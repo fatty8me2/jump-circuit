@@ -35,4 +35,5 @@ func _on_body(body: Node3D) -> void:
 	while n != null and not n.has_method("fail"):
 		n = n.get_parent()
 	if n != null:
-		n.call_deferred("fail")
+		# a visible brick is a hazard hit; an invisible catch net is just an early fall-out
+		n.call_deferred("fail", "hazard" if show_mesh else "fall")

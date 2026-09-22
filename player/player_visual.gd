@@ -4,6 +4,9 @@ extends Node3D
 ## foot cycle and particles are animated here and never touch the collider.
 ## Used both by the local Player and by RemoteRacer ghosts.
 
+## A foot planted while moving on the ground (the local Player turns it into a quiet tick).
+signal footstep(speed: float)
+
 var accent: Color = Color(1.0, 0.72, 0.2)
 
 var _root: Node3D          # squash/stretch + lean pivot (at the feet)
@@ -13,7 +16,8 @@ var _foot_r: MeshInstance3D
 var _bulb: MeshInstance3D
 var _bulb_mat: StandardMaterial3D
 var _antenna: Node3D
-var _dust: GPUParticles3D
+var _dust: GPUParticles3D        # landing puffs
+var _jump_dust: GPUParticles3D   # takeoff / bounce puffs (own emitter, so a quick jump can't wipe a landing puff)
 var _trail: GPUParticles3D
 
 var _squash: float = 0.0       # spring displacement: + stretch, - squash
@@ -24,6 +28,7 @@ var _stride: float = 0.0
 var _flare: float = 0.0
 var _prev_hvel: Vector3 = Vector3.ZERO
 var _antenna_sway: Vector2 = Vector2.ZERO
+var _step_quiet: float = 0.0   # no footstep right on top of a jump / land / bounce sound
 
 
 func _ready() -> void:
@@ -104,6 +109,8 @@ func _build() -> void:
 	_foot_r = _part(_root, sphere, foot_mat, Vector3(0.17, 0.09, 0), Vector3(0.24, 0.17, 0.34))
 	_dust = _make_burst(Color(1, 1, 1, 0.75))
 	add_child(_dust)
+	_jump_dust = _make_burst(Color(1, 1, 1, 0.75))
+	add_child(_jump_dust)
 	_trail = _make_trail()
 	add_child(_trail)
 
@@ -202,13 +209,15 @@ func _make_trail() -> GPUParticles3D:
 func on_jump() -> void:
 	_squash_vel += 5.5
 	_flare = 1.0
-	_dust.amount_ratio = 0.5
-	_dust.restart()
+	_step_quiet = 0.12
+	_jump_dust.amount_ratio = 0.5
+	_jump_dust.restart()
 
 
 func on_land(impact: float) -> void:
 	var k: float = clampf(impact / 22.0, 0.15, 1.0)
 	_squash_vel -= 9.0 * k
+	_step_quiet = 0.12
 	_dust.amount_ratio = clampf(k + 0.2, 0.3, 1.0)
 	_dust.restart()
 
@@ -217,8 +226,39 @@ func on_bounce(_strength: float) -> void:
 	_squash = -0.3
 	_squash_vel = 10.0
 	_flare = 1.6
-	_dust.amount_ratio = 1.0
-	_dust.restart()
+	_step_quiet = 0.12
+	_jump_dust.amount_ratio = 1.0
+	_jump_dust.restart()
+
+
+## Banked a checkpoint: bulb flare and a little hop of the body.
+func on_checkpoint() -> void:
+	_flare = maxf(_flare, 1.2)
+	_squash_vel += 4.0
+
+
+## Crossed the finish: a big stretch and the brightest bulb flash.
+func on_cheer() -> void:
+	_squash_vel += 7.0
+	_flare = 1.6
+
+
+## Respawn arrival: drops the motion carried over from the death pose (lean, squash,
+## antenna swing, the stale velocity that would jolt the lean for a frame) and pops
+## in with a small spring and a bulb glow.
+func on_respawn() -> void:
+	if _root == null:
+		return
+	_prev_hvel = Vector3.ZERO
+	_lean = Vector2.ZERO
+	_antenna_sway = Vector2.ZERO
+	_squash = -0.2
+	_squash_vel = 4.0
+	_flare = maxf(_flare, 1.4)
+	_step_quiet = 0.12
+	_foot_l.position = Vector3(-0.17, 0.09, 0)
+	_foot_r.position = Vector3(0.17, 0.09, 0)
+	_trail.emitting = false
 
 
 func snap_facing(dir: Vector3) -> void:
@@ -232,6 +272,7 @@ func snap_facing(dir: Vector3) -> void:
 func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 	if _root == null or dt <= 0.0:
 		return
+	_step_quiet = maxf(_step_quiet - dt, 0.0)
 	# facing
 	if facing.length() > 0.01:
 		var target_yaw: float = atan2(-facing.x, -facing.z)
@@ -241,9 +282,14 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 	var target: float = 0.0
 	if not on_floor:
 		target = clampf(absf(vel.y) * 0.014, 0.0, 0.2)
-	var accel: float = (target - _squash) * 190.0 - _squash_vel * 15.0
-	_squash_vel += accel * dt
-	_squash = clampf(_squash + _squash_vel * dt, -0.42, 0.42)
+	# sub-stepped: this stiff spring overshoots and flip-flops between the clamps if
+	# it takes a long frame (a ~0.1 s hitch) in one step; at 60+ fps it is one step
+	var n: int = mini(ceili(dt * 50.0), 8)
+	var h: float = dt / float(n)
+	for i: int in n:
+		var accel: float = (target - _squash) * 190.0 - _squash_vel * 15.0
+		_squash_vel += accel * h
+		_squash = clampf(_squash + _squash_vel * h, -0.42, 0.42)
 	var sy: float = 1.0 + _squash
 	var sxz: float = 1.0 / sqrt(maxf(sy, 0.3))
 	_root.scale = Vector3(sxz, sy, sxz)
@@ -264,7 +310,11 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 	# feet
 	var speed: float = hvel.length()
 	if on_floor:
+		var prev: float = _stride
 		_stride += dt * (4.0 + speed * 1.55)
+		# a foot plants each time the stride phase crosses a multiple of PI
+		if speed > 1.5 and _step_quiet <= 0.0 and floori(prev / PI) != floori(_stride / PI):
+			footstep.emit(speed)
 		var amp: float = clampf(speed / 9.0, 0.0, 1.0)
 		var s: float = sin(_stride)
 		_foot_l.position = Vector3(-0.17, 0.09 + maxf(s, 0.0) * 0.16 * amp, -cos(_stride) * 0.24 * amp)
@@ -281,4 +331,11 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 	_flare = maxf(_flare - dt * 2.5, 0.0)
 	_bulb_mat.emission_energy_multiplier = 2.0 + _flare * 7.0
 	_bulb.scale = Vector3.ONE * (0.12 + _flare * 0.05)
-	_trail.emitting = (not on_floor) and vel.length() > 14.0
+	# speed streak: carried momentum (the same > 11 m/s as the HUD readout and the FOV
+	# kick), plus big launches (pads, flings off rising platforms); plain hops stay clean
+	var rise: float = 0.0 if on_floor else vel.y
+	var streak: bool = speed > 11.0 or rise > 15.0
+	_trail.emitting = streak
+	if streak:
+		_trail.amount_ratio = clampf((maxf(speed, rise) - 9.0) / 12.0, 0.35, 1.0)
+		_trail.position.y = 0.28 if on_floor else 0.5

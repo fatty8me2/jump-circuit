@@ -46,6 +46,8 @@ func setup(p_name: String, color: Color) -> void:
 func push_state(pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
 	if not _has_state or seq != _seq or pos.distance_to(global_position) > 12.0:
 		# first packet, a respawn / teleport, or a long packet gap: snap, don't slide
+		if _has_state and seq != _seq:
+			_visual.on_respawn()     # drop the death-pose lean, same arrival glow as ours
 		global_position = pos
 		var flat := Vector3(vel.x, 0, vel.z)
 		if flat.length() > 0.5:

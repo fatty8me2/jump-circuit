@@ -57,6 +57,7 @@ under the effects) and this keeps stereo loops inside the size budget.
 |------|--------|-----------|
 | `jump.wav` | 0.18 s | Sine blip gliding 380 -> 900 Hz with a touch of 2nd harmonic, 4 ms attack / 60 ms decay, layered over a soft 150 -> 65 Hz sine thump. |
 | `land.wav` | 0.20 s | 125 -> 52 Hz sine thud with 2nd/3rd harmonics (so it is audible on small speakers) plus a 30 ms puff of 120-950 Hz noise. |
+| `step.wav` | 0.07 s | Footstep tick: an 8 ms click of 1.4-6 kHz band-passed noise over a short 210 -> 120 Hz sine tap (well above the land thud). Played quietly and pitch-varied at each foot plant while you are walking or running; faster steps are a little louder, and on ice the pitch goes up. |
 | `whack.wav` | 0.30 s | Hammer hit: a 180 -> 60 Hz sine drop with its octave, an 18 ms crack of 900-4500 Hz band-passed noise and a quiet metallic ring (523 + 1307 Hz, inharmonic) that dies in about 60 ms. |
 | `bounce.wav` | 0.45 s | The "boing": pitch starts high, drops within about 20 ms, then rises, with a damped 11.5 Hz spring wobble on the pitch. Fast-decaying 2nd and 3rd harmonics and a 4 ms high-passed noise click give the bright attack; a short sine thump adds weight. |
 | `checkpoint.wav` | 0.70 s | Two bell notes (E5 then B5, 150 ms apart) built from slightly inharmonic partials (1, 2, 3.01, 4.2). Shimmer is a detuned octave-up sine pair with 17 Hz tremolo plus a faint twelfth. |

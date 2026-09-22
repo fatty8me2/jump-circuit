@@ -1594,3 +1594,187 @@ func test_w2_route_bot_gives_up_when_route_ends() -> void:
 		await get_tree().physics_frame
 	var why: String = bot.log_lines[-1] if not bot.log_lines.is_empty() else ""
 	check(bot.stuck and not bot.done and why.begins_with("route exhausted"), "route bot gives up soon when its route ends short of the finish (%s)" % why)
+
+
+# ---- B4b: game feel (respawn veil, checkpoint / finish celebrations, Volt feedback) --------------
+
+## The respawn veil overlays a respawn that has already happened: cause-tinted, never
+## brighter than the old white flash, gone within a blink, and control is live at once.
+func test_zb4b_respawn_veil_never_delays_control() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var cp: Checkpoint = lvl.checkpoints[0]
+	lvl.player.use_device_input = false
+	lvl.player.teleport(cp.respawn_transform())
+	await wait_until(func() -> bool: return lvl.current_checkpoint == 1, 1.0, "the first checkpoint")
+	var veil: ColorRect = lvl.hud._flash
+	var base: Vector3 = cp.global_position + Vector3(40, 0, 0)
+	lvl.kit.plat(base, Vector3(20, 1, 20), "main", 0.0)
+	lvl.kit.hazard(base + Vector3(0, 0.6, 0), Vector3(4, 1.2, 4))
+	await ticks(2)
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(0, 0.1, 0)))
+	var f0: int = Engine.get_physics_frames()
+	while lvl.deaths == 0 and not overdue(f0, 2.0, "the kill brick"):
+		await get_tree().physics_frame
+	var c: Color = veil.color
+	check(lvl.deaths == 1 and lvl.player.global_position.distance_to(cp.global_position) < 1.0, "a kill brick respawns at the checkpoint at once")
+	check(c.r > c.g + 0.25 and c.a <= 0.5, "under a red hazard veil (%s)" % str(c))
+	lvl.player.cmd_move = FWD
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	check(lvl.player.control_enabled and lvl.player.horizontal_speed() > 0.1, "control is live right after the respawn (%.2f m/s)" % lvl.player.horizontal_speed())
+	lvl.player.cmd_move = Vector2.ZERO
+	await real_seconds(0.45)
+	check(veil.color.a < 0.02, "the veil has cleared within 0.45 s (alpha %.3f)" % veil.color.a)
+	await ticks(3)
+	lvl.manual_respawn()
+	c = veil.color
+	check(is_equal_approx(c.a, 0.3) and c.r < 0.1, "R while standing gets the lightest, neutral veil (%s)" % str(c))
+	await ticks(3)
+	lvl.fail()
+	c = veil.color
+	check(is_equal_approx(c.a, 0.55) and c.r < 0.1, "a fall-out gets a dark veil no stronger than the old flash (%s)" % str(c))
+	# an invisible catch net (level 2) is a fall-out, not a hazard hit
+	var net := KillZone.new()
+	net.size = Vector3(6, 2, 6)
+	net.show_mesh = false
+	lvl.kit._add(net, base + Vector3(7, 1.0, 0))
+	await ticks(3)
+	var d0: int = lvl.deaths
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(7, 0.1, 0)))
+	f0 = Engine.get_physics_frames()
+	while lvl.deaths == d0 and not overdue(f0, 2.0, "the catch net"):
+		await get_tree().physics_frame
+	c = veil.color
+	check(lvl.deaths == d0 + 1 and c.r < 0.1, "an invisible catch net counts as a fall (%s)" % str(c))
+
+
+## "STAGE n / N" banner merged with the split, ring flare + sparks, and a flare that
+## can never relight a ring switched off straight after (F6, close checkpoints).
+func test_zb4b_checkpoint_banner_and_flare() -> void:
+	SaveData.wipe()
+	var keep_mode: String = Settings.timer_mode
+	Settings.timer_mode = "on"
+	var lvl: LevelBase = await load_level(0)
+	var n: int = lvl.checkpoints.size()
+	var best: Array = []
+	for i: int in n:
+		best.append(50.0 * (i + 1))
+	SaveData.record_finish(lvl.level_id, 999.0, 4, best)
+	var cp: Checkpoint = lvl.checkpoints[0]
+	lvl.player.teleport(cp.respawn_transform())
+	await wait_until(func() -> bool: return lvl.current_checkpoint == 1, 1.0, "the first checkpoint")
+	var toast: Label = lvl.hud._toast
+	var sub: Label = lvl.hud._toast_sub
+	check(toast.text == "STAGE 2 / %d" % (n + 1) and sub.text.begins_with("-"), "the checkpoint banner names the new stage over the split (%s / %s)" % [toast.text, sub.text])
+	var ring: StandardMaterial3D = cp.get("_ring_mat")
+	var burst: GPUParticles3D = cp.get("_burst")
+	check(ring.emission_energy_multiplier > 2.4 and burst != null and burst.emitting, "the ring flares and throws sparks (%.2f)" % ring.emission_energy_multiplier)
+	lvl.player.teleport(lvl.checkpoints[1].respawn_transform())
+	await wait_until(func() -> bool: return lvl.current_checkpoint == 2, 1.0, "the second checkpoint")
+	await real_seconds(0.8)
+	check(not cp.active and is_equal_approx(ring.emission_energy_multiplier, 0.15), "a ring switched off mid-flare stays dark (%.2f)" % ring.emission_energy_multiplier)
+	check(toast.scale.is_equal_approx(Vector2.ONE) and lvl.hud._stage.modulate.is_equal_approx(Color.WHITE), "banner and stage counter settle")
+	lvl.hud.checkpoint_reached(n, 400.0)
+	check(toast.text == "FINAL STAGE" and sub.text != "" and toast.scale.x > 1.2, "the last checkpoint pops a FINAL STAGE banner (%s / %s)" % [toast.text, sub.text])
+	lvl.hud.toast("Someone finished")
+	check(toast.scale == Vector2.ONE and sub.text == "", "a plain toast doesn't pop and has no split line")
+	Settings.timer_mode = keep_mode
+	SaveData.wipe()
+
+
+## PlayerVisual driven frame by frame: footstep cadence and quiet windows, separate
+## landing / takeoff puffs, the horizontal-speed streak, and the respawn reset.
+func test_zb4b_volt_steps_dust_trail_respawn() -> void:
+	var v := PlayerVisual.new()
+	add_child(v)
+	await ticks(1)
+	var steps: Array[int] = [0]
+	v.footstep.connect(func(_s: float) -> void: steps[0] += 1)
+	var dt: float = 1.0 / 60.0
+	var run := Vector3(0, 0, -9)
+	for i: int in 120:
+		v.animate(dt, run, true, Vector3.FORWARD)
+	check(steps[0] >= 10 and steps[0] <= 12, "a 9 m/s run plants about 5.7 steps a second (%d in 2 s)" % steps[0])
+	steps[0] = 0
+	for i: int in 60:
+		v.animate(dt, Vector3(0, 0, -1), true, Vector3.FORWARD)
+	for i: int in 60:
+		v.animate(dt, run, false, Vector3.FORWARD)
+	check(steps[0] == 0, "no steps when shuffling below 1.5 m/s or in the air")
+	v.set("_stride", ceilf(float(v.get("_stride")) / PI) * PI - 0.05)
+	v.on_land(5.0)
+	for i: int in 4:
+		v.animate(dt, run, true, Vector3.FORWARD)
+	check(steps[0] == 0, "no step right on top of a landing")
+	# a buffered jump one tick after a heavy landing keeps the landing puff
+	var dust: GPUParticles3D = v.get("_dust")
+	var jdust: GPUParticles3D = v.get("_jump_dust")
+	v.on_land(22.0)
+	v.on_jump()
+	check(dust.emitting and is_equal_approx(dust.amount_ratio, 1.0) and jdust.emitting and is_equal_approx(jdust.amount_ratio, 0.5), "the takeoff puff has its own emitter: the full landing puff survives")
+	# speed streak follows horizontal speed, plus big launches
+	var trail: GPUParticles3D = v.get("_trail")
+	v.animate(dt, Vector3(9, 0, 0), true, Vector3.FORWARD)
+	var run_off: bool = not trail.emitting
+	v.animate(dt, Vector3(9, 12, 0), false, Vector3.FORWARD)
+	var hop_off: bool = not trail.emitting
+	check(run_off and hop_off, "plain running and ordinary hops leave no streak")
+	v.animate(dt, Vector3(12, 0, 0), true, Vector3.FORWARD)
+	check(trail.emitting and is_equal_approx(trail.position.y, 0.28), "over 11 m/s on the ground: a low streak")
+	v.animate(dt, Vector3(0, 18, 0), false, Vector3.FORWARD)
+	check(trail.emitting and is_equal_approx(trail.amount_ratio, 0.75) and is_equal_approx(trail.position.y, 0.5), "a straight-up pad launch keeps a dense streak (%.2f)" % trail.amount_ratio)
+	# respawn: the death pose (fast fall, lean) must not carry over or jolt
+	for i: int in 30:
+		v.animate(dt, Vector3(20, -30, 0), false, Vector3.RIGHT)
+	v.on_respawn()
+	v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
+	var lean: Vector2 = v.get("_lean")
+	check(lean.length() < 0.02 and float(v.get("_flare")) > 1.0 and not trail.emitting, "a respawn clears the lean with no jolt and pops the bulb (lean %.3f)" % lean.length())
+	# a pop during a run of long frames (0.13 s hitches) must settle, not flip-flop
+	v.on_bounce(20.0)
+	var peak_late: float = 0.0
+	for i: int in 12:
+		v.animate(0.13, Vector3.ZERO, true, Vector3.FORWARD)
+		if i >= 6:
+			peak_late = maxf(peak_late, absf(float(v.get("_squash"))))
+	check(peak_late < 0.05, "the squash spring settles through frame hitches (late peak %.3f)" % peak_late)
+	v.queue_free()
+	# footsteps only sound while the player is actually steering
+	await new_world()
+	floor_slab()
+	await settle()
+	player.cmd_move = FWD
+	await ticks(2)
+	var steering: float = player.move_input
+	player.control_enabled = false
+	await ticks(1)
+	check(is_equal_approx(steering, 1.0) and player.move_input == 0.0, "move_input follows the stick and drops to 0 with control off")
+	player.control_enabled = true
+	player.cmd_move = Vector2.ZERO
+
+
+## Crossing the gate: confetti and a brief lamp / veil / glow flare that settles again,
+## without touching the shared Look.flat glow material.
+func test_zb4b_finish_gate_celebrates() -> void:
+	await new_world(Vector3(0, 0.05, 6))
+	floor_slab()
+	# (away from the origin: Jolt judges the first step from where the player was added)
+	var gate: FinishGate = kit.finish(Vector3(0, 0, -20))
+	var shared: StandardMaterial3D = Look.flat(Look.c("accent"), 0.3, 0.0, 3.0)
+	var reached: Array[int] = [0]
+	gate.reached.connect(func() -> void: reached[0] += 1)
+	await settle()
+	check(reached[0] == 0, "the gate is quiet until the player enters it")
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, -20)))
+	await wait_until(func() -> bool: return reached[0] > 0, 1.0, "the finish gate")
+	# (a one-shot reads as emitting only through its short emission window)
+	var confetti: GPUParticles3D = gate.get("_confetti")
+	var popped: bool = confetti.emitting
+	await real_seconds(0.05)
+	var lamp: OmniLight3D = gate.get("_lamp")
+	var glow: StandardMaterial3D = gate.get("_glow")
+	check(reached[0] == 1 and popped and lamp.light_energy > 3.0 and glow.emission_energy_multiplier > 3.0, "crossing the gate pops confetti and flares the lamp (%.2f)" % lamp.light_energy)
+	check(is_equal_approx(shared.emission_energy_multiplier, 3.0), "the flare leaves the shared glow material alone")
+	await real_seconds(1.3)
+	var veil: StandardMaterial3D = gate.get("_veil_mat")
+	check(is_equal_approx(lamp.light_energy, 2.5) and is_equal_approx(veil.albedo_color.a, 0.16) and is_equal_approx(glow.emission_energy_multiplier, 3.0), "the gate settles back (lamp %.2f, veil %.2f)" % [lamp.light_energy, veil.albedo_color.a])

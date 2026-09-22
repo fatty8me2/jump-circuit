@@ -31,6 +31,9 @@ var last_jump_height: float = 0.0
 var last_jump_distance: float = 0.0
 var last_ground_y: float = 0.0
 var facing_dir: Vector3 = Vector3.FORWARD
+## Stick / key magnitude this tick (0 while control is off). Read only by feedback
+## (footsteps), never by movement.
+var move_input: float = 0.0
 
 var _coyote: float = 0.0
 var _buffer: float = 0.0
@@ -84,6 +87,7 @@ func _physics_process(dt: float) -> void:
 		_jump_press_queued = false
 	if move.length() > 1.0:
 		move = move.normalized()
+	move_input = move.length()
 	var wish: Vector3 = Basis(Vector3.UP, camera_yaw) * Vector3(move.x, 0.0, -move.y)
 
 	var was_grounded: bool = grounded
@@ -422,4 +426,17 @@ func connect_feedback() -> void:
 		Sfx.play("bounce", 0.04, 1.0, clampf(1.25 - strength / 60.0, 0.75, 1.2)))
 	# the hazard plays its own positional hit sound
 	knocked.connect(func(v: Vector3) -> void: visual.on_bounce(v.length()))
-	teleported.connect(func() -> void: visual.snap_facing(facing_dir))
+	teleported.connect(func() -> void:
+		visual.on_respawn()
+		visual.snap_facing(facing_dir))
+	visual.footstep.connect(_on_footstep)
+
+
+## Quiet, pitch-varied tick per foot plant - only while actually walking: coasting on
+## ice, riding a conveyor or sliding down a tilt board with the stick released is silent.
+func _on_footstep(speed: float) -> void:
+	if move_input < 0.2:
+		return
+	var fb: Object = floor_body if (floor_body != null and is_instance_valid(floor_body)) else null
+	var slick: bool = fb != null and fb.has_method("grip") and float(fb.call("grip")) < 1.0
+	Sfx.play("step", 0.1, clampf(speed / 14.0, 0.15, 0.35), 1.3 if slick else 1.0)

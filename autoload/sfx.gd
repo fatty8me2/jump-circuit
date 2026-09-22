@@ -3,7 +3,7 @@ extends Node
 ## All clips are synthesised by tools/gen_audio.py into res://audio.
 
 const NAMES: Array[String] = ["jump", "land", "bounce", "checkpoint", "crumble", "collapse", "creak",
-	"finish", "respawn", "tick", "go", "ui", "beacon", "whack"]
+	"finish", "respawn", "tick", "go", "ui", "beacon", "whack", "step"]
 ## Track changes crossfade: the old bed fades out while the new one fades in.
 const MUSIC_FADE_OUT: float = 0.6
 const MUSIC_FADE_IN: float = 0.9

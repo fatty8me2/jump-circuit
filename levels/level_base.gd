@@ -249,14 +249,15 @@ func _check_failure() -> void:
 			fail()
 
 
-func fail() -> void:
+## `cause` only tints the respawn veil: "fall" (fell out, catch nets) or "hazard" (kill bricks, sweepers).
+func fail(cause: String = "fall") -> void:
 	# Several kill zones can report one touch: all in the same tick (a seam or corner
 	# between bricks, or a zone plus _check_failure), or one tick after the respawn
 	# (Jolt still judges overlaps from the pre-teleport spot for a step). Count one fall.
 	if finished or Engine.get_physics_frames() - _respawn_tick <= 1:
 		return
 	deaths += 1
-	respawn()
+	respawn(cause)
 
 
 ## R/Y or the pause menu's "Back to Checkpoint". Bailing out while clearly falling
@@ -272,7 +273,8 @@ func manual_respawn() -> void:
 
 
 ## Instant, safe, correctly oriented. Local physics objects return to their start state.
-func respawn() -> void:
+## `cause` is fail()'s; "" (R, the menu, the bot) gets the lightest veil.
+func respawn(cause: String = "") -> void:
 	if finished:
 		return
 	# respawns from input or the pause menu run between ticks, so they belong to the next one
@@ -283,7 +285,7 @@ func respawn() -> void:
 	reset_dynamic_objects()
 	player.teleport(xf)
 	camera.face(-xf.basis.z)
-	hud.flash()
+	hud.flash(cause)
 	Sfx.play("respawn", 0.03, 0.7)
 	player_respawned.emit()
 
@@ -318,8 +320,10 @@ func _on_checkpoint(cp: Checkpoint) -> void:
 	splits[cp.index - 1] = run_time
 	for other: Checkpoint in checkpoints:
 		other.set_active(other.index == cp.index)
-	Sfx.play("checkpoint")
+	# the chime climbs a little with every stage banked
+	Sfx.play("checkpoint", 0.0, 1.0, minf(1.0 + 0.03 * float(cp.index - 1), 1.3))
 	hud.checkpoint_reached(cp.index, run_time)
+	player.visual.on_checkpoint()
 	if Game.race_mode:
 		Net.send_checkpoint(cp.index)
 
@@ -335,6 +339,7 @@ func _on_finish() -> void:
 		_pause.set_open(false)
 	var time: float = run_time
 	Sfx.play("finish")
+	player.visual.on_cheer()
 	level_finished.emit(time)
 	if Game.race_mode:
 		Net.send_checkpoint(checkpoints.size() + 1)

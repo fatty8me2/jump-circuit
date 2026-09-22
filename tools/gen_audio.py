@@ -171,6 +171,16 @@ def sfx_land():
     finish_sfx("land", thud + 0.7 * noise / np.max(np.abs(noise)))
 
 
+def sfx_step():
+    # a light robot foot tick: a bright noise click over a short 210 -> 120 Hz tap
+    # (kept well above the land thud so the two never muddy each other)
+    r = rng_for("step")
+    t = tvec(0.07)
+    click = fft_band(r.standard_normal(len(t)), SR, 1400.0, 6000.0, 2) * ad_env(t, 0.001, 0.008)
+    tap = osc(sweep(210.0, 120.0, t, 0.04)) * ad_env(t, 0.002, 0.018)
+    finish_sfx("step", 0.6 * click / np.max(np.abs(click)) + tap, fout=0.01)
+
+
 def sfx_whack():
     r = rng_for("whack")
     t = tvec(0.3)
@@ -757,7 +767,7 @@ def music_title():
 # --------------------------------------------------------------------------
 SFX_SPEC = {"jump": 0.18, "land": 0.2, "bounce": 0.45, "checkpoint": 0.7, "crumble": 0.7, "collapse": 0.9,
             "creak": 0.35, "finish": 2.2, "respawn": 0.3, "tick": 0.12, "go": 0.5, "ui": 0.06, "beacon": 4.0,
-            "whack": 0.3}
+            "whack": 0.3, "step": 0.07}
 MUSIC = ("music_a", "music_b", "music_title")
 
 
@@ -822,7 +832,7 @@ def main():
         if "--music" not in args:
             print("effects:")
             for fn in (sfx_jump, sfx_land, sfx_whack, sfx_bounce, sfx_checkpoint, sfx_crumble, sfx_collapse,
-                       sfx_creak, sfx_finish, sfx_respawn, sfx_tick, sfx_go, sfx_ui, sfx_beacon):
+                       sfx_creak, sfx_finish, sfx_respawn, sfx_tick, sfx_go, sfx_ui, sfx_beacon, sfx_step):
                 fn()
         if "--sfx" not in args:
             print("music:")

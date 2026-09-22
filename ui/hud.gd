@@ -15,6 +15,7 @@ var _toast_tw: Tween
 var _count: Label
 var _board: VBoxContainer
 var _flash: ColorRect
+var _flash_tw: Tween
 var _debug: Label
 var _results: Control
 var _results_ready: bool = false
@@ -24,6 +25,7 @@ var _board_refresh: float = 0.0
 var _last_count: int = 99
 var _peak_speed: float = 0.0
 var _stage: Label
+var _stage_tw: Tween
 var _speed: Label
 
 
@@ -116,20 +118,26 @@ func show_intro(title: String, blurb: String) -> void:
 	tw.tween_property(_intro, "modulate:a", 0.0, 1.0)
 
 
-func toast(text: String, sub: String = "", sub_color: Color = UiKit.SOFT) -> void:
+## `pop` springs the headline in from a larger size (checkpoints).
+func toast(text: String, sub: String = "", sub_color: Color = UiKit.SOFT, pop: bool = false) -> void:
 	_toast.text = text
 	_toast_sub.text = sub
 	_toast_sub.add_theme_color_override("font_color", sub_color)
 	# the previous toast's fade-out would otherwise cut this one short
 	if _toast_tw != null and _toast_tw.is_valid():
 		_toast_tw.kill()
+	_toast.pivot_offset = _toast.size * 0.5
+	_toast.scale = Vector2.ONE * (1.3 if pop else 1.0)
 	_toast_tw = create_tween()
 	_toast_tw.tween_property(_toast, "modulate:a", 1.0, 0.12)
+	if pop:
+		_toast_tw.parallel().tween_property(_toast, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_toast_tw.tween_interval(1.3)
 	_toast_tw.tween_property(_toast, "modulate:a", 0.0, 0.5)
 
 
-## Checkpoint toast, plus the split against your best run when the timer is shown.
+## Checkpoint banner: "STAGE n / N" (the stage you are now on, as the corner label
+## counts it) over the split against your best run when the timer is shown.
 func checkpoint_reached(index: int, time: float) -> void:
 	var sub: String = ""
 	var col: Color = UiKit.SOFT
@@ -139,7 +147,18 @@ func checkpoint_reached(index: int, time: float) -> void:
 		if best.size() == level.checkpoints.size() and index >= 1 and index <= best.size() and float(best[index - 1]) >= 0.0:
 			sub = _delta_text(time, float(best[index - 1]))
 			col = _delta_color(time, float(best[index - 1]))
-	toast("Checkpoint", sub, col)
+	toast(stage_text(index + 1, level.checkpoints.size() + 1), sub, col, true)
+	# the corner counter ticks over in gold, then settles
+	if _stage_tw != null and _stage_tw.is_valid():
+		_stage_tw.kill()
+	_stage.modulate = UiKit.GOLD
+	_stage_tw = create_tween()
+	_stage_tw.tween_property(_stage, "modulate", Color.WHITE, 0.8)
+
+
+## Banner line for arriving on `stage` of `total` ("FINAL STAGE" for the last one).
+static func stage_text(stage: int, total: int) -> String:
+	return "FINAL STAGE" if stage >= total else "STAGE %d / %d" % [stage, total]
 
 
 ## "-1.84" / "+0.62" against `ref`, at the resolution the times are shown.
@@ -153,10 +172,20 @@ static func _delta_color(time: float, ref: float) -> Color:
 	return UiKit.TEAL if d < 0 else (Color(1.0, 0.5, 0.45) if d > 0 else UiKit.SOFT)
 
 
-func flash() -> void:
-	_flash.color = Color(1, 1, 1, 0.55)
-	var tw: Tween = create_tween()
-	tw.tween_property(_flash, "color:a", 0.0, 0.3)
+## Respawn veil, drawn over the already-completed respawn (it never delays control):
+## a dark dip that hides the camera cut, tinted red for a hazard, lighter for R / menu.
+func flash(cause: String = "") -> void:
+	if _flash_tw != null and _flash_tw.is_valid():
+		_flash_tw.kill()
+	match cause:
+		"hazard":
+			_flash.color = Color(0.45, 0.03, 0.06, 0.5)
+		"fall":
+			_flash.color = Color(0.02, 0.03, 0.07, 0.55)
+		_:
+			_flash.color = Color(0.02, 0.03, 0.07, 0.3)
+	_flash_tw = create_tween()
+	_flash_tw.tween_property(_flash, "color:a", 0.0, 0.28).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 func start_countdown() -> void:
