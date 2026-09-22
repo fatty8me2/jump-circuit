@@ -680,13 +680,15 @@ func _stage_10() -> void:
 	add_child(_second_b)
 	var dark: StandardMaterial3D = Look.flat(Color(0.14, 0.15, 0.2), 0.4, 0.7)
 	kit.hazard(V(5.1, 0, 0), V(2.2, 0.5, 0.5), 0.0, _second_b)
-	_second_b.add_child(Look.box(V(4.2, 0.2, 0.2), dark, V(2.1, 1.2, 0)))
-	_second_b.add_child(Look.box(V(0.2, 1.2, 0.2), dark, V(4.2, 0.6, 0)))
-	_second_b.add_child(Look.cylinder(0.3, 1.4, dark, V(0, 0.7, 0), -1.0, 10))
+	# visual hand, lifted clear of a full-jump head at the CP9 respawn (feet 2.47 m + 1.4 m antenna);
+	# the hub reaches up into the tower shaft (bottom at K.y + 7) like a clock arbor
+	_second_b.add_child(Look.box(V(4.2, 0.2, 0.2), dark, V(2.1, 4.0, 0)))
+	_second_b.add_child(Look.box(V(0.2, 4.0, 0.2), dark, V(4.2, 2.0, 0)))
+	_second_b.add_child(Look.cylinder(0.3, 1.0, dark, V(0, 4.1, 0), -1.0, 10))
 
 	# tower ledge: down the tangent from the east point, 1.8 m up
 	var t0: Vector3 = V(K.x + 7.6, y + 1.8, K.z - 2.7 - 10.8)
-	_cp(t0, V(5, 1, 5), -45.0)
+	_cp(t0, V(5, 1, 5), -125.0)  # face the tower ladder that curls away toward +X/+Z
 	kit.pillar(t0 + V(0, -1.0, 0), 0.5, 3.0, Look.c("metal"))
 
 	# board at 55 deg over the collar and the upper second hand, onto the arrowhead
@@ -785,14 +787,16 @@ func _stage_11() -> void:
 func _build_belfry(belfry: Vector3) -> void:
 	for i: int in 4:
 		var post: Vector3 = belfry + V(cos(PI * 0.25 + PI * 0.5 * i), 0, sin(PI * 0.25 + PI * 0.5 * i)) * 4.4
-		kit.pillar(post + V(0, 8.0, 0), 0.4, 8.0, Look.c("metal"))
+		kit.pillar(post + V(0, 9.4, 0), 0.4, 9.4, Look.c("metal"))
+	# roof sits clear of the finish ring (tops out near +8.9); the bell hangs on the
+	# approach side, off the gate plane, and swings along X
 	var roof := Look.cylinder(6.2, 5.0, Look.flat(Look.c("decor2"), 0.7), Vector3.ZERO, 0.0, 8)
-	add_child(_at(roof, belfry + V(0, 10.7, 0)))
-	add_child(_at(Look.cylinder(6.4, 0.4, Look.flat(Look.c("trim"), 0.5, 0.4), Vector3.ZERO, -1.0, 8), belfry + V(0, 8.2, 0)))
-	add_child(_at(Look.sphere(0.5, Look.flat(Look.c("accent"), 0.3, 0.0, 3.0)), belfry + V(0, 13.6, 0)))
+	add_child(_at(roof, belfry + V(0, 12.1, 0)))
+	add_child(_at(Look.cylinder(6.4, 0.4, Look.flat(Look.c("trim"), 0.5, 0.4), Vector3.ZERO, -1.0, 8), belfry + V(0, 9.6, 0)))
+	add_child(_at(Look.sphere(0.5, Look.flat(Look.c("accent"), 0.3, 0.0, 3.0)), belfry + V(0, 15.0, 0)))
 	kit.ring(belfry + V(0, 4.0, 0), 7.4, Look.c("accent"), Vector3(90, 0, 0))
 	_bell = Node3D.new()
-	_bell.position = belfry + V(0, 8.0, 0)
+	_bell.position = belfry + V(0, 9.4, 2.6)
 	add_child(_bell)
 	_bell.add_child(Look.cylinder(0.09, 2.4, Look.flat(Look.c("metal"), 0.4, 0.7), V(0, -1.2, 0), -1.0, 8))
 	_bell.add_child(Look.cylinder(1.3, 1.6, Look.flat(Look.c("accent"), 0.35, 0.6, 0.8), V(0, -3.0, 0), 0.6, 20))

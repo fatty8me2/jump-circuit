@@ -6,6 +6,9 @@ func _ready() -> void:
 	_home = global_transform
 
 func reset_state() -> void:
+	# move the node too (not just the body) so the interpolation reset below
+	# captures the home pose instead of drawing a one-frame streak back home
+	global_transform = _home
 	PhysicsServer3D.body_set_state(get_rid(), PhysicsServer3D.BODY_STATE_TRANSFORM, _home)
 	linear_velocity = Vector3.ZERO
 	angular_velocity = Vector3.ZERO

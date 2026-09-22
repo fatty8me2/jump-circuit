@@ -14,7 +14,7 @@ void fragment() {
 	float g = 0.0;
 	if (ln.y > 0.6) {
 		float x = abs(lp.x) / max(half_size.x, 0.01);
-		float v = (lp.z + x * half_size.x * 0.8) / spacing + TIME * scroll_speed / spacing;
+		float v = (lp.z - x * half_size.x * 0.8) / spacing + TIME * scroll_speed / spacing;
 		float f = fract(v);
 		float chev = smoothstep(0.0, 0.06, f) * (1.0 - smoothstep(0.34, 0.4, f));
 		chev *= 1.0 - smoothstep(0.82, 0.9, x);

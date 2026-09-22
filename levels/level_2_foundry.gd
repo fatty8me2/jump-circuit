@@ -712,4 +712,5 @@ func _build_surroundings() -> void:
 		kit.glow_strip(spot + Vector3(0, 3.2, 0), Vector3(s * 0.57, 0.3, s * 0.57), Look.c("decor2"))
 		kit.chimney(spot + Vector3(s * 0.22, 5.0, -s * 0.1), kit.rng.randf_range(8.0, 14.0), 1.1)
 		kit.chimney(spot + Vector3(-s * 0.3, 0.0, s * 0.32), kit.rng.randf_range(5.0, 8.0), 0.8, false)
-		kit.pipe(spot + Vector3(0, -2.0, 0), Vector3(0, maxf(spot.y - 20.0, -15.0), OZ), 0.6, Look.c("decor"))
+		# feed pipe dives steeply to the tower base, well below the course
+		kit.pipe(spot + Vector3(0, -2.0, 0), Vector3(0, maxf(spot.y - 45.0, -15.0), OZ), 0.6, Look.c("decor"))

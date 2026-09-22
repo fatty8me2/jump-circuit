@@ -57,11 +57,16 @@ const THEMES: Dictionary = {
 
 static var theme: Dictionary = THEMES["gardens"]
 static var _cache: Dictionary = {}
+## Primitive meshes shared by exact parameters: identical decor pieces (gear teeth,
+## bolts, posts, lamps) then batch through the renderer's automatic instancing.
+## Nothing edits a mesh after creation, so sharing is safe.
+static var _meshes: Dictionary = {}
 
 
 static func use_theme(id: String) -> void:
 	theme = THEMES[id]
 	_cache.clear()
+	_meshes.clear()
 
 
 static func c(key: String) -> Color:
@@ -140,28 +145,38 @@ static func mesh_node(mesh: Mesh, mat: Material, pos: Vector3 = Vector3.ZERO) ->
 
 
 static func box(size: Vector3, mat: Material, pos: Vector3 = Vector3.ZERO) -> MeshInstance3D:
-	var b := BoxMesh.new()
-	b.size = size
-	return mesh_node(b, mat, pos)
+	var key: Array = ["b", size]
+	if not _meshes.has(key):
+		var b := BoxMesh.new()
+		b.size = size
+		_meshes[key] = b
+	return mesh_node(_meshes[key], mat, pos)
 
 
 static func cylinder(radius: float, height: float, mat: Material, pos: Vector3 = Vector3.ZERO, top_radius: float = -1.0, segments: int = 24) -> MeshInstance3D:
-	var cm := CylinderMesh.new()
-	cm.bottom_radius = radius
-	cm.top_radius = radius if top_radius < 0.0 else top_radius
-	cm.height = height
-	cm.radial_segments = segments
-	cm.rings = 1
-	return mesh_node(cm, mat, pos)
+	var top: float = radius if top_radius < 0.0 else top_radius
+	var key: Array = ["c", radius, top, height, segments]
+	if not _meshes.has(key):
+		var cm := CylinderMesh.new()
+		cm.bottom_radius = radius
+		cm.top_radius = top
+		cm.height = height
+		cm.radial_segments = segments
+		cm.rings = 1
+		_meshes[key] = cm
+	return mesh_node(_meshes[key], mat, pos)
 
 
 static func sphere(radius: float, mat: Material, pos: Vector3 = Vector3.ZERO) -> MeshInstance3D:
-	var s := SphereMesh.new()
-	s.radius = radius
-	s.height = radius * 2.0
-	s.radial_segments = 20
-	s.rings = 10
-	return mesh_node(s, mat, pos)
+	var key: Array = ["s", radius]
+	if not _meshes.has(key):
+		var s := SphereMesh.new()
+		s.radius = radius
+		s.height = radius * 2.0
+		s.radial_segments = 20
+		s.rings = 10
+		_meshes[key] = s
+	return mesh_node(_meshes[key], mat, pos)
 
 
 ## Box platform visual whose local origin is the box centre.
@@ -182,20 +197,23 @@ static func platform_round(radius: float, height: float, style: String = "main")
 
 ## Tapered keel hanging under a platform so it reads as a floating island.
 static func underside(size: Vector3, depth: float, is_round: bool = false) -> MeshInstance3D:
-	var cm := CylinderMesh.new()
-	cm.height = depth
-	cm.rings = 1
-	var mi: MeshInstance3D
-	if is_round:
-		cm.radial_segments = 24
-		cm.top_radius = size.x * 0.5 * 0.92
-		cm.bottom_radius = size.x * 0.5 * 0.18
-		mi = mesh_node(cm, flat(c("side").darkened(0.18), 0.9))
-	else:
-		cm.radial_segments = 4
-		cm.top_radius = 0.7071 * 0.94
-		cm.bottom_radius = 0.7071 * 0.22
-		mi = mesh_node(cm, flat(c("side").darkened(0.18), 0.9))
+	# round keels depend on diameter and depth; square ones only on depth (the holder scales x/z)
+	var key: Array = ["ur", size.x, depth] if is_round else ["uq", depth]
+	if not _meshes.has(key):
+		var cm := CylinderMesh.new()
+		cm.height = depth
+		cm.rings = 1
+		if is_round:
+			cm.radial_segments = 24
+			cm.top_radius = size.x * 0.5 * 0.92
+			cm.bottom_radius = size.x * 0.5 * 0.18
+		else:
+			cm.radial_segments = 4
+			cm.top_radius = 0.7071 * 0.94
+			cm.bottom_radius = 0.7071 * 0.22
+		_meshes[key] = cm
+	var mi: MeshInstance3D = mesh_node(_meshes[key], flat(c("side").darkened(0.18), 0.9))
+	if not is_round:
 		mi.rotation.y = PI / 4.0
 		# CylinderMesh with 4 segments rotated 45deg is a unit square frustum.
 		mi.scale = Vector3(1, 1, 1)

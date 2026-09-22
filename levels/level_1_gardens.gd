@@ -246,7 +246,7 @@ func _stage_4_runways() -> Vector3:
 	var r3: Dictionary = _blk(Vector3(2.0, 0, -58.0), 3.0, 4.0, "alt")
 	var q1: Dictionary = _blk(Vector3(-0.8, 1.5, -64.0), 1.8, 1.8)
 	var end: Dictionary = _lawn(Vector3(-0.8, 1.5, -73.4), 7.0, true, -90.0)
-	kit.arch(_w(Vector3(0, 0, -9.2)), 3.0, 4.0)
+	kit.arch(_w(Vector3(0, 0, -9.2)), 3.0, 4.0, _yaw)
 	kit.lamp(_w(Vector3(1.7, 0, -29.2)), 2.6, false)
 	kit.lamp(_w(Vector3(-1.7, 0, -29.2)), 2.6, false)
 	_hop(lawn, r1, Vector3(0, 0, 3.6))

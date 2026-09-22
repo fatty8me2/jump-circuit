@@ -17,6 +17,7 @@ var _vis: MeshInstance3D
 var _shape: CollisionShape3D
 var _fall_speed: float = 0.0
 var _mat: ShaderMaterial
+var _grow: Tween
 
 
 func _ready() -> void:
@@ -64,6 +65,11 @@ func reset_state() -> void:
 	_vis.visible = true
 	_mat.set_shader_parameter("trim_glow", 0.5)
 	_shape.set_deferred("disabled", false)
+	# a regrow tween left running would keep shrinking the restored stone, and the
+	# jump home from the fall must not be drawn as an interpolated streak
+	if _grow != null and _grow.is_valid():
+		_grow.kill()
+	_vis.reset_physics_interpolation()
 
 
 func _physics_process(dt: float) -> void:
@@ -95,5 +101,5 @@ func _physics_process(dt: float) -> void:
 			if _timer >= respawn:
 				reset_state()
 				_vis.scale = Vector3.ONE * 0.05
-				var tw: Tween = create_tween()
-				tw.tween_property(_vis, "scale", Vector3.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+				_grow = create_tween()
+				_grow.tween_property(_vis, "scale", Vector3.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
