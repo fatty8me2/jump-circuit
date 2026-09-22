@@ -717,3 +717,52 @@ func test_u_pendulum_and_sweeper() -> void:
 		await get_tree().physics_frame
 		t += 1.0 / 120.0
 	check(lvl.deaths == 1, "a sweeper bar kills a player who does not jump it (after %.2fs)" % t)
+
+
+## Where the route resumes after a "checkpoint" step: the first static route point
+## (from / to / to_center; moving-node targets are skipped) more than 2.5 m (flat)
+## from the checkpoint. Returns Vector3.INF when the route has none.
+func route_resume_point(lvl: LevelBase, step: int, origin: Vector3) -> Vector3:
+	for s: int in range(step + 1, lvl.route.size()):
+		var st: Dictionary = lvl.route[s]
+		var pts: Array[Vector3] = []
+		if st.get("from") is Vector3 and not st.has("from_node"):
+			pts.append(st["from"])
+		if st.get("to") is Vector3 and not st.has("to_node"):
+			pts.append(st["to"])
+		if st.get("to_center") is Vector3:
+			pts.append(st["to_center"])
+		for p: Vector3 in pts:
+			if Vector2(p.x - origin.x, p.z - origin.z).length() > 2.5:
+				return p
+	return Vector3.INF
+
+
+## Respawning at any checkpoint points the camera at the stage it resumes (within
+## 50 deg of the first route point past the checkpoint), not into the void.
+func test_w_checkpoints_face_the_route() -> void:
+	for i: int in Game.LEVELS.size():
+		if only_level >= 0 and i != only_level:
+			continue
+		var lvl: LevelBase = await load_level(i)
+		var label: String = str(Game.LEVELS[i]["name"])
+		var worst: float = 0.0
+		var worst_cp: int = 0
+		var k: int = 0
+		for s: int in lvl.route.size():
+			if str(lvl.route[s]["kind"]) != "checkpoint" or k >= lvl.checkpoints.size():
+				continue
+			var cp: Checkpoint = lvl.checkpoints[k]
+			k += 1
+			var target: Vector3 = route_resume_point(lvl, s, cp.global_position)
+			if target == Vector3.INF:
+				continue
+			# the respawn camera looks along the checkpoint's -Z (LevelBase.respawn)
+			var face: Vector3 = -cp.respawn_transform().basis.z
+			var to: Vector3 = target - cp.global_position
+			var ang: float = rad_to_deg(absf(Vector2(face.x, face.z).angle_to(Vector2(to.x, to.z))))
+			if ang > worst:
+				worst = ang
+				worst_cp = cp.index
+		check(k == lvl.checkpoints.size(), "%s: every checkpoint has a route checkpoint step (%d/%d)" % [label, k, lvl.checkpoints.size()])
+		check(worst <= 50.0, "%s: respawns face the next stage (worst: checkpoint %d, %.0f deg off)" % [label, worst_cp, worst])

@@ -128,11 +128,12 @@ func _hammers_clear(list: Array) -> bool:
 
 
 ## Hammer swinging ACROSS the travel line at forward distance d (head skims the beam).
-func _hammer(y: float, d: float, period: float, phase: float, swing: float = 45.0, length: float = 7.0) -> Pendulum:
+## `span` puts the gantry posts outside the head's reach (length * sin(swing) + head).
+func _hammer(y: float, d: float, period: float, phase: float, swing: float = 45.0, length: float = 7.0, span: float = 6.6) -> Pendulum:
 	var p: Pendulum = kit.pendulum(L(0, y + length + 1.3, d), length, period, phase, _yaw, swing)
 	# gantry the hammer hangs from
-	kit.block(L(0, y + length + 1.6, d), _sz(9.0, 0.5, 0.5), TEAL, false)
-	for sx: float in [-4.5, 4.5]:
+	kit.block(L(0, y + length + 1.6, d), _sz(span * 2.0 + 0.4, 0.5, 0.5), TEAL, false)
+	for sx: float in [-span, span]:
 		kit.block(L(sx, y + length + 1.6 - 9.0, d), Vector3(0.3, 18.0, 0.3), DEEP, false)
 	return p
 
@@ -271,12 +272,13 @@ func _stage_6_hammers() -> void:
 	_water(0, -4.0, 24.0, 8.0, 40.0)
 	kit.plat(L(0, 0, 15.5), _sz(1.2, 0.6, 20.0), "alt", 0.8)
 	# phases chosen so one committed sprint threads all three
-	var h1: Pendulum = _hammer(0, 10.0, 2.4, 0.0)
-	var h2: Pendulum = _hammer(0, 13.5, 2.4, 0.338)
-	var h3: Pendulum = _hammer(0, 17.0, 2.4, 0.676)
-	var h4: Pendulum = _hammer(0, 22.0, 2.0, 0.2)
+	# (wide gantries: the posts straddle both the beam and the shortcut side deck)
+	var h1: Pendulum = _hammer(0, 10.0, 2.4, 0.0, 45.0, 7.0, 10.4)
+	var h2: Pendulum = _hammer(0, 13.5, 2.4, 0.338, 45.0, 7.0, 10.4)
+	var h3: Pendulum = _hammer(0, 17.0, 2.4, 0.676, 45.0, 7.0, 10.4)
+	var h4: Pendulum = _hammer(0, 22.0, 2.0, 0.2, 45.0, 7.0, 10.4)
 	_beam(0, 0, 34.2, 1.4, 9.0, false, true, {"edge_tilt_deg": 18.0, "max_tilt_deg": 24.0})
-	var h5: Pendulum = _hammer(0, 34.2, 2.4, 0.1)
+	var h5: Pendulum = _hammer(0, 34.2, 2.4, 0.1, 45.0, 7.0, 10.4)
 
 	J(0, 0, 2.2, 0, 0, 6.3)
 	r_walk(L(0, 0, 7.0))
@@ -407,14 +409,15 @@ func _build_crane_tower(g: Vector3) -> void:
 
 
 func _dress_master(c: Vector3) -> void:
-	var mast: Vector3 = c + Vector3(-3.4, 0, -3.6)
+	# mast and crates stand clear of the finish arch (gate at c + (-2, 0, 0), yaw 90)
+	var mast: Vector3 = c + Vector3(-3.8, 0, -3.6)
 	_lattice(mast + Vector3(0, 12.0, 0), 12.0, 2.0, true)
 	kit.glow_strip(mast + Vector3(0, 26.0, 0), Vector3(0.7, 26.0, 0.7), YELLOW)
 	kit.ring(mast + Vector3(0, 32.0, 0), 4.5, YELLOW, Vector3(0, 0, 0), 12.0)
 	kit.ring(mast + Vector3(0, 24.0, 0), 3.0, Color(0, 0, 0, 0), Vector3(0, 0, 0), 8.0)
 	kit.banner(c + Vector3(3.6, 0, -4.4), 5.0, YELLOW, 90.0)
 	kit.banner(c + Vector3(3.6, 0, 4.4), 5.0, YELLOW, 90.0)
-	_crate_stack(c + Vector3(-2.0, 0, 3.6))
+	_crate_stack(c + Vector3(-2.0, 0, 4.0))
 	kit.lamp(c + Vector3(-4.4, 0, 4.4), 3.4, false)
 
 

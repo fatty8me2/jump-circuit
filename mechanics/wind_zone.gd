@@ -18,32 +18,45 @@ func _ready() -> void:
 	var cs := CollisionShape3D.new()
 	cs.shape = shape
 	add_child(cs)
+	# streaks enter at the upwind face, run with the wind and fade out at the downwind
+	# face (every level push is axis-aligned, so the box's extent along the wind is its span)
+	var along: Vector3 = push.normalized()
+	var axis: Vector3 = along.abs()
+	var span: float = maxf(absf(size.dot(axis)), 0.5)
 	var p := GPUParticles3D.new()
 	p.amount = int(clampf(size.x * size.y * size.z * 0.35, 16, 90))
-	p.lifetime = 1.1
-	p.preprocess = 1.1
+	p.lifetime = maxf(span / 8.0, 0.3)  # 8 = initial_velocity_max: no streak leaves the box
+	p.preprocess = p.lifetime
 	p.local_coords = true
 	p.visibility_aabb = AABB(-size, size * 2.0)
 	var pm := ParticleProcessMaterial.new()
 	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
-	pm.emission_box_extents = size * 0.5
-	pm.direction = push.normalized()
+	pm.emission_box_extents = size * 0.5 * (Vector3.ONE - axis) + axis * 0.1
+	pm.emission_shape_offset = -along * span * 0.5
+	pm.direction = along
 	pm.spread = 3.0
-	pm.initial_velocity_min = 5.0
-	pm.initial_velocity_max = 9.0
+	pm.initial_velocity_min = 6.0
+	pm.initial_velocity_max = 8.0
 	pm.gravity = Vector3.ZERO
 	pm.scale_min = 0.5
 	pm.scale_max = 1.0
+	pm.particle_flag_align_y = true  # the streak's long (Y) axis follows its velocity
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, 0.15, 0.75, 1.0])
+	g.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
+	var gt := GradientTexture1D.new()
+	gt.gradient = g
+	pm.color_ramp = gt
 	p.process_material = pm
-	var q := QuadMesh.new()
-	q.size = Vector2(0.07, 0.9)
+	var m := BoxMesh.new()
+	m.size = Vector3(0.05, 0.9, 0.05)
 	var qm := StandardMaterial3D.new()
 	qm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	qm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	qm.vertex_color_use_as_albedo = true  # needed for the fade ramp to reach the pixels
 	qm.albedo_color = Color(1, 1, 1, 0.35)
-	qm.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	q.material = qm
-	p.draw_pass_1 = q
+	m.material = qm  # no billboard: a thin box reads along the wind from any angle
+	p.draw_pass_1 = m
 	add_child(p)
 
 

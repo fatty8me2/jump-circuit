@@ -238,7 +238,7 @@ func _stage_4(o: Vector3) -> Vector3:
 	_tbeam(24.3, 0.6, 9.0, 0.9, true, false, 16.0)
 	kit.wind(W(0, 2.2, -24.3), _sz(Vector3(7, 4, 10)), D(Vector3(-13, 0, 0)), 14.0)
 	var ham: Pendulum = kit.pendulum(W(0, 0.6 + 8.1, -24.3), 7.0, 2.6, 0.0, _yaw, 50.0)
-	kit.arch(W(0, -0.4, -24.3), 9.0, 9.0, _yaw, Look.c("side").lightened(0.2))
+	kit.arch(W(0, -0.4, -24.3), 15.0, 9.0, _yaw, Look.c("side").lightened(0.2))  # posts outside the swing
 	_wait(func() -> bool: return absf(ham.angle_at(Game.course_time + 1.0)) > 0.5 and absf(ham.angle_at(Game.course_time + 1.35)) > 0.4)
 	r_jump(W(0, 0.6, -17.15), W(0, 0.6, -21.0))
 	r_walk(W(0, 0.6, -28.0))
@@ -332,7 +332,7 @@ func _stage_6(o: Vector3) -> Vector3:
 	var cp: Vector3 = hub + D(Vector3(-8.7, 0.6, -10.4))
 	_step({"kind": "x_jump", "from_node": table, "from_local": Vector3(9.9, 0.25, 0), "when_node": table, "when_local": Vector3(9.9, 0, 0),
 		"when_point": hub + D(Vector3(0, -0.25, -9.9)), "when_radius": 0.8, "lead": 0.0, "to": cp + D(Vector3(0.6, 0, 0)), "speed": 12.0})
-	_cp_plat(cp, -90.0)
+	_cp_plat(cp, 0.0)  # face stage 7's first hop (its frame yaw is 0)
 	r_walk(cp)
 	r_checkpoint()
 	return cp
@@ -488,7 +488,7 @@ func _stage_10(o: Vector3) -> Vector3:
 	for i: int in 3:
 		var hz: float = -7.0 - 9.0 * i
 		hams.append(kit.pendulum(W(0, 8.2, hz), 7.0, 3.0, -0.173 * i, _yaw, 50.0))
-		kit.arch(W(0, -1.0, hz), 8.0, 9.6, _yaw, Look.c("side").lightened(0.2))
+		kit.arch(W(0, -1.0, hz), 15.0, 9.6, _yaw, Look.c("side").lightened(0.2))  # posts outside the swing
 	for bz: float in [-11.5, -20.5]:
 		kit.hazard(W(0, 0.25, bz), _sz(Vector3(3, 0.5, 0.6)))
 	r_walk(W(0, 0, -1.8))
@@ -506,7 +506,7 @@ func _stage_10(o: Vector3) -> Vector3:
 	for bz: float in [-36.4, -42.4]:
 		kit.hazard(W(0, 0.25, bz), _sz(Vector3(2.4, 0.5, 0.6)))
 	var last: Pendulum = kit.pendulum(W(0, 8.2, -47.0), 7.0, 2.2, 0.0, _yaw, 50.0)
-	kit.arch(W(0, -1.0, -47.0), 8.0, 9.6, _yaw, Look.c("side").lightened(0.2))
+	kit.arch(W(0, -1.0, -47.0), 15.0, 9.6, _yaw, Look.c("side").lightened(0.2))
 	_wait(func() -> bool: return _hammers_clear([last], [2.25], 0.35))
 	r_jump(W(0, 0, -32.3), W(0, 0, -38.3))
 	r_jump(W(0, 0, -38.8), W(0, 0, -44.4))
@@ -527,7 +527,8 @@ func _stage_11(o: Vector3) -> Vector3:
 	var plate: Vector3 = W(0, 1.6, -13.8)
 	kit.plat(plate, Vector3(1.8, 0.8, 1.8), "accent", 0.0)
 	var ham: Pendulum = kit.pendulum(plate + Vector3(0, 1.25 + 9.0, 0), 9.0, 3.2, 0.0, _yaw + 90.0, 60.0)
-	kit.arch(plate + D(Vector3(0, -12.0, 0)), 9.0, 23.0, _yaw + 90.0, Look.c("side").lightened(0.2))
+	# gantry straddles the lane, out of the swing and throw plane
+	kit.arch(plate + D(Vector3(0, -12.0, 0)), 9.0, 23.0, _yaw, Look.c("side").lightened(0.2))
 	# step on right after the head has swept back over the plate; it returns 1.6 s later and hurls us forward
 	_wait(func() -> bool:
 		var t: float = Game.course_time + 0.75
