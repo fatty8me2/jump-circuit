@@ -1071,7 +1071,9 @@ func test_v_race_go_behind_open_menu() -> void:
 		await ticks(2)
 	Game.level_index = 0
 	Game.race_mode = true
-	Net.race_start_time = Net.now() + 1.0
+	# a long countdown while the level builds (a loaded machine can take > 1 s), then a short one
+	Net.race_start_time = Net.now() + 30.0
+	Game.course_time = -30.0
 	var lvl: LevelBase = (load(Game.LEVELS[0]["scene"]) as PackedScene).instantiate() as LevelBase
 	add_child(lvl)
 	world = lvl
@@ -1079,6 +1081,7 @@ func test_v_race_go_behind_open_menu() -> void:
 	var pause: PauseMenu = lvl.find_children("*", "PauseMenu", true, false)[0] as PauseMenu
 	check(Game.course_time < 0.0 and not lvl.player.control_enabled, "the race countdown holds the player (t=%.2f)" % Game.course_time)
 	pause.set_open(true)
+	Net.race_start_time = Net.now() + 0.3
 	var t: float = 0.0
 	while Game.course_time < 0.2 and t < 3.0:
 		await get_tree().physics_frame
