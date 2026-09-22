@@ -26,11 +26,14 @@ var current_checkpoint: int = 0
 var finished: bool = false
 var run_time: float = 0.0
 var deaths: int = 0
+## run_time when each checkpoint was first reached this run (-1 = not yet / skipped).
+var splits: Array[float] = []
 ## Set false by automated tests to skip HUD/camera/audio side effects.
 var headless_mode: bool = false
 
 var _spawn: Transform3D = Transform3D.IDENTITY
-var _respawning: bool = false
+## Physics tick of the last respawn (see fail()).
+var _respawn_tick: int = -100
 var _started: bool = false
 var _pose_tick: int = 0
 var _ghosts: Dictionary = {}
@@ -78,6 +81,8 @@ func _collect_checkpoints() -> void:
 	for i: int in checkpoints.size():
 		checkpoints[i].index = i + 1
 		checkpoints[i].reached.connect(_on_checkpoint)
+	splits.resize(checkpoints.size())
+	splits.fill(-1.0)
 	for node: Node in find_children("*", "FinishGate", true, false):
 		(node as FinishGate).reached.connect(_on_finish)
 
@@ -110,6 +115,27 @@ func _begin_run() -> void:
 	if Game.intro_shown_for != level_id:
 		Game.intro_shown_for = level_id
 		hud.show_intro(Game.level_info()["name"], Game.level_info().get("blurb", ""))
+	if not headless_mode and not Game.shot_mode:
+		_hold_clock_until_drawn()
+
+
+## The scene load and the level build stall the main loop, and the physics catch-up
+## after them would otherwise run the solo clock (and the world) before the first
+## frame is on screen. Hold both at t=0, with control off, until the level is drawn.
+func _hold_clock_until_drawn() -> void:
+	var tree: SceneTree = get_tree()
+	Game.course_running = false
+	Game.course_time = 0.0
+	player.control_enabled = false
+	await tree.process_frame
+	if not is_inside_tree():
+		return
+	await tree.process_frame
+	if not is_inside_tree() or Game.race_mode or finished:
+		return
+	Game.course_time = 0.0
+	Game.course_running = true
+	player.control_enabled = not _pause.open
 
 
 # ---- race -------------------------------------------------------------------------------
@@ -162,7 +188,8 @@ func _physics_process(dt: float) -> void:
 	if Game.race_mode:
 		if not _started and Game.course_time >= 0.0:
 			_started = true
-			player.control_enabled = true
+			# GO behind the open menu leaves control off; closing the menu hands it back
+			player.control_enabled = not (_pause != null and _pause.open)
 			hud.go()
 		_pose_tick += 1
 		if _pose_tick % 4 == 0:
@@ -173,22 +200,29 @@ func _physics_process(dt: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if finished or player == null:
+	# the menu has its own "Back to Checkpoint" (solo play is paused anyway; a race is not)
+	if player == null or (_pause != null and _pause.open):
+		return
+	if finished:
+		# results screen: R / Y runs it again, once the panel takes input
+		if not Game.race_mode and hud.results_ready() and event.is_action_pressed("restart"):
+			get_viewport().set_input_as_handled()
+			Game.restart_level()
 		return
 	if event.is_action_pressed("restart"):
 		if current_checkpoint == 0 and not Game.race_mode and _started and Game.level_index >= 0:
-			Game.restart_level()
+			restart_run()
 		else:
-			respawn()
-	elif event.is_action_pressed("dev_next_checkpoint") and Game.dev_mode:
+			manual_respawn()
+	elif event.is_action_pressed("dev_next_checkpoint") and Game.dev_mode and not Game.race_mode:
 		if current_checkpoint < checkpoints.size():
-			var cp: Checkpoint = checkpoints[current_checkpoint]
-			player.teleport(cp.respawn_transform())
+			var xf: Transform3D = checkpoints[current_checkpoint].respawn_transform()
+			reset_dynamic_objects()
+			player.teleport(xf)
+			camera.face(-xf.basis.z)
 
 
 func _check_failure() -> void:
-	if _respawning:
-		return
 	var p: Vector3 = player.global_position
 	if p.y < kill_y:
 		fail()
@@ -205,17 +239,33 @@ func _check_failure() -> void:
 
 
 func fail() -> void:
-	if _respawning or finished:
+	# Several kill zones can report one touch: all in the same tick (a seam or corner
+	# between bricks, or a zone plus _check_failure), or one tick after the respawn
+	# (Jolt still judges overlaps from the pre-teleport spot for a step). Count one fall.
+	if finished or Engine.get_physics_frames() - _respawn_tick <= 1:
 		return
 	deaths += 1
 	respawn()
+
+
+## R/Y or the pause menu's "Back to Checkpoint". Bailing out while clearly falling
+## counts as a fall, so it can't dodge the fall counter; resetting while standing,
+## or mid-hop near your footing, stays free.
+func manual_respawn() -> void:
+	if finished or player == null:
+		return
+	if not player.grounded and player.velocity.y < -4.0 and player.global_position.y < player.last_ground_y - 1.5:
+		fail()
+	else:
+		respawn()
 
 
 ## Instant, safe, correctly oriented. Local physics objects return to their start state.
 func respawn() -> void:
 	if finished:
 		return
-	_respawning = true
+	# respawns from input or the pause menu run between ticks, so they belong to the next one
+	_respawn_tick = Engine.get_physics_frames() + (0 if Engine.is_in_physics_frame() else 1)
 	var xf: Transform3D = _spawn
 	if current_checkpoint > 0:
 		xf = checkpoints[current_checkpoint - 1].respawn_transform()
@@ -225,7 +275,23 @@ func respawn() -> void:
 	hud.flash()
 	Sfx.play("respawn", 0.03, 0.7)
 	player_respawned.emit()
-	_respawning = false
+
+
+## Solo restart from the top without reloading the scene (R before the first
+## checkpoint, or the pause menu). Obstacles are pure functions of Game.course_time
+## and stateful props are "resettable", so zeroing the clock and respawning is a
+## full reset - no rebuild hitch, no clock skew.
+func restart_run() -> void:
+	if finished or Game.race_mode:
+		return
+	Game.course_time = 0.0
+	run_time = 0.0
+	deaths = 0
+	current_checkpoint = 0
+	splits.fill(-1.0)
+	for cp: Checkpoint in checkpoints:
+		cp.set_active(false, false)
+	respawn()
 
 
 func reset_dynamic_objects() -> void:
@@ -238,10 +304,11 @@ func _on_checkpoint(cp: Checkpoint) -> void:
 	if cp.index <= current_checkpoint or finished:
 		return
 	current_checkpoint = cp.index
+	splits[cp.index - 1] = run_time
 	for other: Checkpoint in checkpoints:
 		other.set_active(other.index == cp.index)
 	Sfx.play("checkpoint")
-	hud.toast("Checkpoint")
+	hud.checkpoint_reached(cp.index, run_time)
 	if Game.race_mode:
 		Net.send_checkpoint(cp.index)
 
@@ -257,15 +324,16 @@ func _on_finish() -> void:
 	if Game.race_mode:
 		Net.send_checkpoint(checkpoints.size() + 1)
 		Net.send_finished(time)
-		SaveData.record_finish(level_id, time, deaths)
+		SaveData.record_finish(level_id, time, deaths, splits)
 		hud.show_race_results()
 		return
 	var prev_best: float = SaveData.best_time(level_id)
+	var prev_ff: int = SaveData.fewest_falls(level_id)
 	var is_best: bool = false
 	if Game.level_index >= 0:
-		is_best = SaveData.record_finish(level_id, time, deaths)
+		is_best = SaveData.record_finish(level_id, time, deaths, splits)
 	await _finish_sequence()
-	hud.show_results(time, prev_best, is_best, deaths)
+	hud.show_results(time, prev_best, is_best, deaths, prev_ff)
 
 
 ## Override for a bespoke ending (level 5's beacon).

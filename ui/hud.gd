@@ -9,11 +9,14 @@ var _root: Control
 var _timer: Label
 var _intro: VBoxContainer
 var _toast: Label
+## Second line under the toast (split time vs best); a child, so it fades with it.
+var _toast_sub: Label
 var _count: Label
 var _board: VBoxContainer
 var _flash: ColorRect
 var _debug: Label
 var _results: Control
+var _results_ready: bool = false
 var _board_refresh: float = 0.0
 var _last_count: int = 99
 var _peak_speed: float = 0.0
@@ -62,6 +65,10 @@ func _ready() -> void:
 	_toast.custom_minimum_size = Vector2(600, 0)
 	_toast.modulate.a = 0.0
 	_root.add_child(_toast)
+	_toast_sub = UiKit.shadowed(UiKit.label("", 24, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER), 5)
+	_toast_sub.position = Vector2(0, 40)
+	_toast_sub.custom_minimum_size = Vector2(600, 0)
+	_toast.add_child(_toast_sub)
 
 	_count = UiKit.shadowed(UiKit.label("", 150, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER), 14)
 	_count.set_anchors_preset(Control.PRESET_CENTER)
@@ -89,7 +96,8 @@ func _timer_visible() -> bool:
 		return true
 	if Settings.timer_mode == "off":
 		return false
-	return level != null and SaveData.is_completed(level.level_id)
+	# "auto": once this course layout has a best time (an old layout's clear doesn't count)
+	return level != null and SaveData.best_time(level.level_id) >= 0.0
 
 
 func show_intro(title: String, blurb: String) -> void:
@@ -103,12 +111,38 @@ func show_intro(title: String, blurb: String) -> void:
 	tw.tween_property(_intro, "modulate:a", 0.0, 1.0)
 
 
-func toast(text: String) -> void:
+func toast(text: String, sub: String = "", sub_color: Color = UiKit.SOFT) -> void:
 	_toast.text = text
+	_toast_sub.text = sub
+	_toast_sub.add_theme_color_override("font_color", sub_color)
 	var tw: Tween = create_tween()
 	tw.tween_property(_toast, "modulate:a", 1.0, 0.12)
 	tw.tween_interval(1.3)
 	tw.tween_property(_toast, "modulate:a", 0.0, 0.5)
+
+
+## Checkpoint toast, plus the split against your best run when the timer is shown.
+func checkpoint_reached(index: int, time: float) -> void:
+	var sub: String = ""
+	var col: Color = UiKit.SOFT
+	if not Game.race_mode and _timer_visible():
+		var best: Array = SaveData.best_splits(level.level_id)
+		# a best from another checkpoint layout, or a skipped checkpoint, has no split
+		if best.size() == level.checkpoints.size() and index >= 1 and index <= best.size() and float(best[index - 1]) >= 0.0:
+			sub = _delta_text(time, float(best[index - 1]))
+			col = _delta_color(time, float(best[index - 1]))
+	toast("Checkpoint", sub, col)
+
+
+## "-1.84" / "+0.62" against `ref`, at the resolution the times are shown.
+static func _delta_text(time: float, ref: float) -> String:
+	return "%+.2f" % (float(SaveData.centiseconds(time) - SaveData.centiseconds(ref)) / 100.0)
+
+
+## Teal when ahead of `ref`, soft red when behind.
+static func _delta_color(time: float, ref: float) -> Color:
+	var d: int = SaveData.centiseconds(time) - SaveData.centiseconds(ref)
+	return UiKit.TEAL if d < 0 else (Color(1.0, 0.5, 0.45) if d > 0 else UiKit.SOFT)
 
 
 func flash() -> void:
@@ -137,6 +171,9 @@ func _process(dt: float) -> void:
 		return
 	_timer.visible = _timer_visible() and _results == null
 	_timer.text = SaveData.format_time(maxf(level.run_time, 0.0))
+	# past your personal best the timer turns red: this run won't be a PB
+	var pb: float = SaveData.best_time(level.level_id)
+	_timer.self_modulate = Color(1.0, 0.6, 0.55) if not Game.race_mode and pb >= 0.0 and level.run_time > pb else Color.WHITE
 	_stage.text = "Stage %d / %d     Falls %d" % [level.current_checkpoint + 1, level.checkpoints.size() + 1, level.deaths]
 	_stage.visible = _results == null
 	var hs: float = level.player.horizontal_speed()
@@ -201,33 +238,53 @@ func _update_debug() -> void:
 
 # ---- end of level -------------------------------------------------------------------------
 
-func show_results(time: float, prev_best: float, is_best: bool, deaths: int) -> void:
+## `prev_best` / `prev_ff` are the records from before this run (-1 = none), so a
+## new best time or fewest-falls record can be called out.
+func show_results(time: float, prev_best: float, is_best: bool, deaths: int, prev_ff: int = -1) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	var box: VBoxContainer = UiKit.vbox(12)
 	box.add_child(UiKit.label("COURSE CLEAR", 22, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER))
 	box.add_child(UiKit.label(str(Game.level_info()["name"]), 40, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER))
 	box.add_child(UiKit.label(SaveData.format_time(time), 64, UiKit.GOLD, HORIZONTAL_ALIGNMENT_CENTER))
 	var sub: String = "First clear!" if prev_best < 0.0 else ("New personal best!  (was %s)" % SaveData.format_time(prev_best) if is_best else "Personal best  %s" % SaveData.format_time(prev_best))
-	box.add_child(UiKit.label(sub, 22, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER))
-	var ff: int = SaveData.fewest_falls(level.level_id)
+	box.add_child(UiKit.label(sub, 22, UiKit.GOLD if is_best and prev_best >= 0.0 else UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER))
+	if prev_best >= 0.0:
+		box.add_child(UiKit.label(_delta_text(time, prev_best) + " s", 20, _delta_color(time, prev_best), HORIZONTAL_ALIGNMENT_CENTER))
 	var falls_text: String = "Falls: %d" % deaths
+	var falls_record: bool = deaths == 0 or (prev_ff >= 0 and deaths < prev_ff)
 	if deaths == 0:
 		falls_text = "FLAWLESS - no falls!"
-	elif ff >= 0:
-		falls_text += "   (fewest ever: %d)" % ff
-	box.add_child(UiKit.label(falls_text, 18, UiKit.GOLD if deaths == 0 else Color(0.7, 0.74, 0.85), HORIZONTAL_ALIGNMENT_CENTER))
+	elif prev_ff >= 0 and deaths < prev_ff:
+		falls_text += "  - fewest yet!  (was %d)" % prev_ff
+	elif prev_ff >= 0:
+		falls_text += "   (fewest ever: %d)" % prev_ff
+	box.add_child(UiKit.label(falls_text, 18, UiKit.GOLD if falls_record else Color(0.7, 0.74, 0.85), HORIZONTAL_ALIGNMENT_CENTER))
 	var last: bool = Game.level_index == Game.LEVELS.size() - 1
 	var next: Button = UiKit.button("Finale" if last else "Next Level", func() -> void: Game.next_level())
-	box.add_child(next)
-	box.add_child(UiKit.button("Run It Again", func() -> void: Game.restart_level()))
-	box.add_child(UiKit.button("Level Select", func() -> void: Game.goto_title("levels")))
+	var buttons: Array[Button] = [next,
+		UiKit.button("Run It Again  (R)", func() -> void: Game.restart_level()),
+		UiKit.button("Level Select", func() -> void: Game.goto_title("levels"))]
+	for b: Button in buttons:
+		b.disabled = true      # live once readable, so a jump mashed into the gate can't skip it
+		box.add_child(b)
 	var p: PanelContainer = UiKit.panel(Vector2(460, 0))
 	p.add_child(box)
 	_results = UiKit.centered(p)
 	_results.modulate.a = 0.0
 	_root.add_child(_results)
-	create_tween().tween_property(_results, "modulate:a", 1.0, 0.35)
-	next.grab_focus()
+	var tw: Tween = create_tween()
+	tw.tween_property(_results, "modulate:a", 1.0, 0.35)
+	tw.tween_interval(0.35)
+	tw.tween_callback(func() -> void:
+		for b: Button in buttons:
+			b.disabled = false
+		_results_ready = true
+		next.grab_focus())
+
+
+## True once the results panel takes input (R / Y retries from then on).
+func results_ready() -> bool:
+	return _results_ready
 
 
 func show_race_results() -> void:
