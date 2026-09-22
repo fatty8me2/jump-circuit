@@ -914,9 +914,11 @@ func test_z_b2_settings_panel_and_sanitize() -> void:
 	check(f is HSlider and sp.is_ancestor_of(f), "the settings panel focuses its first slider by itself (pause menu too)")
 	check(not bool(sp.get("_dirty")), "building the panel leaves nothing to save")
 	var fov_slider := sp.find_children("*", "HSlider", true, false)[1] as HSlider
-	fov_slider.value = 90.0
+	# (a value the slider is not already on: the developer's own settings may be 90)
+	var want: float = 80.0 if is_equal_approx(fov_slider.value, 90.0) else 90.0
+	fov_slider.value = want
 	var readout := fov_slider.get_parent().get_child(1) as Label
-	check(readout.text == "90°" and is_equal_approx(Settings.fov, 90.0) and bool(sp.get("_dirty")), "FOV applies live, shows its value (%s) and marks the panel dirty" % readout.text)
+	check(readout.text == "%d°" % roundi(want) and is_equal_approx(Settings.fov, want) and bool(sp.get("_dirty")), "FOV applies live, shows its value (%s) and marks the panel dirty" % readout.text)
 	Settings.fullscreen = not bool(snap["fullscreen"])
 	Settings.changed.emit()
 	var fs := sp.get("_fullscreen_check") as CheckButton
@@ -1778,3 +1780,43 @@ func test_zb4b_finish_gate_celebrates() -> void:
 	await real_seconds(1.3)
 	var veil: StandardMaterial3D = gate.get("_veil_mat")
 	check(is_equal_approx(lamp.light_energy, 2.5) and is_equal_approx(veil.albedo_color.a, 0.16) and is_equal_approx(glow.emission_energy_multiplier, 3.0), "the gate settles back (lamp %.2f, veil %.2f)" % [lamp.light_energy, veil.albedo_color.a])
+
+
+# ---- final review fixes ---------------------------------------------------------------------------
+
+## An in-place restart drops the last run's stage banner and poses every clock-driven
+## obstacle for t=0 at once (no interpolated sweep across the course).
+func test_zf_restart_clears_banner_and_snaps_obstacles() -> void:
+	var lvl: LevelBase = await load_level(3)
+	lvl.player.teleport(lvl.checkpoints[0].respawn_transform())
+	await seconds(0.3)
+	var toast: Label = lvl.hud.get("_toast")
+	check(lvl.current_checkpoint == 1 and toast.modulate.a > 0.0, "banking a checkpoint shows the stage banner")
+	Game.course_time = 40.0
+	await ticks(2)
+	lvl.restart_run()
+	var movers: int = 0
+	var snapped: int = 0
+	for node: Node in get_tree().get_nodes_in_group("course_clock"):
+		if node is MovingPlatform:
+			var mp := node as MovingPlatform
+			movers += 1
+			if mp.position.is_equal_approx((mp.get("_origin") as Vector3) + mp.offset_at(Game.course_time)):
+				snapped += 1
+	check(movers > 0 and snapped == movers, "restart poses every mover for the new clock before the next tick (%d/%d)" % [snapped, movers])
+	check(is_zero_approx(toast.modulate.a) and (lvl.hud.get("_toast_sub") as Label).text == "", "restart clears the stage banner")
+	await seconds(0.3)
+	check(is_zero_approx(toast.modulate.a), "and it stays cleared on the new run")
+
+
+## A colour the race host lends on join is for that session only: the player's own
+## pick is what gets saved, and it comes back when the session ends.
+func test_zf_host_assigned_colour_is_session_only() -> void:
+	var saved: int = Settings.color_index
+	Net.leave()
+	Settings.color_index = 3
+	Net._sync_roster({1: {"name": "Me", "color": 0, "cp": 0, "finished": -1.0}})
+	check(Settings.color_index == 0 and Net.preferred_color == 3, "joining wears the colour the host assigned")
+	Net._shutdown()
+	check(Settings.color_index == 3 and Net.preferred_color == -1, "ending the session gives the player's own colour back")
+	Settings.color_index = saved

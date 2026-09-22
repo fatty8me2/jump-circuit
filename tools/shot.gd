@@ -76,6 +76,6 @@ func _ready() -> void:
 
 ## Removes the scratch save and quits.
 func _quit(code: int) -> void:
-	if FileAccess.file_exists(SHOT_SAVE):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(SHOT_SAVE))
+	if SaveData.path_override == SHOT_SAVE:   # _quit(2) can run before the override is set
+		SaveData.delete_files()   # with its .bak / .tmp siblings
 	get_tree().quit(code)

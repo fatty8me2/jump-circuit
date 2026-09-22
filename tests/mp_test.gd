@@ -46,7 +46,7 @@ func _finish(reason: String) -> void:
 	print("[%s]   FAIL  %s" % [role, reason])
 	print("[%s] RESULT: %d passed, %d failed" % [role, passed, failed])
 	Net.leave()
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(SaveData.path_override))
+	SaveData.delete_files()
 	get_tree().quit(1)
 
 

@@ -89,6 +89,9 @@ func save_settings() -> void:
 	var cf := ConfigFile.new()
 	for prop: String in _props():
 		cf.set_value("s", prop, get(prop))
+	if Net.preferred_color >= 0:
+		# wearing a colour a race host assigned: keep the player's own pick on disk
+		cf.set_value("s", "color_index", Net.preferred_color)
 	cf.save(PATH)
 
 

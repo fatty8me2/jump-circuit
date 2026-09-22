@@ -156,6 +156,18 @@ func checkpoint_reached(index: int, time: float) -> void:
 	_stage_tw.tween_property(_stage, "modulate", Color.WHITE, 0.8)
 
 
+## An in-place restart (LevelBase.restart_run) drops the last run's stage banner.
+func clear_banner() -> void:
+	if _toast_tw != null and _toast_tw.is_valid():
+		_toast_tw.kill()
+	if _stage_tw != null and _stage_tw.is_valid():
+		_stage_tw.kill()
+	_toast.modulate.a = 0.0
+	_toast.scale = Vector2.ONE
+	_toast_sub.text = ""
+	_stage.modulate = Color.WHITE
+
+
 ## Banner line for arriving on `stage` of `total` ("FINAL STAGE" for the last one).
 static func stage_text(stage: int, total: int) -> String:
 	return "FINAL STAGE" if stage >= total else "STAGE %d / %d" % [stage, total]
@@ -340,14 +352,20 @@ func show_race_results(time: float) -> void:
 		Game.goto_title("main")
 	var first: Button
 	var leave: Button
+	# these buttons get focus, and Space / A are also the jump inputs: anything that
+	# ends the race for someone still running takes two presses
 	if Net.is_host():
-		first = UiKit.button("Back to Lobby (everyone)", func() -> void: Net.host_return_to_lobby())
+		var to_lobby := func() -> void: Net.host_return_to_lobby()
+		if Net.all_finished():
+			first = UiKit.button("Back to Lobby (everyone)", to_lobby)
+		else:
+			first = UiKit.confirm_button("Back to Lobby (everyone)", "Press again to end the race", to_lobby)
 		box.add_child(first)
 		# for the host, leaving closes the session on everyone
 		leave = UiKit.confirm_button("Close Session (disconnects all)", "Press again to disconnect all", leave_race)
 	else:
 		box.add_child(UiKit.label("Waiting for the host to continue...", 18, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER))
-		leave = UiKit.button("Leave Race", leave_race)
+		leave = UiKit.confirm_button("Leave Race", "Press again to leave", leave_race)
 		first = leave
 	box.add_child(leave)
 	var p: PanelContainer = UiKit.panel(Vector2(440, 0))

@@ -76,6 +76,6 @@ func _process(dt: float) -> void:
 
 ## Removes the scratch save (a copy of the real progress plus the bot's runs) and quits.
 func _quit(code: int) -> void:
-	if SaveData.path_override != "" and FileAccess.file_exists(SaveData.path_override):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(SaveData.path_override))
+	if SaveData.path_override != "":
+		SaveData.delete_files()   # with its .bak / .tmp siblings
 	get_tree().quit(code)

@@ -33,6 +33,9 @@ var in_race: bool = false
 var upnp_enabled: bool = true
 ## Cached UPnP outcome for the current hosting session ("" = not known yet).
 var upnp_text: String = ""
+## The player's own colour while the host has them wearing another one (-1 = none).
+## Settings saves this instead of the session colour, and it returns when the session ends.
+var preferred_color: int = -1
 
 var _clock_offset: float = 0.0
 var _best_rtt: float = 999.0
@@ -125,6 +128,9 @@ func _shutdown() -> void:
 	_connect_left = -1.0
 	_clock_offset = 0.0
 	upnp_text = ""
+	if preferred_color >= 0:
+		Settings.color_index = preferred_color
+		preferred_color = -1
 	roster_changed.emit()
 
 
@@ -237,8 +243,12 @@ func _sync_roster(new_roster: Dictionary) -> void:
 					e["finished"] = old["finished"]
 	roster = new_roster
 	if first:
-		# wear the colour the host assigned (it moves newcomers off colours already taken)
-		Settings.color_index = int(roster[my_id()]["color"])
+		# wear the colour the host assigned for this session (it moves newcomers off colours
+		# already taken); the player's own pick comes back when the session ends
+		var assigned: int = int(roster[my_id()]["color"])
+		if assigned != Settings.color_index:
+			preferred_color = Settings.color_index
+			Settings.color_index = assigned
 	roster_changed.emit()
 	if first:
 		joined_lobby.emit()
@@ -324,15 +334,17 @@ func _pose(pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
 
 func send_checkpoint(index: int) -> void:
 	if active:
-		_checkpoint.rpc(index)
+		_checkpoint.rpc(index, now())
 
 
+## `at` is the racer's own session time at the checkpoint: stamping it on arrival would
+## let every peer rank itself first in a near-tie.
 @rpc("any_peer", "call_local", "reliable")
-func _checkpoint(index: int) -> void:
+func _checkpoint(index: int, at: float) -> void:
 	var id: int = multiplayer.get_remote_sender_id()
 	if roster.has(id) and index > int(roster[id]["cp"]):
 		roster[id]["cp"] = index
-		roster[id]["cp_at"] = now()
+		roster[id]["cp_at"] = at
 		roster_changed.emit()
 
 

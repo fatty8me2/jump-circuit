@@ -42,6 +42,13 @@ func _ready() -> void:
 		add_child(vis)
 	_apply(Game.course_time)
 	reset_physics_interpolation()
+	add_to_group("course_clock")
+
+
+## restart_run() winds the clock back in place: take the new pose now, without a streak.
+func snap_to_clock() -> void:
+	_apply(Game.course_time)
+	reset_physics_interpolation()
 
 
 func angle_at(time: float) -> float:

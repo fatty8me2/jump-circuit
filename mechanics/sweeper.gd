@@ -27,6 +27,13 @@ func _ready() -> void:
 		kz.position = Vector3(arm_length * 0.5 + 0.3, bar_height, 0)
 		holder.add_child(kz)
 	_apply()
+	add_to_group("course_clock")
+
+
+## restart_run() winds the clock back in place: take the new pose now, without a streak.
+func snap_to_clock() -> void:
+	_apply()
+	reset_physics_interpolation()
 
 
 func angle_at(time: float) -> float:

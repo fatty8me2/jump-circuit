@@ -30,9 +30,9 @@ copy tools\Godot_v4.7.1-stable_win64.exe build\JumpCircuit.exe
 
 Godot refuses to export into a folder that does not exist, hence the `mkdir build`.
 `make_build.bat` creates the folder itself, and stops with `BUILD FAILED` (exit code 1) if any step
-fails, deleting the old `.pck` first so a failed export never ships a stale one.
-`run.bat` in the repo root plays that build; with no build it runs the project from source using the
-editor binary in `tools\`.
+fails, deleting the old `.pck` and `.exe` first so a failed export never ships a stale one.
+`run.bat` in the repo root plays whatever build is in `build\` (route A or B); with no build it runs
+the project from source using the editor binary in `tools\`.
 
 Ship `JumpCircuit.exe` + `JumpCircuit.pck` together. This is fully native and playable; the only
 differences from (A) are file size (the editor binary is larger than a release template) and that

@@ -810,6 +810,13 @@ func _physics_process(dt: float) -> void:
 		_second_b.rotation.y = _second_b_angle(Game.course_time)
 
 
+func _snap_to_clock() -> void:
+	super()
+	if _second_b != null:
+		_second_b.rotation.y = _second_b_angle(Game.course_time)
+		_second_b.reset_physics_interpolation()
+
+
 # =================================================================================================
 # surroundings
 # =================================================================================================

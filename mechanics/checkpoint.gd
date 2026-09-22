@@ -15,7 +15,8 @@ var _orb_mat: StandardMaterial3D
 var _t: float = 0.0
 ## Ring flare after a celebrated activation (killed by any later set_active).
 var _flare_tw: Tween
-## One-shot spark ring rising off the floor ring; built on the first celebration, then reused.
+## One-shot spark ring rising off the floor ring; built with the checkpoint (inside the level
+## load, not as a hitch on the first touch) and restarted on every celebration.
 var _burst: GPUParticles3D
 
 
@@ -58,6 +59,8 @@ func _ready() -> void:
 	_orb_mat.emission_energy_multiplier = 0.1
 	_orb = Look.mesh_node(_octa(), _orb_mat, Vector3(0, 2.75, 0))
 	add_child(_orb)
+	_burst = _make_burst()
+	add_child(_burst)
 
 
 func _octa() -> Mesh:
@@ -87,9 +90,6 @@ func set_active(on: bool, celebrate: bool = true) -> void:
 		_ring_mat.emission_energy_multiplier = 7.0
 		_flare_tw = create_tween()
 		_flare_tw.tween_property(_ring_mat, "emission_energy_multiplier", 2.4, 0.6).set_ease(Tween.EASE_OUT)
-		if _burst == null:
-			_burst = _make_burst()
-			add_child(_burst)
 		_burst.restart()
 
 

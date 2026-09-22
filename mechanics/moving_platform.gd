@@ -50,6 +50,13 @@ func _ready() -> void:
 		add_child(pod)
 	position = _origin + offset_at(Game.course_time)
 	reset_physics_interpolation()
+	add_to_group("course_clock")
+
+
+## restart_run() winds the clock back in place: take the new pose now, without a streak.
+func snap_to_clock() -> void:
+	position = _origin + offset_at(Game.course_time)
+	reset_physics_interpolation()
 
 
 func offset_at(time: float) -> Vector3:

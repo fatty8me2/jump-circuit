@@ -1,7 +1,7 @@
 @echo off
 setlocal
 rem Template-free native build: see docs/BUILD.md
-rem Stops with BUILD FAILED (exit code 1) if any step fails, and never leaves an old .pck behind.
+rem Stops with BUILD FAILED (exit code 1) if any step fails, and never leaves an old build behind.
 cd /d "%~dp0.."
 set "GODOT=tools\Godot_v4.7.1-stable_win64.exe"
 if not exist "%GODOT%" (
@@ -12,6 +12,7 @@ if not exist "%GODOT%" (
 if not exist build mkdir build || goto fail
 if not exist build\.gdignore type nul > build\.gdignore
 if exist build\JumpCircuit.pck del /q build\JumpCircuit.pck
+if exist build\JumpCircuit.exe del /q build\JumpCircuit.exe
 "%GODOT%" --headless --path . --import
 if errorlevel 1 goto fail
 "%GODOT%" --headless --path . --export-pack "Windows Desktop" build/JumpCircuit.pck

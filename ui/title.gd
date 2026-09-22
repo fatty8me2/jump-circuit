@@ -116,6 +116,8 @@ func show_screen(id: String) -> void:
 	_focus_pref = null
 	_prev_screen = Game.title_screen
 	Game.title_screen = id
+	# a race host may have lent us another colour; leaving the session gives ours back
+	_volt.set_accent(Settings.my_color())
 	match id:
 		"levels":
 			_screen = _levels_screen()
@@ -306,6 +308,7 @@ func _identity_row() -> Control:
 		# restyle in place: rebuilding the screen would wipe a typed address and status
 		sw.pressed.connect(func() -> void:
 			Settings.color_index = i
+			Net.preferred_color = -1   # an explicit pick is the player's colour from now on
 			Settings.save_settings()
 			for j: int in styles.size():
 				styles[j].set_border_width_all(3 if j == i else 0)

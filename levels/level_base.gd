@@ -298,13 +298,24 @@ func restart_run() -> void:
 	if finished or Game.race_mode:
 		return
 	Game.course_time = 0.0
+	_snap_to_clock()
 	run_time = 0.0
 	deaths = 0
 	current_checkpoint = 0
 	splits.fill(-1.0)
 	for cp: Checkpoint in checkpoints:
 		cp.set_active(false, false)
+	hud.clear_banner()
 	respawn()
+
+
+## After the clock jumps back, pose every clock-driven obstacle for the new time at
+## once (otherwise physics interpolation draws them sweeping across the course).
+## Levels with their own clock-driven parts extend this.
+func _snap_to_clock() -> void:
+	for node: Node in get_tree().get_nodes_in_group("course_clock"):
+		if is_ancestor_of(node):
+			node.call("snap_to_clock")
 
 
 func reset_dynamic_objects() -> void:
