@@ -1,0 +1,7 @@
+.godot/
+build/
+tests/scratch/
+tools/__pycache__/
+*.tmp
+# Godot 4.7.1 editor binary (171 MB, over GitHub's file limit): download from godotengine.org
+tools/Godot_v4.7.1-stable_win64.exe
