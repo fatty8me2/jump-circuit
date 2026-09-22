@@ -13,6 +13,9 @@ var _grounded: bool = true
 var _age: float = 0.0
 var _has_state: bool = false
 var _facing: Vector3 = Vector3.FORWARD
+## Teleport sequence of the last packet (a change means the racer respawned).
+var _seq: int = -1
+var racer_name: String = ""
 
 
 func _ready() -> void:
@@ -31,16 +34,22 @@ func _ready() -> void:
 	add_child(_label)
 
 
-func setup(racer_name: String, color: Color) -> void:
+func setup(p_name: String, color: Color) -> void:
+	racer_name = p_name
 	_visual.set_accent(color)
-	_label.text = racer_name
+	_label.text = p_name
 	_label.modulate = color.lerp(Color.WHITE, 0.4)
 
 
-func push_state(pos: Vector3, vel: Vector3, grounded: bool) -> void:
-	if not _has_state or pos.distance_to(global_position) > 12.0:
-		global_position = pos      # first packet or a respawn: snap
-	if grounded and not _grounded:
+func push_state(pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
+	if not _has_state or seq != _seq or pos.distance_to(global_position) > 12.0:
+		# first packet, a respawn / teleport, or a long packet gap: snap, don't slide
+		global_position = pos
+		var flat := Vector3(vel.x, 0, vel.z)
+		if flat.length() > 0.5:
+			_facing = flat.normalized()
+		_visual.snap_facing(_facing)
+	elif grounded and not _grounded:
 		_visual.on_land(absf(_vel.y))
 	elif not grounded and _grounded and vel.y > 6.0:
 		if vel.y > 14.0:
@@ -52,6 +61,7 @@ func push_state(pos: Vector3, vel: Vector3, grounded: bool) -> void:
 	_grounded = grounded
 	_age = 0.0
 	_has_state = true
+	_seq = seq
 
 
 func _process(dt: float) -> void:

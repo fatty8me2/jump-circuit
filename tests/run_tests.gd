@@ -10,6 +10,7 @@ var only_level: int = -1
 
 
 func _ready() -> void:
+	Net.upnp_enabled = false   # hosting in test_r must never open a port on the real router
 	SaveData.path_override = "user://test_progress.json"
 	SaveData.wipe()
 	var only: String = ""
@@ -717,3 +718,69 @@ func test_u_pendulum_and_sweeper() -> void:
 		await get_tree().physics_frame
 		t += 1.0 / 120.0
 	check(lvl.deaths == 1, "a sweeper bar kills a player who does not jump it (after %.2fs)" % t)
+
+
+# ---- race networking logic (no sockets) ---------------------------------------------------------
+
+func test_race_clock_and_roster_logic() -> void:
+	# race clock: fixed steps steered toward the session clock (no per-tick wall-clock lurches)
+	var saved_time: float = Game.course_time
+	var saved_start: float = Net.race_start_time
+	var dt: float = 1.0 / 120.0
+	Net.race_start_time = Net.now() + 1.0
+	Game.course_time = -1.2
+	Game._advance_race_clock(dt)
+	near(Game.course_time, Net.now() - Net.race_start_time, 0.002, "race countdown tracks the session clock exactly")
+	# 10 s at 60 fps (two ticks back to back per frame), starting 80 ms behind the host;
+	# the session clock is simulated (real time spent in the loop is cancelled out)
+	var t0: float = Net.now()
+	Game.course_time = 4.92
+	var lo: float = 1.0
+	var hi: float = 0.0
+	for f: int in 600:
+		Net.race_start_time = (t0 - 5.0) - float(f + 1) / 60.0 + (Net.now() - t0)
+		for k: int in 2:
+			var before: float = Game.course_time
+			Game._advance_race_clock(dt)
+			lo = minf(lo, Game.course_time - before)
+			hi = maxf(hi, Game.course_time - before)
+	var err_end: float = 15.0 - Game.course_time
+	check(lo >= dt * 0.949 and hi <= dt * 1.051, "race clock steps stay within 5%% of a tick (%.2f..%.2f ms)" % [lo * 1000.0, hi * 1000.0])
+	check(absf(err_end) < 0.01, "race clock converges on the session clock (error %.1f ms)" % (err_end * 1000.0))
+	Game.race_mode = true
+	Net.race_start_time -= 0.5
+	Game._process(0.0)
+	Game.race_mode = false
+	near(Game.course_time, Net.now() - Net.race_start_time, 0.002, "a long hitch re-syncs the race clock at once")
+	Game.course_time = saved_time
+	Net.race_start_time = saved_start
+	# standings tie-break, colour assignment and forward-only roster merges
+	var saved_roster: Dictionary = Net.roster
+	Net.roster = {
+		5: {"name": "A", "color": 0, "cp": 3, "cp_at": 10.0, "finished": -1.0},
+		7: {"name": "B", "color": 1, "cp": 3, "cp_at": 8.0, "finished": -1.0},
+		9: {"name": "C", "color": 2, "cp": 2, "cp_at": 1.0, "finished": -1.0},
+	}
+	var want: Array[int] = [7, 5, 9]
+	check(Net.standings() == want, "same checkpoint: whoever reached it first ranks higher %s" % str(Net.standings()))
+	check(Net._free_color(11, 0) == 3 and Net._free_color(11, 4) == 4 and Net._free_color(5, 0) == 0, "a newcomer gets a colour nobody else wears")
+	Net.in_race = true
+	Net.roster[5]["finished"] = 40.0
+	Net._sync_roster({
+		5: {"name": "A", "color": 0, "cp": 1, "cp_at": 2.0, "finished": -1.0},
+		7: {"name": "B", "color": 1, "cp": 3, "cp_at": 8.0, "finished": -1.0},
+	})
+	check(int(Net.roster[5]["cp"]) == 3 and float(Net.roster[5]["cp_at"]) == 10.0 and float(Net.roster[5]["finished"]) == 40.0 and not Net.roster.has(9),
+		"a stale host snapshot can't roll back a racer's checkpoint or finish")
+	Net.in_race = false
+	Net.roster = saved_roster
+	# a respawned racer's ghost snaps (new teleport seq) instead of sliding back
+	var g := RemoteRacer.new()
+	add_child(g)
+	g.push_state(Vector3.ZERO, Vector3.ZERO, true, 0)
+	await get_tree().process_frame
+	g.push_state(Vector3(6, 0, 0), Vector3.ZERO, true, 0)
+	check(g.global_position.length() < 0.01, "a nearby pose eases the ghost (no snap)")
+	g.push_state(Vector3(0, 0, 6), Vector3.ZERO, true, 1)
+	check(g.global_position.is_equal_approx(Vector3(0, 0, 6)), "a new teleport seq snaps the ghost")
+	g.queue_free()

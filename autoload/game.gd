@@ -24,6 +24,8 @@ var title_message: String = ""
 var shot_mode: bool = false
 ## Level whose intro banner was already shown (instant restarts skip it).
 var intro_shown_for: String = ""
+## Race clock: smoothed error between course_time and the session clock.
+var _clock_err_avg: float = 0.0
 
 
 func _ready() -> void:
@@ -36,6 +38,12 @@ func _ready() -> void:
 		if race_mode or title_screen == "lobby":
 			title_message = reason
 			goto_title("main"))
+	# turned away (kicked) while in a race level: back to Race Friends with the reason
+	# (on the title itself, the title handles this signal)
+	Net.connection_failed.connect(func(reason: String) -> void:
+		if race_mode:
+			title_message = reason
+			goto_title("race"))
 
 
 func _setup_input() -> void:
@@ -68,9 +76,35 @@ func _setup_input() -> void:
 
 func _physics_process(dt: float) -> void:
 	if race_mode:
-		course_time = Net.now() - Net.race_start_time
+		_advance_race_clock(dt)
 	elif course_running and not get_tree().paused:
 		course_time += dt
+
+
+## Race clock: step one fixed tick at a time. A frame's physics ticks run back to
+## back, so sampling the wall clock per tick moved obstacles in 16 ms / 0.5 ms
+## lurches and doubled or zeroed the velocity riders inherit. Then steer gently
+## toward the shared session clock.
+func _advance_race_clock(dt: float) -> void:
+	var target: float = Net.now() - Net.race_start_time
+	course_time += dt
+	if course_time < 0.0:
+		# countdown (players are held): track the session clock exactly, which also
+		# absorbs the scene-load gap so GO lands at the same moment on every peer
+		course_time = target
+		_clock_err_avg = 0.0
+		return
+	# average out the per-frame sawtooth of the wall-clock target, then nudge (<= 5 %)
+	_clock_err_avg = lerpf(_clock_err_avg, target - course_time, 0.02)
+	course_time += clampf(_clock_err_avg * 0.01, -dt * 0.05, dt * 0.05)
+
+
+func _process(_dt: float) -> void:
+	# hard re-sync after a long hitch - checked once per frame, after the frame's
+	# catch-up physics ticks, so those ticks don't carry the clock past the target
+	if race_mode and absf(Net.now() - Net.race_start_time - course_time) > 0.25:
+		course_time = Net.now() - Net.race_start_time
+		_clock_err_avg = 0.0
 
 
 # ---- navigation ----------------------------------------------------------------------
@@ -85,6 +119,7 @@ func _on_race_starting(index: int, start_time: float) -> void:
 	race_mode = true
 	level_index = index
 	course_time = Net.now() - start_time
+	_clock_err_avg = 0.0
 	_load_level()
 
 

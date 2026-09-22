@@ -28,13 +28,18 @@ func _ready() -> void:
 	layer.add_child(_ui)
 	Sfx.music("title")
 	Net.roster_changed.connect(_refresh_lobby)
-	Net.joined_lobby.connect(func() -> void: show_screen("lobby"))
+	Net.joined_lobby.connect(func() -> void:
+		_volt.set_accent(Settings.my_color())   # the host may have assigned us a free colour
+		show_screen("lobby"))
 	Net.connection_failed.connect(func(reason: String) -> void:
 		Game.title_message = reason
 		show_screen("race"))
 	Net.upnp_result.connect(func(text: String) -> void:
 		if _upnp_label != null and is_instance_valid(_upnp_label):
 			_upnp_label.text = text)
+	# the host's course picker starts on the last raced course (rematch = one click)
+	if Net.race_level >= 0:
+		_lobby_level = clampi(Net.race_level, 0, Game.LEVELS.size() - 1)
 	var want: String = Game.title_screen
 	if want == "lobby" and not Net.active:
 		want = "main"
@@ -240,23 +245,27 @@ func _identity_row() -> Control:
 		Settings.save_settings()
 		Net.update_identity())
 	row.add_child(name_edit)
+	var styles: Array[StyleBoxFlat] = []
 	for i: int in Settings.RACER_COLORS.size():
 		var sw := Button.new()
 		sw.custom_minimum_size = Vector2(36, 44)
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = Settings.RACER_COLORS[i]
 		sb.set_corner_radius_all(8)
-		if i == Settings.color_index:
-			sb.border_color = Color.WHITE
-			sb.set_border_width_all(3)
-		for state: String in ["normal", "hover", "pressed", "focus"]:
+		sb.border_color = Color.WHITE
+		sb.set_border_width_all(3 if i == Settings.color_index else 0)
+		styles.append(sb)
+		# ("focus" keeps the theme's gold ring, so keyboard / pad users can see where they are)
+		for state: String in ["normal", "hover", "pressed"]:
 			sw.add_theme_stylebox_override(state, sb)
+		# restyle in place: rebuilding the screen would wipe a typed address and status
 		sw.pressed.connect(func() -> void:
 			Settings.color_index = i
 			Settings.save_settings()
+			for j: int in styles.size():
+				styles[j].set_border_width_all(3 if j == i else 0)
 			_volt.set_accent(Settings.my_color())
-			Net.update_identity()
-			show_screen(Game.title_screen))
+			Net.update_identity())
 		row.add_child(sw)
 	return row
 
@@ -266,23 +275,51 @@ func _race_screen() -> Control:
 	box.add_child(UiKit.label("RACE FRIENDS", 36, Color.WHITE))
 	box.add_child(UiKit.label("Up to 8 players. Everyone runs the same course at once;\nyou see each other live but never collide.", 17, UiKit.SOFT))
 	box.add_child(_identity_row())
-	box.add_child(UiKit.button("Host a Race", func() -> void:
+	var host_button: Button = UiKit.button("Host a Race", func() -> void:
 		var err: Error = Net.host()
 		if err != OK:
-			_set_status("Could not open port %d (is another host running?)." % Net.PORT), 440))
+			_set_status("Could not open port %d (is another host running?)." % Net.PORT), 440)
+	box.add_child(host_button)
 	var join_row: HBoxContainer = UiKit.hbox(10)
 	var ip := LineEdit.new()
 	ip.text = Settings.last_ip
 	ip.placeholder_text = "Host address"
 	ip.custom_minimum_size = Vector2(250, 48)
+	# keep what was typed across rebuilds (Back, a failed join); Join saves it to disk
+	ip.text_changed.connect(func(t: String) -> void: Settings.last_ip = t.strip_edges())
 	join_row.add_child(ip)
-	join_row.add_child(UiKit.button("Join", func() -> void:
-		Settings.last_ip = ip.text.strip_edges()
+	var do_join := func() -> void:
+		var raw: String = ip.text.strip_edges()
+		if raw == "":
+			_set_status("Type the host's address first.")
+			return
+		# accept "address:port" (and "[ipv6]:port"); a bare IPv6 address has several ':'
+		var host_addr: String = raw
+		var port: int = Net.PORT
+		var port_text: String = ""
+		if raw.begins_with("[") and raw.contains("]:"):
+			host_addr = raw.substr(1, raw.find("]:") - 1)
+			port_text = raw.substr(raw.find("]:") + 2)
+		elif raw.count(":") == 1:
+			host_addr = raw.get_slice(":", 0).strip_edges()
+			port_text = raw.get_slice(":", 1).strip_edges()
+		if port_text != "":
+			if not port_text.is_valid_int() or int(port_text) < 1 or int(port_text) > 65535:
+				_set_status("That port does not look right.")
+				return
+			port = int(port_text)
+		host_addr = host_addr.trim_prefix("[").trim_suffix("]")
+		if host_addr == "":
+			_set_status("Type the host's address first.")
+			return
+		Settings.last_ip = raw
 		Settings.save_settings()
-		_set_status("Connecting to %s ..." % ip.text)
-		var err: Error = Net.join(ip.text)
+		_set_status("Connecting to %s ...  (Back cancels)" % raw)
+		var err: Error = Net.join(host_addr, port)
 		if err != OK:
-			_set_status("That address does not look right."), 180))
+			_set_status("That address does not look right.")
+	join_row.add_child(UiKit.button("Join", do_join, 180))
+	ip.text_submitted.connect(func(_t: String) -> void: do_join.call())
 	box.add_child(join_row)
 	_status = UiKit.label(Game.title_message, 17, Color(1, 0.7, 0.55))
 	Game.title_message = ""
@@ -292,6 +329,7 @@ func _race_screen() -> Control:
 		show_screen("main"), 440))
 	var p: PanelContainer = UiKit.panel(Vector2(560, 0))
 	p.add_child(box)
+	host_button.grab_focus.call_deferred()
 	return _left_column(p, 580)
 
 
@@ -305,12 +343,15 @@ func _lobby_screen() -> Control:
 	box.add_child(UiKit.label("RACE LOBBY", 36, Color.WHITE))
 	if Net.is_host():
 		var addrs: Array[String] = Net.local_addresses()
-		box.add_child(UiKit.label("Friends on your network join:  %s" % ("  or  ".join(addrs) if not addrs.is_empty() else "(no LAN address found)"), 17, UiKit.TEAL))
-		_upnp_label = UiKit.label("Checking for automatic internet port forwarding (UDP %d)..." % Net.PORT, 15, UiKit.SOFT)
+		var lan: Label = UiKit.label("Friends on your network join:  %s" % ("  or  ".join(addrs) if not addrs.is_empty() else "(no LAN address found)"), 17, UiKit.TEAL)
+		lan.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # several adapters (VPNs, VMs) make a long line
+		lan.custom_minimum_size = Vector2(520, 0)
+		box.add_child(lan)
+		_upnp_label = UiKit.label(Net.upnp_text if Net.upnp_text != "" else "Checking for automatic internet port forwarding (UDP %d)..." % Net.PORT, 15, UiKit.SOFT)
 		_upnp_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_upnp_label.custom_minimum_size = Vector2(520, 0)
 		box.add_child(_upnp_label)
-		Net.try_upnp()
+		Net.try_upnp()   # once per session; a no-op once the result is cached
 	else:
 		box.add_child(UiKit.label("Connected. The host picks the course and starts the race.", 17, UiKit.TEAL))
 	box.add_child(_identity_row())
@@ -326,12 +367,15 @@ func _lobby_screen() -> Control:
 		box.add_child(pick)
 		_start_button = UiKit.button("Start Race", func() -> void: Net.host_start_race(_lobby_level), 520)
 		box.add_child(_start_button)
-	box.add_child(UiKit.button("Leave", func() -> void:
+	var leave: Button = UiKit.button("Leave", func() -> void:
 		Net.leave()
-		show_screen("race"), 520))
+		show_screen("race"), 520)
+	box.add_child(leave)
 	var p: PanelContainer = UiKit.panel(Vector2(580, 0))
 	p.add_child(box)
 	_refresh_lobby.call_deferred()
+	var first: Button = _start_button if _start_button != null else leave
+	first.grab_focus.call_deferred()
 	return _left_column(p, 600)
 
 

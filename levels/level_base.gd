@@ -116,41 +116,52 @@ func _begin_run() -> void:
 
 func _setup_race() -> void:
 	player.control_enabled = false
-	# fan racers out across the start so ghosts don't stack
+	# fan racers out across the start so ghosts don't stack; every peer derives the
+	# same slots from the same roster, so each ghost waits on its racer's real spot
 	var ids: Array = Net.roster.keys()
 	ids.sort()
-	var slot: int = ids.find(Net.my_id())
-	var offset: float = (float(slot) - float(ids.size() - 1) * 0.5) * 1.3
-	_spawn.origin += _spawn.basis.x * offset
+	var base: Transform3D = _spawn
+	for i: int in ids.size():
+		var xf: Transform3D = base
+		xf.origin += base.basis.x * ((float(i) - float(ids.size() - 1) * 0.5) * 1.3)
+		if int(ids[i]) == Net.my_id():
+			_spawn = xf
+		else:
+			_add_ghost(int(ids[i]), xf.origin)
 	player.teleport(_spawn)
-	for id: int in ids:
-		if id != Net.my_id():
-			_add_ghost(id)
+	player.teleported.connect(Net.note_teleport)
 	Net.racer_pose.connect(_on_racer_pose)
 	Net.roster_changed.connect(_on_roster_changed)
 	Net.racer_finished.connect(func(id: int, time: float) -> void:
-		if id != Net.my_id() and Net.roster.has(id):
+		if id != Net.my_id() and Net.roster.has(id) and is_inside_tree():
 			hud.toast("%s finished - %s" % [Net.roster[id]["name"], SaveData.format_time(time)]))
 	hud.start_countdown()
 
 
-func _add_ghost(id: int) -> void:
+func _add_ghost(id: int, at: Vector3) -> void:
 	var g := RemoteRacer.new()
 	add_child(g)
 	g.setup(str(Net.roster[id]["name"]), Settings.RACER_COLORS[int(Net.roster[id]["color"]) % Settings.RACER_COLORS.size()])
-	g.global_position = _spawn.origin
+	g.global_position = at
 	_ghosts[id] = g
 
 
-func _on_racer_pose(id: int, pos: Vector3, vel: Vector3, grounded: bool) -> void:
-	if _ghosts.has(id):
-		(_ghosts[id] as RemoteRacer).push_state(pos, vel, grounded)
+func _on_racer_pose(id: int, pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
+	# (poses still arrive for a moment after the scene change back to the lobby)
+	if _ghosts.has(id) and is_inside_tree():
+		(_ghosts[id] as RemoteRacer).push_state(pos, vel, grounded, seq)
 
 
 func _on_roster_changed() -> void:
+	if not is_inside_tree():
+		return
 	for id: int in _ghosts.keys():
 		if not Net.roster.has(id):
-			(_ghosts[id] as Node).queue_free()
+			var g := _ghosts[id] as RemoteRacer
+			# (Net.active is already false when it is us leaving or the session ending)
+			if Net.active and g.racer_name != "":
+				hud.toast("%s left the race" % g.racer_name)
+			g.queue_free()
 			_ghosts.erase(id)
 
 
