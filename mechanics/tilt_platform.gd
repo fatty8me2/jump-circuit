@@ -179,7 +179,7 @@ func rider_load(point: Vector3, force: float) -> void:
 
 func rider_impact(point: Vector3, impulse: float) -> void:
 	_sim.apply_impulse(Vector3(0, -impulse * impact_scale, 0), point - _sim.global_position)
-	Sfx.play_at("creak", point, 0.0, clampf(impulse / 900.0, 0.2, 1.0))
+	Sfx.play_at("creak", point, 0.08, clampf(impulse / 900.0, 0.2, 1.0))
 
 
 func tilt_degrees() -> Vector2:

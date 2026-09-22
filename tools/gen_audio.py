@@ -171,6 +171,16 @@ def sfx_land():
     finish_sfx("land", thud + 0.7 * noise / np.max(np.abs(noise)))
 
 
+def sfx_whack():
+    r = rng_for("whack")
+    t = tvec(0.3)
+    ft = sweep(180.0, 60.0, t, 0.12)
+    body = (osc(ft) + 0.4 * osc(ft * 2.0)) * ad_env(t, 0.002, 0.08)
+    crack = fft_band(r.standard_normal(len(t)), SR, 900.0, 4500.0, 2) * np.exp(-t / 0.018)
+    ring = (np.sin(TAU * 523.0 * t) + 0.5 * np.sin(TAU * 1307.0 * t)) * ad_env(t, 0.002, 0.06)
+    finish_sfx("whack", body + 0.6 * crack / np.max(np.abs(crack)) + 0.2 * ring, fout=0.02)
+
+
 def sfx_bounce():
     r = rng_for("bounce")
     t = tvec(0.45)
@@ -746,7 +756,8 @@ def music_title():
 # verification
 # --------------------------------------------------------------------------
 SFX_SPEC = {"jump": 0.18, "land": 0.2, "bounce": 0.45, "checkpoint": 0.7, "crumble": 0.7, "collapse": 0.9,
-            "creak": 0.35, "finish": 2.2, "respawn": 0.3, "tick": 0.12, "go": 0.5, "ui": 0.06, "beacon": 4.0}
+            "creak": 0.35, "finish": 2.2, "respawn": 0.3, "tick": 0.12, "go": 0.5, "ui": 0.06, "beacon": 4.0,
+            "whack": 0.3}
 MUSIC = ("music_a", "music_b", "music_title")
 
 
@@ -810,8 +821,8 @@ def main():
     if "--verify" not in args:
         if "--music" not in args:
             print("effects:")
-            for fn in (sfx_jump, sfx_land, sfx_bounce, sfx_checkpoint, sfx_crumble, sfx_collapse, sfx_creak,
-                       sfx_finish, sfx_respawn, sfx_tick, sfx_go, sfx_ui, sfx_beacon):
+            for fn in (sfx_jump, sfx_land, sfx_whack, sfx_bounce, sfx_checkpoint, sfx_crumble, sfx_collapse,
+                       sfx_creak, sfx_finish, sfx_respawn, sfx_tick, sfx_go, sfx_ui, sfx_beacon):
                 fn()
         if "--sfx" not in args:
             print("music:")

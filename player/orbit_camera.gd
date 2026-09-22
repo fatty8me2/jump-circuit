@@ -119,6 +119,7 @@ func _process(dt: float) -> void:
 	else:
 		_cur_dist = minf(_cur_dist + 7.0 * dt, allowed)
 	global_transform = Transform3D(rot, pivot + back * _cur_dist)
+	_apply_impact(dt)
 
 
 func _cast(from: Vector3, motion: Vector3) -> float:
@@ -132,3 +133,45 @@ func _cast(from: Vector3, motion: Vector3) -> float:
 	q.collision_mask = 1
 	var res: PackedFloat32Array = space.cast_motion(q)
 	return res[0] if res.size() > 0 else 1.0
+
+
+# ---- impact jolt (cosmetic only) --------------------------------------------
+# A short, small shake when a hazard throws the player. It is applied to the
+# rendered transform only: yaw, pitch and the player's camera_yaw never see it.
+# Landings and pads deliberately don't shake - that is when the next jump is lined up.
+
+const JOLT_MAX_TRAUMA: float = 0.6
+const JOLT_DECAY: float = 2.5          # trauma per second
+const JOLT_OFFSET: float = 0.12        # metres at trauma 1 (scaled by trauma^2)
+const JOLT_ANGLE_DEG: float = 0.9      # degrees at trauma 1 (scaled by trauma^2)
+
+var _trauma: float = 0.0
+var _jolt_t: float = 0.0
+var _hooked: Player
+
+
+## Kicks the camera: `amount` of trauma (0..1), capped and fading within ~0.25 s.
+func add_trauma(amount: float) -> void:
+	_trauma = clampf(_trauma + amount, 0.0, JOLT_MAX_TRAUMA)
+
+
+func _on_target_knocked(v: Vector3) -> void:
+	add_trauma(clampf(v.length() / 40.0, 0.3, JOLT_MAX_TRAUMA))
+
+
+func _apply_impact(dt: float) -> void:
+	if _hooked != target:
+		if _hooked != null and is_instance_valid(_hooked) and _hooked.knocked.is_connected(_on_target_knocked):
+			_hooked.knocked.disconnect(_on_target_knocked)
+		_hooked = target
+		_hooked.knocked.connect(_on_target_knocked)
+	if _trauma <= 0.0:
+		return
+	_trauma = maxf(_trauma - JOLT_DECAY * dt, 0.0)
+	_jolt_t += dt
+	var k: float = _trauma * _trauma
+	var n := Vector3(sin(_jolt_t * 47.0), sin(_jolt_t * 59.0 + 1.3), sin(_jolt_t * 53.0 + 2.1))
+	var ang: float = deg_to_rad(JOLT_ANGLE_DEG) * k
+	var b: Basis = global_basis
+	global_transform = Transform3D(b * Basis.from_euler(Vector3(n.y * ang, n.z * ang, 0.0)),
+		global_position + b * (Vector3(n.x, n.y, 0.0) * JOLT_OFFSET * k))

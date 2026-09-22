@@ -17,6 +17,9 @@ var _top: Node3D
 var _press: float = 0.0
 var _press_vel: float = 0.0
 var _surface_tilt: float = 0.0
+var _shock: MeshInstance3D
+var _shock_mat: StandardMaterial3D
+var _shock_tw: Tween
 
 
 func _ready() -> void:
@@ -175,6 +178,38 @@ func on_bounced(_player: Node) -> void:
 	_press = -0.06
 	_press_vel = 3.2
 	set_process(true)
+	# shockwave ring in the strength colour: keeps the launch point readable
+	var ring: MeshInstance3D = _shock_ring()
+	if _shock_tw != null:
+		_shock_tw.kill()
+	ring.visible = true
+	ring.scale = Vector3(1.0, 0.3, 1.0)
+	_shock_mat.albedo_color.a = 0.9
+	_shock_tw = create_tween().set_parallel(true)
+	_shock_tw.tween_property(ring, "scale", Vector3(2.4, 0.3, 2.4), 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	_shock_tw.tween_property(_shock_mat, "albedo_color:a", 0.0, 0.3)
+	_shock_tw.chain().tween_callback(ring.hide)
+
+
+## Built on first use. Own material (Look.flat is shared per colour, and the
+## fade animates alpha); parented to the pad so it doesn't bob with the cushion.
+func _shock_ring() -> MeshInstance3D:
+	if _shock == null:
+		var tm := TorusMesh.new()
+		tm.inner_radius = radius * 0.8
+		tm.outer_radius = radius * 0.95
+		tm.rings = 36
+		tm.ring_segments = 6
+		_shock_mat = StandardMaterial3D.new()
+		_shock_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_shock_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_shock_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		_shock_mat.albedo_color = strength_color(strength).lerp(Color.WHITE, 0.25)
+		_shock = Look.mesh_node(tm, _shock_mat, Vector3(0, LIP + 0.03 + radius * sin(_surface_tilt), 0))
+		_shock.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_shock.layers = 2      # keeps the blob shadow decal (cull_mask 1) off it
+		add_child(_shock)
+	return _shock
 
 
 func _process(dt: float) -> void:

@@ -1312,3 +1312,122 @@ func test_w_race_finish_behind_menu() -> void:
 	world.queue_free()
 	world = null
 	await ticks(2)
+
+
+# ---- B4a: knockback, teleport, blob shadow, pad ring, music -----------------------------------
+
+func test_zb4a_knockback_beats_jump_press() -> void:
+	await new_world(Vector3(0, 0.05, 2.5))
+	floor_slab()
+	kit.bumper(Vector3.ZERO, 16.0, 8.0)
+	await settle()
+	var counts: Array[int] = [0, 0, 0]      # knocked, jumped, bounced
+	player.knocked.connect(func(_v: Vector3) -> void:
+		counts[0] += 1
+		player.press_jump())                 # a reflexive jump press on contact
+	player.jumped.connect(func() -> void: counts[1] += 1)
+	player.bounced.connect(func(_s: float) -> void: counts[2] += 1)
+	player.cmd_move = FWD
+	var t: int = 0
+	while counts[0] == 0 and t < 240:
+		await get_tree().physics_frame
+		t += 1
+	player.cmd_move = Vector2.ZERO
+	var peak_vy: float = player.velocity.y
+	for i: int in 40:
+		if i < 6:
+			player.press_jump()
+		await get_tree().physics_frame
+		peak_vy = maxf(peak_vy, player.velocity.y)
+	check(counts[0] == 1 and counts[2] == 0, "a bumper hit emits knocked once and never bounced (%d/%d)" % [counts[0], counts[2]])
+	check(counts[1] == 0 and peak_vy < 8.2, "a jump pressed on contact cannot overwrite the throw (peak vy %.2f, jumps %d)" % [peak_vy, counts[1]])
+	await wait_landing()
+
+
+func test_zb4a_teleport_clears_floor_state() -> void:
+	await new_world(Vector3(4, 0.5, 0))
+	floor_slab(Vector3(200, 1, 200), Vector3(0, -6, 0))
+	var arms: Array[Dictionary] = [{"pos": Vector3(4, 0, 0), "size": Vector3(8, 0.5, 2.5)}]
+	var spin: RotatingPlatform = kit.spinner(Vector3(0, 0, 0), 4.0, arms)
+	kit.plat(Vector3(60, 0, 0), Vector3(6, 1, 6), "main", 0.0)
+	await settle()
+	await seconds(0.5)
+	check(player.grounded and player.platform_velocity.length() > 3.0, "riding the spinner before the teleport")
+	var layers: int = player.platform_floor_layers
+	var landings: Array[int] = [0]
+	player.landed.connect(func(_i: float) -> void: landings[0] += 1)
+	player.teleport(Transform3D(Basis(Vector3.UP, PI), Vector3(60, 0.15, 0)))
+	await get_tree().physics_frame
+	var shove: float = Vector2(player.global_position.x - 60.0, player.global_position.z).length()
+	check(shove < 0.01, "the old spinner does not shove the player on the teleport tick (%.3fm)" % shove)
+	check(player.global_basis.is_equal_approx(Basis.IDENTITY), "the body stays unrotated after a rotated teleport")
+	check(player.facing_dir.is_equal_approx(Vector3(0, 0, 1)), "facing still follows the teleport heading")
+	check(player.platform_floor_layers == layers, "platform layers restored after the teleport move")
+	await seconds(0.3)
+	check(player.grounded and landings[0] == 1, "lands once on the new pad (%d)" % landings[0])
+	check(player.last_jump_distance < 0.05, "jump stats restart at the teleport (%.2fm)" % player.last_jump_distance)
+	# two teleports before a tick (race setup) must not lose the saved layers
+	player.teleport(Transform3D(Basis(), Vector3(60, 0.15, 1)))
+	player.teleport(Transform3D(Basis(), spin.global_transform * Vector3(4, 0.5, 0)))
+	await seconds(0.5)
+	check(player.platform_floor_layers == layers, "a double teleport keeps platform carry intact")
+	var r0: Vector3 = player.global_position
+	await seconds(0.5)
+	check(player.grounded and Vector2(player.global_position.x - r0.x, player.global_position.z - r0.z).length() > 1.0, "and the spinner carries the player again")
+
+
+func test_zb4a_blob_shadow_fit() -> void:
+	await new_world(Vector3(0, 4.05, 0))
+	floor_slab()
+	kit.plat(Vector3(0, 4, 0), Vector3(3, 1, 3), "main", 0.0)
+	await settle()
+	await get_tree().process_frame
+	var shadow: Decal = player.get("_shadow")
+	near(shadow.size.y, BlobShadow.TOP + BlobShadow.UNDER, 0.1, "standing on a platform: the shadow box ends just under it")
+	var d := BlobShadow.make()
+	var space: PhysicsDirectSpaceState3D = world.get_world_3d().direct_space_state
+	BlobShadow.fit(d, space, Vector3(3.0, 4.0, 0), 1)
+	near(d.size.y, BlobShadow.TOP + 4.0 + BlobShadow.UNDER, 0.05, "past the platform edge the shadow reaches the floor below")
+	check(absf(d.position.y + d.size.y * 0.5 - BlobShadow.TOP) < 0.001, "box top stays just above the feet")
+	BlobShadow.fit(d, space, Vector3(0, 7.0, 0), 1)
+	near(d.size.y, BlobShadow.TOP + 3.0 + BlobShadow.UNDER, 0.05, "above stacked geometry only the first surface is covered")
+	BlobShadow.fit(d, space, Vector3(500, 4.0, 0), 1)
+	near(d.size.y, BlobShadow.TOP + BlobShadow.REACH + BlobShadow.UNDER, 0.05, "over the void the shadow keeps its full reach")
+	d.free()
+
+
+func test_zb4a_pad_ring_and_music() -> void:
+	await new_world(Vector3(0, 2.0, 0))
+	floor_slab()
+	var pad: BouncePad = kit.pad(Vector3(0, 0, 0), 20.0)
+	var bounces: Array[int] = [0]
+	player.bounced.connect(func(_s: float) -> void: bounces[0] += 1)
+	var t: int = 0
+	while bounces[0] == 0 and t < 240:
+		await get_tree().physics_frame
+		t += 1
+	var ring: MeshInstance3D = pad.get("_shock")
+	check(ring != null and ring.visible, "a bounce shows the pad's shockwave ring")
+	await seconds(0.5)
+	check(ring != null and not ring.visible and is_equal_approx(ring.scale.y, 0.3), "the ring expands flat and hides again")
+	# music: rapid track changes crossfade without stranding a player
+	Sfx.music("title")
+	await ticks(12)
+	Sfx.music("a")
+	await ticks(12)
+	Sfx.music("b")
+	await seconds(1.2)
+	var players: Array = Sfx.get("_music_players")
+	var audible: int = 0
+	for m: AudioStreamPlayer in players:
+		if m.playing:
+			audible += 1
+	var cur: AudioStreamPlayer = Sfx.get("_music")
+	check(audible <= 1 and is_equal_approx(cur.volume_db, 0.0), "after the crossfades one bed plays at full volume (%d playing)" % audible)
+	Sfx.music("")
+	await seconds(0.8)
+	audible = 0
+	for m: AudioStreamPlayer in players:
+		if m.playing:
+			audible += 1
+	check(audible == 0, "music('') fades the bed out and stops it")
