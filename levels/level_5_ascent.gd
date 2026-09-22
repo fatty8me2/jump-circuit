@@ -1,9 +1,13 @@
 extends LevelBase
-## 5. THE FINAL ASCENT - a night climb up a neon spire complex to the beacon.
-## Five stages, each behind a checkpoint, each leaning on one earlier lesson
-## and then mixing in another:
-##   1 pads + jumps   2 balance + pad   3 ferry + collapsing stones
-##   4 lift + turntable   5 the pad chain to the summit
+## 5. THE FINAL ASCENT - a night climb up a neon spire complex to the beacon. Hard mode:
+## twelve stages, each behind a checkpoint, each pushing one earlier idea to its nastiest
+## and then mixing in two or three more:
+##   1 neon ladder + head-hitters + kill slalom      2 boost strip -> 15 m leap -> pad at sprint -> small disc
+##   3 ice slide -> lip leap -> angled pad -> blink   4 lively narrow tilt beams, cross-wind, a hammer
+##   5 ferry sling into a collapsing-stone curve      6 turntable with sweeper bars, arm-tip sling
+##   7 neon ladder II (blinks, mover, kill walls)     8 the pinball shaft (bumper to bumper between kill panels)
+##   9 the updraft chimney through kill rings         10 the belt gauntlet under sweeping hammers
+##   11 the hammer express (get hit on purpose)        12 the victory lap: six momentum pieces, no plain ground
 ## Set piece: lighting the beacon.
 
 var _beam: MeshInstance3D
@@ -86,10 +90,15 @@ func _edge(c: Vector3, half: float, toward: Vector3, inset: float = 0.35) -> Vec
 
 ## Neon parkour block + the jump onto it from the previous block.
 func _hop(a: Vector3, a_half: float, b: Vector3, size: float = 1.8, style: String = "alt", hold: bool = true) -> Vector3:
-	kit.plat(b, Vector3(size, 0.8, size), style, 0.0)
+	kit.plat(b, Vector3(size, 0.8, size), style, 0.7)
 	kit.glow_strip(b - Vector3(0, 0.86, 0), Vector3(size * 0.7, 0.08, size * 0.7), Look.c("accent2") if style == "alt" else Look.c("accent"))
 	r_jump(_edge(a, a_half, b), b, hold)
 	return b
+
+
+## Solid body under a flat boost / ice / conveyor strip so it does not read as a floating sheet.
+func _body(top: Vector3, size: Vector3, yaw_deg: float) -> void:
+	kit.plat(top - Vector3(0, 0.42, 0), Vector3(size.x * 0.92, 0.5, size.z * 0.985), "main", 1.6, yaw_deg)
 
 
 func _cp_plat(c: Vector3, yaw_deg: float, size: float = 5.0) -> void:
@@ -118,6 +127,14 @@ func _stage_1() -> Vector3:
 		kit.block(W(0, 3.0 + 2.5 + 0.25, z + 1.5), Vector3(3.0, 0.5, 2.6), Look.c("side").lightened(0.1))
 		kit.glow_strip(W(0, 3.0 + 2.47, z + 1.5), Vector3(2.6, 0.06, 2.2), Look.c("accent2"))
 		a = _hop(a, 0.9 if i == 0 else 0.75, W(0, 3.0, z), 1.5)
+	# SHORTCUT A: a 1 m side disc (95% leap off the last head-hitter block) carries a strong angled
+	# pad that fires you past three ladder blocks onto a 1.2 m catch disc (landing placed by Ballistics)
+	var sc: Vector3 = W(-6.2, 3.4, -30.5)
+	kit.disc(sc, 1.0, 0.6, "accent")
+	var aim: Vector3 = W(-4.6, 13.0, -45.0) - sc
+	var sc_pad: BouncePad = kit.pad(sc, 30.0, 38.0, rad_to_deg(atan2(-aim.x, -aim.z)), 0.9)
+	var sc_land: Vector3 = Ballistics.landing_point(_tuning, sc_pad.launch_origin(), sc_pad.get_launch()["velocity"], 12.4)
+	kit.disc(Vector3(sc_land.x, 12.4, sc_land.z), 1.2, 0.6, "accent")
 	# the ladder: 1.9 m up per block, zig-zag
 	var half: float = 0.75
 	for i: int in 5:
@@ -145,6 +162,7 @@ func _stage_1() -> Vector3:
 func _stage_2(o: Vector3) -> Vector3:
 	_frame(o, 0.0)
 	kit.boost(W(0, 0, -8.5), Vector3(3, 0.4, 12), _yaw, 20.0)
+	_body(W(0, 0, -8.5), Vector3(3, 0.4, 12), _yaw)
 	kit.glow_strip(W(0, 0.03, -14.3), Vector3(3, 0.06, 0.25), Look.c("accent2"))
 	kit.disc(W(0, 0, -29.1), 2.2, 0.8, "accent")
 	kit.pad(W(0, 0, -29.1), 20.0, 0.0, 0.0, 1.5)
@@ -172,6 +190,7 @@ func _stage_3(o: Vector3) -> Vector3:
 	kit.slick(W(0, -drop * 0.5, -2.5 - run * 0.5), Vector3(3.5, 0.4, 16), _yaw, -25.0)
 	var lip_z: float = -2.5 - run - 6.0
 	kit.slick(W(0, -drop, lip_z + 3.0), Vector3(3.5, 0.4, 6.0), _yaw, 0.0)
+	_body(W(0, -drop, lip_z + 3.0), Vector3(3.5, 0.4, 6.0), _yaw)
 	kit.glow_strip(W(0, -drop + 0.03, lip_z + 0.2), Vector3(3.5, 0.06, 0.25), Look.c("accent2"))
 	var pad_pos: Vector3 = W(0, -drop - 1.0, lip_z - 18.6)
 	kit.disc(pad_pos, 2.2, 0.8, "accent")
@@ -212,6 +231,9 @@ func _stage_4(o: Vector3) -> Vector3:
 	var rest1: Vector3 = W(0, 0.6, -16.6)
 	kit.plat(rest1, Vector3(1.8, 0.8, 1.8), "alt", 0.0)
 	r_jump(W(0, 0, -12.5), rest1)
+	# SHORTCUT B: three 1 m blocks along the wind edge skip beam 2 and the hammer (94% jumps in a cross-wind)
+	for sb: Vector3 in [W(3.8, 0.9, -22.0), W(3.8, 1.2, -28.5)]:
+		kit.plat(sb, Vector3(1.0, 0.8, 1.0), "accent", 0.0)
 	# beam 2: rolls under you, hammer across the middle, wind from the other side
 	_tbeam(24.3, 0.6, 9.0, 0.9, true, false, 16.0)
 	kit.wind(W(0, 2.2, -24.3), _sz(Vector3(7, 4, 10)), D(Vector3(-13, 0, 0)), 14.0)
@@ -461,6 +483,7 @@ func _hammers_clear(hams: Array, leads: Array, half: float = 0.45, margin: float
 func _stage_10(o: Vector3) -> Vector3:
 	_frame(o, 0.0)
 	kit.conveyor(W(0, 0, -16.0), _sz(Vector3(3, 0.4, 27)), _yaw + 180.0, 5.0)
+	_body(W(0, 0, -16.0), _sz(Vector3(3, 0.4, 27)), _yaw + 180.0)
 	var hams: Array = []
 	for i: int in 3:
 		var hz: float = -7.0 - 9.0 * i
@@ -479,6 +502,7 @@ func _stage_10(o: Vector3) -> Vector3:
 	r_walk(rest)
 	# belt 2: too fast to walk - bunny-hop it, kill bars set the rhythm, one last hammer at the exit
 	kit.conveyor(W(0, 0, -40.0), _sz(Vector3(2.4, 0.4, 15)), _yaw + 180.0, 7.5)
+	_body(W(0, 0, -40.0), _sz(Vector3(2.4, 0.4, 15)), _yaw + 180.0)
 	for bz: float in [-36.4, -42.4]:
 		kit.hazard(W(0, 0.25, bz), _sz(Vector3(2.4, 0.5, 0.6)))
 	var last: Pendulum = kit.pendulum(W(0, 8.2, -47.0), 7.0, 2.2, 0.0, _yaw, 50.0)
@@ -514,6 +538,7 @@ func _stage_11(o: Vector3) -> Vector3:
 	var land: Vector3 = W(0, -0.9, -27.0)
 	kit.plat(W(0, -0.9, -25.0), _sz(Vector3(3.4, 1, 12)), "main")
 	kit.boost(W(0, -0.9, -35.0), Vector3(3.4, 0.4, 8), _yaw, 22.0)
+	_body(W(0, -0.9, -35.0), Vector3(3.4, 0.4, 8), _yaw)
 	kit.glow_strip(W(0, -0.87, -38.8), _sz(Vector3(3.4, 0.06, 0.25)), Look.c("accent2"))
 	_step({"kind": "kick", "from": plate, "to": land})
 	# still carrying the hammer's speed: sprint the deck and leap
@@ -533,13 +558,16 @@ func _stage_11(o: Vector3) -> Vector3:
 func _stage_12(o: Vector3) -> void:
 	_frame(o, -90.0)
 	kit.boost(W(0, 0, -10.4), Vector3(3, 0.4, 12), _yaw, 20.0)
+	_body(W(0, 0, -10.4), Vector3(3, 0.4, 12), _yaw)
 	kit.glow_strip(W(0, 0.03, -16.2), _sz(Vector3(3, 0.06, 0.25)), Look.c("accent2"))
 	var p1: Vector3 = W(0, 0, -31.0)
 	kit.disc(p1, 2.2, 0.8, "accent")
 	kit.pad(p1, 20.0, 0.0, 0.0, 1.5)
 	kit.slick(W(0, 4.5, -51.0), Vector3(3.6, 0.4, 14), _yaw, 0.0)
+	_body(W(0, 4.5, -51.0), Vector3(3.6, 0.4, 14), _yaw)
 	kit.glow_strip(W(0, 4.53, -57.8), _sz(Vector3(3.6, 0.06, 0.25)), Look.c("accent2"))
 	kit.boost(W(0, 5.5, -75.0), Vector3(3, 0.4, 14), _yaw, 24.0)
+	_body(W(0, 5.5, -75.0), Vector3(3, 0.4, 14), _yaw)
 	kit.glow_strip(W(0, 5.53, -81.8), _sz(Vector3(3, 0.06, 0.25)), Look.c("accent2"))
 	var p2: Vector3 = W(0, 5.5, -100.0)
 	kit.disc(p2, 3.0, 0.8, "accent")

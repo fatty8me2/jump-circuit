@@ -655,7 +655,8 @@ func _stage_9() -> void:
 # =================================================================================================
 
 const SHORT_PERIOD: float = 5.2
-const SECOND_B_PERIOD: float = -7.8
+const SECOND_B_PERIOD: float = -5.2   # geared 1:1 against the short hand, so every pass has the same bar pattern
+const SECOND_B_PHASE: float = 0.092
 
 
 func _stage_10() -> void:
@@ -671,31 +672,40 @@ func _stage_10() -> void:
 	_second_b = SecondHand.new()
 	_second_b.position = V(K.x, y + 0.45, K.z)
 	add_child(_second_b)
-	kit.hazard(V(6.7, 0, 0), V(5.0, 0.5, 0.5), 0.0, _second_b)
-	_second_b.add_child(Look.box(V(4.2, 0.2, 0.2), Look.flat(Color(0.14, 0.15, 0.2), 0.4, 0.7), V(2.1, 1.2, 0)))
-	_second_b.add_child(Look.box(V(0.2, 1.2, 0.2), Look.flat(Color(0.14, 0.15, 0.2), 0.4, 0.7), V(4.2, 0.6, 0)))
-	_second_b.add_child(Look.cylinder(0.3, 1.4, Look.flat(Color(0.14, 0.15, 0.2), 0.4, 0.7), V(0, 0.7, 0), -1.0, 10))
+	var dark: StandardMaterial3D = Look.flat(Color(0.14, 0.15, 0.2), 0.4, 0.7)
+	for sx: int in [-1, 1]:
+		kit.hazard(V(sx * 6.7, 0, 0), V(5.0, 0.5, 0.5), 0.0, _second_b)
+		_second_b.add_child(Look.box(V(4.2, 0.2, 0.2), dark, V(sx * 2.1, 1.2, 0)))
+		_second_b.add_child(Look.box(V(0.2, 1.2, 0.2), dark, V(sx * 4.2, 0.6, 0)))
+	_second_b.add_child(Look.cylinder(0.3, 1.4, dark, V(0, 0.7, 0), -1.0, 10))
 
 	# tower ledge: 12 m down the tangent from the east point, 1.8 m up
-	var t0: Vector3 = V(K.x + 7.6, y + 1.8, K.z - 2.7 - 12.6)
+	var t0: Vector3 = V(K.x + 7.6, y + 1.8, K.z - 2.7 - 10.8)
 	_cp(t0, V(5, 1, 5), -45.0)
 	kit.pillar(t0 + V(0, -1.0, 0), 0.5, 3.0, Look.c("metal"))
 
 	var plinth: Vector3 = V(K.x, y, K.z)
-	r_walk(plinth + V(0, 0, -2.6))
-	x_wait([short_hand], plinth + V(0, 0, -6.2), 1.0, 0.5, [V(6.2, 0.25, 0), V(-6.2, 0.25, 0)])
-	x_step({"kind": "x_jump", "from": plinth + V(0, 0, -2.85), "picked": true, "to_local": V(6.0, 0.25, 0)})
-	x_step({"kind": "h_hop", "picked": true, "local": V(7.6, 0.25, 2.3), "sweepers": [_second_b], "until": func() -> bool:
+	# board at 55 deg: the geared upper bar has just crossed that spot and the next is 0.4 s out
+	r_walk(pol(2.5, -55, y))
+	x_wait([short_hand], pol(6.2, -55, y), 1.0, 0.5, [V(6.2, 0.25, 0), V(-6.2, 0.25, 0)])
+	x_step({"kind": "x_jump", "from": pol(2.85, -55, y), "picked": true, "to_local": V(6.0, 0.25, 0)})
+	x_step({"kind": "h_hop", "picked": true, "local": V(7.6, 0.25, 1.6), "sweepers": [_second_b], "until": func() -> bool:
 		var t: float = Game.course_time
 		var w: float = TAU / SHORT_PERIOD
-		var arm: float = deg_to_rad(_clock_deg(player.global_position)) + atan2(2.3, 7.6)
-		var at_takeoff: float = rad_to_deg(wrapf(arm + w * 0.62, -PI, PI))
-		if at_takeoff < -16.0 or at_takeoff > 6.0:
+		var arm: float = deg_to_rad(_clock_deg(player.global_position)) + atan2(1.6, 7.6)
+		var at_takeoff: float = rad_to_deg(wrapf(arm + w * 0.55, -PI, PI))
+		if OS.has_environment("H4DBG"):
+			print("DBG t=%.2f arm=%.1f take=%.1f bar=%.1f rel0=%.1f" % [t, rad_to_deg(arm), at_takeoff, rad_to_deg(_second_b_angle(t)), rad_to_deg(wrapf(_second_b_angle(t) - arm, -PI, PI))])
+		if at_takeoff < -10.0 or at_takeoff > 4.0:
 			return false
-		for k: int in 8:
-			var tt: float = t + 0.1 * float(k)
-			var rel: float = wrapf(_second_b_angle(tt) - (arm + w * (tt - t)), -PI, PI)
-			if absf(rel) < deg_to_rad(14.0):
+		# the sprint along the arrowhead moves us from -12 to +20 deg of the arm axis in 0.55 s:
+		# the upper second hand must miss that path
+		for k: int in 12:
+			var dt: float = 0.05 * float(k)
+			var tt: float = t + dt
+			var me_rel: float = deg_to_rad(-12.0 + 58.0 * dt)
+			var rel: float = wrapf(_second_b_angle(tt) - (arm + w * dt) - me_rel, -PI, PI)
+			if absf(rel) < deg_to_rad(15.0):
 				return false
 		return true})
 	x_step({"kind": "h_jump", "sprint": true, "picked": true, "from_local": V(7.6, 0.25, -2.75), "to": t0 + V(0, 0, 0.8)})
@@ -705,17 +715,17 @@ func _stage_10() -> void:
 
 
 func _second_b_angle(t: float) -> float:
-	return fposmod(t / SECOND_B_PERIOD, 1.0) * TAU
+	return fposmod(t / SECOND_B_PERIOD + SECOND_B_PHASE, 1.0) * TAU
 
 
 ## Upper second hand: one kill bar over the short hand, driven like a Sweeper (the bot duck-types it).
 class SecondHand extends Node3D:
-	var bar_count: int = 1
+	var bar_count: int = 2
 	var arm_length: float = 9.2
 	var period: float = SECOND_B_PERIOD
 
 	func angle_at(t: float) -> float:
-		return fposmod(t / period, 1.0) * TAU
+		return fposmod(t / period + SECOND_B_PHASE, 1.0) * TAU
 
 
 # =================================================================================================
