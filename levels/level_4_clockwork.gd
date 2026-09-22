@@ -126,6 +126,7 @@ func _build() -> void:
 	_stage_9()
 	_stage_10()
 	_stage_11()
+	_build_surroundings()
 
 
 # =================================================================================================
@@ -241,8 +242,8 @@ func _stage_2() -> void:
 	r_walk(cp2)
 	r_checkpoint()
 
-	# SHORTCUT A: three 1.1 m posts skip the teeth (95% jumps, tiny landings)
-	var posts: Array[Vector3] = [V(6.4, 2.0, -82.0), V(7.0, 2.4, -89.0), V(5.6, 2.6, -96.0)]
+	# SHORTCUT A: three 1.1 m posts beside the teeth walk (6 m hops onto 1.1 m landings)
+	var posts: Array[Vector3] = [V(6.2, 2.0, -82.0), V(6.8, 2.4, -88.0), V(5.4, 2.4, -94.0)]
 	for p: Vector3 in posts:
 		kit.disc(p, 0.55, 0.5, "accent", 4.0)
 		kit.glow_strip(p + V(0, 0.03, 0), V(0.5, 0.05, 0.5), Look.c("accent2"), 45.0)
@@ -567,6 +568,11 @@ func _stage_8() -> void:
 			r_jump(o + V(0, 0, bars[i] + 1.5), o + V(0, 0, bars[i] - 2.2))
 	var p8: Vector3 = o + V(0, 0, -32.0)
 	kit.plat(p8, V(4, 1, 3), "alt", 2.0)
+	# SHORTCUT B: four 1.0 m posts beside the escalator - 6 m hops instead of fighting the belt
+	for i: int in 4:
+		var sp: Vector3 = o + V(3.7 + 0.3 * float(i % 2), 0.3, -11.5 - 6.0 * float(i))
+		kit.disc(sp, 0.5, 0.5, "accent", 4.0)
+		kit.glow_strip(sp + V(0, 0.03, 0), V(0.45, 0.05, 0.45), Look.c("accent2"), 45.0)
 	kit.boost(o + V(0, 0, -38.5), V(3, 0.4, 10), 0.0, 22.0)
 	for sx: int in [-1, 1]:
 		kit.glow_strip(o + V(sx * 1.7, 0.05, -38.5), V(0.12, 0.1, 10.0), Look.c("accent2"))
@@ -655,8 +661,8 @@ func _stage_9() -> void:
 # =================================================================================================
 
 const SHORT_PERIOD: float = 5.2
-const SECOND_B_PERIOD: float = -5.2   # geared 1:1 against the short hand, so every pass has the same bar pattern
-const SECOND_B_PHASE: float = 0.092
+const SECOND_B_PERIOD: float = -7.8
+const SECOND_B_PHASE: float = 0.0
 
 
 func _stage_10() -> void:
@@ -673,41 +679,29 @@ func _stage_10() -> void:
 	_second_b.position = V(K.x, y + 0.45, K.z)
 	add_child(_second_b)
 	var dark: StandardMaterial3D = Look.flat(Color(0.14, 0.15, 0.2), 0.4, 0.7)
-	for sx: int in [-1, 1]:
-		kit.hazard(V(sx * 6.7, 0, 0), V(5.0, 0.5, 0.5), 0.0, _second_b)
-		_second_b.add_child(Look.box(V(4.2, 0.2, 0.2), dark, V(sx * 2.1, 1.2, 0)))
-		_second_b.add_child(Look.box(V(0.2, 1.2, 0.2), dark, V(sx * 4.2, 0.6, 0)))
+	kit.hazard(V(5.1, 0, 0), V(2.2, 0.5, 0.5), 0.0, _second_b)
+	_second_b.add_child(Look.box(V(4.2, 0.2, 0.2), dark, V(2.1, 1.2, 0)))
+	_second_b.add_child(Look.box(V(0.2, 1.2, 0.2), dark, V(4.2, 0.6, 0)))
 	_second_b.add_child(Look.cylinder(0.3, 1.4, dark, V(0, 0.7, 0), -1.0, 10))
 
-	# tower ledge: 12 m down the tangent from the east point, 1.8 m up
+	# tower ledge: down the tangent from the east point, 1.8 m up
 	var t0: Vector3 = V(K.x + 7.6, y + 1.8, K.z - 2.7 - 10.8)
 	_cp(t0, V(5, 1, 5), -45.0)
 	kit.pillar(t0 + V(0, -1.0, 0), 0.5, 3.0, Look.c("metal"))
 
-	var plinth: Vector3 = V(K.x, y, K.z)
-	# board at 55 deg: the geared upper bar has just crossed that spot and the next is 0.4 s out
+	# board at 55 deg over the collar and the upper second hand, onto the arrowhead
+	var tips: Array = [V(7.0, 0.25, 0), V(-7.0, 0.25, 0)]
 	r_walk(pol(2.5, -55, y))
-	x_wait([short_hand], pol(6.2, -55, y), 1.0, 0.5, [V(6.2, 0.25, 0), V(-6.2, 0.25, 0)])
-	x_step({"kind": "x_jump", "from": pol(2.85, -55, y), "picked": true, "to_local": V(6.0, 0.25, 0)})
-	x_step({"kind": "h_hop", "picked": true, "local": V(7.6, 0.25, 1.6), "sweepers": [_second_b], "until": func() -> bool:
-		var t: float = Game.course_time
+	x_step({"kind": "h_jump", "from": pol(2.85, -55, y), "reach": 4.4, "lead": 0.5, "to_node": short_hand, "to_locals": tips,
+		"test": func() -> bool:
+			var bar: float = rad_to_deg(wrapf(_second_b_angle(Game.course_time + 0.5) - deg_to_rad(55.0), -PI, PI))
+			return absf(bar) > 28.0})
+	x_walk_on(V(7.6, 0.25, 1.6), null, 0.3)
+	t_wait(func() -> bool:
 		var w: float = TAU / SHORT_PERIOD
 		var arm: float = deg_to_rad(_clock_deg(player.global_position)) + atan2(1.6, 7.6)
 		var at_takeoff: float = rad_to_deg(wrapf(arm + w * 0.55, -PI, PI))
-		if OS.has_environment("H4DBG"):
-			print("DBG t=%.2f arm=%.1f take=%.1f bar=%.1f rel0=%.1f" % [t, rad_to_deg(arm), at_takeoff, rad_to_deg(_second_b_angle(t)), rad_to_deg(wrapf(_second_b_angle(t) - arm, -PI, PI))])
-		if at_takeoff < -10.0 or at_takeoff > 4.0:
-			return false
-		# the sprint along the arrowhead moves us from -12 to +20 deg of the arm axis in 0.55 s:
-		# the upper second hand must miss that path
-		for k: int in 12:
-			var dt: float = 0.05 * float(k)
-			var tt: float = t + dt
-			var me_rel: float = deg_to_rad(-12.0 + 58.0 * dt)
-			var rel: float = wrapf(_second_b_angle(tt) - (arm + w * dt) - me_rel, -PI, PI)
-			if absf(rel) < deg_to_rad(15.0):
-				return false
-		return true})
+		return at_takeoff >= -10.0 and at_takeoff <= 4.0)
 	x_step({"kind": "h_jump", "sprint": true, "picked": true, "from_local": V(7.6, 0.25, -2.75), "to": t0 + V(0, 0, 0.8)})
 	r_walk(t0)
 	r_checkpoint()
@@ -720,8 +714,8 @@ func _second_b_angle(t: float) -> float:
 
 ## Upper second hand: one kill bar over the short hand, driven like a Sweeper (the bot duck-types it).
 class SecondHand extends Node3D:
-	var bar_count: int = 2
-	var arm_length: float = 9.2
+	var bar_count: int = 1
+	var arm_length: float = 6.2
 	var period: float = SECOND_B_PERIOD
 
 	func angle_at(t: float) -> float:
@@ -810,6 +804,43 @@ func _physics_process(dt: float) -> void:
 	super(dt)
 	if _second_b != null:
 		_second_b.rotation.y = _second_b_angle(Game.course_time)
+
+
+# =================================================================================================
+# surroundings
+# =================================================================================================
+
+func _build_surroundings() -> void:
+	var towers: Array = [
+		[V(-13, -4, -30), V(5, 26, 5)], [V(13, -2, -60), V(4, 30, 4)], [V(-12, 2, -110), V(5, 30, 5)],
+		[V(14, 4, -150), V(4, 34, 4)], [V(-16, 6, -185), V(5, 38, 5)], [V(-8, 10, -240), V(5, 40, 5)],
+		[V(52, 8, -215), V(6, 44, 6)], [V(78, 10, -270), V(5, 40, 5)], [V(46, 12, -300), V(4, 34, 4)],
+		[V(78, 12, -350), V(5, 42, 5)], [V(44, 10, -400), V(5, 38, 5)], [V(90, 14, -440), V(6, 46, 6)],
+		[V(30, 12, -470), V(5, 40, 5)], [V(95, 16, -495), V(5, 44, 5)],
+	]
+	for t: Array in towers:
+		var c: Vector3 = t[0]
+		var sz: Vector3 = t[1]
+		kit.block(c, sz, Look.c("decor"), false)
+		kit.block(c + V(0, sz.y * 0.5 + 0.4, 0), V(sz.x + 1.0, 0.8, sz.z + 1.0), Look.c("metal"), false)
+		var spire := Look.cylinder(sz.x * 0.55, sz.x * 1.4, Look.flat(Look.c("decor2"), 0.7), Vector3.ZERO, 0.0, 4)
+		spire.rotation_degrees.y = 45.0
+		add_child(_at(spire, c + V(0, sz.y * 0.5 + 0.8 + sz.x * 0.7, 0)))
+		kit.glow_strip(c + V(0, sz.y * 0.28, sz.z * 0.5 + 0.03), V(sz.x * 0.35, sz.y * 0.18, 0.06), Look.c("accent"))
+		kit.gear(c + V(0, sz.y * 0.05, sz.z * 0.5 + 0.3), sz.x * 0.42, 10, 0.3, kit.rng.randf_range(6.0, 14.0))
+	# great gears under and beside the clock
+	kit.gear(K + V(0, -19.0, 0), 11.0, 26, 1.2, 40.0, Vector3.ZERO, Look.c("decor"))
+	kit.gear(K + V(19.5, -17.0, 9.0), 6.0, 16, 1.0, -18.5, Vector3.ZERO)
+	kit.gear(K + V(-21.0, -16.5, -7.0), 7.5, 18, 1.0, -23.0, Vector3.ZERO)
+	kit.gear(K + V(-30.0, 8.0, -16.0), 8.0, 20, 0.9, 30.0, Vector3(90, 60, 0), Look.c("decor"))
+	kit.gear(K + V(30.0, 4.0, -18.0), 6.0, 16, 0.8, -20.0, Vector3(90, -55, 0))
+	kit.gear(V(16, 4, -20), 4.5, 14, 0.6, 16.0, Vector3(90, -35, 0))
+	kit.gear(V(-16, 10, -95), 5.0, 14, 0.7, -14.0, Vector3(90, 40, 0), Look.c("decor"))
+	kit.gear(V(18, 14, -170), 5.5, 16, 0.7, 18.0, Vector3(90, 70, 0))
+	kit.gear(V(74, 24, -320), 5.0, 14, 0.7, -15.0, Vector3(90, -60, 0), Look.c("decor"))
+	kit.cloud_field(V(35, -28, -250), V(180, 8, 300), 44)
+	kit.cloud_field(V(35, 60, -250), V(200, 10, 320), 14)
+	kit.monolith_ring(V(35, 6, -245), 300.0, 370.0, 20, 30.0)
 
 
 func _process(_dt: float) -> void:

@@ -50,3 +50,7 @@
   velocity/add_impulse, so the controller stays the single owner of movement.
 - Measured: boost 20 m/s -> 15.5 m jump, still 17 m/s half a second after landing; 25 deg x 16 m ice slide -> 20 m/s; hammer throw ~23 m/s.
 - Validator now allows 95% of reach and understands per-jump "speed"; bot may respawn up to 15 times per level (hard but completable).
+- Rebuilt levels (bot main-route results): L1 9 stages 74 s / 0 respawns, hardest jump 92%; L2 11 stages 107 m climb 85 s / 2, 92%;
+  L3 10 stages 69 s / 0, 90%; L4 11 stages 103 s / 0, 93%; L5 12 stages 100 m climb 87 s / 1, 93%. A clean human run is expected
+  to take 3-6 min per level with many falls - that is the design.
+- Repo: https://github.com/fatty8me2/jump-circuit (private). The engine binary and build/ are not in git (size).
