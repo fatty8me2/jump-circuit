@@ -78,6 +78,38 @@ static func button(text: String, on_press: Callable, min_width: float = 280.0) -
 	return b
 
 
+## A destructive action. The first press arms it (`armed_text` in gold) and a second
+## press within 3 s runs it. Moving focus away or waiting disarms it. Works while paused.
+static func confirm_button(text: String, armed_text: String, on_press: Callable, min_width: float = 280.0) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.custom_minimum_size = Vector2(min_width, 48)
+	var armed_at: Array[int] = [-1]   # boxed: lambdas capture locals by value
+	var colors: Array[String] = ["font_color", "font_focus_color", "font_hover_color"]
+	var disarm := func() -> void:
+		armed_at[0] = -1
+		if is_instance_valid(b):
+			b.text = text
+			for c: String in colors:
+				b.remove_theme_color_override(c)
+	b.pressed.connect(func() -> void:
+		Sfx.play("ui", 0.05, 0.6)
+		var now: int = Time.get_ticks_msec()
+		if armed_at[0] >= 0:
+			if now - armed_at[0] >= 250:   # not a double-click or key bounce
+				on_press.call()
+			return
+		armed_at[0] = now
+		b.text = armed_text
+		for c: String in colors:
+			b.add_theme_color_override(c, GOLD)
+		b.get_tree().create_timer(3.0).timeout.connect(func() -> void:
+			if armed_at[0] == now:
+				disarm.call()))
+	b.focus_exited.connect(disarm)
+	return b
+
+
 static func panel(min_size: Vector2 = Vector2.ZERO) -> PanelContainer:
 	var p := PanelContainer.new()
 	p.custom_minimum_size = min_size

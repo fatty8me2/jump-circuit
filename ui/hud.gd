@@ -11,12 +11,15 @@ var _intro: VBoxContainer
 var _toast: Label
 ## Second line under the toast (split time vs best); a child, so it fades with it.
 var _toast_sub: Label
+var _toast_tw: Tween
 var _count: Label
 var _board: VBoxContainer
 var _flash: ColorRect
 var _debug: Label
 var _results: Control
 var _results_ready: bool = false
+## "2nd place of 4" on the race results panel; follows the live standings.
+var _race_place: Label
 var _board_refresh: float = 0.0
 var _last_count: int = 99
 var _peak_speed: float = 0.0
@@ -79,7 +82,9 @@ func _ready() -> void:
 
 	_board = UiKit.vbox(3)
 	_board.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_board.position = Vector2(-290, 16)
+	# right edge pinned 20 px in: long names widen the board leftwards, not off-screen
+	_board.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_board.position = Vector2(-20, 16)
 	_board.custom_minimum_size = Vector2(270, 0)
 	_board.visible = Game.race_mode
 	_root.add_child(_board)
@@ -115,10 +120,13 @@ func toast(text: String, sub: String = "", sub_color: Color = UiKit.SOFT) -> voi
 	_toast.text = text
 	_toast_sub.text = sub
 	_toast_sub.add_theme_color_override("font_color", sub_color)
-	var tw: Tween = create_tween()
-	tw.tween_property(_toast, "modulate:a", 1.0, 0.12)
-	tw.tween_interval(1.3)
-	tw.tween_property(_toast, "modulate:a", 0.0, 0.5)
+	# the previous toast's fade-out would otherwise cut this one short
+	if _toast_tw != null and _toast_tw.is_valid():
+		_toast_tw.kill()
+	_toast_tw = create_tween()
+	_toast_tw.tween_property(_toast, "modulate:a", 1.0, 0.12)
+	_toast_tw.tween_interval(1.3)
+	_toast_tw.tween_property(_toast, "modulate:a", 0.0, 0.5)
 
 
 ## Checkpoint toast, plus the split against your best run when the timer is shown.
@@ -213,6 +221,8 @@ func _rebuild_board() -> void:
 		var me: String = "  <" if id == Net.my_id() else ""
 		var l: Label = UiKit.shadowed(UiKit.label("%d  %s   %s%s" % [place, e["name"], status, me], 20, col.lerp(Color.WHITE, 0.35)), 5)
 		_board.add_child(l)
+		if id == Net.my_id() and is_instance_valid(_race_place) and float(e["finished"]) >= 0.0:
+			_race_place.text = "%d%s place of %d" % [place, _ordinal(place), Net.roster.size()] if Net.roster.size() > 1 else ""
 		place += 1
 
 
@@ -287,19 +297,54 @@ func results_ready() -> bool:
 	return _results_ready
 
 
-func show_race_results() -> void:
+func show_race_results(time: float) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	var box: VBoxContainer = UiKit.vbox(12)
 	box.add_child(UiKit.label("FINISHED!", 40, UiKit.GOLD, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(UiKit.label(SaveData.format_time(time), 56, UiKit.GOLD, HORIZONTAL_ALIGNMENT_CENTER))
+	_race_place = UiKit.label("", 24, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
+	box.add_child(_race_place)
+	_rebuild_board()   # our own finish is already in the roster (call_local)
 	box.add_child(UiKit.label("Live standings are on the right.", 18, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER))
+	var leave_race := func() -> void:
+		Net.leave()
+		Game.goto_title("main")
+	var first: Button
+	var leave: Button
 	if Net.is_host():
-		box.add_child(UiKit.button("Back to Lobby (everyone)", func() -> void: Net.host_return_to_lobby()))
+		first = UiKit.button("Back to Lobby (everyone)", func() -> void: Net.host_return_to_lobby())
+		box.add_child(first)
+		# for the host, leaving closes the session on everyone
+		leave = UiKit.confirm_button("Close Session (disconnects all)", "Press again to disconnect all", leave_race)
 	else:
 		box.add_child(UiKit.label("Waiting for the host to continue...", 18, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER))
-	box.add_child(UiKit.button("Leave Race", func() -> void:
-		Net.leave()
-		Game.goto_title("main")))
+		leave = UiKit.button("Leave Race", leave_race)
+		first = leave
+	box.add_child(leave)
 	var p: PanelContainer = UiKit.panel(Vector2(440, 0))
 	p.add_child(box)
 	_results = UiKit.centered(p)
+	_results.modulate.a = 0.0
 	_root.add_child(_results)
+	# focus (for keyboard / pad) only after a beat, so a jump mashed across the line
+	# can't press a button that ends the race; keeps focus the player already moved
+	var tw: Tween = create_tween()
+	tw.tween_property(_results, "modulate:a", 1.0, 0.35)
+	tw.tween_interval(0.65)
+	tw.tween_callback(func() -> void:
+		if is_instance_valid(first) and get_viewport().gui_get_focus_owner() == null:
+			first.grab_focus())
+
+
+## "st" / "nd" / "rd" / "th" for a place number.
+static func _ordinal(n: int) -> String:
+	if n % 100 >= 11 and n % 100 <= 13:
+		return "th"
+	match n % 10:
+		1:
+			return "st"
+		2:
+			return "nd"
+		3:
+			return "rd"
+	return "th"
