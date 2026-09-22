@@ -1,12 +1,18 @@
 extends TestLib
 ## Headless physics/integration tests.
 ##   godot --headless --path . res://tests/run_tests.tscn
-## Optional user args:  -- --only=<substring>   -- --fps=<n> (cap render rate)
+## Optional user args:  -- --only=<substring>   -- --level=<0-based index>   -- --fps=<n> (cap render rate)
+## A selection that matches nothing (or a bad --level) exits with code 2 instead of a green 0.
 
 const FWD := Vector2(0, 1)
 
-## -- --level=<index> restricts the per-level tests to one level.
+## -- --level=<index> (0-based) restricts the per-level tests to one level.
 var only_level: int = -1
+## Per-test watchdog budget in physics seconds (test_n gets 1300 s per level instead).
+var watchdog_s: float = 180.0
+## Bumped per test so a stale watchdog timer from an earlier test does nothing.
+var _test_gen: int = 0
+var _ended: bool = false
 
 
 func _ready() -> void:
@@ -18,7 +24,11 @@ func _ready() -> void:
 		if a.begins_with("--only="):
 			only = a.trim_prefix("--only=")
 		elif a.begins_with("--level="):
-			only_level = int(a.trim_prefix("--level="))
+			var v: String = a.trim_prefix("--level=")
+			if not v.is_valid_int() or int(v) < 0 or int(v) >= Game.LEVELS.size():
+				_usage_error("--level=%s is invalid; use a 0-based index 0..%d" % [v, Game.LEVELS.size() - 1])
+				return
+			only_level = int(v)
 		elif a.begins_with("--fps="):
 			Engine.max_fps = int(a.trim_prefix("--fps="))
 	await ticks(3)
@@ -27,17 +37,59 @@ func _ready() -> void:
 		var n: String = m["name"]
 		if n.begins_with("test_") and (only == "" or n.contains(only)):
 			tests.append(n)
+	if tests.is_empty():
+		_usage_error("--only=%s matched no test_ method" % only)
+		return
+	OS.add_logger(trap)
 	for n: String in tests:
 		print("\n== ", n)
+		_test_gen += 1
+		var gen: int = _test_gen
+		# physics-time budget (process_in_physics, scaled): the bot levels get 1300 s each
+		var limit: float = 1300.0 * Game.LEVELS.size() if n == "test_n_bot_levels" else watchdog_s
+		get_tree().create_timer(limit, true, true, false).timeout.connect(func() -> void: _watchdog(n, gen))
+		var before: int = trap.count()
+		trap.expected = 0
 		await call(n)
+		if _ended:
+			return
+		var got: int = trap.count() - before
+		if got != trap.expected:
+			check(false, "%s logged %d engine/script error(s) (expected %d): %s" % [n, got, trap.expected, trap.since(before)])
+	_finish()
+
+
+func _finish(note: String = "") -> void:
+	if _ended:
+		return
+	_ended = true
+	OS.remove_logger(trap)
 	if world != null:
 		world.queue_free()
 	print("\n---- metrics ----")
 	for k: String in metrics:
 		print("  %-34s %s" % [k, str(metrics[k])])
-	print("\nRESULT: %d passed, %d failed  (render fps cap: %d)" % [passed, failed, Engine.max_fps])
+	if passed + failed == 0:
+		print("\nno checks ran")
+	print("\nRESULT: %d passed, %d failed  (render fps cap: %d)%s" % [passed, failed, Engine.max_fps, note])
 	SaveData.delete_files()
-	get_tree().quit(1 if failed > 0 else 0)
+	get_tree().quit(1 if failed > 0 or passed + failed == 0 else 0)
+
+
+## Per-test backstop: a test still running after its budget fails the whole run
+## (instead of the suite hanging with no hint of which test is stuck).
+func _watchdog(n: String, gen: int) -> void:
+	if gen != _test_gen or _ended:
+		return
+	check(false, "%s timed out (watchdog)" % n)
+	_finish("  (watchdog abort)")
+
+
+## Bad command-line selection: exit 2 without running anything, so a typo never reads as green.
+func _usage_error(msg: String) -> void:
+	printerr(msg)
+	SaveData.delete_files()
+	get_tree().quit(2)
 
 
 # ---- core movement -----------------------------------------------------------------------
@@ -123,8 +175,8 @@ func test_d_coyote_and_buffer() -> void:
 	floor_slab()
 	await settle()
 	player.cmd_move = FWD
-	while player.grounded:
-		await get_tree().physics_frame
+	if not await wait_until(func() -> bool: return not player.grounded, 5.0, "walking off the ledge"):
+		return
 	await seconds(0.07)
 	player.press_jump()
 	player.cmd_jump = true
@@ -136,18 +188,21 @@ func test_d_coyote_and_buffer() -> void:
 	player.teleport(Transform3D(Basis(), Vector3(0, 5.05, 0)))
 	await settle()
 	player.cmd_move = FWD
-	while player.grounded:
-		await get_tree().physics_frame
+	if not await wait_until(func() -> bool: return not player.grounded, 5.0, "walking off the ledge again"):
+		return
 	await seconds(0.25)
 	player.press_jump()
 	await ticks(2)
 	check(player.velocity.y < 0.0, "coyote: no mid-air jump after the window closes")
 	# buffer: press shortly before touching down
+	var f0: int = Engine.get_physics_frames()
 	while not player.grounded:
 		if player.global_position.y < 0.55 and player.velocity.y < 0.0:
 			player.press_jump()
 			player.cmd_jump = true
 			break
+		if overdue(f0, 5.0, "the fall toward the floor"):
+			return
 		await get_tree().physics_frame
 	var jumped_again: bool = false
 	for i: int in 30:
@@ -234,10 +289,13 @@ func test_g_bounce_pads() -> void:
 	player.bounced.connect(func(_s: float) -> void: bounces[0] += 1)
 	for i: int in 3:
 		player.teleport(Transform3D(Basis(), Vector3(0.2 * i, 2.0 + i, 0)))
-		while bounces[0] <= i:
-			await get_tree().physics_frame
+		if not await wait_until(func() -> bool: return bounces[0] > i, 5.0, "pad bounce %d" % (i + 1)):
+			return
 		var apex: float = player.global_position.y
+		var f0: int = Engine.get_physics_frames()
 		while player.velocity.y > 0.0:
+			if overdue(f0, 5.0, "the pad launch apex"):
+				return
 			await get_tree().physics_frame
 			apex = maxf(apex, player.global_position.y)
 		heights.append(apex)
@@ -252,7 +310,10 @@ func test_g_bounce_pads() -> void:
 	# jump buffered into a pad must not override the launch
 	player.teleport(Transform3D(Basis(), Vector3(0, 1.0, 0)))
 	player.press_jump()
+	var f1: int = Engine.get_physics_frames()
 	while bounces[0] < 4:
+		if overdue(f1, 5.0, "the buffered-jump pad bounce"):
+			return
 		player.press_jump()
 		await get_tree().physics_frame
 	await ticks(3)
@@ -263,8 +324,8 @@ func test_g_bounce_pads() -> void:
 	player.cmd_move = Vector2.ZERO
 	player.teleport(Transform3D(Basis(), Vector3(40, 1.5, 0)))
 	var base_count: int = bounces[0]
-	while bounces[0] == base_count:
-		await get_tree().physics_frame
+	if not await wait_until(func() -> bool: return bounces[0] != base_count, 5.0, "the angled pad bounce"):
+		return
 	player.cmd_move = FWD
 	await wait_landing()
 	var launch: Dictionary = apad.get_launch()
@@ -288,10 +349,9 @@ func test_h_moving_platform() -> void:
 		max_drift = maxf(max_drift, (player.global_position - m.global_position - rel0).length())
 	check(player.grounded and max_drift < 0.12, "rides a moving platform through a full stroke without drifting (max %.3fm)" % max_drift)
 	# take off mid-stroke: inherit platform velocity exactly once
-	while true:
-		await get_tree().physics_frame
-		if player.platform_velocity.x > 3.5:
-			break
+	await get_tree().physics_frame
+	if not await wait_until(func() -> bool: return player.platform_velocity.x > 3.5, 10.0, "the platform to reach takeoff speed"):
+		return
 	var pv: float = player.platform_velocity.x
 	player.press_jump()
 	player.cmd_jump = true
@@ -483,8 +543,10 @@ func test_n_bot_levels() -> void:
 	for i: int in Game.LEVELS.size():
 		if only_level >= 0 and i != only_level:
 			continue
-		if ResourceLoader.exists(Game.LEVELS[i]["scene"]):
-			await run_bot(i, 1200.0)
+		if not ResourceLoader.exists(Game.LEVELS[i]["scene"]):
+			check(false, "level %d scene exists" % (i + 1))
+			continue
+		await run_bot(i, 1200.0)
 
 
 func test_o_checkpoint_fail_respawn_reset() -> void:
@@ -573,13 +635,19 @@ func test_r_menus_build_without_errors() -> void:
 	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
 	add_child(title)
 	await ticks(3)
-	for id: String in ["levels", "race", "settings", "victory", "main"]:
+	# "race" twice: rebuilding the screen in place is what a colour swatch press does
+	# (pressing the real swatch would write the player's settings.cfg)
+	for id: String in ["levels", "race", "race", "settings", "victory", "main"]:
+		var e0: int = trap.count()
 		title.call("show_screen", id)
 		await ticks(2)
-		check(Game.title_screen == id, "title screen builds: %s" % id)
+		# Game.title_screen is set before the builder runs, so also require a live, non-empty screen
+		var scr := title.get("_screen") as Control
+		check(Game.title_screen == id and scr != null and scr.is_inside_tree() and scr.get_child_count() > 0 and trap.count() == e0, ("title screen builds: %s %s" % [id, trap.since(e0)]).strip_edges())
+	var e1: int = trap.count()
 	check(Net.host(24599) == OK, "hosting opens the lobby")
 	await ticks(3)
-	check(Game.title_screen == "lobby" and Net.roster.size() == 1, "lobby shows the host in the roster")
+	check(Game.title_screen == "lobby" and Net.roster.size() == 1 and trap.count() == e1, ("lobby shows the host in the roster %s" % trap.since(e1)).strip_edges())
 	Net.leave()
 	title.queue_free()
 	await ticks(2)
@@ -591,9 +659,26 @@ func test_r_menus_build_without_errors() -> void:
 	check(get_tree().paused and not lvl.player.control_enabled, "pause freezes a solo run")
 	pause.set_open(false)
 	check(not get_tree().paused and lvl.player.control_enabled, "resume restores control")
+	# settings inside the pause menu; leave through `closed`, not Done (which saves settings.cfg)
+	pause.set_open(true)
+	pause.call("_show_settings")
+	await ticks(2)
+	var sp: Array[Node] = pause.find_children("*", "SettingsPanel", true, false)
+	check(pause.get("_settings") != null and sp.size() == 1 and sp[0].get_child_count() > 0, "pause settings panel builds")
+	if sp.size() == 1:
+		(sp[0] as SettingsPanel).closed.emit()
+	await ticks(2)
+	check(pause.get("_settings") == null and pause.get("_menu") != null, "settings returns to the pause menu")
+	pause.set_open(false)
+	check(not get_tree().paused, "pause menu closed again")
 	lvl.hud.show_results(12.34, -1.0, true, 0)
 	await ticks(2)
-	check(true, "results panel builds")
+	var r := lvl.hud.get("_results") as Control
+	check(r != null and r.is_inside_tree(), "results panel builds")
+	lvl.hud.show_race_results()
+	await ticks(2)
+	var rr := lvl.hud.get("_results") as Control
+	check(rr != null and rr != r and rr.is_inside_tree(), "race results panel builds")
 
 
 # ---- momentum toolkit -------------------------------------------------------------------------
@@ -605,7 +690,10 @@ func test_s_boost_conveyor_ice() -> void:
 	await settle()
 	player.cmd_move = FWD
 	var peak: float = 0.0
+	var f0: int = Engine.get_physics_frames()
 	while player.global_position.z > -11.5:
+		if overdue(f0, 5.0, "the run down the boost strip"):
+			return
 		await get_tree().physics_frame
 		peak = maxf(peak, player.horizontal_speed())
 	check(peak > 19.0 and peak < 21.0, "boost strip drives speed to its target (%.1f m/s)" % peak)
@@ -1480,3 +1568,29 @@ func test_w_checkpoints_face_the_route() -> void:
 				worst_cp = cp.index
 		check(k == lvl.checkpoints.size(), "%s: every checkpoint has a route checkpoint step (%d/%d)" % [label, k, lvl.checkpoints.size()])
 		check(worst <= 50.0, "%s: respawns face the next stage (worst: checkpoint %d, %.0f deg off)" % [label, worst_cp, worst])
+
+
+# ---- harness self-checks -------------------------------------------------------------------------
+
+func test_w_error_trap_records_errors() -> void:
+	var t := TestLib.ErrorTrap.new()
+	var no_trace: Array[ScriptBacktrace] = []
+	t._log_error("f", "res://a.gd", 3, "cond", "", false, Logger.ERROR_TYPE_WARNING, no_trace)
+	check(t.count() == 0, "error trap ignores warnings")
+	t._log_error("f", "res://a.gd", 5, "cond", "why", false, Logger.ERROR_TYPE_SCRIPT, no_trace)
+	t._log_error("f", "res://b.gd", 9, "cond2", "", false, Logger.ERROR_TYPE_ERROR, no_trace)
+	check(t.count() == 2 and t.since(1) == "cond2 @ res://b.gd:9", "error trap records script and engine errors with where they happened (%s)" % t.since(0))
+
+
+func test_w2_route_bot_gives_up_when_route_ends() -> void:
+	var lvl: LevelBase = await load_level(0)
+	lvl.route.clear()
+	lvl.r_walk(lvl.player.global_position)
+	var bot := RouteBot.new()
+	lvl.add_child(bot)
+	bot.attach(lvl)
+	var f0: int = Engine.get_physics_frames()
+	while not bot.stuck and not bot.done and not overdue(f0, 20.0, "the route bot to give up"):
+		await get_tree().physics_frame
+	var why: String = bot.log_lines[-1] if not bot.log_lines.is_empty() else ""
+	check(bot.stuck and not bot.done and why.begins_with("route exhausted"), "route bot gives up soon when its route ends short of the finish (%s)" % why)

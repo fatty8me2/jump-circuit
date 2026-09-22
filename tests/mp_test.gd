@@ -13,6 +13,8 @@ var failed: int = 0
 var _clock_error: float = 99.0
 var _port: int = 24577
 var _done: bool = false
+## Counts engine/script errors: a runtime error only aborts the function it hits.
+var _trap := TestLib.ErrorTrap.new()
 
 
 func _ready() -> void:
@@ -22,6 +24,7 @@ func _ready() -> void:
 			role = a.trim_prefix("--role=")
 		elif a.begins_with("--port="):
 			_port = int(a.trim_prefix("--port="))
+	OS.add_logger(_trap)
 	name = "MpTest"
 	# survive scene changes
 	get_parent().remove_child.call_deferred(self)
@@ -155,6 +158,8 @@ func _run() -> void:
 	await get_tree().create_timer(0.5).timeout
 	check(Net.active and Net.roster.size() == 2, "session stays connected for the next race")
 	_done = true   # the watchdog must not fire during the orderly shutdown below
+	check(_trap.count() == 0, ("no engine/script errors during the session %s" % _trap.since(0)).strip_edges())
+	OS.remove_logger(_trap)
 	print("[%s] RESULT: %d passed, %d failed" % [role, passed, failed])
 	if role == "client":
 		Net.leave()
