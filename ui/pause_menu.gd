@@ -61,9 +61,11 @@ func _show_menu() -> void:
 	box.add_child(resume)
 	box.add_child(UiKit.button("Back to Checkpoint  (R)", func() -> void:
 		set_open(false)
-		level.respawn()))
+		level.manual_respawn()))
 	if not Game.race_mode:
-		box.add_child(UiKit.button("Restart Level", func() -> void: Game.restart_level()))
+		box.add_child(UiKit.button("Restart Level", func() -> void:
+			set_open(false)
+			level.restart_run()))
 	box.add_child(UiKit.button("Settings", func() -> void: _show_settings()))
 	if Game.race_mode:
 		box.add_child(UiKit.button("Leave Race", func() -> void:

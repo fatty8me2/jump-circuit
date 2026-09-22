@@ -161,5 +161,5 @@ func _run() -> void:
 	else:
 		await get_tree().create_timer(1.0).timeout
 		Net.leave()
-	DirAccess.remove_absolute(ProjectSettings.globalize_path(SaveData.path_override))
+	SaveData.delete_files()
 	get_tree().quit(1 if failed > 0 else 0)

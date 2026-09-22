@@ -36,7 +36,7 @@ func _ready() -> void:
 	for k: String in metrics:
 		print("  %-34s %s" % [k, str(metrics[k])])
 	print("\nRESULT: %d passed, %d failed  (render fps cap: %d)" % [passed, failed, Engine.max_fps])
-	DirAccess.remove_absolute(ProjectSettings.globalize_path("user://test_progress.json"))
+	SaveData.delete_files()
 	get_tree().quit(1 if failed > 0 else 0)
 
 
@@ -956,3 +956,182 @@ func test_race_clock_and_roster_logic() -> void:
 	g.push_state(Vector3(0, 0, 6), Vector3.ZERO, true, 1)
 	check(g.global_position.is_equal_approx(Vector3(0, 0, 6)), "a new teleport seq snaps the ghost")
 	g.queue_free()
+
+
+# ---- run flow, results and save file ----------------------------------------------------------
+
+func test_v_kill_seam_counts_one_fall() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var base: Vector3 = lvl.checkpoints[0].global_position
+	lvl.player.teleport(lvl.checkpoints[0].respawn_transform())
+	await seconds(0.3)
+	lvl.kit.plat(base + Vector3(40, 0, 0), Vector3(30, 1, 30), "main", 0.0)
+	# two 2 m kill bricks side by side, walked into right at their seam
+	lvl.kit.hazard(base + Vector3(39, 0.3, -6), Vector3(2, 0.6, 2))
+	lvl.kit.hazard(base + Vector3(41, 0.3, -6), Vector3(2, 0.6, 2))
+	var respawns: Array[int] = [0]
+	lvl.player_respawned.connect(func() -> void: respawns[0] += 1)
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(40, 0.1, 0)))
+	lvl.player.use_device_input = false
+	await seconds(0.3)
+	lvl.player.cmd_move = FWD
+	var t: float = 0.0
+	while lvl.deaths == 0 and t < 3.0:
+		await get_tree().physics_frame
+		t += 1.0 / 120.0
+	lvl.player.cmd_move = Vector2.ZERO
+	await ticks(6)
+	check(lvl.deaths == 1 and respawns[0] == 1, "one touch across two kill bricks is one fall (falls %d, respawns %d)" % [lvl.deaths, respawns[0]])
+
+
+func test_v_restart_run_in_place() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var cp: Checkpoint = lvl.checkpoints[0]
+	lvl.player.teleport(cp.respawn_transform())
+	await seconds(0.3)
+	check(lvl.current_checkpoint == 1 and lvl.splits[0] >= 0.0, "banking a checkpoint records its split (%.2fs)" % lvl.splits[0])
+	lvl.deaths = 3
+	Game.course_time = 5.0
+	lvl.restart_run()
+	await ticks(2)
+	var any_active: bool = false
+	for c: Checkpoint in lvl.checkpoints:
+		any_active = any_active or c.active
+	check(lvl.deaths == 0 and lvl.current_checkpoint == 0 and not any_active and lvl.splits[0] < 0.0, "restarting clears falls, checkpoints and splits")
+	check(Game.course_time < 0.05 and lvl.run_time < 0.05, "restarting zeroes the clock (t=%.3f)" % Game.course_time)
+	check(lvl.player.global_position.distance_to(lvl._spawn.origin) < 0.5 and lvl.is_inside_tree(), "restarting puts the player back at the start, in place")
+
+
+func test_v_bail_while_falling_counts() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var cp: Checkpoint = lvl.checkpoints[0]
+	lvl.player.teleport(cp.respawn_transform())
+	await seconds(0.3)
+	lvl.manual_respawn()
+	await ticks(3)
+	check(lvl.deaths == 0, "going back to the checkpoint while standing is free")
+	lvl.player.teleport(Transform3D(Basis(), cp.global_position + Vector3(60, 0, 0)))
+	await seconds(0.45)
+	check(not lvl.player.grounded and lvl.deaths == 0, "falling, not caught by the fall-out check yet (vy %.1f)" % lvl.player.velocity.y)
+	lvl.manual_respawn()
+	await ticks(3)
+	check(lvl.deaths == 1 and lvl.player.global_position.distance_to(cp.global_position) < 1.0, "bailing out with R while falling counts as a fall")
+
+
+func test_v_save_file_robustness() -> void:
+	var keep: String = SaveData.path_override
+	SaveData.path_override = "user://test_progress_robust.json"
+	SaveData.wipe()
+	var t60: float = 0.0
+	for i: int in 7200:
+		t60 += 1.0 / 120.0
+	var shown: Array[String] = [SaveData.format_time(59.996), SaveData.format_time(t60), SaveData.format_time(3599.999), SaveData.format_time(61.5), SaveData.format_time(-1.0)]
+	check(shown == ["0:59.99", "1:00.00", "59:59.99", "1:01.50", "--:--.--"], "format_time truncates and carries the minute (%s)" % str(shown))
+	SaveData.record_finish("gardens", 62.35, 4, [10.0, -1.0, 30.5])
+	check(not SaveData.record_finish("gardens", 62.358, 4), "a run that reads the same as the best is not a new best")
+	check(SaveData.record_finish("gardens", 60.0, 5, [9.0, 20.0, 29.0]) and not SaveData.record_finish("gardens", 70.0, 5, [1.0, 2.0, 3.0]), "bests still follow the time")
+	SaveData.load_data()
+	check(SaveData.best_splits("gardens") == [9.0, 20.0, 29.0], "the best run's splits survive a reload, and slower runs leave them (%s)" % str(SaveData.best_splits("gardens")))
+	# a damaged file falls back to the backup and is kept aside
+	var f: FileAccess = FileAccess.open(SaveData.path_override, FileAccess.WRITE)
+	f.store_string("{\"levels\": {\"gardens\": {\"compl")
+	f.close()
+	SaveData.load_data()
+	check(SaveData.is_completed("gardens") and SaveData.best_time("gardens") > 0.0 and FileAccess.file_exists(SaveData.path_override + ".corrupt"), "a truncated save is restored from the backup")
+	f = FileAccess.open(SaveData.path_override, FileAccess.WRITE)
+	f.store_string("{\"levels\": {\"gardens\": true, \"foundry\": {\"completed\": \"yes\", \"best\": \"x\", \"runs\": 2}}, \"game_completed\": \"no\"}")
+	f.close()
+	SaveData.load_data()
+	check(not SaveData.is_completed("gardens") and not SaveData.is_completed("foundry") and SaveData.best_time("foundry") < 0.0 and not bool(SaveData.data["game_completed"]), "malformed entries are dropped instead of breaking the accessors")
+	f = FileAccess.open(SaveData.path_override, FileAccess.WRITE)
+	f.store_string("{\"levels\": [], \"game_completed\": false}")
+	f.close()
+	SaveData.load_data()
+	check(SaveData.record_finish("balance", 90.0, 1) and SaveData.is_completed("balance"), "a malformed level table still records finishes")
+	# bests set on an older course layout move aside; unlocks stay
+	f = FileAccess.open(SaveData.path_override, FileAccess.WRITE)
+	f.store_string("{\"levels\": {\"gardens\": {\"completed\": true, \"best\": 18.22, \"runs\": 1.0, \"fewest_falls\": 0}}, \"game_completed\": false}")
+	f.close()
+	SaveData.load_data()
+	var g: Dictionary = SaveData.data["levels"]["gardens"]
+	check(SaveData.is_completed("gardens") and SaveData.best_time("gardens") < 0.0 and SaveData.fewest_falls("gardens") < 0 and is_equal_approx(float(g.get("legacy_best", -1.0)), 18.22), "an old-layout best becomes legacy_best; completion is kept")
+	check(SaveData.record_finish("gardens", 250.0, 3), "the first clear of the new layout is a best")
+	SaveData.load_data()
+	check(is_equal_approx(SaveData.best_time("gardens"), 250.0) and SaveData.fewest_falls("gardens") == 3, "the new-layout best survives a reload")
+	SaveData.delete_files()
+	check(not FileAccess.file_exists(SaveData.path_override) and not FileAccess.file_exists(SaveData.path_override + ".bak") and not FileAccess.file_exists(SaveData.path_override + ".corrupt"), "delete_files leaves nothing behind")
+	SaveData.path_override = keep
+	SaveData.wipe()
+
+
+func test_v_race_go_behind_open_menu() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Game.level_index = 0
+	Game.race_mode = true
+	Net.race_start_time = Net.now() + 1.0
+	var lvl: LevelBase = (load(Game.LEVELS[0]["scene"]) as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	var pause: PauseMenu = lvl.find_children("*", "PauseMenu", true, false)[0] as PauseMenu
+	check(Game.course_time < 0.0 and not lvl.player.control_enabled, "the race countdown holds the player (t=%.2f)" % Game.course_time)
+	pause.set_open(true)
+	var t: float = 0.0
+	while Game.course_time < 0.2 and t < 3.0:
+		await get_tree().physics_frame
+		t += 1.0 / 120.0
+	check(lvl._started and not lvl.player.control_enabled, "GO behind the open race menu keeps control off")
+	var respawns: Array[int] = [0]
+	lvl.player_respawned.connect(func() -> void: respawns[0] += 1)
+	var ev := InputEventAction.new()
+	ev.action = "restart"
+	ev.pressed = true
+	lvl._unhandled_input(ev)
+	check(respawns[0] == 0, "R is ignored behind the open race menu")
+	pause.set_open(false)
+	check(lvl.player.control_enabled, "closing the menu hands control back")
+	Game.race_mode = false
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+func test_v_results_and_splits_display() -> void:
+	SaveData.wipe()
+	var keep_mode: String = Settings.timer_mode
+	Settings.timer_mode = "on"
+	var lvl: LevelBase = await load_level(0)
+	var best: Array = []
+	for i: int in lvl.checkpoints.size():
+		best.append(5.0 * (i + 1))
+	SaveData.record_finish(lvl.level_id, 100.0, 4, best)
+	lvl.hud.checkpoint_reached(1, 4.0)
+	check(lvl.hud._toast_sub.text == "-1.00", "a checkpoint shows the split against the best run (%s)" % lvl.hud._toast_sub.text)
+	lvl.hud.toast("Someone finished")
+	check(lvl.hud._toast_sub.text == "", "a plain toast clears the split line")
+	Game.course_time = 150.0
+	await ticks(2)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	check(lvl.hud._timer.self_modulate != Color.WHITE, "the timer turns red once the run is slower than the best")
+	lvl.hud.show_results(80.0, 100.0, true, 2, 4)
+	await ticks(2)
+	var buttons: Array[Node] = lvl.hud.find_children("*", "Button", true, false)
+	var locked: bool = buttons.size() == 3 and not lvl.hud.results_ready()
+	for b: Node in buttons:
+		locked = locked and (b as Button).disabled
+	check(locked, "results buttons ignore input while the panel fades in")
+	var texts: String = ""
+	for l: Node in lvl.hud.find_children("*", "Label", true, false):
+		texts += (l as Label).text + "|"
+	check(texts.contains("-20.00 s") and texts.contains("fewest yet!  (was 4)"), "results call out the time gained and a fewest-falls record")
+	await seconds(1.0)
+	var live: bool = lvl.hud.results_ready()
+	for b: Node in buttons:
+		live = live and not (b as Button).disabled
+	check(live, "results buttons go live after the fade")
+	Settings.timer_mode = keep_mode
+	SaveData.wipe()
