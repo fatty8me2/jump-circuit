@@ -35,7 +35,8 @@ Title -> **Race Friends**.
 
 * One player presses **Host a Race**. The lobby shows the LAN address(es) to share, and tries UPnP to
   open UDP port **24565** for internet play (the result is shown in the lobby).
-* Everyone else types the host address and presses **Join**.
+* Everyone else types the host address (`address` or `address:port`) and presses **Join** or Enter.
+  Newcomers are given a colour nobody else in the lobby is wearing.
 * The host picks a course and presses **Start Race**: everyone loads in, gets a synchronized
   3-2-1-GO, and races. You see the other racers live (name tags, their colours) but never collide,
   so nobody can block or grief a jump. Standings (checkpoints reached, finish times) are top right.
@@ -99,6 +100,9 @@ Multiplayer (two processes, localhost):
 start /b tools\Godot_v4.7.1-stable_win64.exe --headless --path . res://tests/mp_test.tscn -- --role=host
 tools\Godot_v4.7.1-stable_win64.exe --headless --path . res://tests/mp_test.tscn -- --role=client
 ```
+
+Add `--port=<n>` to both commands to use another UDP port (default 24577). Each process gives up
+after 90 s (exit code 1) if the other one never shows up. The tests never try UPnP.
 
 Visual review:
 

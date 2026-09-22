@@ -2,20 +2,26 @@ extends Node
 ## Two-process multiplayer integration test (run one host and one client):
 ##   godot --headless --path . res://tests/mp_test.tscn -- --role=host
 ##   godot --headless --path . res://tests/mp_test.tscn -- --role=client
+## Optional: --port=<n> (default 24577; both processes must use the same one).
 ## Covers: connect, roster sync, clock sync, synchronized race start, ghost pose
 ## replication, checkpoint + finish reporting, standings, return to lobby.
+## A watchdog ends the process (exit 1) if the run stalls, so a missing peer never hangs it.
 
 var role: String = "host"
 var passed: int = 0
 var failed: int = 0
 var _clock_error: float = 99.0
 var _port: int = 24577
+var _done: bool = false
 
 
 func _ready() -> void:
+	Net.upnp_enabled = false   # never open a port on the real router
 	for a: String in OS.get_cmdline_user_args():
 		if a.begins_with("--role="):
 			role = a.trim_prefix("--role=")
+		elif a.begins_with("--port="):
+			_port = int(a.trim_prefix("--port="))
 	name = "MpTest"
 	# survive scene changes
 	get_parent().remove_child.call_deferred(self)
@@ -23,7 +29,22 @@ func _ready() -> void:
 	SaveData.path_override = "user://test_progress_%s.json" % role
 	Settings.player_name = "Host" if role == "host" else "Guest"
 	Settings.color_index = 1 if role == "host" else 2
+	get_tree().create_timer(90.0, true, false, true).timeout.connect(func() -> void:
+		_finish("watchdog: test did not complete in 90 s"))
 	_run.call_deferred()
+
+
+## Abort path: report, clean up and quit with a failure (runs at most once).
+func _finish(reason: String) -> void:
+	if _done:
+		return
+	_done = true
+	failed += 1
+	print("[%s]   FAIL  %s" % [role, reason])
+	print("[%s] RESULT: %d passed, %d failed" % [role, passed, failed])
+	Net.leave()
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SaveData.path_override))
+	get_tree().quit(1)
 
 
 func check(cond: bool, what: String) -> void:
@@ -62,6 +83,9 @@ func _run() -> void:
 		await get_tree().create_timer(0.8).timeout
 		check(Net.join("127.0.0.1", _port) == OK, "client starts connecting")
 	check(await wait_for(func() -> bool: return Net.roster.size() == 2, 10.0), "both peers see a 2-player roster")
+	if Net.roster.size() != 2:
+		_finish("no second peer - is the other process running on port %d?" % _port)
+		return
 	var names: Array = []
 	for id: int in Net.roster:
 		names.append(Net.roster[id]["name"])
@@ -78,10 +102,16 @@ func _run() -> void:
 		check(_clock_error < 0.05, "client clock matches host within 50 ms (error %.1f ms)" % (_clock_error * 1000.0))
 	check(await wait_for(func() -> bool: return Game.race_mode and _level() != null and _level().player != null, 10.0), "race start loads the level on this peer")
 	var lvl: LevelBase = _level()
+	if lvl == null or lvl.player == null:
+		_finish("the race level never loaded")
+		return
 	check(not lvl.player.control_enabled and Game.course_time < 0.0, "players are held during the countdown (t=%.2f)" % Game.course_time)
 	check(await wait_for(func() -> bool: return lvl.player.control_enabled, 6.0), "control unlocks at GO")
 	check(absf(Game.course_time) < 0.3, "GO happens at course time zero (t=%.2f)" % Game.course_time)
 	check(lvl._ghosts.size() == 1, "one ghost racer spawned for the other player")
+	if lvl._ghosts.is_empty():
+		_finish("no ghost to follow")
+		return
 	# move: host runs forward, guest runs back; each verifies the other's ghost follows
 	lvl.player.use_device_input = false
 	lvl.player.cmd_move = Vector2(0, 1) if role == "host" else Vector2(0.6, -0.4)
@@ -92,6 +122,9 @@ func _run() -> void:
 	var expect_forward: bool = role != "host"      # the OTHER player is the host -> moved toward -Z
 	var gz: float = ghost.global_position.z
 	check((gz < 0.5) if expect_forward else (gz > 3.2), "remote racer ghost mirrors the other player (ghost z=%.2f)" % gz)
+	# give the other peer time to check our ghost before we teleport away (the two
+	# processes poll GO independently, so their timelines differ by up to ~50 ms)
+	await get_tree().create_timer(0.5).timeout
 	# checkpoint + finish
 	lvl.player.teleport(lvl.checkpoints[0].respawn_transform())
 	await get_tree().create_timer(0.4).timeout
@@ -99,14 +132,21 @@ func _run() -> void:
 	for id: int in Net.roster:
 		if id != Net.my_id():
 			other = id
-	check(await wait_for(func() -> bool: return int(Net.roster[other]["cp"]) >= 1, 5.0), "other racer's checkpoint progress arrives")
+	check(await wait_for(func() -> bool: return other != 0 and Net.roster.has(other) and int(Net.roster[other]["cp"]) >= 1, 5.0), "other racer's checkpoint progress arrives")
 	if role == "client":
 		await get_tree().create_timer(1.0).timeout    # host finishes first
-	var gate: FinishGate = lvl.find_children("*", "FinishGate", true, false)[0] as FinishGate
+	var gates: Array[Node] = lvl.find_children("*", "FinishGate", true, false)
+	if gates.is_empty():
+		_finish("the level has no finish gate")
+		return
+	var gate: FinishGate = gates[0] as FinishGate
 	lvl.player.teleport(Transform3D(Basis(), gate.global_position + Vector3(0, 0.3, 0)))
 	check(await wait_for(func() -> bool: return Net.all_finished(), 8.0), "both finish times are known to this peer")
 	var order: Array[int] = Net.standings()
 	check(order.size() == 2 and order[0] == 1, "standings put the host (finished first) on top")
+	if order.size() != 2:
+		_finish("a racer dropped out of the roster mid-race")
+		return
 	check(float(Net.roster[order[0]]["finished"]) < float(Net.roster[order[1]]["finished"]), "finish times ordered %.2f < %.2f" % [float(Net.roster[order[0]]["finished"]), float(Net.roster[order[1]]["finished"])])
 	if role == "host":
 		await get_tree().create_timer(0.5).timeout
@@ -114,6 +154,7 @@ func _run() -> void:
 	check(await wait_for(func() -> bool: return not Game.race_mode and Game.title_screen == "lobby", 8.0), "everyone returns to the lobby together")
 	await get_tree().create_timer(0.5).timeout
 	check(Net.active and Net.roster.size() == 2, "session stays connected for the next race")
+	_done = true   # the watchdog must not fire during the orderly shutdown below
 	print("[%s] RESULT: %d passed, %d failed" % [role, passed, failed])
 	if role == "client":
 		Net.leave()
