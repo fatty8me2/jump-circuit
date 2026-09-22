@@ -14,7 +14,7 @@ Run `build/JumpCircuit.exe` (see *Building* below), or open the project in Godot
 | WASD / left stick / D-pad | Move (camera relative) |
 | Space / A | Jump - tap for a hop, hold for full height |
 | Mouse / right stick | Orbit camera, wheel zooms |
-| R / Y | Instantly back to the checkpoint (at the start of a level: instant level restart) |
+| R / Y | Instantly back to the checkpoint (before the first checkpoint: instant restart; on the results screen: run it again). Bailing out while falling still counts as a fall |
 | Esc / Start | Pause, settings |
 | Arrows or D-pad, Enter / A, Esc / B | Menus: move, confirm, back |
 | F3 | Developer readout (speed, grounded, jump stats, platform velocity, tilt) |
@@ -26,8 +26,12 @@ blinking blocks, sweepers and kill bricks.
 
 Five levels: Launch Gardens, Bounce Foundry, Balance Works, Clockwork Heights, The Final Ascent.
 The run timer stays hidden until you have cleared a level once (Settings can force it on or off).
-Progress and personal bests are saved to `user://progress.json`
-(`%APPDATA%\Godot\app_userdata\Jump Circuit\`).
+Once you have a best, every checkpoint shows your split against it and the results screen shows the
+time gained or lost. Leaving the window pauses a solo run; pause-menu actions that would throw away
+banked checkpoints ask for a second press.
+Progress, personal bests and best-run splits are saved to `user://progress.json`
+(`%APPDATA%\Godot\app_userdata\Jump Circuit\`). Bests set on an earlier layout of a course are
+kept in the file as `legacy_best` but no longer shown (`SaveData.LAYOUT_REV`).
 
 ## Racing friends
 
@@ -86,7 +90,9 @@ tools\Godot_v4.7.1-stable_win64.exe --headless --path . --import
 tools\Godot_v4.7.1-stable_win64.exe --headless --path . res://tests/run_tests.tscn
 ```
 
-Options after `--`: `--only=<substring>`, `--level=<0-4>`, `--fps=<cap>`.
+Options after `--`: `--only=<substring>`, `--level=<0-4>`, `--fps=<cap>`. A selection that matches
+nothing exits with code 2. Any engine or script error logged during a test fails that test, and a
+per-test watchdog fails a test that hangs.
 The suite measures the controller (speed, jump heights/distances, coyote, buffer, air control),
 checks slopes/seams/ceilings/terminal-velocity landings, every mechanic (pad consistency and
 no double triggers, riding and takeoff inheritance on movers and spinners, tilt response/limits/

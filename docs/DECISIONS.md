@@ -53,4 +53,23 @@
 - Rebuilt levels (bot main-route results): L1 9 stages 74 s / 0 respawns, hardest jump 92%; L2 11 stages 107 m climb 85 s / 2, 92%;
   L3 10 stages 69 s / 0, 90%; L4 11 stages 103 s / 0, 93%; L5 12 stages 100 m climb 87 s / 1, 93%. A clean human run is expected
   to take 3-6 min per level with many falls - that is the design.
-- Repo: https://github.com/fatty8me2/jump-circuit (private). The engine binary and build/ are not in git (size).
+- Repo: https://github.com/fatty8me2/jump-circuit (private).
+
+## Polish pass (2026-09-22): bugs, feel, UX; no tuning, geometry or route changes
+- Race clock: Game advances course_time one fixed tick at a time and steers it (EMA-filtered, <= 5% of a tick)
+  toward the host's session clock. Sampling the wall clock per tick made obstacles lurch (a frame's physics
+  ticks run back to back) and doubled or zeroed the velocity riders inherit in races.
+- Restart before the first checkpoint (and pause > Restart) happens in place: clock, falls, checkpoints and splits
+  reset, and clock-driven obstacles ("course_clock" group, snap_to_clock) take their t=0 pose at once. The solo clock
+  is held at 0 until the level's first frame is drawn, so load hitches never land on the timer.
+- Falls: one fall per tick however many kill zones report it; R while clearly falling counts as a fall.
+- Saves: atomic write (.tmp swapped in, previous kept as .bak, damaged file kept as .corrupt), sanitized on load.
+  SaveData.LAYOUT_REV versions each course: bests from an older layout move to legacy_best (in memory on load,
+  on disk at the next save), so the pre-hard-mode times no longer show as unbeatable bests. Best-run splits are saved.
+- Player: Player.knockback() for hammers/bumpers clears coyote/buffer (a buffered jump used to overwrite the throw);
+  teleport keeps the body unrotated and clears floor state. Everything else added is cosmetic (respawn veil,
+  checkpoint/finish celebrations, camera trauma on hits, footsteps, pad shockwave, fitted blob shadow).
+- Menus work fully on keyboard or any gamepad slot (focus on every screen, A/B = accept/back, D-pad, right stick
+  via look_* actions); F11 / Alt+Enter fullscreen; settings save however the panel closes.
+- Test harness: any engine/script error during a test fails it (TestLib.ErrorTrap), per-test watchdog, --only/--level
+  that select nothing exit 2. Tools and tests never write the real progress.json or open a real UPnP port. The engine binary and build/ are not in git (size).
