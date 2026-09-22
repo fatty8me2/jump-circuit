@@ -34,6 +34,21 @@ static func theme() -> Theme:
 	t.set_color("font_hover_color", "Button", Color.WHITE)
 	t.set_color("font_pressed_color", "Button", INK)
 	t.set_color("font_disabled_color", "Button", Color(0.5, 0.52, 0.6))
+	# Toggles read like the dropdown slabs next to them ("On" in teal), not like a
+	# pressed action button; disabled/focus still inherit from Button.
+	t.set_stylebox("normal", "CheckButton", normal)
+	t.set_stylebox("pressed", "CheckButton", normal)
+	t.set_stylebox("hover", "CheckButton", hover)
+	t.set_stylebox("hover_pressed", "CheckButton", hover)
+	t.set_color("font_pressed_color", "CheckButton", TEAL)
+	t.set_color("font_hover_pressed_color", "CheckButton", Color.WHITE)
+	# Dropdown lists (OptionButton, LineEdit context menu) instead of the engine's grey popup.
+	t.set_stylebox("panel", "PopupMenu", _box(Color(0.1, 0.12, 0.19, 0.98), 10, 6))
+	t.set_stylebox("hover", "PopupMenu", _box(Color(0.22, 0.27, 0.42), 8, 4))
+	t.set_color("font_color", "PopupMenu", SOFT)
+	t.set_color("font_hover_color", "PopupMenu", Color.WHITE)
+	# a focused (or hovered) slider fills gold, so keyboard / pad users can see where they are
+	t.set_stylebox("grabber_area_highlight", "HSlider", _box(GOLD, 3, 0))
 	t.set_stylebox("panel", "PanelContainer", _box(PANEL, 18, 22))
 	t.set_stylebox("normal", "LineEdit", _box(Color(0.05, 0.06, 0.1), 8, 8))
 	t.set_stylebox("focus", "LineEdit", focus)
@@ -112,3 +127,31 @@ static func slider(min_v: float, max_v: float, value: float, on_change: Callable
 	s.custom_minimum_size = Vector2(240, 24)
 	s.value_changed.connect(on_change)
 	return s
+
+
+## Gives keyboard/gamepad navigation a starting point: Godot won't begin focus
+## navigation from nothing. Deferred so `root` can be added to the tree first; keeps
+## focus that already sits inside `root`. `prefer` wins when it is visible and enabled,
+## otherwise the first visible, enabled button or slider under `root` gets focus.
+static func focus_first(root: Control, prefer: Control = null) -> void:
+	var grab := func() -> void:
+		if not is_instance_valid(root) or not root.is_inside_tree():
+			return
+		var cur: Control = root.get_viewport().gui_get_focus_owner()
+		if cur != null and root.is_ancestor_of(cur):
+			return
+		if is_instance_valid(prefer) and _focusable(prefer):
+			prefer.grab_focus()
+			return
+		for n: Node in root.find_children("*", "Control", true, false):
+			var c := n as Control
+			if (c is BaseButton or c is Range) and _focusable(c):
+				c.grab_focus()
+				return
+	grab.call_deferred()
+
+
+static func _focusable(c: Control) -> bool:
+	if not c.is_inside_tree() or not c.is_visible_in_tree() or c.focus_mode == Control.FOCUS_NONE:
+		return false
+	return not (c is BaseButton and (c as BaseButton).disabled)

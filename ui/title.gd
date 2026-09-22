@@ -15,6 +15,10 @@ var _roster_box: VBoxContainer
 var _lobby_level: int = 0
 var _start_button: Button
 var _upnp_label: Label
+## Control a screen builder wants focused first (keyboard / gamepad start point).
+var _focus_pref: Control
+## Screen shown before the current one: main re-focuses the button that opened it.
+var _prev_screen: String = ""
 
 
 func _ready() -> void:
@@ -104,6 +108,8 @@ func show_screen(id: String) -> void:
 	_status = null
 	_start_button = null
 	_upnp_label = null
+	_focus_pref = null
+	_prev_screen = Game.title_screen
 	Game.title_screen = id
 	match id:
 		"levels":
@@ -119,6 +125,32 @@ func show_screen(id: String) -> void:
 		_:
 			_screen = _main_screen()
 	_ui.add_child(_screen)
+	UiKit.focus_first(_screen, _focus_pref)
+
+
+## Esc / pad B backs out of a sub-screen exactly like its Back / Done / Leave button.
+## A focused LineEdit or an open dropdown consumes Esc before it gets here.
+func _unhandled_input(event: InputEvent) -> void:
+	if not event.is_action_pressed("ui_cancel"):
+		return
+	match Game.title_screen:
+		"levels", "victory":
+			show_screen("main")
+		"settings":
+			Settings.save_settings()  # same as the panel's Done
+			show_screen("main")
+		"race":
+			Net.leave()
+			show_screen("main")
+		"lobby":
+			if Net.is_host():
+				return  # a stray Esc must not disband everyone's lobby: use Leave
+			Net.leave()
+			show_screen("race")
+		_:
+			return
+	Sfx.play("ui", 0.05, 0.6)
+	get_viewport().set_input_as_handled()
 
 
 func _left_column(content: Control, width: float = 420.0) -> Control:
@@ -161,9 +193,12 @@ func _main_screen() -> Control:
 	var play_text: String = "Play" if next_index == 0 and not SaveData.is_completed("gardens") else "Continue  -  %s" % Game.LEVELS[next_index]["name"]
 	var play: Button = UiKit.button(play_text, func() -> void: Game.play_level(next_index), 380)
 	box.add_child(play)
-	box.add_child(UiKit.button("Level Select", func() -> void: show_screen("levels"), 380))
-	box.add_child(UiKit.button("Race Friends", func() -> void: show_screen("race"), 380))
-	box.add_child(UiKit.button("Settings", func() -> void: show_screen("settings"), 380))
+	var levels_btn: Button = UiKit.button("Level Select", func() -> void: show_screen("levels"), 380)
+	box.add_child(levels_btn)
+	var race_btn: Button = UiKit.button("Race Friends", func() -> void: show_screen("race"), 380)
+	box.add_child(race_btn)
+	var settings_btn: Button = UiKit.button("Settings", func() -> void: show_screen("settings"), 380)
+	box.add_child(settings_btn)
 	if Game.dev_mode:
 		box.add_child(UiKit.button("Playground (dev)", func() -> void: Game.play_playground(), 380))
 	box.add_child(UiKit.button("Quit", func() -> void: get_tree().quit(), 380))
@@ -171,30 +206,39 @@ func _main_screen() -> Control:
 		box.add_child(UiKit.shadowed(UiKit.label(Game.title_message, 18, Color(1, 0.6, 0.5))))
 		Game.title_message = ""
 	box.add_child(UiKit.shadowed(UiKit.label("WASD move   Space jump   Mouse look   R retry   Esc pause", 16, Color(1, 1, 1, 0.75)), 5))
-	play.grab_focus.call_deferred()
+	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn}
+	_focus_pref = openers.get(_prev_screen, play)
 	return _left_column(box)
 
 
 func _levels_screen() -> Control:
 	var box: VBoxContainer = UiKit.vbox(10)
 	box.add_child(UiKit.shadowed(UiKit.label("LEVEL SELECT", 40, Color.WHITE), 8))
+	var first_open: Button = null
+	var last_unlocked: Button = null
 	for i: int in Game.LEVELS.size():
 		var info: Dictionary = Game.LEVELS[i]
 		var unlocked: bool = Game.is_level_unlocked(i)
 		var best: float = SaveData.best_time(info["id"])
 		var text: String = "%d   %s" % [i + 1, info["name"]]
 		if not unlocked:
-			text += "     (locked)"
+			text += "     (clear %s to unlock)" % Game.LEVELS[i - 1]["name"]
 		elif best >= 0.0:
 			text += "     best %s" % SaveData.format_time(best)
 			var ff: int = SaveData.fewest_falls(info["id"])
 			if ff >= 0:
-				text += "   falls %d" % ff
+				text += "   fewest falls %d" % ff
 		var b: Button = UiKit.button(text, func() -> void: Game.play_level(i), 520)
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.disabled = not unlocked
 		b.tooltip_text = info["blurb"]
 		box.add_child(b)
+		if unlocked:
+			last_unlocked = b
+			if first_open == null and not SaveData.is_completed(info["id"]):
+				first_open = b
+	# start on the first level still to clear (else the last unlocked one)
+	_focus_pref = first_open if first_open != null else last_unlocked
 	box.add_child(UiKit.button("Back", func() -> void: show_screen("main"), 520))
 	return _left_column(box, 540)
 
@@ -219,7 +263,8 @@ func _victory_screen() -> Control:
 	if all_done:
 		box.add_child(UiKit.label("Sum of bests   %s" % SaveData.format_time(total), 28, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER))
 	box.add_child(UiKit.label("Every course has a faster line. Go find it - or race your friends.", 18, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER))
-	box.add_child(UiKit.button("Level Select", func() -> void: show_screen("levels")))
+	_focus_pref = UiKit.button("Level Select", func() -> void: show_screen("levels"))
+	box.add_child(_focus_pref)
 	box.add_child(UiKit.button("Title", func() -> void: show_screen("main")))
 	var p: PanelContainer = UiKit.panel(Vector2(620, 0))
 	p.add_child(box)

@@ -4,6 +4,11 @@ extends PanelContainer
 
 signal closed
 
+## Something changed since the last save: saved on Done, when the panel leaves the tree
+## (pause menu Esc, scene change) or when the window is closed.
+var _dirty: bool = false
+var _fullscreen_check: CheckButton
+
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(620, 0)
@@ -12,25 +17,49 @@ func _ready() -> void:
 	box.add_child(UiKit.label("SETTINGS", 30, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER))
 
 	_section(box, "Camera")
-	_slider_row(box, "Mouse sensitivity", 0.2, 3.0, Settings.mouse_sensitivity, func(v: float) -> void: Settings.mouse_sensitivity = v)
-	_slider_row(box, "Field of view", 55.0, 100.0, Settings.fov, func(v: float) -> void: Settings.fov = v, 1.0)
+	_slider_row(box, "Mouse sensitivity", 0.2, 3.0, Settings.mouse_sensitivity, func(v: float) -> void: Settings.mouse_sensitivity = v,
+		func(v: float) -> String: return "%.2fx" % v)
+	_slider_row(box, "Field of view", 55.0, 100.0, Settings.fov, func(v: float) -> void: Settings.fov = v,
+		func(v: float) -> String: return "%d°" % roundi(v), 1.0)
 	_check_row(box, "Invert vertical look", Settings.invert_y, func(on: bool) -> void: Settings.invert_y = on)
 
 	_section(box, "Audio")
-	_slider_row(box, "Master volume", 0.0, 1.0, Settings.master_volume, func(v: float) -> void: Settings.master_volume = v)
-	_slider_row(box, "Effects", 0.0, 1.0, Settings.sfx_volume, func(v: float) -> void: Settings.sfx_volume = v)
-	_slider_row(box, "Music", 0.0, 1.0, Settings.music_volume, func(v: float) -> void: Settings.music_volume = v)
+	var pct := func(v: float) -> String: return "%d%%" % roundi(v * 100.0)
+	_slider_row(box, "Master volume", 0.0, 1.0, Settings.master_volume, func(v: float) -> void: Settings.master_volume = v, pct)
+	_slider_row(box, "Effects", 0.0, 1.0, Settings.sfx_volume, func(v: float) -> void: Settings.sfx_volume = v, pct)
+	_slider_row(box, "Music", 0.0, 1.0, Settings.music_volume, func(v: float) -> void: Settings.music_volume = v, pct)
 
 	_section(box, "Graphics & HUD")
 	_option_row(box, "Quality", ["Low", "Medium", "High"], Settings.quality, func(i: int) -> void: Settings.quality = i)
-	_check_row(box, "Fullscreen", Settings.fullscreen, func(on: bool) -> void: Settings.fullscreen = on)
+	_fullscreen_check = _check_row(box, "Fullscreen", Settings.fullscreen, func(on: bool) -> void: Settings.fullscreen = on)
 	_check_row(box, "V-Sync", Settings.vsync, func(on: bool) -> void: Settings.vsync = on)
 	var modes: Array[String] = ["auto", "on", "off"]
 	_option_row(box, "Run timer", ["After first clear", "Always", "Never"], modes.find(Settings.timer_mode), func(i: int) -> void: Settings.timer_mode = modes[i])
 
 	box.add_child(UiKit.button("Done", func() -> void:
 		Settings.save_settings()
+		_dirty = false
 		closed.emit()))
+	Settings.changed.connect(_sync_from_settings)
+	UiKit.focus_first(self)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_EXIT_TREE or what == NOTIFICATION_WM_CLOSE_REQUEST:
+		save_if_dirty()
+
+
+func save_if_dirty() -> void:
+	if _dirty:
+		Settings.save_settings()
+		_dirty = false
+
+
+## F11 / Alt+Enter can flip fullscreen while the panel is open.
+func _sync_from_settings() -> void:
+	if _fullscreen_check != null and _fullscreen_check.button_pressed != Settings.fullscreen:
+		_fullscreen_check.set_pressed_no_signal(Settings.fullscreen)
+		_fullscreen_check.text = "On" if Settings.fullscreen else "Off"
 
 
 func _section(box: VBoxContainer, text: String) -> void:
@@ -47,19 +76,35 @@ func _row(box: VBoxContainer, text: String, control: Control) -> void:
 	box.add_child(h)
 
 
-func _slider_row(box: VBoxContainer, text: String, lo: float, hi: float, value: float, setter: Callable, step: float = 0.01) -> void:
-	_row(box, text, UiKit.slider(lo, hi, value, func(v: float) -> void:
+## `fmt` turns the value into the readout shown right of the slider.
+func _slider_row(box: VBoxContainer, text: String, lo: float, hi: float, value: float, setter: Callable, fmt: Callable, step: float = 0.01) -> void:
+	var readout: Label = UiKit.label(fmt.call(value), 19, Color.WHITE, HORIZONTAL_ALIGNMENT_RIGHT)
+	readout.custom_minimum_size = Vector2(70, 0)
+	var s: HSlider = UiKit.slider(lo, hi, value, func(v: float) -> void:
 		setter.call(v)
-		Settings.apply(), step))
+		readout.text = fmt.call(v)
+		_dirty = true
+		Settings.apply(), step)
+	s.custom_minimum_size.x = 200.0
+	s.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	s.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var h: HBoxContainer = UiKit.hbox(10)
+	h.add_child(s)
+	h.add_child(readout)
+	_row(box, text, h)
 
 
-func _check_row(box: VBoxContainer, text: String, value: bool, setter: Callable) -> void:
+func _check_row(box: VBoxContainer, text: String, value: bool, setter: Callable) -> CheckButton:
 	var cb := CheckButton.new()
 	cb.button_pressed = value
+	cb.text = "On" if value else "Off"
 	cb.toggled.connect(func(on: bool) -> void:
+		cb.text = "On" if on else "Off"
 		setter.call(on)
+		_dirty = true
 		Settings.apply())
 	_row(box, text, cb)
+	return cb
 
 
 func _option_row(box: VBoxContainer, text: String, options: Array, selected: int, setter: Callable) -> void:
@@ -69,5 +114,6 @@ func _option_row(box: VBoxContainer, text: String, options: Array, selected: int
 	ob.selected = maxi(selected, 0)
 	ob.item_selected.connect(func(i: int) -> void:
 		setter.call(i)
+		_dirty = true
 		Settings.apply())
 	_row(box, text, ob)

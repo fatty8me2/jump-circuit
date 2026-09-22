@@ -18,6 +18,8 @@ var target: Player
 var yaw: float = 0.0
 var pitch: float = deg_to_rad(-22.0)
 var mouse_enabled: bool = true
+## Wheel zoom survives scene reloads (stage-1 R restart, Run It Again, Next Level) for this session.
+static var saved_distance: float = -1.0
 
 var _focus: Vector3
 var _focus_ready: bool = false
@@ -34,7 +36,15 @@ func _ready() -> void:
 	near = 0.08
 	far = 900.0
 	fov = Settings.fov
+	if saved_distance > 0.0:
+		distance = clampf(saved_distance, min_distance, max_distance)
 	_cur_dist = distance
+	Settings.changed.connect(_on_settings_changed)
+
+
+## Settings changes (FOV slider) show at once, even while the pause menu has _process frozen.
+func _on_settings_changed() -> void:
+	fov = Settings.fov + _fov_kick
 
 
 func face(dir: Vector3) -> void:
@@ -42,6 +52,10 @@ func face(dir: Vector3) -> void:
 		yaw = atan2(-dir.x, -dir.z)
 	pitch = deg_to_rad(-22.0)
 	_focus_ready = false
+	# a respawn starts at rest: drop the speed FOV kick and any wall-pulled zoom at once
+	_fov_kick = 0.0
+	fov = Settings.fov
+	_cur_dist = distance
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -50,24 +64,28 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var mm := event as InputEventMouseMotion
 		var s: float = 0.0023 * Settings.mouse_sensitivity
-		yaw -= mm.relative.x * s
-		var dy: float = mm.relative.y * s
+		# screen_relative: `relative` is divided by the canvas_items stretch factor, which
+		# would make sensitivity depend on the window size / fullscreen resolution
+		yaw -= mm.screen_relative.x * s
+		var dy: float = mm.screen_relative.y * s
 		pitch += dy if Settings.invert_y else -dy
 		pitch = clampf(pitch, deg_to_rad(pitch_min_deg), deg_to_rad(pitch_max_deg))
 	elif event is InputEventMouseButton and event.is_pressed():
 		var mb := event as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
 			distance = maxf(distance - 0.6, min_distance)
+			saved_distance = distance
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			distance = minf(distance + 0.6, max_distance)
+			saved_distance = distance
 
 
 func _process(dt: float) -> void:
 	if target == null or not is_instance_valid(target):
 		return
-	# right stick
-	var stick := Vector2(Input.get_joy_axis(0, JOY_AXIS_RIGHT_X), Input.get_joy_axis(0, JOY_AXIS_RIGHT_Y))
-	if stick.length() > 0.2 and mouse_enabled:
+	# right stick (any pad; get_vector applies the look_* deadzone and rescales past it)
+	var stick: Vector2 = Input.get_vector("look_left", "look_right", "look_up", "look_down")
+	if mouse_enabled and stick != Vector2.ZERO:
 		yaw -= stick.x * 2.6 * dt * Settings.mouse_sensitivity
 		pitch = clampf(pitch - stick.y * 1.8 * dt * (-1.0 if Settings.invert_y else 1.0), deg_to_rad(pitch_min_deg), deg_to_rad(pitch_max_deg))
 	target.camera_yaw = yaw

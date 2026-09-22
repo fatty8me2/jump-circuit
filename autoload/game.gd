@@ -52,18 +52,37 @@ func _setup_input() -> void:
 			var ev := InputEventKey.new()
 			ev.physical_keycode = code as Key
 			InputMap.action_add_event(action, ev)
-	var pad: Dictionary = {"jump": JOY_BUTTON_A, "restart": JOY_BUTTON_Y, "pause": JOY_BUTTON_START}
+	# Pad events use device -1 (any pad): new() defaults to device 0, which misses a
+	# controller that enumerates on another slot (second pad, wheel, virtual pad).
+	var pad: Dictionary = {"jump": JOY_BUTTON_A, "restart": JOY_BUTTON_Y, "pause": JOY_BUTTON_START,
+		"move_forward": JOY_BUTTON_DPAD_UP, "move_back": JOY_BUTTON_DPAD_DOWN,
+		"move_left": JOY_BUTTON_DPAD_LEFT, "move_right": JOY_BUTTON_DPAD_RIGHT}
 	for action: String in pad:
 		var jb := InputEventJoypadButton.new()
+		jb.device = -1
 		jb.button_index = pad[action] as JoyButton
 		InputMap.action_add_event(action, jb)
 	var axes: Dictionary = {"move_left": [JOY_AXIS_LEFT_X, -1.0], "move_right": [JOY_AXIS_LEFT_X, 1.0],
-		"move_forward": [JOY_AXIS_LEFT_Y, -1.0], "move_back": [JOY_AXIS_LEFT_Y, 1.0]}
+		"move_forward": [JOY_AXIS_LEFT_Y, -1.0], "move_back": [JOY_AXIS_LEFT_Y, 1.0],
+		"look_left": [JOY_AXIS_RIGHT_X, -1.0], "look_right": [JOY_AXIS_RIGHT_X, 1.0],
+		"look_up": [JOY_AXIS_RIGHT_Y, -1.0], "look_down": [JOY_AXIS_RIGHT_Y, 1.0]}
 	for action: String in axes:
+		if not InputMap.has_action(action):
+			InputMap.add_action(action, 0.2)
 		var jm := InputEventJoypadMotion.new()
+		jm.device = -1
 		jm.axis = axes[action][0] as JoyAxis
 		jm.axis_value = axes[action][1]
 		InputMap.action_add_event(action, jm)
+	# The built-in ui_accept / ui_cancel have no pad buttons: A presses a focused
+	# menu button, B goes back.
+	var ui_pad: Dictionary = {"ui_accept": JOY_BUTTON_A, "ui_cancel": JOY_BUTTON_B}
+	for action: String in ui_pad:
+		var ub := InputEventJoypadButton.new()
+		ub.device = -1
+		ub.button_index = ui_pad[action] as JoyButton
+		if not InputMap.action_has_event(action, ub):
+			InputMap.action_add_event(action, ub)
 
 
 func _physics_process(dt: float) -> void:

@@ -45,15 +45,44 @@ func _ensure_buses() -> void:
 			AudioServer.set_bus_send(idx, "Master")
 
 
-func load_settings() -> void:
+## `path` is only overridden by tests.
+func load_settings(path: String = PATH) -> void:
 	var cf := ConfigFile.new()
-	if cf.load(PATH) != OK:
+	if cf.load(path) != OK:
 		if OS.has_environment("USERNAME"):
-			player_name = OS.get_environment("USERNAME").substr(0, 14)
+			player_name = OS.get_environment("USERNAME")
+		_sanitize()
 		return
 	for prop: String in _props():
 		if cf.has_section_key("s", prop):
-			set(prop, cf.get_value("s", prop))
+			# Only take values of the right type (an int is fine for a float): set() would
+			# turn a hand-edited fov="abc" into 0.0.
+			var v: Variant = cf.get_value("s", prop)
+			var cur: Variant = get(prop)
+			if typeof(v) == typeof(cur) or (typeof(cur) == TYPE_FLOAT and typeof(v) == TYPE_INT):
+				set(prop, v)
+	_sanitize()
+
+
+## Clamps loaded values to what the Settings panel can produce, so a hand-edited or
+## future-version settings.cfg can't index out of range or break the camera.
+func _sanitize() -> void:
+	mouse_sensitivity = _finite_clamp(mouse_sensitivity, 0.2, 3.0, 1.0)
+	fov = _finite_clamp(fov, 55.0, 100.0, 72.0)
+	master_volume = _finite_clamp(master_volume, 0.0, 1.0, 0.8)
+	sfx_volume = _finite_clamp(sfx_volume, 0.0, 1.0, 0.9)
+	music_volume = _finite_clamp(music_volume, 0.0, 1.0, 0.4)
+	quality = clampi(quality, 0, 2)
+	color_index = posmod(color_index, RACER_COLORS.size())
+	if timer_mode not in ["auto", "on", "off"]:
+		timer_mode = "auto"
+	player_name = player_name.strip_edges().substr(0, 14)
+	if player_name == "":
+		player_name = "Runner"
+
+
+static func _finite_clamp(x: float, lo: float, hi: float, fallback: float) -> float:
+	return clampf(x, lo, hi) if is_finite(x) else fallback
 
 
 func save_settings() -> void:
@@ -61,6 +90,23 @@ func save_settings() -> void:
 	for prop: String in _props():
 		cf.set_value("s", prop, get(prop))
 	cf.save(PATH)
+
+
+## F11 / Alt+Enter toggle fullscreen anywhere: menus, paused, even while typing in a
+## LineEdit (hence _input, not _unhandled_input).
+func _input(event: InputEvent) -> void:
+	var k := event as InputEventKey
+	if k == null or not k.pressed or k.echo:
+		return
+	if k.physical_keycode == KEY_F11 or (k.alt_pressed and (k.physical_keycode == KEY_ENTER or k.physical_keycode == KEY_KP_ENTER)):
+		toggle_fullscreen()
+		get_viewport().set_input_as_handled()
+
+
+func toggle_fullscreen() -> void:
+	fullscreen = not fullscreen
+	apply()
+	save_settings()
 
 
 func _props() -> Array[String]:
@@ -80,7 +126,11 @@ func apply() -> void:
 		var want: int = DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
 		if DisplayServer.window_get_mode() != want and not (not fullscreen and DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MAXIMIZED):
 			DisplayServer.window_set_mode(want)
-		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
+		# Setting vsync recreates the swapchain even when unchanged (~50 ms per call while
+		# dragging a slider), so only touch it on a real change.
+		var vs: DisplayServer.VSyncMode = DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED
+		if DisplayServer.window_get_vsync_mode() != vs:
+			DisplayServer.window_set_vsync_mode(vs)
 	var vp: Viewport = get_viewport()
 	if vp != null:
 		vp.msaa_3d = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X][quality]

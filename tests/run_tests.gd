@@ -717,3 +717,175 @@ func test_u_pendulum_and_sweeper() -> void:
 		await get_tree().physics_frame
 		t += 1.0 / 120.0
 	check(lvl.deaths == 1, "a sweeper bar kills a player who does not jump it (after %.2fs)" % t)
+
+
+# ---- menus, pad bindings, settings, camera (polish pass B2) ----------------------------------
+
+func _key(code: Key, pressed: bool = true) -> InputEventKey:
+	var k := InputEventKey.new()
+	k.keycode = code
+	k.physical_keycode = code
+	k.pressed = pressed
+	return k
+
+
+func _pad_button(button: JoyButton, device: int, pressed: bool = true) -> InputEventJoypadButton:
+	var b := InputEventJoypadButton.new()
+	b.device = device
+	b.button_index = button
+	b.pressed = pressed
+	return b
+
+
+func _focus_after_rebuild() -> Control:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	return get_viewport().gui_get_focus_owner()
+
+
+func test_z_b2_menu_focus_and_back_nav() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	SaveData.wipe()
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	add_child(title)
+	await ticks(3)
+	for id: String in ["main", "levels", "settings", "victory", "race"]:
+		title.call("show_screen", id)
+		var f: Control = await _focus_after_rebuild()
+		var screen: Control = title.get("_screen")
+		check(f != null and screen.is_ancestor_of(f), "title '%s' starts with a focused control (%s)" % [id, f.get_class() if f != null else "none"])
+		if id == "levels":
+			check(f is Button and (f as Button).text.begins_with("1 "), "level select starts on the first level still to clear")
+		elif id == "settings":
+			check(f is HSlider, "settings starts on its first slider")
+		elif id == "victory":
+			check(f is Button and (f as Button).text == "Level Select", "victory starts on Level Select")
+	# Esc backs out of the race screen; main re-focuses the button that opened it
+	get_viewport().push_input(_key(KEY_ESCAPE))
+	get_viewport().push_input(_key(KEY_ESCAPE, false))
+	var back_f: Control = await _focus_after_rebuild()
+	check(Game.title_screen == "main" and back_f is Button and (back_f as Button).text == "Race Friends", "Esc on Race Friends returns to main, focused on Race Friends")
+	# pad A (any slot) presses the focused button, pad B goes back
+	title.call("show_screen", "main")
+	await _focus_after_rebuild()
+	get_viewport().push_input(_key(KEY_DOWN))
+	get_viewport().push_input(_key(KEY_DOWN, false))
+	get_viewport().push_input(_pad_button(JOY_BUTTON_A, 3))
+	get_viewport().push_input(_pad_button(JOY_BUTTON_A, 3, false))
+	await _focus_after_rebuild()
+	check(Game.title_screen == "levels", "pad A on slot 3 presses the focused menu button")
+	get_viewport().push_input(_pad_button(JOY_BUTTON_B, 1))
+	get_viewport().push_input(_pad_button(JOY_BUTTON_B, 1, false))
+	var f2: Control = await _focus_after_rebuild()
+	check(Game.title_screen == "main" and f2 is Button and (f2 as Button).text == "Level Select", "pad B backs out of level select")
+	# a stray Esc never disbands a hosted lobby
+	check(Net.host(24597) == OK, "hosting opens the lobby")
+	await ticks(3)
+	get_viewport().push_input(_key(KEY_ESCAPE))
+	get_viewport().push_input(_key(KEY_ESCAPE, false))
+	await ticks(2)
+	check(Game.title_screen == "lobby" and Net.active, "Esc in a hosted lobby keeps the lobby open")
+	Net.leave()
+	title.queue_free()
+	await ticks(2)
+	Game.title_screen = "main"
+
+
+func test_z_b2_pad_bindings_any_slot() -> void:
+	var a: InputEventJoypadButton = _pad_button(JOY_BUTTON_A, 2)
+	check(InputMap.event_is_action(a, "jump") and InputMap.event_is_action(a, "ui_accept"), "pad A on any slot jumps and confirms menus")
+	check(InputMap.event_is_action(_pad_button(JOY_BUTTON_B, 1), "ui_cancel"), "pad B is menu back")
+	check(InputMap.event_is_action(_pad_button(JOY_BUTTON_START, 5), "pause"), "Start pauses from any slot")
+	check(InputMap.event_is_action(_pad_button(JOY_BUTTON_DPAD_UP, 1), "move_forward"), "D-pad moves")
+	var rs := InputEventJoypadMotion.new()
+	rs.device = 1
+	rs.axis = JOY_AXIS_RIGHT_X
+	rs.axis_value = 0.6
+	Input.parse_input_event(rs)
+	Input.flush_buffered_events()
+	var v: Vector2 = Input.get_vector("look_left", "look_right", "look_up", "look_down")
+	near(v.x, 0.5, 0.02, "right stick on slot 1 turns the camera, rescaled past the deadzone")
+	var rs0 := rs.duplicate() as InputEventJoypadMotion
+	rs0.axis_value = 0.0
+	Input.parse_input_event(rs0)
+	Input.flush_buffered_events()
+
+
+func test_z_b2_settings_panel_and_sanitize() -> void:
+	var snap: Dictionary = {}
+	for p: String in Settings._props():
+		snap[p] = Settings.get(p)
+	var sp := SettingsPanel.new()
+	var holder: Control = UiKit.centered(sp)
+	add_child(holder)
+	var f: Control = await _focus_after_rebuild()
+	check(f is HSlider and sp.is_ancestor_of(f), "the settings panel focuses its first slider by itself (pause menu too)")
+	check(not bool(sp.get("_dirty")), "building the panel leaves nothing to save")
+	var fov_slider := sp.find_children("*", "HSlider", true, false)[1] as HSlider
+	fov_slider.value = 90.0
+	var readout := fov_slider.get_parent().get_child(1) as Label
+	check(readout.text == "90°" and is_equal_approx(Settings.fov, 90.0) and bool(sp.get("_dirty")), "FOV applies live, shows its value (%s) and marks the panel dirty" % readout.text)
+	Settings.fullscreen = not bool(snap["fullscreen"])
+	Settings.changed.emit()
+	var fs := sp.get("_fullscreen_check") as CheckButton
+	check(fs.button_pressed == Settings.fullscreen and fs.text == ("On" if Settings.fullscreen else "Off"), "the Fullscreen toggle follows an F11 change")
+	sp.set("_dirty", false)  # never write the real settings.cfg from a test
+	holder.queue_free()
+	for p: String in snap:
+		Settings.set(p, snap[p])
+	Settings.apply()
+	await ticks(2)
+	# a hand-edited settings.cfg
+	var path: String = "user://test_settings_b2.cfg"
+	var cf := ConfigFile.new()
+	cf.set_value("s", "fov", "abc")
+	cf.set_value("s", "quality", 5)
+	cf.set_value("s", "mouse_sensitivity", 9.0)
+	cf.set_value("s", "music_volume", INF)
+	cf.set_value("s", "master_volume", 1)
+	cf.set_value("s", "color_index", -3)
+	cf.set_value("s", "timer_mode", "sometimes")
+	cf.set_value("s", "player_name", "   ")
+	cf.save(path)
+	Settings.fov = 80.0
+	Settings.load_settings(path)
+	check(is_equal_approx(Settings.fov, 80.0), "a non-numeric fov in settings.cfg is ignored")
+	check(Settings.quality == 2 and is_equal_approx(Settings.mouse_sensitivity, 3.0), "out-of-range quality / sensitivity are clamped")
+	check(is_equal_approx(Settings.music_volume, 0.4) and is_equal_approx(Settings.master_volume, 1.0), "inf volume falls back to default, an int volume is accepted")
+	check(Settings.color_index == 5 and Settings.timer_mode == "auto" and Settings.player_name == "Runner", "colour wraps, unknown timer mode and blank name fall back")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	for p: String in snap:
+		Settings.set(p, snap[p])
+	Settings.apply()
+
+
+func test_z_b2_camera_respawn_zoom_fov() -> void:
+	var cam := OrbitCamera.new()
+	add_child(cam)
+	cam.set("_fov_kick", 10.0)
+	cam.fov = Settings.fov + 10.0
+	cam.set("_cur_dist", 2.9)
+	cam.face(Vector3.FORWARD)
+	check(is_equal_approx(cam.fov, Settings.fov) and float(cam.get("_fov_kick")) == 0.0 and is_equal_approx(float(cam.get("_cur_dist")), cam.distance), "respawn (face) drops the speed FOV kick and the wall-pulled zoom")
+	var wheel := InputEventMouseButton.new()
+	wheel.button_index = MOUSE_BUTTON_WHEEL_DOWN
+	wheel.pressed = true
+	cam._unhandled_input(wheel)
+	cam._unhandled_input(wheel)
+	var zoomed: float = cam.distance
+	cam.queue_free()
+	var cam2 := OrbitCamera.new()
+	add_child(cam2)
+	check(zoomed > 8.0 and is_equal_approx(cam2.distance, zoomed), "wheel zoom carries over to the next camera (%.1f m)" % zoomed)
+	var fov0: float = Settings.fov
+	Settings.fov = fov0 + 7.0
+	Settings.changed.emit()
+	check(is_equal_approx(cam2.fov, fov0 + 7.0), "an FOV change shows at once, even with the camera paused")
+	Settings.fov = fov0
+	Settings.changed.emit()
+	cam2.queue_free()
+	OrbitCamera.saved_distance = -1.0
+	await ticks(2)

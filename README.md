@@ -11,12 +11,14 @@ Run `build/JumpCircuit.exe` (see *Building* below), or open the project in Godot
 
 | Input | Action |
 |---|---|
-| WASD / left stick | Move (camera relative) |
+| WASD / left stick / D-pad | Move (camera relative) |
 | Space / A | Jump - tap for a hop, hold for full height |
 | Mouse / right stick | Orbit camera, wheel zooms |
 | R / Y | Instantly back to the checkpoint (at the start of a level: instant level restart) |
 | Esc / Start | Pause, settings |
+| Arrows or D-pad, Enter / A, Esc / B | Menus: move, confirm, back |
 | F3 | Developer readout (speed, grounded, jump stats, platform velocity, tilt) |
+| F11 / Alt+Enter | Toggle fullscreen |
 
 **It is hard on purpose** - obby-style stages with a checkpoint each, instant retries, a fall counter, and
 momentum toys everywhere: boost strips, ice slides, bumpers, hammers that hurl you, conveyors, updrafts,
