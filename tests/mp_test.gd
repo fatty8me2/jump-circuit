@@ -10,12 +10,15 @@ var passed: int = 0
 var failed: int = 0
 var _clock_error: float = 99.0
 var _port: int = 24577
+## Counts engine/script errors: a runtime error only aborts the function it hits.
+var _trap := TestLib.ErrorTrap.new()
 
 
 func _ready() -> void:
 	for a: String in OS.get_cmdline_user_args():
 		if a.begins_with("--role="):
 			role = a.trim_prefix("--role=")
+	OS.add_logger(_trap)
 	name = "MpTest"
 	# survive scene changes
 	get_parent().remove_child.call_deferred(self)
@@ -114,6 +117,8 @@ func _run() -> void:
 	check(await wait_for(func() -> bool: return not Game.race_mode and Game.title_screen == "lobby", 8.0), "everyone returns to the lobby together")
 	await get_tree().create_timer(0.5).timeout
 	check(Net.active and Net.roster.size() == 2, "session stays connected for the next race")
+	check(_trap.count() == 0, ("no engine/script errors during the session %s" % _trap.since(0)).strip_edges())
+	OS.remove_logger(_trap)
 	print("[%s] RESULT: %d passed, %d failed" % [role, passed, failed])
 	if role == "client":
 		Net.leave()

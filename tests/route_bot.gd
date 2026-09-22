@@ -65,7 +65,16 @@ func _physics_process(dt: float) -> void:
 		player.cmd_move = Vector2.ZERO
 		return
 	if step_index >= level.route.size():
-		# route exhausted: keep heading for the last target
+		# route exhausted: keep heading for the last walk target; give up (stuck) if the finish never triggers
+		# (only a walk's `to` is a real spot: r_jump_onto stores a placeholder Vector3.ZERO)
+		_step_time += dt
+		if not level.route.is_empty():
+			var last: Dictionary = level.route[level.route.size() - 1]
+			if str(last.get("kind", "")) == "walk":
+				_steer_ground(last["to"])
+		if _step_time > 8.0:
+			log_lines.append("route exhausted at %s without reaching the finish" % str(player.global_position.snapped(Vector3.ONE * 0.01)))
+			stuck = true
 		return
 	var step: Dictionary = level.route[step_index]
 	_step_time += dt

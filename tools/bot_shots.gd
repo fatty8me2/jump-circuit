@@ -22,11 +22,21 @@ func _arg(key: String, fallback: String) -> String:
 
 func _ready() -> void:
 	Game.shot_mode = true
+	# (a negative index would silently wrap to the last level)
+	var raw: String = _arg("level", "0")
+	if not raw.is_valid_int() or int(raw) < 0 or int(raw) >= Game.LEVELS.size():
+		printerr("bot_shots: --level must be 0..%d" % (Game.LEVELS.size() - 1))
+		get_tree().quit(2)
+		return
+	# safety net above the 200 s run cap + end delay: never leave an always-on-top window behind
+	get_tree().create_timer(240.0).timeout.connect(func() -> void:
+		printerr("bot_shots: timed out")
+		_quit(3))
 	get_window().always_on_top = true
 	_every = float(_arg("every", "1.5"))
 	_max = int(_arg("max", "40"))
 	_prefix = _arg("out", "user://bot")
-	Game.level_index = int(_arg("level", "0"))
+	Game.level_index = int(raw)
 	Game.course_running = true
 	Game.course_time = 0.0
 	SaveData.path_override = "user://shots_progress.json"
@@ -61,4 +71,11 @@ func _process(dt: float) -> void:
 		var img2: Image = get_viewport().get_texture().get_image()
 		img2.resize(960, 540, Image.INTERPOLATE_BILINEAR)
 		img2.save_png("%s_end.png" % _prefix)
-		get_tree().quit()
+		_quit(0)
+
+
+## Removes the scratch save (a copy of the real progress plus the bot's runs) and quits.
+func _quit(code: int) -> void:
+	if SaveData.path_override != "" and FileAccess.file_exists(SaveData.path_override):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(SaveData.path_override))
+	get_tree().quit(code)
