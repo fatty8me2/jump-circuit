@@ -41,7 +41,7 @@ Title -> **Race Friends**.
   3-2-1-GO, and races. You see the other racers live (name tags, their colours) but never collide,
   so nobody can block or grief a jump. Standings (checkpoints reached, finish times) are top right.
 * When you finish you keep watching the standings; the host sends everyone back to the lobby for
-  the next course.
+  the next course (from the results panel, or any time from the Esc menu).
 
 Internet play without touching the router: if UPnP is unavailable, either forward UDP 24565 to the
 host PC, or put everyone on a virtual LAN (Tailscale, ZeroTier, Radmin VPN...) and use that address.

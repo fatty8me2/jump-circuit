@@ -329,6 +329,10 @@ func _on_finish() -> void:
 		return
 	finished = true
 	player.control_enabled = false
+	# a racer can coast into the gate behind the race menu: close it before the
+	# results (which free the mouse again), or it would sit over them
+	if _pause != null and _pause.open:
+		_pause.set_open(false)
 	var time: float = run_time
 	Sfx.play("finish")
 	level_finished.emit(time)
@@ -336,7 +340,7 @@ func _on_finish() -> void:
 		Net.send_checkpoint(checkpoints.size() + 1)
 		Net.send_finished(time)
 		SaveData.record_finish(level_id, time, deaths, splits)
-		hud.show_race_results()
+		hud.show_race_results(time)
 		return
 	var prev_best: float = SaveData.best_time(level_id)
 	var prev_ff: int = SaveData.fewest_falls(level_id)

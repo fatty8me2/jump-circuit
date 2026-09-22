@@ -1138,3 +1138,177 @@ func test_v_results_and_splits_display() -> void:
 	check(live, "results buttons go live after the fade")
 	Settings.timer_mode = keep_mode
 	SaveData.wipe()
+
+
+## Button with exactly this text under `root` (skips menus already being rebuilt).
+func find_button(root: Node, text: String) -> Button:
+	for n: Node in root.find_children("*", "Button", true, false):
+		var live: bool = (n as Button).text == text
+		var up: Node = n
+		while live and up != null:
+			live = not up.is_queued_for_deletion()
+			up = up.get_parent()
+		if live:
+			return n as Button
+	return null
+
+
+## Waits `s` seconds of wall-clock time (headless physics can run ahead of it).
+func real_seconds(s: float) -> void:
+	var until: int = Time.get_ticks_msec() + int(s * 1000.0)
+	while Time.get_ticks_msec() < until:
+		await get_tree().process_frame
+
+
+## A left click (press + release) pushed through the viewport at `at`.
+func click_at(at: Vector2) -> void:
+	for down: bool in [true, false]:
+		var ev := InputEventMouseButton.new()
+		ev.button_index = MOUSE_BUTTON_LEFT
+		ev.pressed = down
+		ev.position = at
+		ev.global_position = at
+		get_viewport().push_input(ev, true)
+
+
+func test_w_confirm_button_two_press() -> void:
+	var fired: Array[int] = [0]
+	var b: Button = UiKit.confirm_button("Quit to Title", "Press again to quit", func() -> void: fired[0] += 1)
+	add_child(b)
+	await ticks(1)
+	b.grab_focus()
+	b.pressed.emit()
+	check(fired[0] == 0 and b.text == "Press again to quit", "a confirm button only arms on the first press")
+	b.pressed.emit()
+	check(fired[0] == 0, "an instant second press (double-click) does not confirm")
+	await real_seconds(0.3)
+	b.pressed.emit()
+	check(fired[0] == 1, "a second press confirms")
+	b.release_focus()
+	check(b.text == "Quit to Title", "moving focus away disarms it")
+	b.grab_focus()
+	b.pressed.emit()
+	await real_seconds(3.1)
+	check(b.text == "Quit to Title", "an armed button disarms itself after 3 s")
+	b.pressed.emit()
+	check(fired[0] == 1 and b.text == "Press again to quit", "after that a press only arms it again")
+	b.queue_free()
+	await ticks(1)
+
+
+func test_w_pause_menu_keys_confirms_focus() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var pause: PauseMenu = lvl.find_children("*", "PauseMenu", true, false)[0] as PauseMenu
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.physical_keycode = KEY_ESCAPE
+	esc.pressed = true
+	get_viewport().push_input(esc)
+	check(pause.open and get_tree().paused, "Esc opens the pause menu (its ui_cancel side doesn't shut it again)")
+	var f: Control = get_viewport().gui_get_focus_owner()
+	check(f is Button and (f as Button).text == "Resume", "the pause menu focuses Resume")
+	get_viewport().push_input(esc)
+	check(not pause.open and not get_tree().paused, "Esc closes it again")
+	var back := InputEventAction.new()
+	back.action = "ui_cancel"
+	back.pressed = true
+	get_viewport().push_input(back)
+	check(not pause.open, "ui_cancel (pad B) never opens the menu from gameplay")
+	pause.set_open(true)
+	get_viewport().push_input(back)
+	check(not pause.open, "ui_cancel closes the open menu")
+	# Settings -> back: focus returns to the Settings button (closed is what Done emits;
+	# emitted directly here so the test never writes the real settings.cfg)
+	pause.set_open(true)
+	find_button(pause, "Settings").pressed.emit()
+	await get_tree().process_frame
+	var panels: Array[Node] = pause.find_children("*", "SettingsPanel", true, false)
+	check(panels.size() == 1, "the pause menu opens its settings panel")
+	(panels[0] as SettingsPanel).closed.emit()
+	f = get_viewport().gui_get_focus_owner()
+	check(f is Button and (f as Button).text == "Settings", "coming back from Settings focuses the Settings button")
+	# run-ending buttons: one press before a checkpoint (like R), two once one is banked
+	check(find_button(pause, "Level Select") != null and find_button(pause, "Quit to Title") != null, "solo menu lists Level Select and Quit")
+	find_button(pause, "Restart Level").pressed.emit()
+	check(not pause.open, "before a checkpoint, Restart Level restarts on one press")
+	lvl.current_checkpoint = 1
+	pause.set_open(true)
+	var restart: Button = find_button(pause, "Restart Level")
+	restart.grab_focus()
+	restart.pressed.emit()
+
+	check(pause.open and lvl.current_checkpoint == 1 and restart.text == "Press again to restart", "with a checkpoint banked, Restart Level asks for a second press")
+	await real_seconds(0.3)
+	restart.pressed.emit()
+	check(not pause.open and lvl.current_checkpoint == 0 and not get_tree().paused, "the second press restarts the run")
+	# losing window focus pauses a solo run; the click that brings the window back is eaten
+	lvl.headless_mode = false   # (focus-loss pausing is off in automated runs)
+	pause.notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	check(pause.open and get_tree().paused, "losing window focus pauses a solo run")
+	await get_tree().process_frame
+	var at: Vector2 = find_button(pause, "Resume").get_global_rect().get_center()
+	click_at(at)
+	check(pause.open, "the click that refocuses the window can't press a menu button")
+	pause.notification(Node.NOTIFICATION_APPLICATION_FOCUS_IN)
+	await real_seconds(0.4)
+	click_at(at)
+	check(not pause.open and not get_tree().paused, "a moment after focus returns, clicks work again")
+	lvl.headless_mode = true
+
+
+func test_w_back_to_back_toasts() -> void:
+	var lvl: LevelBase = await load_level(0)
+	lvl.hud.toast("First")
+	await real_seconds(1.5)
+	lvl.hud.toast("Second")
+	await real_seconds(0.5)
+	var a: float = lvl.hud._toast.modulate.a
+	check(a > 0.9 and lvl.hud._toast.text == "Second", "a toast right after another stays readable (alpha %.2f)" % a)
+
+
+func test_w_race_finish_behind_menu() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	check(Net.host(24596) == OK, "hosting a one-player race")
+	Game.level_index = 0
+	Game.race_mode = true
+	Net.race_start_time = Net.now() - 1.0
+	var lvl: LevelBase = (load(Game.LEVELS[0]["scene"]) as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	var pause: PauseMenu = lvl.find_children("*", "PauseMenu", true, false)[0] as PauseMenu
+	lvl.headless_mode = false
+	pause.notification(Node.NOTIFICATION_APPLICATION_FOCUS_OUT)
+	check(not pause.open, "losing focus mid-race doesn't open the menu (the race clock can't pause)")
+	lvl.headless_mode = true
+	pause.set_open(true)
+	check(find_button(pause, "End Race - Everyone to Lobby") != null and find_button(pause, "Close Session (disconnects all)") != null, "the host's race menu can end the race for everyone")
+	# a slower racer with a long name: the board must grow leftwards, not off-screen
+	Net.roster[2] = {"name": "WWWWWWWWWWWWWW", "color": 1, "cp": 99, "finished": 599.99}
+	var t: float = lvl.run_time
+	lvl._on_finish()
+	check(lvl.finished and not pause.open, "finishing behind the race menu closes it")
+	var texts: String = ""
+	for l: Node in lvl.hud._results.find_children("*", "Label", true, false):
+		texts += (l as Label).text + "|"
+	check(texts.contains(SaveData.format_time(t)) and texts.contains("1st place of 2"), "race results show your time and place (%s)" % texts)
+	await ticks(3)
+	var r: Rect2 = lvl.hud._board.get_global_rect()
+	var w: float = lvl.hud._root.size.x
+	check(r.size.x > 290.0 and r.end.x <= w - 19.0 and r.position.x > 0.0, "a long standings row widens the board leftwards (%s in %.0f)" % [str(r), w])
+	check(get_viewport().gui_get_focus_owner() == null, "no race-results button takes focus right at the line")
+	await real_seconds(1.1)
+	var f: Control = get_viewport().gui_get_focus_owner()
+	check(f is Button and (f as Button).text == "Back to Lobby (everyone)", "then Back to Lobby is focused for keyboard / pad")
+	var close: Button = find_button(lvl.hud, "Close Session (disconnects all)")
+	close.grab_focus()
+	close.pressed.emit()
+	check(Net.active and close.text == "Press again to disconnect all", "the host's Close Session asks for a second press")
+	Net.leave()
+	Game.race_mode = false
+	world.queue_free()
+	world = null
+	await ticks(2)
