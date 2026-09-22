@@ -675,7 +675,7 @@ func test_r_menus_build_without_errors() -> void:
 	await ticks(2)
 	var r := lvl.hud.get("_results") as Control
 	check(r != null and r.is_inside_tree(), "results panel builds")
-	lvl.hud.show_race_results()
+	lvl.hud.show_race_results(12.34)
 	await ticks(2)
 	var rr := lvl.hud.get("_results") as Control
 	check(rr != null and rr != r and rr.is_inside_tree(), "race results panel builds")
