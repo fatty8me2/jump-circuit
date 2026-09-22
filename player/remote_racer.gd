@@ -13,13 +13,15 @@ var _grounded: bool = true
 var _age: float = 0.0
 var _has_state: bool = false
 var _facing: Vector3 = Vector3.FORWARD
+var _shadow: Decal
 
 
 func _ready() -> void:
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_visual = PlayerVisual.new()
 	add_child(_visual)
-	add_child(BlobShadow.make())
+	_shadow = BlobShadow.make()
+	add_child(_shadow)
 	_label = Label3D.new()
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_label.no_depth_test = true
@@ -64,3 +66,4 @@ func _process(dt: float) -> void:
 	if flat.length() > 0.5:
 		_facing = flat.normalized()
 	_visual.animate(dt, _vel, _grounded, _facing)
+	BlobShadow.fit(_shadow, get_world_3d().direct_space_state, global_position, 1 | 8)

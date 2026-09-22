@@ -57,6 +57,7 @@ under the effects) and this keeps stereo loops inside the size budget.
 |------|--------|-----------|
 | `jump.wav` | 0.18 s | Sine blip gliding 380 -> 900 Hz with a touch of 2nd harmonic, 4 ms attack / 60 ms decay, layered over a soft 150 -> 65 Hz sine thump. |
 | `land.wav` | 0.20 s | 125 -> 52 Hz sine thud with 2nd/3rd harmonics (so it is audible on small speakers) plus a 30 ms puff of 120-950 Hz noise. |
+| `whack.wav` | 0.30 s | Hammer hit: a 180 -> 60 Hz sine drop with its octave, an 18 ms crack of 900-4500 Hz band-passed noise and a quiet metallic ring (523 + 1307 Hz, inharmonic) that dies in about 60 ms. |
 | `bounce.wav` | 0.45 s | The "boing": pitch starts high, drops within about 20 ms, then rises, with a damped 11.5 Hz spring wobble on the pitch. Fast-decaying 2nd and 3rd harmonics and a 4 ms high-passed noise click give the bright attack; a short sine thump adds weight. |
 | `checkpoint.wav` | 0.70 s | Two bell notes (E5 then B5, 150 ms apart) built from slightly inharmonic partials (1, 2, 3.01, 4.2). Shimmer is a detuned octave-up sine pair with 17 Hz tremolo plus a faint twelfth. |
 | `crumble.wav` | 0.70 s | About 70 random band-passed noise grains (gravel) over a 140-520 Hz noise bed chopped by a wobbling 27 Hz gate (the rattle), with a gentle swell. |
@@ -93,6 +94,10 @@ saturation), `v_lead` (soft sine with odd harmonics and delayed vibrato),
 | `music_a.wav` | 57.6 s (24 bars, 100 bpm) | Light and optimistic, D major / lydian (Dmaj9, E/D, Bm7, Gmaj7, Aadd9, F#m7, Asus4). Wide pads, plucked eighth-note arpeggio with dotted-eighth ping-pong delay, soft bass. Three 8-bar sections: sparse intro, fuller arpeggio with long bell notes and an off-beat shaker, then a bell melody. |
 | `music_b.wav` | 49.66 s (24 bars, 116 bpm) | More driven and mechanical, D dorian (Dm9, G7, Fmaj7, Am7, Em7, C). Pulsing eighth-note bass with octave jumps, soft kick, sixteenth-note ticks made from high-passed noise with an accent pattern, metallic "cog" pings on fixed steps, noise claps, a masked sixteenth-note pluck arpeggio, and a soft lead melody from bar 9 (doubled by an octave bell in the last section). |
 | `music_title.wav` | 40.0 s (12 bars, 72 bpm) | Calm and spacious menu piece: slow pads (Fmaj9, Cmaj7/E, Dm9, Bbmaj7#11, Gm9, Csus4add9), a sub pad, sparse bell notes with a long delay and a long dark reverb. |
+
+In game, `Sfx.music()` crossfades on a track change (the old bed fades out over
+0.6 s while the new one fades in over 0.9 s); restarting a level keeps the
+current track playing.
 
 ## Godot import settings
 

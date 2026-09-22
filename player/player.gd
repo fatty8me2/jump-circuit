@@ -8,6 +8,8 @@ signal jumped
 signal landed(impact_speed: float)
 signal bounced(strength: float)
 signal teleported
+## A hazard (bumper, hammer) threw the player: `v` is the velocity it imposed.
+signal knocked(v: Vector3)
 
 @export var tuning: MovementTuning
 
@@ -39,6 +41,8 @@ var _takeoff_pos: Vector3 = Vector3.ZERO
 var _apex_y: float = 0.0
 var _pad_cooldown: Dictionary = {}
 var _jump_press_queued: bool = false
+var _teleported: bool = false    # until the next move: ignore the pre-teleport floor/platform
+var _platform_layers_saved: int = 0
 
 
 func _ready() -> void:
@@ -85,7 +89,8 @@ func _physics_process(dt: float) -> void:
 	var was_grounded: bool = grounded
 	# Right after a jump or pad launch the stale floor flag must not count
 	# (it would grant coyote time and let a buffered jump overwrite the launch).
-	var on_floor: bool = is_on_floor() and _no_snap <= 0.0
+	# Likewise the floor we stood on before a teleport.
+	var on_floor: bool = is_on_floor() and _no_snap <= 0.0 and not _teleported
 
 	# --- timers ---
 	if _jump_press_queued:
@@ -140,6 +145,9 @@ func _physics_process(dt: float) -> void:
 	floor_snap_length = 0.0 if _no_snap > 0.0 else t.floor_snap
 	var pre_move_velocity: Vector3 = velocity
 	move_and_slide()
+	if _teleported:
+		_teleported = false
+		platform_floor_layers = _platform_layers_saved
 
 	# --- post-move bookkeeping ---
 	grounded = is_on_floor()
@@ -335,19 +343,46 @@ func add_impulse(dv: Vector3) -> void:
 		_no_snap = 0.12
 
 
+## A hazard throws the player: velocity is replaced outright. Like a pad launch,
+## coyote time and a buffered press are dropped so a jump pressed on contact
+## cannot overwrite the throw - same contact, same result.
+## `grounded` is left alone so the floor's velocity is still inherited on takeoff.
+func knockback(v: Vector3) -> void:
+	velocity = v
+	_jumping = false
+	_coyote = 0.0
+	_buffer = 0.0
+	_no_snap = maxf(_no_snap, 0.12)
+	_begin_flight_stats()
+	knocked.emit(v)
+
+
 func teleport(xform: Transform3D) -> void:
-	global_transform = xform
+	# Position only: the body stays unrotated (facing is visual, from facing_dir).
+	global_transform = Transform3D(Basis.IDENTITY, xform.origin)
 	velocity = Vector3.ZERO
 	platform_velocity = Vector3.ZERO
+	floor_body = null
 	_jumping = false
 	_buffer = 0.0
 	_coyote = 0.0
+	_no_snap = 0.0
 	_jump_press_queued = false
 	grounded = false
 	air_time = 0.0
 	last_ground_y = xform.origin.y
 	facing_dir = -xform.basis.z
 	_pad_cooldown.clear()
+	_begin_flight_stats()
+	last_jump_height = 0.0
+	last_jump_distance = 0.0
+	# The engine still remembers the old floor: for one move, don't let it carry
+	# us (a spinner would add omega x teleport distance). Guarded because two
+	# teleports can happen before a physics tick (race setup).
+	if not _teleported:
+		_platform_layers_saved = platform_floor_layers
+	platform_floor_layers = 0
+	_teleported = true
 	reset_physics_interpolation()
 	teleported.emit()
 
@@ -371,6 +406,8 @@ func _enter_tree() -> void:
 func _process(dt: float) -> void:
 	if visual != null:
 		visual.animate(dt, velocity, grounded, facing_dir)
+	if _shadow != null and is_inside_tree():
+		BlobShadow.fit(_shadow, get_world_3d().direct_space_state, get_global_transform_interpolated().origin, collision_mask)
 
 
 func connect_feedback() -> void:
@@ -383,4 +420,6 @@ func connect_feedback() -> void:
 	bounced.connect(func(strength: float) -> void:
 		visual.on_bounce(strength)
 		Sfx.play("bounce", 0.04, 1.0, clampf(1.25 - strength / 60.0, 0.75, 1.2)))
+	# the hazard plays its own positional hit sound
+	knocked.connect(func(v: Vector3) -> void: visual.on_bounce(v.length()))
 	teleported.connect(func() -> void: visual.snap_facing(facing_dir))

@@ -45,8 +45,7 @@ func _physics_process(dt: float) -> void:
 			away.y = 0.0
 			if away.length() < 0.05:
 				away = Vector3.FORWARD
-			p.velocity = away.normalized() * strength + Vector3(0, lift, 0)
-			p.add_impulse(Vector3(0, 0.01, 0))
+			p.knockback(away.normalized() * strength + Vector3(0, lift, 0))
 			_cool = 0.25
 			_pulse = 1.0
 			Sfx.play_at("bounce", global_position, 0.05, 0.9)

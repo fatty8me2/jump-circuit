@@ -61,7 +61,6 @@ func _physics_process(dt: float) -> void:
 			if absf(w) < 0.05:
 				dir = (body.global_position - _area.global_position).normalized()
 			var p := body as Player
-			p.velocity = dir * (absf(w) * length + kick) + Vector3(0, 7.0, 0)
-			p.add_impulse(Vector3(0, 0.01, 0))
+			p.knockback(dir * (absf(w) * length + kick) + Vector3(0, 7.0, 0))
 			_cool = 0.5
-			Sfx.play_at("land", _area.global_position, 0.1, 1.2)
+			Sfx.play_at("whack", _area.global_position, 0.08, 1.0)

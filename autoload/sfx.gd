@@ -3,13 +3,19 @@ extends Node
 ## All clips are synthesised by tools/gen_audio.py into res://audio.
 
 const NAMES: Array[String] = ["jump", "land", "bounce", "checkpoint", "crumble", "collapse", "creak",
-	"finish", "respawn", "tick", "go", "ui", "beacon"]
+	"finish", "respawn", "tick", "go", "ui", "beacon", "whack"]
+## Track changes crossfade: the old bed fades out while the new one fades in.
+const MUSIC_FADE_OUT: float = 0.6
+const MUSIC_FADE_IN: float = 0.9
+const MUSIC_SILENT_DB: float = -40.0
 
 var _streams: Dictionary = {}
 var _pool: Array[AudioStreamPlayer] = []
 var _pool3d: Array[AudioStreamPlayer3D] = []
-var _music: AudioStreamPlayer
+var _music_players: Array[AudioStreamPlayer] = []
+var _music: AudioStreamPlayer    # the current (audible or fading-in) player
 var _music_name: String = ""
+var _music_tween: Tween
 
 
 func _ready() -> void:
@@ -30,12 +36,16 @@ func _ready() -> void:
 		b.max_distance = 70.0
 		add_child(b)
 		_pool3d.append(b)
-	_music = AudioStreamPlayer.new()
-	_music.bus = "Music"
-	_music.finished.connect(func() -> void:
-		if _music_name != "":
-			_music.play())
-	add_child(_music)
+	for i: int in 2:
+		var m := AudioStreamPlayer.new()
+		m.bus = "Music"
+		# tracks import as loops, so this is only a fallback; never restart a fading-out player
+		m.finished.connect(func() -> void:
+			if m == _music and _music_name != "":
+				m.play())
+		add_child(m)
+		_music_players.append(m)
+	_music = _music_players[0]
 
 
 func play(clip: String, pitch_var: float = 0.0, volume: float = 1.0, pitch: float = 1.0) -> void:
@@ -67,9 +77,22 @@ func music(track: String) -> void:
 	if track == _music_name:
 		return
 	_music_name = track
+	if _music_tween != null:
+		_music_tween.kill()
+	var outgoing: AudioStreamPlayer = _music
+	_music = _music_players[1] if outgoing == _music_players[0] else _music_players[0]
+	_music.stop()
 	var p: String = "res://audio/music_%s.wav" % track
-	if track == "" or not ResourceLoader.exists(p):
-		_music.stop()
+	var stream: AudioStream = load(p) if track != "" and ResourceLoader.exists(p) else null
+	if stream == null and not outgoing.playing:
 		return
-	_music.stream = load(p)
-	_music.play()
+	# Sfx runs ALWAYS, so the fade also completes while the tree is paused
+	_music_tween = create_tween().set_parallel(true)
+	if outgoing.playing:
+		_music_tween.tween_property(outgoing, "volume_db", MUSIC_SILENT_DB, MUSIC_FADE_OUT)
+		_music_tween.tween_callback(outgoing.stop).set_delay(MUSIC_FADE_OUT)
+	if stream != null:
+		_music.stream = stream
+		_music.volume_db = MUSIC_SILENT_DB
+		_music.play()
+		_music_tween.tween_property(_music, "volume_db", 0.0, MUSIC_FADE_IN)
