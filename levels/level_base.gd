@@ -120,8 +120,8 @@ func _begin_run() -> void:
 
 
 ## The scene load and the level build stall the main loop, and the physics catch-up
-## after them would otherwise run the solo clock (and the world) before the first
-## frame is on screen. Hold both at t=0, with control off, until the level is drawn.
+## after them would otherwise run the solo clock (and the obstacles) before the first
+## frame is on screen. Hold the clock at t=0, with control off, until the level is drawn.
 func _hold_clock_until_drawn() -> void:
 	var tree: SceneTree = get_tree()
 	Game.course_running = false
