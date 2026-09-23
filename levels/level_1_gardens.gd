@@ -622,7 +622,7 @@ func _debug_start() -> void:
 # but a trellis panel on the right - run it and kick off onto the landing. A hedge wall too tall to
 # jump (3.4 m) has a gold lip: mantle it. Then hedge-top hops (a trimmer behind the rise) to the lawn.
 func _stage_10_topiary() -> Vector3:
-	_panel(2.3, 1.2, -12.6, -27.6)
+	_panel(2.3, 1.2, -11.4, -27.6)
 	var l1: Dictionary = _blk(Vector3(-2.4, 0, -33.1), 3.6, 3.6, "alt")
 	var wall: Dictionary = _area(Vector3(-2.4, 3.4, -37.2), 1.8, 2.3)
 	_ledge(Vector3(-2.4, 3.4, -37.2), Vector3(3.6, 6.0, 4.6))
@@ -1028,16 +1028,162 @@ func _stage_15_press() -> Vector3:
 	return end["c"]
 
 
+# ---- stage 16: Topiary Chimney - three wall runs up, out by a mantle ------------------------------
+# Three ivy trellis panels zig-zag up a chimney over the void: run the right one, kick across to the
+# left, kick back to the right, and the last kick throws you at a hedge ledge 3 m above - mantle it.
+# Then three tap-hops under red trimmer ceilings to the lawn.
 func _stage_16_chimney() -> Vector3:
-	return Vector3.ZERO
+	_panel(2.3, 1.2, -5.5, -12.0)
+	_panel(-2.3, 6.0, -10.5, -18.5)
+	_panel(2.3, 9.0, -16.5, -24.5)
+	var top: Dictionary = _area(Vector3(-0.75, 11.9, -28.0), 2.25, 2.0)
+	_ledge(Vector3(-0.75, 11.9, -28.0), Vector3(4.5, 14.0, 4.0))
+	_topiary(Vector3(-2.6, 11.9, -29.6), 0.45)
+	r_wallrun(_w(Vector3(0.5, 0, -2.1)), _w(Vector3(1.7, 1.4, -6.6)), _w(Vector3(1.7, 1.4, -9.5)), _w(Vector3(-1.7, 5.5, -13.4)))
+	r_wallrun(Vector3.ZERO, _w(Vector3(-1.7, 5.5, -13.4)), _w(Vector3(-1.7, 5.5, -16.4)), _w(Vector3(1.7, 8.5, -20.0)), true, true)
+	r_wallrun(Vector3.ZERO, _w(Vector3(1.7, 8.5, -20.0)), _w(Vector3(1.7, 8.5, -21.4)), _w(Vector3(-0.75, 11.9, -26.6)), true, true)
+	# the tap-hop run under trimmer ceilings
+	var a: Dictionary = top
+	var xs: Array[float] = [1.2, -1.0, 1.0]
+	for i: int in 3:
+		var b: Dictionary = _blk(Vector3(-0.75 + xs[i], 11.9, -32.6 - 3.3 * float(i)), 1.6, 1.6, "alt", 0.8)
+		var ca: Vector3 = a["c"]
+		var cb: Vector3 = b["c"]
+		_haz((ca + cb) * 0.5 + Vector3(0, 2.95, 0), Vector3(3.0, 0.4, 3.0))
+		_hop(a, b, Vector3.ZERO, false)
+		a = b
+	var end: Dictionary = _lawn(Vector3(0, 11.9, -47.6), 7.0, true, -90.0)
+	_hop(a, end, Vector3(0, 0, 1.7))
+	r_checkpoint()
+	# leaves swirling up the chimney, a sparkle when you top out
+	_amb(_w(Vector3(0, 6.0, -15.0)), GardensFx.leaf_updraft(_ext(Vector3(2.0, 4.0, 8.0)), 40))
+	_amb(_w(Vector3(0, 1.0, -15.0)), GardensFx.seeds(_ext(Vector3(2.5, 1.0, 8.0)), Vector3(0, 1.6, 0), 20))
+	_cue_near(_w(Vector3(-0.75, 12.1, -27.0)), 2.2, GardensFx.sparkle_ring(LedgeBlock.LIP_COLOR))
+	_cue_near(_w(end["c"] + Vector3(0, 0.2, 0)), 2.4, GardensFx.petal_fountain())
+	return end["c"]
 
 
+# ---- stage 17: The Orchard - BRANCH ------------------------------------------------------------
+# LEFT (orange lamps): the runway - a boost strip into an 11 m leap, then a 1.2 m laser bridge with two
+# gates to time. RIGHT (blue lamps): three hops up the apple terrace, the last an 88 % leap, into the
+# warp ring that drops you out beside the merge deck - quicker, if you stick the landing.
 func _stage_17_orchard() -> Vector3:
-	return Vector3.ZERO
+	var lawn: Dictionary = _area(Vector3.ZERO, 3.5, 3.5)
+	_sign(Vector3(-1.5, 0, -4.4), Color(1.0, 0.55, 0.2))
+	# LEFT - runway, leap, laser bridge
+	var runway: Dictionary = _blk(Vector3(-1.5, 0, -11.25), 3.0, 15.5, "alt", 1.0)
+	kit.boost(_w(Vector3(-1.5, 0.02, -14.8)), Vector3(2.4, 0.3, 7.6), _yaw, 17.0)
+	var isle: Dictionary = _blk(Vector3(-1.5, 0, -31.0), 3.0, 4.0, "main", 1.0)
+	_blk(Vector3(-1.5, 0, -40.0), 1.2, 14.0, "accent", 0.6)
+	var f1: LaserGate = _fence(-1.5, 0, -37.0, 1.8, [0.5, 1.4], 2.4, 0.45, 0.0)
+	var f2: LaserGate = _fence(-1.5, 0, -42.0, 1.8, [0.5, 1.4], 2.4, 0.45, 0.4)
+	kit.pillar(_w(Vector3(-1.5, -1.0, -31.0)), 1.0, 14.0)
+	# RIGHT - the apple terrace and its warp ring
+	var r1: Dictionary = _blk(Vector3(2.8, 1.0, -8.4), 1.4, 1.4)
+	var r2: Dictionary = _blk(Vector3(3.6, 2.0, -13.8), 1.4, 1.4, "alt")
+	var terr: Dictionary = _blk(Vector3(4.4, 2.0, -21.2), 3.2, 3.2, "main", 1.0)
+	kit.pillar(_w(Vector3(4.4, 1.0, -21.2)), 1.0, 14.0)
+	var ring: WarpPortal = kit.portal(_w(Vector3(4.4, 2.0, -21.6)), _yaw, _w(Vector3(3.5, 0, -47.6)), _yaw, 8.0)
+	kit.glow_strip(_w(Vector3(2.8, 1.03, -8.4)), Vector3(0.6, 0.06, 0.6), WarpPortal.EXIT_COLOR, _yaw)
+	kit.glow_strip(_w(Vector3(3.6, 2.03, -13.8)), Vector3(0.6, 0.06, 0.6), WarpPortal.EXIT_COLOR, _yaw)
+	kit.lamp(_w(Vector3(3.0, 0, -2.6)), 3.0, true, WarpPortal.EXIT_COLOR)
+	# merge deck and the lawn
+	var merge: Dictionary = _blk(Vector3(0.5, 0, -50.0), 10.0, 6.0, "main", 1.0)
+	kit.pillar(_w(Vector3(0.5, -1.0, -50.0)), 1.6, 16.0)
+	var end: Dictionary = _lawn(Vector3(0.5, 1.0, -60.2), 7.0, true, 0.0)
+	# the orchard: apple trees on floating plots either side
+	for p: Vector3 in [Vector3(-8, -1, -12), Vector3(-9, 0, -26), Vector3(10, -1, -30), Vector3(-8, -2, -44), Vector3(10, 0, -42), Vector3(9, 1, -8)]:
+		kit.disc(_w(p), 2.2, 0.8, "main")
+		_apple_tree(p)
+	if route_variant == 0:
+		r_walk(_w(Vector3(-1.5, 0, -6.0)))
+		r_jump(_w(Vector3(-1.5, 0, -18.6)), _w(Vector3(-1.5, 0, -30.4)))
+		route[route.size() - 1]["speed"] = 17.0
+		r_walk(_w(Vector3(-1.5, 0, -34.4)))
+		r_until(func() -> bool: return _dark(f1, 0.0, 0.7))
+		r_walk(_w(Vector3(-1.5, 0, -39.8)))
+		r_until(func() -> bool: return _dark(f2, 0.0, 0.7))
+		r_walk(_w(Vector3(-1.5, 0, -46.0)))
+		r_walk(_w(Vector3(0.5, 0, -51.5)))
+	else:
+		_hop(lawn, r1)
+		_hop(r1, r2)
+		_hop(r2, terr, Vector3(0, 0, 0.6))
+		r_portal(_w(Vector3(4.4, 2.0, -21.6)), ring.exit_point())
+		r_walk(_w(Vector3(1.5, 0, -51.5)))
+	_hop(merge, end, Vector3(0, 0, 1.8))
+	r_checkpoint()
+	_cue_near(ring.exit_point() + Vector3(0, 0.6, 0), 2.0, GardensFx.sparkle_ring(WarpPortal.EXIT_COLOR, 44))
+	_cue_near(_w(isle["c"] + Vector3(0, 0.3, 0)), 2.2, GardensFx.petal_fountain(30, 4.5))
+	_amb(_w(Vector3(0, 5.0, -28.0)), GardensFx.petals(_ext(Vector3(10, 2, 18)), 34, [Color(1, 1, 1), Color(1.0, 0.8, 0.86), Color(1.0, 0.92, 0.95)]))
+	_cue_near(_w(end["c"] + Vector3(0, 0.2, 0)), 2.4, GardensFx.petal_fountain())
+	return end["c"]
 
 
+func _apple_tree(p: Vector3) -> void:
+	kit.round_tree(_w(p), kit.rng.randf_range(1.2, 1.6), Color(0.35, 0.62, 0.3))
+	for k: int in 6:
+		var apple := Look.sphere(0.16, Look.flat(Color(0.9, 0.15, 0.12), 0.5))
+		apple.position = _w(p + Vector3(kit.rng.randf_range(-1.1, 1.1), kit.rng.randf_range(2.2, 3.4), kit.rng.randf_range(-1.1, 1.1)))
+		add_child(apple)
+
+
+# ---- stage 18: Summit Garden - the finale ---------------------------------------------------------
+# Hop to the runway, boost to 20 m/s and leap 12 m, wall run a trellis over the void, sprint onto the
+# bounce pad at the foot of the summit wall and mantle its lip at the top of the bounce, then time a
+# piston and a laser gate on the ridge path to the summit lawn and the finish (fireworks).
 func _stage_18_summit() -> void:
-	kit.finish(_w(Vector3.ZERO), _yaw)
+	var lawn: Dictionary = _area(Vector3.ZERO, 3.5, 3.5)
+	var h1: Dictionary = _blk(Vector3(1.2, 1.0, -8.6), 1.8, 1.8)
+	var runway: Dictionary = _blk(Vector3(0, 1.0, -21.0), 3.2, 14.0, "alt", 1.0)
+	kit.boost(_w(Vector3(0, 1.02, -23.5)), Vector3(2.6, 0.3, 7.0), _yaw, 20.0)
+	var isle: Dictionary = _blk(Vector3(0, 1.0, -41.5), 3.5, 4.0, "main", 1.0)
+	_panel(-2.3, 2.2, -45.0, -61.5)
+	var land: Dictionary = _blk(Vector3(2.4, 1.0, -68.0), 3.6, 6.0, "alt", 1.0)
+	kit.pad(_w(Vector3(2.4, 1.0, -69.6)), 17.0, 0.0, 0.0, 1.1)
+	_ledge(Vector3(2.4, 6.6, -75.0), Vector3(6.0, 10.0, 7.0))
+	_blk(Vector3(2.4, 6.6, -84.25), 1.6, 11.5, "accent", 0.8)
+	var ram: Piston = kit.piston(_w(Vector3(0.0, 8.25, -82.5)), Vector3(2.2, 1.6, 2.0), _yaw - 90.0, 3.0, 2.4, 0.0, 10.0)
+	var gate: LaserGate = _fence(2.4, 6.6, -87.6, 2.4, [0.5, 1.4, 2.3], 2.4, 0.45, 0.3)
+	_blk(Vector3(2.4, 6.6, -96.0), 12.0, 12.0, "main", 2.0)
+	kit.finish(_w(Vector3(2.4, 6.6, -94.0)), _yaw)
+	kit.pillar(_w(Vector3(2.4, 4.6, -96.0)), 2.4, 20.0)
+	kit.pillar(_w(Vector3(0, 0, -21.0)), 1.2, 14.0)
+	kit.pillar(_w(Vector3(0, 0, -41.5)), 1.2, 14.0)
+	kit.pillar(_w(Vector3(2.4, 0, -68.0)), 1.2, 14.0)
+	# the summit garden: trees, a ring of lamps, an arch over the finish, hedge walls round the plaza
+	for p: Vector3 in [Vector3(-2.5, 6.6, -91.5), Vector3(7.3, 6.6, -91.5), Vector3(-2.6, 6.6, -100.6), Vector3(7.4, 6.6, -100.4)]:
+		kit.round_tree(_w(p), kit.rng.randf_range(1.3, 1.7))
+	for i: int in 8:
+		var ang: float = float(i) / 8.0 * TAU
+		kit.lamp(_w(Vector3(2.4 + cos(ang) * 5.2, 6.6, -96.0 + sin(ang) * 5.2)), 2.2, i % 2 == 0, Look.c("accent2"))
+	_hedge(Vector3(2.4, 7.2, -101.6), Vector3(12.0, 1.2, 0.8), false)
+	kit.banner(_w(Vector3(-0.4, 6.6, -93.2)), 5.0)
+	kit.banner(_w(Vector3(5.2, 6.6, -93.2)), 5.0, Look.c("accent2"))
+	kit.tree(_w(Vector3(-3.5, 1.0, -9.0)), 1.4)
+	# route
+	_hop(lawn, h1)
+	_hop(h1, runway, Vector3(0, 0, 5.0))
+	r_jump(_w(Vector3(0, 1.0, -27.6)), _w(Vector3(0, 1.0, -40.8)))
+	route[route.size() - 1]["speed"] = 20.0
+	r_wallrun(_w(Vector3(-0.5, 1.0, -43.1)), _w(Vector3(-1.7, 2.4, -47.6)), _w(Vector3(-1.7, 2.4, -59.2)), _w(Vector3(2.4, 1.0, -66.7)))
+	r_walk(_w(Vector3(2.4, 1.0, -66.4)))
+	var ledge_top: Vector3 = _w(Vector3(2.4, 6.6, -73.2))
+	route.append({"kind": "a_fly", "to": ledge_top, "until": func() -> bool: return player.grounded and player.global_position.y > ledge_top.y - 0.3})
+	r_walk(_w(Vector3(2.4, 6.6, -79.4)))
+	r_until(func() -> bool: return _ram_clear(ram, 0.0, 0.75))
+	r_walk(_w(Vector3(2.4, 6.6, -85.6)))
+	r_until(func() -> bool: return _dark(gate, 0.0, 0.7))
+	r_walk(_w(Vector3(2.4, 6.6, -95.0)))
+	# effects: fireworks over the summit on a beat, a blossom burst at the gate
+	var colors: Array = [[Color(1.0, 0.45, 0.6), Color(1.0, 0.9, 0.5)], [Color(0.5, 0.8, 1.0), Color(1, 1, 1)], [Color(1.0, 0.7, 0.2), Color(1.0, 0.35, 0.2)], [Color(0.7, 1.0, 0.5), Color(1.0, 1.0, 0.7)]]
+	for i: int in 4:
+		var off: float = 0.8 * float(i)
+		var at: Vector3 = _w(Vector3(2.4 + [-5.0, 5.0, -3.0, 4.0][i], 18.0 + 2.0 * float(i % 2), -96.0 + [-3.0, 2.0, 5.0, -5.0][i]))
+		_cue(at, GardensFx.firework(colors[i]), 0.0, func() -> bool: return fposmod(Game.course_time + off, 3.2) < 0.1, 1.0)
+	_cue_near(_w(Vector3(2.4, 6.9, -94.0)), 3.0, GardensFx.petal_fountain(70, 8.0))
+	_amb(_w(Vector3(2.4, 9.0, -96.0)), GardensFx.petals(_ext(Vector3(6, 2, 6)), 30))
+	_amb(_w(Vector3(0, 3.0, -55.0)), GardensFx.seeds(_ext(Vector3(4, 3, 10)), _b * Vector3(-0.8, 0.2, -0.4), 24))
 
 
 func _ambience() -> void:
