@@ -410,6 +410,13 @@ func _try_wall_run(hv: Vector3) -> void:
 		var along: float = hv.dot(along_dir)
 		if along < t.wall_run_min_speed:
 			continue
+		# head-on into the face or a panel's end cap is a bump, not a run
+		if absf(fwd.dot(n)) > 0.85:
+			continue
+		# the diagonal / forward rays see a panel before we reach its leading edge: latch only once
+		# the body is alongside it, or the run would end next tick and burn the panel
+		if not _panel_beside(n):
+			continue
 		_wall_body = hit["collider"]
 		_wall_normal = n
 		_wall_dir = along_dir
@@ -424,9 +431,14 @@ func _try_wall_run(hv: Vector3) -> void:
 
 ## Any part of the body (feet, middle, head) still alongside a panel.
 func _wall_still_there() -> bool:
+	return _panel_beside(_wall_normal)
+
+
+## Any part of the body (feet, middle, head) alongside a panel whose face points along `normal`.
+func _panel_beside(normal: Vector3) -> bool:
 	for h: float in [0.2, 0.65, 1.1]:
 		var p: Vector3 = global_position + Vector3(0, h, 0)
-		if not _probe(p, p - _wall_normal * (0.38 + 0.5), "is_wall_run").is_empty():
+		if not _probe(p, p - normal * (0.38 + 0.5), "is_wall_run").is_empty():
 			return true
 	return false
 

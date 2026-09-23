@@ -878,6 +878,29 @@ func test_x_wall_run_and_wall_jump() -> void:
 	player.cmd_jump = false
 
 
+## Jumping in just before a panel starts: the diagonal ray sees the face ahead while the body is
+## not alongside yet. The run must start once we are beside it, not latch, drop and burn the panel.
+func test_x_wall_run_leading_edge() -> void:
+	await new_world(Vector3(0, 0.05, 4))
+	floor_slab()
+	kit.wallrun(Vector3(1.2, 2.6, -12), Vector3(16, 4.4, 0.5), 90.0)   # face at x 0.95, starts at z -4
+	await seconds(0.3)
+	var starts: Array[float] = []
+	player.wall_run_started.connect(func(_n: Vector3) -> void: starts.append(player.global_position.z))
+	var kicks: Array[int] = [0]
+	player.wall_jumped.connect(func() -> void: kicks[0] += 1)
+	player.teleport(Transform3D(Basis(), Vector3(0.45, 1.2, -2.6)))
+	player.velocity = Vector3(0, 3.0, -10.0)
+	player.cmd_move = FWD
+	player.press_jump()      # a buffered press must not turn a false latch into a kick off nothing
+	var ran: bool = await wait_until(func() -> bool: return player.is_wall_running(), 0.6, "latch beside the panel")
+	await ticks(6)
+	check(ran and player.is_wall_running(), "a jump that reaches a panel just before its start still gets the run (starts at z %s)" % str(starts))
+	check(kicks[0] == 0, "and no wall jump fires off thin air ahead of the panel")
+	check(starts.size() == 1 and starts[0] < -3.9, "it latches once, beside the panel, not ahead of its leading edge (z %s)" % str(starts))
+	player.cmd_move = Vector2.ZERO
+
+
 ## Run at a 3.4 m face (too tall to jump onto) and jump near it, holding forward.
 func _jump_at_face(ledge: bool) -> void:
 	await new_world(Vector3(0, 0.05, 0))
