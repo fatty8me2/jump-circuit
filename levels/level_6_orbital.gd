@@ -169,7 +169,9 @@ func _build() -> void:
 	_frame(_w(cp), _yaw)
 	cp = _stage_16_stacks()
 	_frame(_w(cp), _yaw)
-	_stage_end()
+	cp = _stage_17_reactor()
+	_frame(_w(cp), _yaw)
+	_stage_18_approach()
 
 
 func _process(dt: float) -> void:
@@ -888,12 +890,74 @@ func _stage_16_stacks() -> Vector3:
 	return end["c"]
 
 
-# temporary end
-func _stage_end() -> void:
-	_deck(Vector3(0, 0, -12.0), 10.0, 10.0, "main", 1.0)
-	kit.finish(_w(Vector3(0, 0, -14.0)), _yaw)
-	r_jump(_w(Vector3(0, 0, -2.7)), _w(Vector3(0, 0, -8.5)))
-	r_walk(_w(Vector3(0, 0, -14.0)))
+# Stage 17: the reactor hall - the whole hall is a low-g bay round the glowing core. Float over the
+# coolant trench, ride a launch grate 11 m up past the core, run the shielding wall at the top and
+# kick off it - in low gravity the kick carries you all the way across to the dock.
+func _stage_17_reactor() -> Vector3:
+	var dock: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	_bay(Vector3(0, 8.0, -29.0), Vector3(18.0, 28.0, 52.0))
+	var r1: Dictionary = _deck(Vector3(0, 0, -13.2), 2.6, 2.6)
+	var gc: Vector3 = Vector3(0, 0, -19.6)
+	var g: OrbitalThruster = _grate(gc, 3.0, 5.5, 3.2, 0.35, 0.0, 14.0)
+	var u: Dictionary = _deck(Vector3(-0.5, 10.0, -26.0), 3.0, 3.0, "alt")
+	kit.wallrun(_w(Vector3(2.6, 11.5, -35.0)), Vector3(14.0, 7.0, 0.5), _yaw + 90.0)
+	var end: Dictionary = _dock(Vector3(-1.0, 10.0, -52.0), 0.0)
+	# the core: a kill sphere hanging beside the lift shaft, and the trench under the first leap
+	var core_c: Vector3 = Vector3(-6.5, 6.0, -21.0)
+	kit.hazard(_w(core_c), Vector3(3.2, 3.2, 3.2))
+	_haz(Vector3(0, -0.2, -7.8), Vector3(2.4, 0.8, 1.4), 0.0)
+	_float(dock, r1)
+	_hop(r1, _area(gc, 1.5, 1.5))
+	_r_lift(g, gc, 6.0, (u["c"] as Vector3))
+	r_wallrun(_w(Vector3(0.6, 10.0, -27.3)), _w(Vector3(2.0, 11.4, -31.0)), _w(Vector3(2.0, 11.4, -38.0)), _w(end["c"] + Vector3(0, 0, 1.2)))
+	r_checkpoint()
+	return end["c"]
+
+
+# Stage 18: the final approach - the last flare deck. Crumbling hull plates between two shield
+# pockets, then a sprint through the flare gate itself to the docking ring and the finish.
+func _stage_18_approach() -> void:
+	var dock: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var f := OrbitalFlare.new()
+	f.width = 12.0
+	f.height = 9.0
+	f.length = 36.0
+	f.period = 5.0
+	f.sweep = 1.4
+	f.phase = 0.3
+	f.position = _w(Vector3(0, 0, -24.0))
+	f.rotation.y = deg_to_rad(_yaw)
+	add_child(f)
+	var d1: Dictionary = _deck(Vector3(0, 0, -9.0), 4.0, 6.0)
+	_shelter(f, Vector3(-0.8, 0, -10.6))
+	kit.collapse(_w(Vector3(1.2, 0, -16.2)), 2.2, 0.6, 2.4)
+	kit.collapse(_w(Vector3(-0.4, 0.6, -21.8)), 2.2, 0.6, 2.4)
+	var d2: Dictionary = _deck(Vector3(0, 0.6, -28.0), 4.0, 6.0)
+	_shelter(f, Vector3(-0.8, 0.6, -29.4))
+	var b1: Dictionary = _deck(Vector3(1.0, 0.6, -35.3), 2.0, 2.0, "alt")
+	var b2: Dictionary = _deck(Vector3(0, 0.6, -40.8), 2.0, 2.0)
+	var fin: Dictionary = _deck(Vector3(0, 0.6, -51.0), 10.0, 12.0, "main", 1.0)
+	kit.finish(_w(Vector3(0, 0.6, -52.0)), _yaw)
+	# leg 1: dock -> pocket 1
+	r_until(func() -> bool: return _flare_go(f, 24.0, 13.4, 2.0))
+	_hop(dock, d1, Vector3(0, 0, 2.0))
+	r_walk(_w(Vector3(-0.8, 0, -10.5)))
+	# leg 2: pocket 1 -> over the crumbling plates -> pocket 2
+	r_until(func() -> bool: return _flare_go(f, 13.4, -5.4, 3.4))
+	r_walk(_w(Vector3(1.2, 0, -10.9)))
+	r_jump(_w(Vector3(1.2, 0, -11.65)), _w(Vector3(1.2, 0, -16.2)))
+	r_jump(_w(Vector3(1.0, 0, -16.9)), _w(Vector3(-0.4, 0.6, -21.8)))
+	r_jump(_w(Vector3(-0.3, 0.6, -22.5)), _w(Vector3(0.6, 0.6, -26.2)))
+	r_walk(_w(Vector3(-0.8, 0.6, -29.3)))
+	# leg 3: pocket 2 -> through the flare gate -> finish
+	r_until(func() -> bool: return _flare_go(f, -5.4, -21.0, 3.2))
+	r_walk(_w(Vector3(1.2, 0.6, -29.7)))
+	r_jump(_w(Vector3(1.2, 0.6, -30.65)), _w(b1["c"]))
+	_hop(b1, b2)
+	_hop(b2, fin, Vector3(0, 0, 4.0))
+	r_walk(_w(Vector3(0, 0.6, -52.5)))
+	d1.clear()
+	d2.clear()
 
 
 # ---- environment ------------------------------------------------------------------------------
