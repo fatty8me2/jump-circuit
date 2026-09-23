@@ -327,6 +327,35 @@ static func _open(cr: Crusher, a: float, b: float, head: float = 2.3) -> bool:
 	return true
 
 
+## Wall-run panel along the stage heading at local x, from z0 to z1 (z0 > z1), centred at height y.
+func _panel(x: float, y: float, z0: float, z1: float, height: float = 7.0) -> WallRunPanel:
+	return kit.wallrun(_w(Vector3(x, y, (z0 + z1) * 0.5)), Vector3(absf(z0 - z1), height, 0.5), _yaw + 90.0)
+
+
+## Sunken-hull planking behind a panel (decor): tarred boards, ribs and a row of glowing portholes.
+func _hull(x: float, y0: float, y1: float, z0: float, z1: float, side: float) -> void:
+	var len: float = absf(z0 - z1)
+	var wood: StandardMaterial3D = Look.flat(Color(0.3, 0.22, 0.16), 0.95)
+	var dark: StandardMaterial3D = Look.flat(Color(0.18, 0.13, 0.1), 0.95)
+	var glass: StandardMaterial3D = Look.flat(Color(1.0, 0.8, 0.45), 0.3, 0.0, 2.2)
+	var n := Node3D.new()
+	var h: float = y1 - y0
+	n.add_child(Look.box(Vector3(0.5, h, len), wood, Vector3(0, (y0 + y1) * 0.5, 0)))
+	var rows: int = int(h / 1.1)
+	for i: int in rows:
+		n.add_child(Look.box(Vector3(0.56, 0.08, len), dark, Vector3(0, y0 + 0.55 + float(i) * 1.1, 0)))
+	var ribs: int = int(len / 3.0) + 1
+	for i: int in ribs:
+		n.add_child(Look.box(Vector3(0.8, h + 0.6, 0.35), dark, Vector3(side * 0.2, (y0 + y1) * 0.5, -len * 0.5 + float(i) * len / float(maxi(ribs - 1, 1)))))
+	for i: int in int(len / 4.0):
+		var z: float = -len * 0.5 + 2.0 + float(i) * 4.0
+		n.add_child(Look.cylinder(0.3, 0.6, glass, Vector3(-side * 0.05, y1 - 1.2, z), -1.0, 12))
+		n.get_child(n.get_child_count() - 1).rotation.z = PI * 0.5
+	n.position = _w(Vector3(x, 0, (z0 + z1) * 0.5))
+	n.rotation_degrees.y = _yaw
+	add_child(n)
+
+
 # ---- bot helpers (all deterministic, from the course clock) --------------------------------------
 
 func _wait(test: Callable, hold: Variant = null) -> void:
@@ -370,7 +399,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 4), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, 0.0, -90.0, -90.0, -90.0, -90.0, 0.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12]
 	_frame(Vector3.ZERO, yaws[0])
 	for i: int in stages.size():
 		_next_yaw = yaws[i + 1]
@@ -726,6 +755,64 @@ func _stage_10() -> Vector3:
 	_hop(_area(Vector3(0, 3.2, -16.5), 1.7, 2.5), p1)
 	_hop(p1, p2)
 	_hop(p2, cp, Vector3(0, 0, 1.5))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 11: Wreck Chimney - three wall runs zig-zag up the split hull, mantle out of the last kick ------
+
+func _stage_11() -> Vector3:
+	_panel(2.3, 1.2, -6.0, -12.5)
+	_panel(-2.3, 6.0, -11.0, -19.0)
+	_panel(2.3, 9.0, -17.0, -25.0)
+	_hull(3.1, -6.0, 13.5, -5.0, -26.0, 1.0)
+	_hull(-3.1, -2.0, 10.5, -10.0, -20.0, -1.0)
+	var top: Dictionary = _ledge(Vector3(-0.75, 11.9, -28.5), Vector3(4.5, 14.0, 4.0), "alt")
+	var cp: Dictionary = _cp(Vector3(0, 11.9, -38.0))
+	r_wallrun(_w(Vector3(0.5, 0, -2.6)), _w(Vector3(1.7, 1.4, -7.1)), _w(Vector3(1.7, 1.4, -10.0)), _w(Vector3(-1.7, 5.5, -13.9)))
+	r_wallrun(Vector3.ZERO, _w(Vector3(-1.7, 5.5, -13.9)), _w(Vector3(-1.7, 5.5, -16.9)), _w(Vector3(1.7, 8.5, -20.5)), true, true)
+	r_wallrun(Vector3.ZERO, _w(Vector3(1.7, 8.5, -20.5)), _w(Vector3(1.7, 8.5, -21.9)), _w(Vector3(-0.75, 11.9, -27.1)), true, true)
+	_hop(top, cp, Vector3(0, 0, 1.5))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 12: Bloom Gauntlet (BRANCH) - jellies and blooming coral, or the coral portal up the side -------
+
+func _stage_12() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var j1: ReefJelly = _jelly(Vector3(0, -1.5, -8.5), 17.0, 1.3, [Vector3(-1.8, 0, 0), Vector3(1.8, 0, 0)], 4.2, 0.0)
+	var bl1: BlinkPlatform = kit.blink(_w(Vector3(0, 1.5, -15.6)), Vector3(2.2, 0.5, 2.2), 3.0, 0.6, 0.0)
+	var bl2: BlinkPlatform = kit.blink(_w(Vector3(1.5, 2.5, -21.6)), Vector3(2.0, 0.5, 2.0), 3.0, 0.6, 0.45)
+	var j2c := Vector3(1.5, 0.3, -28.0)
+	_jelly(j2c, 18.0, 1.3, [], 5.0, 0.0, 0.0, 3.0, ReefDecor.CYAN)
+	var merge: Dictionary = _blk(Vector3(0.5, 3.0, -36.0), 11.0, 5.0, "main", 1.2)
+	var cp: Dictionary = _cp(Vector3(0.5, 3.0, -45.0))
+	# the portal skip: three small coral heads up the right side to an orange ring in a coral arch
+	var r1: Dictionary = _blk(Vector3(5.0, 1.0, -7.8), 1.4, 1.4, "accent", 0.7)
+	var r2: Dictionary = _blk(Vector3(5.8, 2.0, -13.4), 1.3, 1.3, "accent", 0.7)
+	var pp: Dictionary = _blk(Vector3(5.8, 3.0, -19.0), 2.4, 2.4, "accent", 0.8)
+	var portal: WarpPortal = kit.portal(_w(Vector3(5.8, 3.0, -19.6)), _yaw, _w(Vector3(4.2, 3.0, -34.8)), _yaw, 7.0)
+	for b: Dictionary in [r1, r2]:
+		kit.glow_strip(_w((b["c"] as Vector3) + Vector3(0, 0.03, 0)), Vector3(0.5, 0.06, 0.5), WarpPortal.ENTRY_COLOR)
+	kit.arch(_w(Vector3(5.8, 3.0, -19.6)), 3.6, 3.4, _yaw, ReefDecor.PINK.darkened(0.2))
+	for side: float in [-1.0, 1.0]:
+		deco.staghorn(_w(Vector3(5.8 + side * 2.0, 3.0, -19.6)), 1.3, ReefDecor.ORANGE)
+	if route_variant == 0:
+		r_walk(_w(Vector3(0, 0, -1.2)))
+		r_until(func() -> bool: return _blink_on(bl1, 0.9, 2.3))
+		r_jump_onto(_w(Vector3(0, 0, -2.65)), j1)
+		r_pad(_w(Vector3(0, -1.5, -8.5)), _w(Vector3(0, 1.5, -15.4)))
+		r_until(func() -> bool: return _blink_on(bl2, 0.2, 1.1))
+		r_jump(_w(Vector3(0.3, 1.5, -16.4)), _w(Vector3(1.5, 2.5, -21.4)))
+		r_jump(_w(Vector3(1.5, 2.5, -22.3)), _w(j2c))
+		r_pad(_w(j2c), _w(Vector3(0.8, 3.0, -35.4)))
+	else:
+		r_jump(_w(Vector3(2.6, 0, -2.65)), _w(r1["c"]))
+		_hop(r1, r2)
+		_hop(r2, pp, Vector3(0, 0, 0.6))
+		r_portal(_w(Vector3(5.8, 3.0, -19.6)), portal.exit_point())
+	_hop(merge, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	return cp["c"]
 
