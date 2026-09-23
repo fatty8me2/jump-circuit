@@ -872,7 +872,7 @@ func _stage_16_stacks() -> Vector3:
 		var lead: float = (-23.0 - z) / 9.0 + 0.15
 		rams.append(kit.piston(_w(Vector3(3.0, 11.5, z)), Vector3(2.2, 1.6, 1.6), _yaw + 90.0, 2.6, 2.4, fposmod(0.2 - lead / 2.4, 1.0), 13.0))
 		leads.append(lead)
-	var end: Dictionary = _dock(Vector3(0, 9.9, -39.5), 0.0)
+	var end: Dictionary = _dock(Vector3(0, 9.9, -38.3), 0.0)
 	r_mantle(_w(Vector3(0, 0, -2.7)), _w(Vector3(0, 3.3, -5.4)))
 	r_walk(_w(Vector3(0, 3.3, -7.2)))
 	r_until(func() -> bool: return _clear([s1], [0.25], 0.3))
@@ -883,7 +883,7 @@ func _stage_16_stacks() -> Vector3:
 	r_walk(_w(Vector3(1.0, 9.9, -20.0)))
 	r_walk(_w(Vector3(1.0, 9.9, -23.0)))
 	r_until(func() -> bool: return _clear(rams, leads, 0.35))
-	r_walk(_w(Vector3(1.0, 9.9, -32.2)))
+	r_walk(_w(Vector3(1.0, 9.9, -30.6)))
 	_hop(cw, end, Vector3(-1.0, 0, 1.6))
 	r_checkpoint()
 	top3.clear()
