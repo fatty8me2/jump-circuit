@@ -378,6 +378,11 @@ func _finish_sequence() -> void:
 # checks every jump against the measured capability envelope.
 
 var route: Array[Dictionary] = []
+## Branching courses: a level with alternative routes sets route_variants (in _configure) and, where the
+## course splits, annotates the branch the bot should play with `if route_variant == k:` (0 = main route).
+## Tests pick the variant (run_tests --route=N / --route=all); the game itself ignores it.
+var route_variants: int = 1
+static var route_variant: int = 0
 
 
 func r_walk(to: Vector3) -> void:
@@ -411,6 +416,28 @@ func r_jump_from_ride(node: Node3D, point: Vector3, radius: float, to: Vector3, 
 	if stand != null:
 		step["stand"] = stand
 	route.append(step)
+
+
+## Wall run: run to `from`, jump at the panel (aiming at `entry`, a point on its face),
+## run along it toward `exit`, kick off there (kick=false: ride it to its end) and steer to `to`.
+## chain=true: we are already in the air off the previous wall run - just latch on.
+func r_wallrun(from: Vector3, entry: Vector3, exit: Vector3, to: Vector3, kick: bool = true, chain: bool = false) -> void:
+	route.append({"kind": "w_run", "from": from, "entry": entry, "exit": exit, "to": to, "kick": kick, "chain": chain})
+
+
+## Mantle: run to `from`, jump at the ledge face and climb it; done standing near `top`.
+func r_mantle(from: Vector3, top: Vector3) -> void:
+	route.append({"kind": "m_climb", "from": from, "top": top})
+
+
+## Run through a warp ring whose entry is at `entry`; done once we come out near `exit`.
+func r_portal(entry: Vector3, exit: Vector3) -> void:
+	route.append({"kind": "portal", "to": entry, "exit": exit})
+
+
+## Stand still until `test.call()` is true (lasers, crushers, pistons: pass their *_at(t) checks).
+func r_until(test: Callable) -> void:
+	route.append({"kind": "b_wait", "test": test})
 
 
 func r_checkpoint() -> void:

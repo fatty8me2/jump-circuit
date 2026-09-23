@@ -531,3 +531,85 @@ func blink(top: Vector3, size: Vector3, period: float = 3.0, on_fraction: float 
 	b.phase = phase
 	_add(b, top - Vector3(0, size.y * 0.5, 0))
 	return b
+
+
+# ---- movement set pieces and timed machines (level extension toolkit) ----------------------
+
+## Wall-run panel. `center` is the middle of the slab; local X (turned by yaw) runs along it.
+## size = (length, height, thickness). Jump at it moving along it to run; jump again to kick off.
+func wallrun(center: Vector3, size: Vector3, yaw_deg: float = 0.0) -> WallRunPanel:
+	var w := WallRunPanel.new()
+	w.size = size
+	w.rotation_degrees.y = yaw_deg
+	_add(w, center)
+	return w
+
+
+## Mantle ledge: a block whose gold-lipped top edge can be grabbed from any side.
+## `top` is the centre of its TOP surface (like plat). Tops 2.6-4.2 m above the
+## approach cannot be jumped onto, only mantled.
+func ledge(top: Vector3, size: Vector3, yaw_deg: float = 0.0, style: String = "main") -> LedgeBlock:
+	var l := LedgeBlock.new()
+	l.size = size
+	l.style = style
+	l.rotation_degrees.y = yaw_deg
+	_add(l, top - Vector3(0, size.y * 0.5, 0))
+	return l
+
+
+## Timed kill beam between two posts (centre position; local X between the posts).
+func laser(center: Vector3, size: Vector3, period: float = 3.0, on_fraction: float = 0.5, phase: float = 0.0, yaw_deg: float = 0.0) -> LaserGate:
+	var g := LaserGate.new()
+	g.size = size
+	g.period = period
+	g.on_fraction = on_fraction
+	g.phase = phase
+	g.rotation_degrees.y = yaw_deg
+	_add(g, center)
+	return g
+
+
+## Ram that punches `stroke` metres along its arrow (local -Z turned by yaw) and shoves the player.
+## `top` is the centre of its top surface when retracted; a static housing is built behind it.
+func piston(top: Vector3, size: Vector3, yaw_deg: float = 0.0, stroke: float = 3.0, period: float = 3.0, phase: float = 0.0, strength: float = 13.0) -> Piston:
+	var p := Piston.new()
+	p.size = size
+	p.stroke = stroke
+	p.period = period
+	p.phase = phase
+	p.strength = strength
+	p.rotation_degrees.y = yaw_deg
+	var center: Vector3 = top - Vector3(0, size.y * 0.5, 0)
+	_add(p, center)
+	# the housing plate the rod runs into, just behind the rod's retracted end
+	var back: Vector3 = Basis(Vector3.UP, deg_to_rad(yaw_deg)) * Vector3(0, 0, size.z * 0.5 + stroke + 0.45)
+	block(center + back, Vector3(size.x + 0.5, size.y + 0.5, 0.7), Look.c("metal"), true, yaw_deg)
+	return p
+
+
+## Press hanging `lift` m above `floor_top` that slams down on a rhythm; deadly underneath.
+func crusher(floor_top: Vector3, size: Vector3, lift: float = 3.2, period: float = 3.2, phase: float = 0.0) -> Crusher:
+	var c := Crusher.new()
+	c.size = size
+	c.lift = lift
+	c.period = period
+	c.phase = phase
+	_add(c, floor_top)
+	# the guide columns it runs between
+	var h: float = lift + size.y + 1.5
+	for sx: float in [-1.0, 1.0]:
+		block(floor_top + Vector3(sx * (size.x * 0.5 + 0.35), h * 0.5, 0), Vector3(0.35, h, 0.35), Look.c("metal"), true)
+	block(floor_top + Vector3(0, h + 0.2, 0), Vector3(size.x + 1.1, 0.4, 0.6), Look.c("metal"), false)
+	return c
+
+
+## One-way warp ring pair. Both positions are floor points; each ring faces its yaw (-Z forward).
+## You leave the exit heading exit_yaw with your entry speed (at least min_exit_speed).
+func portal(entry_floor: Vector3, entry_yaw_deg: float, exit_floor: Vector3, exit_yaw_deg: float, min_exit_speed: float = 6.0) -> WarpPortal:
+	var p := WarpPortal.new()
+	p.exit_pos = exit_floor
+	p.exit_yaw_deg = exit_yaw_deg
+	p.min_exit_speed = min_exit_speed
+	p.rotation_degrees.y = entry_yaw_deg
+	_add(p, entry_floor)
+	return p

@@ -42,7 +42,7 @@ func _on_respawn() -> void:
 	log_lines.append("respawn during step %d (%s)" % [step_index, str(level.route[mini(step_index, level.route.size() - 1)]["kind"])])
 	step_index = _checkpoint_step
 	_begin_step()
-	if retries > 30:
+	if retries > 45:
 		stuck = true
 
 
@@ -111,6 +111,8 @@ func _physics_process(dt: float) -> void:
 			_do_clock(step)
 		"a_fly":
 			_do_ascent(step)
+		"w_run", "m_climb", "portal":
+			_do_moves(step, dt)
 
 
 func _next() -> void:
@@ -576,3 +578,82 @@ func _do_ascent(step: Dictionary) -> void:
 			_next()
 	elif player.grounded and _was_air:
 		_next()
+
+
+# ---- wall runs, mantles and warps (level extension, additive) -----------------------------------
+#   w_run   {from, entry, exit, to, kick, chain}  jump at a wall-run panel toward entry, run it toward exit, kick off
+#                                                 (or ride it off the end) and steer to `to`. chain = already airborne:
+#                                                 the step ends as soon as the NEXT panel is latched, or on landing.
+#   m_climb {from, top}                           jump at a ledge, hold toward it until the mantle is done
+#   portal  {to, exit}                            run through the entry ring at `to` until we come out near `exit`
+
+func _do_moves(step: Dictionary, dt: float) -> void:
+	match str(step["kind"]):
+		"w_run":
+			var entry: Vector3 = step["entry"]
+			var exit: Vector3 = step["exit"]
+			if _phase == 0:
+				if bool(step["chain"]):
+					_phase = 1
+				else:
+					_do_jump({"from": step["from"], "to": entry, "hold": true}, dt)
+					return
+			if _phase == 1:
+				if not player.grounded:
+					_was_air = true
+				if player.is_wall_running():
+					_phase = 2
+				elif player.grounded and _was_air:
+					log_lines.append("w_run %d: landed without latching at %s" % [step_index, str(player.global_position.snapped(Vector3.ONE * 0.01))])
+					level.respawn()
+					return
+				else:
+					if player.velocity.y <= 0.0:
+						player.cmd_jump = false
+					_set_wish(_flat(entry - player.global_position).normalized())
+					return
+			if _phase == 2:
+				var along: Vector3 = _flat(exit - entry).normalized()
+				_set_wish(along)
+				player.cmd_jump = false
+				var left: float = _flat(exit - player.global_position).dot(along)
+				if bool(step["kick"]) and left < 0.4 and player.is_wall_running():
+					player.press_jump()
+					player.cmd_jump = true
+					_phase = 3
+					_was_air = true
+				elif not player.is_wall_running():
+					_phase = 3
+					_was_air = true
+				return
+			# phase 3: flying off the wall
+			if player.is_wall_running():
+				_next()
+				return
+			_air_phase(step["to"])
+		"m_climb":
+			var top: Vector3 = step["top"]
+			if _phase == 0:
+				_do_jump({"from": step["from"], "to": top, "hold": true}, dt)
+				return
+			if _phase == 1:
+				if not player.grounded:
+					_was_air = true
+				if player.velocity.y <= 0.0:
+					player.cmd_jump = false
+				_set_wish(_flat(top - player.global_position).normalized())
+				if player.is_mantling():
+					_phase = 2
+				elif player.grounded and _was_air and player.global_position.y < top.y - 0.5:
+					log_lines.append("m_climb %d: missed the ledge at %s" % [step_index, str(player.global_position.snapped(Vector3.ONE * 0.01))])
+					level.respawn()
+				return
+			player.cmd_move = Vector2.ZERO
+			if not player.is_mantling() and player.grounded:
+				_next()
+		"portal":
+			var exit_p: Vector3 = step["exit"]
+			if _flat_dist(exit_p) < 3.0 and absf(player.global_position.y - exit_p.y) < 3.0:
+				_next()
+				return
+			_set_wish(_flat((step["to"] as Vector3) - player.global_position).normalized())

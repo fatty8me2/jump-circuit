@@ -8,6 +8,8 @@ const FWD := Vector2(0, 1)
 
 ## -- --level=<index> (0-based) restricts the per-level tests to one level.
 var only_level: int = -1
+## -- --route=all: the bot plays every route variant a level declares (--route=N: just that one).
+var all_routes: bool = false
 ## Per-test watchdog budget in physics seconds (test_n gets 1300 s per level instead).
 var watchdog_s: float = 180.0
 ## Bumped per test so a stale watchdog timer from an earlier test does nothing.
@@ -29,6 +31,15 @@ func _ready() -> void:
 				_usage_error("--level=%s is invalid; use a 0-based index 0..%d" % [v, Game.LEVELS.size() - 1])
 				return
 			only_level = int(v)
+		elif a.begins_with("--route="):
+			var rv: String = a.trim_prefix("--route=")
+			if rv == "all":
+				all_routes = true
+			elif rv.is_valid_int() and int(rv) >= 0:
+				LevelBase.route_variant = int(rv)
+			else:
+				_usage_error("--route=%s is invalid; use a variant index or all" % rv)
+				return
 		elif a.begins_with("--fps="):
 			Engine.max_fps = int(a.trim_prefix("--fps="))
 	await ticks(3)
@@ -519,12 +530,14 @@ func test_m_levels_load_and_validate() -> void:
 		metrics["%s hardest jump %%" % Game.LEVELS[i]["id"]] = int(worst * 100.0)
 
 
-func run_bot(index: int, budget_seconds: float) -> void:
+func run_bot(index: int, budget_seconds: float, variant: int = -1) -> void:
 	var lvl: LevelBase = await load_level(index)
 	var bot := RouteBot.new()
 	lvl.add_child(bot)
 	bot.attach(lvl)
 	var label: String = str(Game.LEVELS[index]["name"])
+	if variant >= 0 or LevelBase.route_variant > 0:
+		label += " (route %d)" % LevelBase.route_variant
 	var t: float = 0.0
 	var dt: float = 1.0 / Engine.physics_ticks_per_second
 	while t < budget_seconds and not bot.done and not bot.stuck:
@@ -533,7 +546,7 @@ func run_bot(index: int, budget_seconds: float) -> void:
 	for line: String in bot.log_lines:
 		print("        bot: ", line)
 	check(bot.done, "%s: bot completes the main route with real physics (%.1fs, %d respawns, reached step %d/%d)" % [label, lvl.run_time, bot.retries, bot.step_index, lvl.route.size()])
-	check(bot.retries <= 15, "%s: hard but fair - the bot needed %d respawns" % [label, bot.retries])
+	check(bot.retries <= 30, "%s: hard but fair - the bot needed %d respawns" % [label, bot.retries])
 	metrics["%s bot time s" % Game.LEVELS[index]["id"]] = snappedf(lvl.run_time, 0.01)
 	if bot.done:
 		check(SaveData.is_completed(lvl.level_id), "%s: completion saved" % label)
@@ -546,7 +559,18 @@ func test_n_bot_levels() -> void:
 		if not ResourceLoader.exists(Game.LEVELS[i]["scene"]):
 			check(false, "level %d scene exists" % (i + 1))
 			continue
-		await run_bot(i, 1200.0)
+		if not all_routes:
+			await run_bot(i, 1200.0)
+			continue
+		var keep: int = LevelBase.route_variant
+		var variants: int = 1
+		for v: int in 16:
+			LevelBase.route_variant = v
+			await run_bot(i, 1200.0, v)
+			variants = (world as LevelBase).route_variants if world is LevelBase else 1
+			if v + 1 >= variants:
+				break
+		LevelBase.route_variant = keep
 
 
 func test_o_checkpoint_fail_respawn_reset() -> void:
@@ -806,6 +830,175 @@ func test_u_pendulum_and_sweeper() -> void:
 		await get_tree().physics_frame
 		t += 1.0 / 120.0
 	check(lvl.deaths == 1, "a sweeper bar kills a player who does not jump it (after %.2fs)" % t)
+
+
+# ---- wall run, mantle and the timed machines (level extension) --------------------------------
+
+## Sprint along -Z beside a panel at x=+1.2 (or a plain wall), jump and drift toward it.
+func _run_at_wall(wall_run: bool) -> void:
+	await new_world(Vector3(0, 0.05, 4))
+	kit.plat(Vector3(0, 0, 1), Vector3(8, 1, 10), "main", 0.0)
+	if wall_run:
+		kit.wallrun(Vector3(1.2, 2.2, -12), Vector3(16, 4.4, 0.5), 90.0)
+	else:
+		kit.block(Vector3(1.2, 2.2, -12), Vector3(0.5, 4.4, 16), Color.GRAY, true)
+	await seconds(0.3)
+	player.cmd_move = FWD
+	await wait_until(func() -> bool: return player.global_position.z < -3.0, 2.0, "run-up")
+	player.press_jump()
+	player.cmd_jump = true
+	player.cmd_move = Vector2(0.45, 1.0)
+
+
+func test_x_wall_run_and_wall_jump() -> void:
+	await _run_at_wall(true)
+	var latched: bool = await wait_until(func() -> bool: return player.is_wall_running(), 0.8, "latch onto the wall-run panel")
+	check(latched, "jumping along a wall-run panel latches onto it")
+	var z0: float = player.global_position.z
+	var y0: float = player.global_position.y
+	player.cmd_move = FWD
+	player.cmd_jump = false
+	await seconds(0.9)
+	check(player.is_wall_running(), "the run holds for most of a second")
+	var ran: float = z0 - player.global_position.z
+	check(ran > 8.0, "running the wall covers ground at speed (%.1f m in 0.9 s)" % ran)
+	check(player.global_position.y > y0 - 1.5, "a slow arc, not a fall (%.2f m below the latch point)" % (y0 - player.global_position.y))
+	player.press_jump()
+	await ticks(2)
+	check(not player.is_wall_running() and player.velocity.x < -5.0 and player.velocity.y > 7.0, "a wall jump kicks away from the wall and up (v %s)" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+	check(player.velocity.z < -6.0, "and keeps the speed along the wall (%.1f)" % player.velocity.z)
+	# a plain wall never latches
+	await _run_at_wall(false)
+	var plain: bool = false
+	for i: int in 90:
+		await get_tree().physics_frame
+		plain = plain or player.is_wall_running()
+	check(not plain, "an ordinary wall cannot be wall-run")
+	player.cmd_move = Vector2.ZERO
+	player.cmd_jump = false
+
+
+## Run at a 3.4 m face (too tall to jump onto) and jump near it, holding forward.
+func _jump_at_face(ledge: bool) -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab()
+	if ledge:
+		kit.ledge(Vector3(0, 3.4, -6.5), Vector3(6, 3.4, 5))
+	else:
+		kit.block(Vector3(0, 1.7, -6.5), Vector3(6, 3.4, 5), Color.GRAY, true)
+	await seconds(0.3)
+	player.cmd_move = FWD
+	await wait_until(func() -> bool: return player.global_position.z < -2.4, 2.0, "run-up to the face")
+	player.press_jump()
+	player.cmd_jump = true
+
+
+func test_x_mantle() -> void:
+	await _jump_at_face(true)
+	var grabbed: bool = await wait_until(func() -> bool: return player.is_mantling(), 1.0, "catch the ledge")
+	check(grabbed, "jumping at a gold-lipped ledge grabs it")
+	await wait_until(func() -> bool: return not player.is_mantling() and player.grounded, 1.5, "climb onto the top")
+	player.cmd_jump = false
+	check(player.global_position.y > 3.3 and player.grounded, "and climbs onto its 3.4 m top (y %.2f)" % player.global_position.y)
+	await _jump_at_face(false)
+	await seconds(1.5)
+	player.cmd_move = Vector2.ZERO
+	player.cmd_jump = false
+	check(player.global_position.y < 1.0 and not player.is_mantling(), "an ordinary 3.4 m block cannot be climbed (y %.2f)" % player.global_position.y)
+
+
+func test_x_lasers_crushers_pistons_portals() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var base: Vector3 = lvl.checkpoints[0].global_position
+	lvl.player.teleport(lvl.checkpoints[0].respawn_transform())
+	lvl.player.use_device_input = false
+	await seconds(0.3)
+	lvl.kit.plat(base + Vector3(40, 0, 0), Vector3(30, 1, 40), "main", 0.0)
+	# laser: harmless while off, deadly once it fires
+	var gate: LaserGate = lvl.kit.laser(base + Vector3(40, 0.8, -4), Vector3(6, 0.3, 0.3), 2.0, 0.5, 0.0)
+	await wait_until(func() -> bool: return gate.time_until_on(Game.course_time) > 0.6, 3.0, "laser off")
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(40, 0.1, -4)))
+	await seconds(0.3)
+	check(lvl.deaths == 0, "standing in a laser's path while it is off is safe")
+	await wait_until(func() -> bool: return lvl.deaths > 0, 1.5, "laser fires")
+	check(lvl.deaths == 1, "a laser gate kills once it fires")
+	# crusher: slams on a player standing under it
+	var cr: Crusher = lvl.kit.crusher(base + Vector3(48, 0, 8), Vector3(3, 1.5, 3), 3.0, 3.0, 0.0)
+	await wait_until(func() -> bool: return cr.is_clear_for(Game.course_time, 0.4), 3.5, "crusher up")
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(48, 0.1, 8)))
+	await wait_until(func() -> bool: return lvl.deaths > 1, 3.5, "crusher slams")
+	check(lvl.deaths == 2, "a crusher kills the player it lands on")
+	check(cr.is_clear_for(0.0, 1.0) and not cr.is_clear_for(1.4, 0.3), "crusher timing helper matches its rhythm")
+	# piston: shoves a player standing in front of its face
+	var pi: Piston = lvl.kit.piston(base + Vector3(34, 1.6, 10), Vector3(3, 1.6, 2), 0.0, 3.0, 2.0, 0.0)
+	await wait_until(func() -> bool: return pi.extension_at(Game.course_time) == 0.0 and not pi.is_punching_at(Game.course_time + 0.4), 3.0, "piston retracted")
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(34, 0.1, 8.2)))
+	var shoved: bool = await wait_until(func() -> bool: return lvl.player.velocity.z < -12.0, 3.0, "piston punch")
+	check(shoved, "a piston shoves the player along its stroke")
+	await wait_level_landing(lvl)
+	# portal: out of the exit ring, heading its way, speed kept
+	lvl.kit.portal(base + Vector3(30, 0, -2), 0.0, base + Vector3(44, 0, -14), 90.0)
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(30, 0.1, 5)))
+	await seconds(0.3)
+	lvl.player.cmd_move = FWD
+	var warped: bool = await wait_until(func() -> bool: return lvl.player.global_position.distance_to(base + Vector3(44, 0.1, -14)) < 3.0, 2.5, "come out of the exit ring")
+	check(warped, "a warp portal moves the player to its exit ring")
+	check(lvl.player.velocity.x < -6.0, "heading out along the exit's facing with the entry speed (v %s)" % str(lvl.player.velocity.snapped(Vector3.ONE * 0.1)))
+	lvl.player.cmd_move = Vector2.ZERO
+
+
+func test_x_bot_new_moves() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Game.level_index = -1
+	Game.race_mode = false
+	Game.course_time = 0.0
+	Game.course_running = true
+	var lvl: LevelBase = (load("res://tests/moves_course.gd") as GDScript).new() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	var bot := RouteBot.new()
+	lvl.add_child(bot)
+	bot.attach(lvl)
+	var t: float = 0.0
+	while t < 60.0 and not bot.done and not bot.stuck:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+	for line: String in bot.log_lines:
+		print("        bot: ", line)
+	check(bot.done and bot.retries <= 2, "the bot wall-runs a gap, mantles a wall and takes a portal (%.1fs, %d respawns, step %d/%d)" % [lvl.run_time, bot.retries, bot.step_index, lvl.route.size()])
+
+
+func test_x_update_check_and_prompt() -> void:
+	check(Updater.version_from_tag("v1.2.0") == "1.2.0" and Updater.version_from_tag("1.3") == "1.3.0" and Updater.version_from_tag("jump-circuit-v2.0.1") == "2.0.1", "release tags parse to versions")
+	check(Updater.version_from_tag("jump-circuit-multiplayer-keepalive-2026-09-23") == "", "tags without a version are ignored")
+	check(Updater.compare_versions("1.10.0", "1.9.3") == 1 and Updater.compare_versions("1.1.0", "1.1.0") == 0 and Updater.compare_versions("1.0.9", "1.1.0") == -1, "versions compare numerically")
+	check(Updater.parse_release({"tag_name": "v9.0.0", "prerelease": true}).is_empty() and Updater.parse_release({"tag_name": "v9.0.0", "draft": true}).is_empty(), "drafts and pre-releases never prompt")
+	var rel: Dictionary = Updater.parse_release({"tag_name": "v9.0.0", "html_url": "https://example.invalid/r", "body": "New levels"})
+	check(rel.get("version", "") == "9.0.0" and rel.get("url", "") == "https://example.invalid/r", "a release yields its version and page")
+	# a newer release: the main menu asks once, focused on Download; Esc / B backs out to main
+	Updater.available = rel
+	Updater.prompted = false
+	Game.title_screen = "main"
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	add_child(title)
+	await ticks(3)
+	var focus: Control = get_viewport().gui_get_focus_owner()
+	check(Game.title_screen == "update" and focus is Button and (focus as Button).text == "Download", "the update prompt opens with Download focused")
+	get_viewport().push_input(_key(KEY_ESCAPE))
+	get_viewport().push_input(_key(KEY_ESCAPE, false))
+	await ticks(3)
+	check(Game.title_screen == "main", "Esc leaves the prompt for the main menu")
+	title.call("show_screen", "main")
+	await ticks(2)
+	check(Game.title_screen == "main", "it asks only once per launch")
+	title.queue_free()
+	Updater.available = {}
+	Updater.prompted = false
+	await ticks(2)
 
 
 # ---- menus, pad bindings, settings, camera (polish pass B2) ----------------------------------

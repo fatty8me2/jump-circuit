@@ -7,7 +7,9 @@ const LEVELS: Array[Dictionary] = [
 	{"id": "foundry", "name": "Bounce Foundry", "scene": "res://levels/level_2_foundry.tscn", "blurb": "Read the pads, steer the arcs, or burn."},
 	{"id": "balance", "name": "Balance Works", "scene": "res://levels/level_3_balance.tscn", "blurb": "Boards that answer to your weight - and tip you off."},
 	{"id": "clockwork", "name": "Clockwork Heights", "scene": "res://levels/level_4_clockwork.tscn", "blurb": "Watch the rhythm, commit, never stop."},
-	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_5_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon."},
+	{"id": "reef", "name": "Coral Depths", "scene": "res://levels/level_5_reef.tscn", "blurb": "A sunken reef. Ride the currents, mind the eels."},
+	{"id": "orbital", "name": "Orbital Drift", "scene": "res://levels/level_6_orbital.tscn", "blurb": "A station in low orbit. Run the walls, don't drift."},
+	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_7_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon."},
 ]
 const TITLE_SCENE: String = "res://ui/title.tscn"
 

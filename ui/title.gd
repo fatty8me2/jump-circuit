@@ -43,8 +43,11 @@ func _ready() -> void:
 	# the host's course picker starts on the last raced course (rematch = one click)
 	if Net.race_level >= 0:
 		_lobby_level = clampi(Net.race_level, 0, Game.LEVELS.size() - 1)
+	Updater.update_available.connect(func(_info: Dictionary) -> void:
+		if Game.title_screen == "main":
+			show_screen("main"))   # redirects to the update prompt (see show_screen)
 	var want: String = Game.title_screen
-	if want == "lobby" and not Net.active:
+	if (want == "lobby" and not Net.active) or want == "update":
 		want = "main"
 	show_screen(want)
 
@@ -106,6 +109,9 @@ func _process(dt: float) -> void:
 # ---- screens ------------------------------------------------------------------------------------
 
 func show_screen(id: String) -> void:
+	# a newer release on GitHub: the first visit to the main menu asks once per launch
+	if id == "main" and not Updater.available.is_empty() and not Updater.prompted:
+		id = "update"
 	if _screen != null:
 		_screen.queue_free()
 	_roster_box = null
@@ -127,6 +133,8 @@ func show_screen(id: String) -> void:
 			_screen = _settings_screen()
 		"victory":
 			_screen = _victory_screen()
+		"update":
+			_screen = _update_screen()
 		_:
 			_screen = _main_screen()
 	_ui.add_child(_screen)
@@ -145,7 +153,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	match Game.title_screen:
-		"levels", "victory":
+		"levels", "victory", "update":
 			show_screen("main")
 		"settings":
 			Settings.save_settings()  # same as the panel's Done
@@ -219,6 +227,8 @@ func _main_screen() -> Control:
 	if Game.dev_mode:
 		box.add_child(UiKit.button("Playground (dev)", func() -> void: Game.play_playground(), 380))
 	box.add_child(UiKit.button("Quit", func() -> void: get_tree().quit(), 380))
+	if not Updater.available.is_empty():
+		box.add_child(UiKit.button("Get update  -  v%s" % Updater.available["version"], func() -> void: Updater.open_download(), 380))
 	if Game.title_message != "":
 		box.add_child(UiKit.shadowed(UiKit.label(Game.title_message, 18, Color(1, 0.6, 0.5))))
 		Game.title_message = ""
@@ -228,6 +238,35 @@ func _main_screen() -> Control:
 	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn}
 	_focus_pref = openers.get(_prev_screen, play)
 	return _left_column(box)
+
+
+## Newer release on GitHub: what's new, and a button that opens its download page.
+func _update_screen() -> Control:
+	Updater.prompted = true
+	var info: Dictionary = Updater.available
+	var box: VBoxContainer = UiKit.vbox(12)
+	box.add_child(UiKit.shadowed(UiKit.label("UPDATE AVAILABLE", 40, UiKit.GOLD), 8))
+	box.add_child(UiKit.shadowed(UiKit.label("Jump Circuit v%s is out  -  you have v%s." % [info.get("version", "?"), Updater.current_version()], 22, Color.WHITE), 6))
+	var notes_text: String = str(info.get("notes", ""))
+	if notes_text != "":
+		var notes: Label = UiKit.label(notes_text, 17, UiKit.SOFT)
+		notes.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		notes.custom_minimum_size = Vector2(520, 0)
+		var panel: PanelContainer = UiKit.panel()
+		panel.add_child(notes)
+		box.add_child(panel)
+	box.add_child(UiKit.shadowed(UiKit.label("Download opens the release page: grab the new zip and replace your game folder.
+Your progress and settings are kept.", 16, Color(1, 1, 1, 0.75)), 5))
+	var download: Button = UiKit.button("Download", func() -> void:
+		Updater.open_download()
+		show_screen("main"), 380)
+	box.add_child(download)
+	box.add_child(UiKit.button("Remind Me Later", func() -> void: show_screen("main"), 380))
+	box.add_child(UiKit.button("Skip This Version", func() -> void:
+		Updater.skip_version()
+		show_screen("main"), 380))
+	_focus_pref = download
+	return _left_column(box, 560.0)
 
 
 func _levels_screen() -> Control:

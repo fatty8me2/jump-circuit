@@ -44,6 +44,26 @@ const THEMES: Dictionary = {
 		"decor": Color(0.72, 0.52, 0.22), "decor2": Color(0.40, 0.28, 0.45), "metal": Color(0.80, 0.62, 0.30),
 		"cloud_light": Color(1.0, 0.85, 0.80), "cloud_shade": Color(0.50, 0.40, 0.66),
 	},
+	# Coral Depths: a sunken reef - dense aqua water haze, light from far above, glowing coral.
+	"reef": {
+		"sky_top": Color(0.10, 0.45, 0.62), "sky_horizon": Color(0.12, 0.62, 0.70), "sky_bottom": Color(0.02, 0.12, 0.22),
+		"sun": Color(0.70, 0.95, 1.0), "sun_energy": 1.25, "sun_rot": Vector3(-72, 25, 0),
+		"ambient": Color(0.35, 0.75, 0.85), "ambient_energy": 0.95, "fog": Color(0.10, 0.48, 0.58), "fog_density": 0.0075,
+		"top": Color(0.92, 0.84, 0.66), "side": Color(0.16, 0.36, 0.42), "trim": Color(0.35, 1.0, 0.85),
+		"alt_top": Color(0.95, 0.55, 0.55), "accent": Color(1.0, 0.45, 0.40), "accent2": Color(0.85, 0.40, 1.0),
+		"decor": Color(0.95, 0.40, 0.55), "decor2": Color(0.30, 0.95, 0.80), "metal": Color(0.45, 0.58, 0.60),
+		"cloud_light": Color(0.60, 0.95, 1.0), "cloud_shade": Color(0.10, 0.40, 0.50),
+	},
+	# Orbital Drift: a space station in low orbit - black sky, hard white sunlight, a planet below.
+	"orbital": {
+		"sky_top": Color(0.0, 0.0, 0.02), "sky_horizon": Color(0.08, 0.06, 0.18), "sky_bottom": Color(0.02, 0.05, 0.14),
+		"sun": Color(1.0, 0.98, 0.94), "sun_energy": 1.9, "sun_rot": Vector3(-28, 120, 0),
+		"ambient": Color(0.35, 0.40, 0.60), "ambient_energy": 0.55, "fog": Color(0.05, 0.05, 0.12), "fog_density": 0.0004,
+		"top": Color(0.90, 0.92, 0.95), "side": Color(0.34, 0.37, 0.44), "trim": Color(1.0, 0.55, 0.12),
+		"alt_top": Color(0.62, 0.66, 0.74), "accent": Color(1.0, 0.55, 0.12), "accent2": Color(0.35, 0.85, 1.0),
+		"decor": Color(0.22, 0.24, 0.30), "decor2": Color(1.0, 0.80, 0.25), "metal": Color(0.70, 0.72, 0.78),
+		"cloud_light": Color(0.85, 0.90, 1.0), "cloud_shade": Color(0.30, 0.40, 0.60),
+	},
 	"ascent": {
 		"sky_top": Color(0.02, 0.03, 0.10), "sky_horizon": Color(0.20, 0.30, 0.58), "sky_bottom": Color(0.05, 0.08, 0.20),
 		"sun": Color(0.70, 0.80, 1.0), "sun_energy": 1.1, "sun_rot": Vector3(-42, 150, 0),

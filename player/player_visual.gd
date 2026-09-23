@@ -28,6 +28,8 @@ var _stride: float = 0.0
 var _flare: float = 0.0
 var _prev_hvel: Vector3 = Vector3.ZERO
 var _antenna_sway: Vector2 = Vector2.ZERO
+## Set by the player each frame while wall running: -1 wall on the left, +1 on the right.
+var wall_roll: float = 0.0
 var _step_quiet: float = 0.0   # no footstep right on top of a jump / land / bounce sound
 
 
@@ -231,6 +233,12 @@ func on_bounce(_strength: float) -> void:
 	_jump_dust.restart()
 
 
+## Caught a ledge: stretch up toward it, then the landing squash follows on top.
+func on_mantle() -> void:
+	_squash_vel += 6.0
+	_step_quiet = 0.12
+
+
 ## Banked a checkpoint: bulb flare and a little hop of the body.
 func on_checkpoint() -> void:
 	_flare = maxf(_flare, 1.2)
@@ -305,6 +313,8 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 		clampf(-local_acc.x * 0.004, -0.25, 0.25))
 	if not on_floor:
 		lean_target.x += clampf(-vel.y * 0.012, -0.25, 0.3)
+	# lean the body away from a wall we run on (feet on the wall, head out)
+	lean_target.y += wall_roll * 0.42
 	_lean = _lean.lerp(lean_target, 1.0 - exp(-9.0 * dt))
 	_root.rotation = Vector3(-_lean.x, 0, _lean.y)
 	# feet

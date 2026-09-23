@@ -10,6 +10,11 @@ signal bounced(strength: float)
 signal teleported
 ## A hazard (bumper, hammer) threw the player: `v` is the velocity it imposed.
 signal knocked(v: Vector3)
+## Latched onto a wall-run panel (`normal` points away from the wall).
+signal wall_run_started(normal: Vector3)
+signal wall_jumped
+## Caught a ledge and started climbing onto it.
+signal mantled
 
 @export var tuning: MovementTuning
 
@@ -34,6 +39,11 @@ var facing_dir: Vector3 = Vector3.FORWARD
 ## Stick / key magnitude this tick (0 while control is off). Read only by feedback
 ## (footsteps), never by movement.
 var move_input: float = 0.0
+## Party-mode power-ups scale movement through these; the main mode never touches them
+## (1.0 = the tuned game). speed: run speed; jump: takeoff speed; gravity: both gravities.
+var speed_mult: float = 1.0
+var jump_mult: float = 1.0
+var gravity_mult: float = 1.0
 
 var _coyote: float = 0.0
 var _buffer: float = 0.0
@@ -46,6 +56,19 @@ var _pad_cooldown: Dictionary = {}
 var _jump_press_queued: bool = false
 var _teleported: bool = false    # until the next move: ignore the pre-teleport floor/platform
 var _platform_layers_saved: int = 0
+# wall run: only on bodies with is_wall_run(). _wall_dir is the run direction along the wall.
+var _wall_body: Object = null
+var _wall_normal: Vector3 = Vector3.ZERO
+var _wall_dir: Vector3 = Vector3.ZERO
+var _wall_speed: float = 0.0
+var _wall_time: float = 0.0
+var _wall_coyote: float = 0.0
+var _wall_last: Object = null     # the panel last run on: no re-latch to it until we touch ground
+# mantle: only on bodies with is_ledge(). A short scripted climb, -1 when not climbing.
+var _mantle_t: float = -1.0
+var _mantle_from: Vector3 = Vector3.ZERO
+var _mantle_to: Vector3 = Vector3.ZERO
+var _mantle_dir: Vector3 = Vector3.ZERO
 
 
 func _ready() -> void:
@@ -111,10 +134,39 @@ func _physics_process(dt: float) -> void:
 		_pad_cooldown[key] = float(_pad_cooldown[key]) - dt
 		if float(_pad_cooldown[key]) <= 0.0:
 			_pad_cooldown.erase(key)
+	_wall_coyote = maxf(_wall_coyote - dt, 0.0)
 
-	# --- horizontal ---
+	# --- mantle: a scripted climb owns the body until it ends ---
+	if _mantle_t >= 0.0:
+		_mantle_step(dt)
+		return
+
+	# --- wall run / wall jump / ledge grab (airborne only) ---
 	var hv := Vector3(velocity.x, 0.0, velocity.z)
 	if on_floor:
+		_wall_last = null
+		if _wall_body != null:
+			_end_wall_run()
+	else:
+		if _wall_body != null:
+			_wall_time += dt
+			if _wall_time > t.wall_run_time or wish.dot(_wall_normal) > 0.5 or not _wall_still_there():
+				_end_wall_run()
+		elif air_time > 0.04 and control_enabled:
+			_try_wall_run(hv)
+		if _wall_body == null and control_enabled and _try_mantle(wish, hv):
+			_mantle_step(dt)
+			return
+	if (_wall_body != null or _wall_coyote > 0.0) and _buffer > 0.0 and control_enabled:
+		_wall_jump()
+		hv = Vector3(velocity.x, 0.0, velocity.z)
+
+	# --- horizontal ---
+	if _wall_body != null:
+		_wall_speed = maxf(_wall_speed, hv.dot(_wall_dir))
+		# hug the wall a little so the slide keeps touching it
+		hv = _wall_dir * _wall_speed - _wall_normal * 1.0
+	elif on_floor:
 		hv = _surface_move(hv, wish, dt)
 	else:
 		hv = _air_move(hv, wish, dt)
@@ -124,10 +176,12 @@ func _physics_process(dt: float) -> void:
 	velocity.z = hv.z
 
 	# --- vertical ---
-	if not on_floor:
-		var g: float = t.gravity_fall
+	if _wall_body != null:
+		velocity.y -= t.wall_run_gravity * dt
+	elif not on_floor:
+		var g: float = t.gravity_fall * gravity_mult
 		if velocity.y > 0.0:
-			g = t.gravity_rise
+			g = t.gravity_rise * gravity_mult
 			if _jumping and not jump_held:
 				g *= t.jump_cut_multiplier
 		if _jumping and jump_held and absf(velocity.y) < t.apex_hang_speed:
@@ -140,7 +194,7 @@ func _physics_process(dt: float) -> void:
 	if _buffer > 0.0 and (on_floor or _coyote > 0.0) and control_enabled:
 		_buffer = 0.0
 		_coyote = 0.0
-		velocity.y = t.jump_velocity
+		velocity.y = t.jump_velocity * jump_mult
 		_jumping = true
 		_no_snap = 0.12
 		_begin_flight_stats()
@@ -215,14 +269,15 @@ func _ground_move(hv: Vector3, wish: Vector3, dt: float, bias: Vector3 = Vector3
 	var speed: float = hv.length()
 	if wish.length() < 0.01:
 		return hv.move_toward(bias, t.ground_brake * grip * dt)
-	if speed > t.max_speed and hv.dot(wish) > 0.0:
+	var top: float = t.max_speed * speed_mult
+	if speed > top and hv.dot(wish) > 0.0:
 		# Carrying extra momentum (pad landing, platform fling): keep it, let the
 		# player steer it, bleed it gently instead of clamping.
-		var new_speed: float = move_toward(speed, t.max_speed, t.overspeed_friction * grip * dt)
+		var new_speed: float = move_toward(speed, top, t.overspeed_friction * grip * dt)
 		var dir: Vector3 = hv.normalized().slerp(wish.normalized(), clampf(t.overspeed_steer * maxf(grip, 0.35) * dt, 0.0, 1.0))
 		return dir.normalized() * new_speed
 	var rate: float = t.turn_accel if hv.dot(wish) < 0.0 else t.ground_accel
-	return hv.move_toward(wish * t.max_speed + bias, rate * grip * dt)
+	return hv.move_toward(wish * top + bias, rate * speed_mult * grip * dt)
 
 
 func _air_move(hv: Vector3, wish: Vector3, dt: float) -> Vector3:
@@ -233,13 +288,14 @@ func _air_move(hv: Vector3, wish: Vector3, dt: float) -> Vector3:
 	else:
 		# Input can redirect and correct, but never pushes speed past what the
 		# player already earned (or max_speed, whichever is higher).
-		var limit: float = maxf(speed, t.max_speed * wish.length())
-		hv += wish * t.air_accel * dt
+		var top: float = t.max_speed * speed_mult
+		var limit: float = maxf(speed, top * wish.length())
+		hv += wish * t.air_accel * speed_mult * dt
 		if hv.length() > limit:
 			hv = hv.normalized() * limit
 	speed = hv.length()
-	if speed > t.max_speed:
-		hv = hv.normalized() * move_toward(speed, t.max_speed, t.air_overspeed_drag * dt)
+	if speed > t.max_speed * speed_mult:
+		hv = hv.normalized() * move_toward(speed, t.max_speed * speed_mult, t.air_overspeed_drag * dt)
 	return hv
 
 
@@ -301,6 +357,7 @@ func _try_bounce(pad: Object, normal: Vector3) -> bool:
 		return false
 	var launch: Dictionary = pad.call("get_launch")
 	var v: Vector3 = launch["velocity"]
+	_cancel_moves()
 	if bool(launch["keep_horizontal"]):
 		velocity.y = v.y
 	else:
@@ -314,6 +371,192 @@ func _try_bounce(pad: Object, normal: Vector3) -> bool:
 	pad.call("on_bounced", self)
 	bounced.emit(v.length())
 	return true
+
+
+# ---- wall run and mantle ----------------------------------------------------
+
+## Ray from chest height; returns the hit only when it is a near-vertical face of a
+## body that answers `method` (is_wall_run / is_ledge).
+func _probe(from: Vector3, to: Vector3, method: String) -> Dictionary:
+	var q := PhysicsRayQueryParameters3D.create(from, to, collision_mask)
+	q.exclude = [get_rid()]
+	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(q)
+	if hit.is_empty():
+		return {}
+	var body: Object = hit["collider"]
+	var n: Vector3 = hit["normal"]
+	if body == null or not body.has_method(method) or absf(n.y) > 0.35:
+		return {}
+	return hit
+
+
+## Latch onto a wall-run panel beside or ahead of us while moving along it fast enough.
+func _try_wall_run(hv: Vector3) -> void:
+	var t: MovementTuning = tuning
+	if hv.length() < t.wall_run_min_speed or velocity.y < -t.wall_run_max_entry_fall:
+		return
+	var fwd: Vector3 = hv.normalized()
+	var chest: Vector3 = global_position + Vector3(0, 0.9, 0)
+	var reach: float = 0.38 + 0.4
+	for dir: Vector3 in [fwd.rotated(Vector3.UP, PI * 0.5), fwd.rotated(Vector3.UP, -PI * 0.5), fwd.rotated(Vector3.UP, PI * 0.25), fwd.rotated(Vector3.UP, -PI * 0.25), fwd]:
+		var hit: Dictionary = _probe(chest, chest + dir * reach, "is_wall_run")
+		if hit.is_empty() or hit["collider"] == _wall_last:
+			continue
+		var n: Vector3 = hit["normal"]
+		n = Vector3(n.x, 0.0, n.z).normalized()
+		var along_dir: Vector3 = n.cross(Vector3.UP).normalized()
+		if hv.dot(along_dir) < 0.0:
+			along_dir = -along_dir
+		var along: float = hv.dot(along_dir)
+		if along < t.wall_run_min_speed:
+			continue
+		_wall_body = hit["collider"]
+		_wall_normal = n
+		_wall_dir = along_dir
+		_wall_speed = maxf(along, t.wall_run_speed)
+		_wall_time = 0.0
+		_jumping = false
+		velocity.y = clampf(velocity.y, t.wall_run_lift, t.wall_run_lift_max)
+		_begin_flight_stats()
+		wall_run_started.emit(n)
+		return
+
+
+## Any part of the body (feet, middle, head) still alongside a panel.
+func _wall_still_there() -> bool:
+	for h: float in [0.2, 0.65, 1.1]:
+		var p: Vector3 = global_position + Vector3(0, h, 0)
+		if not _probe(p, p - _wall_normal * (0.38 + 0.5), "is_wall_run").is_empty():
+			return true
+	return false
+
+
+func _end_wall_run() -> void:
+	if _wall_body == null:
+		return
+	_wall_last = _wall_body
+	_wall_body = null
+	_wall_coyote = tuning.wall_coyote_time
+
+
+## Kick off the wall: away from it and up, keeping the speed along it.
+func _wall_jump() -> void:
+	var t: MovementTuning = tuning
+	var along: float = maxf(Vector3(velocity.x, 0.0, velocity.z).dot(_wall_dir), 0.0)
+	if _wall_body != null:
+		_wall_last = _wall_body
+	_wall_body = null
+	_wall_coyote = 0.0
+	_buffer = 0.0
+	_coyote = 0.0
+	velocity = _wall_dir * along + _wall_normal * t.wall_jump_push + Vector3(0, t.wall_jump_velocity, 0)
+	_jumping = true
+	_no_snap = 0.12
+	_begin_flight_stats()
+	wall_jumped.emit()
+	jumped.emit()
+
+
+## Catch a ledge in front of us (hands reach mantle_reach above the feet) and climb it.
+func _try_mantle(wish: Vector3, hv: Vector3) -> bool:
+	var t: MovementTuning = tuning
+	var dir: Vector3 = wish if wish.length() > 0.3 else hv
+	if dir.length() < 0.3 or velocity.y < -14.0:
+		return false
+	dir = Vector3(dir.x, 0.0, dir.z).normalized()
+	var feet: Vector3 = global_position
+	var hit: Dictionary = {}
+	for h: float in [1.6, 1.0, 0.4]:
+		hit = _probe(feet + Vector3(0, h, 0), feet + Vector3(0, h, 0) + dir * (0.38 + 0.4), "is_ledge")
+		if not hit.is_empty():
+			break
+	if hit.is_empty():
+		return false
+	var n: Vector3 = hit["normal"]
+	n = Vector3(n.x, 0.0, n.z).normalized()
+	if dir.dot(-n) < 0.5:
+		return false
+	# find the top just past the face, from hand-reach height down
+	var over: Vector3 = (hit["position"] as Vector3) - n * 0.3
+	var q := PhysicsRayQueryParameters3D.create(Vector3(over.x, feet.y + t.mantle_reach + 0.05, over.z), Vector3(over.x, feet.y + t.mantle_min, over.z), collision_mask)
+	q.exclude = [get_rid()]
+	var top: Dictionary = get_world_3d().direct_space_state.intersect_ray(q)
+	if top.is_empty() or (top["normal"] as Vector3).y < 0.8:
+		return false
+	var top_y: float = (top["position"] as Vector3).y
+	# room to stand up there
+	var sq := PhysicsShapeQueryParameters3D.new()
+	var cap := CapsuleShape3D.new()
+	cap.radius = 0.36
+	cap.height = 1.3
+	sq.shape = cap
+	var stand: Vector3 = Vector3(over.x, top_y, over.z) - n * 0.25
+	sq.transform = Transform3D(Basis.IDENTITY, stand + Vector3(0, 0.72, 0))
+	sq.collision_mask = collision_mask
+	sq.exclude = [get_rid()]
+	if not get_world_3d().direct_space_state.intersect_shape(sq, 1).is_empty():
+		return false
+	_mantle_t = 0.0
+	_mantle_from = feet
+	_mantle_to = stand + Vector3(0, 0.02, 0)
+	_mantle_dir = -n
+	velocity = Vector3.ZERO
+	_jumping = false
+	_buffer = 0.0
+	_coyote = 0.0
+	facing_dir = -n
+	mantled.emit()
+	return true
+
+
+## Up the face first (hands on the lip), then over onto the top.
+func _mantle_step(dt: float) -> void:
+	_mantle_t += dt
+	var k: float = clampf(_mantle_t / tuning.mantle_time, 0.0, 1.0)
+	var up: float = clampf(k / 0.6, 0.0, 1.0)
+	var over: float = clampf((k - 0.45) / 0.55, 0.0, 1.0)
+	up = 1.0 - (1.0 - up) * (1.0 - up)
+	over = over * over * (3.0 - 2.0 * over)
+	var p: Vector3 = _mantle_from
+	p.y = lerpf(_mantle_from.y, _mantle_to.y + 0.05, up)
+	var flat_to := Vector3(_mantle_to.x, 0.0, _mantle_to.z)
+	var flat_from := Vector3(_mantle_from.x, 0.0, _mantle_from.z)
+	var f: Vector3 = flat_from.lerp(flat_to, over)
+	p.x = f.x
+	p.z = f.z
+	global_position = p
+	velocity = Vector3.ZERO
+	grounded = false
+	air_time = 0.0
+	if k >= 1.0:
+		_mantle_t = -1.0
+		global_position = _mantle_to
+		velocity = _mantle_dir * tuning.mantle_exit_speed + Vector3(0, -1.0, 0)
+		last_ground_y = _mantle_to.y
+		_wall_last = null
+
+
+func is_wall_running() -> bool:
+	return _wall_body != null
+
+
+func is_mantling() -> bool:
+	return _mantle_t >= 0.0
+
+
+## Which side the wall is on, in the player's facing frame: -1 left, +1 right, 0 none.
+func wall_side() -> float:
+	if _wall_body == null:
+		return 0.0
+	var right: Vector3 = facing_dir.cross(Vector3.UP)
+	return -signf(_wall_normal.dot(right))
+
+
+func _cancel_moves() -> void:
+	_wall_body = null
+	_wall_last = null
+	_wall_coyote = 0.0
+	_mantle_t = -1.0
 
 
 func _inherit_platform_velocity() -> void:
@@ -352,6 +595,7 @@ func add_impulse(dv: Vector3) -> void:
 ## cannot overwrite the throw - same contact, same result.
 ## `grounded` is left alone so the floor's velocity is still inherited on takeoff.
 func knockback(v: Vector3) -> void:
+	_cancel_moves()
 	velocity = v
 	_jumping = false
 	_coyote = 0.0
@@ -364,6 +608,7 @@ func knockback(v: Vector3) -> void:
 func teleport(xform: Transform3D) -> void:
 	# Position only: the body stays unrotated (facing is visual, from facing_dir).
 	global_transform = Transform3D(Basis.IDENTITY, xform.origin)
+	_cancel_moves()
 	velocity = Vector3.ZERO
 	platform_velocity = Vector3.ZERO
 	floor_body = null
@@ -409,7 +654,8 @@ func _enter_tree() -> void:
 
 func _process(dt: float) -> void:
 	if visual != null:
-		visual.animate(dt, velocity, grounded, facing_dir)
+		visual.wall_roll = wall_side()
+		visual.animate(dt, velocity, grounded or is_wall_running(), facing_dir)
 	if _shadow != null and is_inside_tree():
 		BlobShadow.fit(_shadow, get_world_3d().direct_space_state, get_global_transform_interpolated().origin, collision_mask)
 
@@ -426,6 +672,10 @@ func connect_feedback() -> void:
 		Sfx.play("bounce", 0.04, 1.0, clampf(1.25 - strength / 60.0, 0.75, 1.2)))
 	# the hazard plays its own positional hit sound
 	knocked.connect(func(v: Vector3) -> void: visual.on_bounce(v.length()))
+	wall_run_started.connect(func(_n: Vector3) -> void: Sfx.play("step", 0.08, 0.45, 1.35))
+	mantled.connect(func() -> void:
+		visual.on_mantle()
+		Sfx.play("step", 0.05, 0.5, 0.8))
 	teleported.connect(func() -> void:
 		visual.on_respawn()
 		visual.snap_facing(facing_dir))
