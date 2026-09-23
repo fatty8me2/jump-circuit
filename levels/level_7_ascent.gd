@@ -22,6 +22,7 @@ func _configure() -> void:
 	theme_id = "ascent"
 	music_track = "b"
 	kill_y = -30.0
+	route_variants = 2
 
 
 func _build() -> void:
@@ -44,6 +45,12 @@ func _build() -> void:
 	cp = _stage_15(cp)
 	cp = _stage_16(cp)
 	cp = _stage_17(cp)
+	cp = _stage_18(cp)
+	cp = _stage_19(cp)
+	cp = _stage_20(cp)
+	cp = _stage_21(cp)
+	cp = _stage_22(cp)
+	_stage_23(cp)
 	_surroundings()
 
 
@@ -849,10 +856,11 @@ func _stage_17(o: Vector3) -> Vector3:
 	kit.plat(W(0, 0, -30.25), _sz(Vector3(2.6, 0.8, 8.5)), "alt", 0.0)
 	var presses: Array[Crusher] = []
 	var pz: Array[float] = [-6.3, -15.4, -19.8, -28.6]
-	var ph: Array[float] = [0.0, 0.3, 0.55, 0.8]
+	# a "green wave": each press trails the one before it by the time a sprinter needs between them
+	var ph: Array[float] = [0.0, 0.3, 0.133, 0.0]
 	for i: int in 4:
 		presses.append(kit.crusher(W(0, 0, pz[i]), Vector3(2.8, 1.8, 2.8), 3.2, 2.4, ph[i]))
-	var fence: LaserGate = _fence(0, 0, -33.3, 2.6, [0.4, 1.3], 2.4, 0.4, 0.1)
+	var fence: LaserGate = _fence(0, 0, -33.3, 2.6, [0.4, 1.3], 2.4, 0.4, 0.4)
 	# the merge deck (checkpoint), wide enough for the portal's exit ring
 	kit.plat(W(3.0, 0, -38.0), _sz(Vector3(11.0, 1.2, 7.0)), "main", 2.0)
 	kit.pillar(W(3.0, -1.2, -38.0), 1.4, 50.0)
@@ -861,12 +869,13 @@ func _stage_17(o: Vector3) -> Vector3:
 	var r2: Vector3 = W(6.0, 2.4, -12.8)
 	var pp: Vector3 = W(6.0, 3.4, -18.3)
 	kit.plat(r1, _sz(Vector3(1.3, 0.8, 1.3)), "accent", 0.7)
-	kit.plat(r2, _sz(Vector3(1.2, 0.8, 1.2)), "accent", 0.7)
+	var rb: BlinkPlatform = kit.blink(r2, Vector3(1.4, 0.5, 1.4), 2.4, 0.6, 0.2)
 	kit.plat(pp, _sz(Vector3(2.4, 0.8, 2.4)), "accent", 0.7)
 	kit.pillar(pp - Vector3(0, 0.8, 0), 0.7, 40.0)
 	var portal: WarpPortal = kit.portal(W(6.0, 3.4, -18.9), _yaw, W(4.5, 0, -35.3), _yaw, 7.0)
+	# the ring's mouth is guarded: a two-beam fence right in front of it
+	var guard: LaserGate = _fence(6.0, 3.4, -18.25, 2.4, [0.5, 1.4], 2.0, 0.5, 0.3)
 	kit.glow_strip(r1 + Vector3(0, 0.03, 0), Vector3(0.5, 0.06, 0.5), WarpPortal.ENTRY_COLOR)
-	kit.glow_strip(r2 + Vector3(0, 0.03, 0), Vector3(0.5, 0.06, 0.5), WarpPortal.ENTRY_COLOR)
 	if route_variant == 0:
 		r_walk(W(0, 0, -3.2))
 		r_until(func() -> bool: return _press_clear(presses[0], 0.0, 1.0))
@@ -880,14 +889,260 @@ func _stage_17(o: Vector3) -> Vector3:
 		r_walk(W(0, 0, -35.8))
 	else:
 		r_jump(W(2.0, 0, -2.2), r1)
+		r_until(func() -> bool: return rb.is_on_at(Game.course_time + 0.5) and rb.is_on_at(Game.course_time + 1.3))
 		r_jump(_edge(r1, 0.65, r2), r2)
-		r_jump(_edge(r2, 0.6, pp), pp + D(Vector3(0, 0, 0.5)))
+		r_jump(_edge(r2, 0.7, pp), pp + D(Vector3(0, 0, 0.7)))
+		r_until(func() -> bool: return _dark(guard, 0.0, 0.6))
 		r_portal(W(6.0, 3.4, -18.9), portal.exit_point())
 	var cp: Vector3 = W(1.5, 0, -38.8)
 	kit.checkpoint(cp, 0.0)
 	r_walk(cp)
 	r_checkpoint()
 	return cp
+
+
+# ---- stage 18: hologram alley - ride the billboards while their ads play, or climb the gantry ------------
+
+## Holographic billboard (AscentBillboard, a wall-run panel that blinks out) along the stage heading.
+func _billboard(x: float, y: float, z0: float, z1: float, period: float, on: float, phase: float, height: float = 7.0) -> AscentBillboard:
+	var b := AscentBillboard.new()
+	b.size = Vector3(absf(z0 - z1), height, 0.5)
+	b.period = period
+	b.on_fraction = on
+	b.phase = phase
+	b.rotation_degrees.y = _yaw + 90.0
+	b.position = W(x, y, (z0 + z1) * 0.5)
+	add_child(b)
+	kit.pillar(W(x, y - height * 0.5 - 0.4, (z0 + z1) * 0.5), 0.45, 40.0)
+	return b
+
+
+func _stage_18(o: Vector3) -> Vector3:
+	_frame(o, 0.0)
+	# the fork, readable from the checkpoint: magenta billboards on the left, the gold gantry on the right
+	kit.lamp(W(-4.0, 0, -1.6), 3.0, true, AscentBillboard.AD_COLORS[0])
+	kit.lamp(W(6.6, 0, -1.6), 3.0, true, LedgeBlock.LIP_COLOR)
+	kit.glow_strip(W(-2.0, 0.03, -2.2), Vector3(1.8, 0.06, 0.5), AscentBillboard.AD_COLORS[0])
+	kit.glow_strip(W(5.0, 0.03, -2.2), Vector3(1.8, 0.06, 0.5), LedgeBlock.LIP_COLOR)
+	# LEFT: three billboards zig-zag up the void; the ad rolls down the alley one screen per second
+	var xl: float = -2.0
+	var bb: Array[AscentBillboard] = [
+		_billboard(xl + 2.3, 1.2, -5.5, -12.0, 3.0, 0.7, 0.0),
+		_billboard(xl - 2.3, 6.0, -10.5, -18.5, 3.0, 0.7, -1.0 / 3.0),
+		_billboard(xl + 2.3, 9.0, -16.5, -24.5, 3.0, 0.7, -2.0 / 3.0),
+	]
+	# RIGHT: the gantry - blinking steps and a laser fence, slower but on solid-ish ground
+	var g1: Vector3 = W(5.0, 1.4, -6.9)
+	kit.plat(g1, Vector3(1.8, 0.8, 1.8), "alt", 0.7)
+	var g2: Vector3 = W(5.8, 3.0, -11.0)
+	var k2: BlinkPlatform = kit.blink(g2, Vector3(1.9, 0.5, 1.9), 2.4, 0.6, 0.0)
+	var gf: LaserGate = _fence(5.3, 3.0, -13.3, 3.0, [0.6, 1.5, 2.4], 2.4, 0.45, 0.45)
+	var g3: Vector3 = W(4.8, 4.6, -15.4)
+	kit.plat(g3, Vector3(1.8, 0.8, 1.8), "alt", 0.7)
+	var g4: Vector3 = W(5.6, 6.2, -19.4)
+	var k4: BlinkPlatform = kit.blink(g4, Vector3(1.9, 0.5, 1.9), 2.4, 0.6, 0.5)
+	var g5: Vector3 = W(4.5, 7.9, -23.6)
+	kit.plat(g5, _sz(Vector3(3.4, 0.8, 4.8)), "main", 1.0)
+	# both routes meet on the relay tower: 3.4 m over the gantry's last deck, so it takes a mantle
+	_ledge(Vector3(0.5, 11.3, -30.5), Vector3(12.0, 16.0, 9.0))
+	for s: float in [-1.0, 1.0]:
+		kit.banner(W(0.5 + s * 5.2, 11.3, -34.2), 4.4, AscentBillboard.AD_COLORS[0] if s < 0.0 else LedgeBlock.LIP_COLOR, _yaw)
+	if route_variant == 0:
+		r_walk(W(xl + 0.5, 0, -0.4))
+		r_until(func() -> bool:
+			var t: float = Game.course_time
+			return bb[0].solid_through(t, 0.0, 1.4) and bb[1].solid_through(t, 0.9, 2.4) and bb[2].solid_through(t, 1.8, 3.4))
+		r_wallrun(W(xl + 0.5, 0, -2.1), W(xl + 1.7, 1.4, -6.6), W(xl + 1.7, 1.4, -9.5), W(xl - 1.7, 5.5, -13.4))
+		r_wallrun(Vector3.ZERO, W(xl - 1.7, 5.5, -13.4), W(xl - 1.7, 5.5, -16.4), W(xl + 1.7, 8.5, -20.0), true, true)
+		r_wallrun(Vector3.ZERO, W(xl + 1.7, 8.5, -20.0), W(xl + 1.7, 8.5, -21.4), W(xl - 0.75, 11.3, -26.6), true, true)
+	else:
+		r_jump(W(5.0, 0, -2.35), g1)
+		r_until(func() -> bool:
+			return k2.is_on_at(Game.course_time + 0.45) and k2.is_on_at(Game.course_time + 1.2) and _dark(gf, 0.8, 1.5))
+		r_jump(_edge(g1, 0.9, g2), g2)
+		r_jump(_edge(g2, 0.95, g3), g3)
+		r_until(func() -> bool: return k4.is_on_at(Game.course_time + 0.45) and k4.is_on_at(Game.course_time + 1.3))
+		r_jump(_edge(g3, 0.9, g4), g4)
+		r_jump(_edge(g4, 0.95, g5), g5 + D(Vector3(0, 0, 1.2)))
+		r_mantle(W(4.5, 7.9, -25.2), W(4.5, 11.3, -27.6))
+	var cp: Vector3 = W(0.5, 11.3, -31.5)
+	kit.checkpoint(cp, 0.0)
+	r_walk(cp)
+	r_checkpoint()
+	return cp
+
+
+# ---- stage 19: the press stair - three mantles, each onto a lip a crusher slams --------------------------
+
+func _stage_19(o: Vector3) -> Vector3:
+	_frame(o, 0.0)
+	# the relay tower's far edge is at local z -3.5
+	var presses: Array[Crusher] = []
+	for i: int in 3:
+		var top: float = 3.2 * float(i + 1)
+		var zc: float = -8.5 - 6.0 * float(i)
+		_ledge(Vector3(0, top, zc), Vector3(4.4, 9.0 + 3.2 * float(i), 6.0))
+		presses.append(kit.crusher(W(0, top, zc + 1.3), Vector3(3.0, 1.6, 2.8), 3.0, 2.6, 0.35 * float(i)))
+	# the ram beam: a 1 m catwalk over the void, rams punching across it from both sides
+	kit.plat(W(0, 9.6, -29.7), _sz(Vector3(1.0, 0.6, 12.4)), "alt", 0.0)
+	var rams: Array[Piston] = [
+		_ram(Vector3(-1.8, 9.6 + 1.65, -27.0), 1.0, 2.2, 2.6, 2.0, 0.0),
+		_ram(Vector3(1.8, 9.6 + 1.65, -32.0), -1.0, 2.2, 2.6, 2.0, 0.35),
+	]
+	r_walk(W(0, 0, -2.6))
+	r_until(func() -> bool: return _press_clear(presses[0], 0.0, 1.8))
+	r_mantle(W(0, 0, -3.2), W(0, 3.2, -6.4))
+	r_walk(W(0, 3.2, -9.5))
+	r_until(func() -> bool: return _press_clear(presses[1], 0.0, 1.8))
+	r_mantle(W(0, 3.2, -10.1), W(0, 6.4, -12.4))
+	r_walk(W(0, 6.4, -15.5))
+	r_until(func() -> bool: return _press_clear(presses[2], 0.0, 1.8))
+	r_mantle(W(0, 6.4, -16.1), W(0, 9.6, -18.4))
+	r_walk(W(0, 9.6, -24.2))
+	r_until(func() -> bool: return _ram_clear(rams[0], 0.0, 0.75))
+	r_walk(W(0, 9.6, -29.5))
+	r_until(func() -> bool: return _ram_clear(rams[1], 0.0, 0.75))
+	var cp: Vector3 = _cp_deck(Vector3(0, 9.6, -38.4), -90.0)
+	r_walk(W(0, 9.6, -35.4))
+	r_walk(cp)
+	r_checkpoint()
+	return cp
+
+
+# ---- stage 20: the uplink - hop the packet stream up the belt, wall-run the void, mantle out of the kick ----
+
+func _stage_20(o: Vector3) -> Vector3:
+	_frame(o, -90.0)
+	var belt_c: Vector3 = W(0, 0, -19.5)
+	kit.conveyor(belt_c, Vector3(4.4, 0.4, 34.0), _yaw + 180.0, 5.0)
+	_body(belt_c, Vector3(4.4, 0.4, 34.0), _yaw + 180.0)
+	for s: float in [-1.0, 1.0]:
+		kit.glow_strip(W(s * 2.35, 0.05, -19.5), _sz(Vector3(0.12, 0.12, 34.0)), Look.c("accent2"))
+	var stream := AscentDataStream.new()
+	stream.length = 34.0
+	stream.width = 4.4
+	stream.speed = 6.5
+	stream.spacing = 6.8
+	stream.pattern = PackedStringArray(["full", "left", "right", "full", "right"])
+	stream.rotation_degrees.y = _yaw
+	stream.position = belt_c
+	add_child(stream)
+	kit.arch(W(0, 0, -36.4), 5.6, 3.6, _yaw, Look.c("accent2"))
+	# the dish deck at the top of the belt, then nothing but a wall-run panel over the drop
+	kit.plat(W(0, 0, -39.0), _sz(Vector3(4.4, 0.8, 5.0)), "main", 1.0)
+	_wall(2.3, 1.2, -44.5, -54.5)
+	_ledge(Vector3(-0.75, 3.8, -59.6), Vector3(4.5, 13.8, 7.0))
+	# SHORTCUT D: a 1 m block off the belt's start and a hidden warp ring on a second one - it drops you
+	# onto the belt half way up (into the packets), for two 85-90% leaps onto tiny tops
+	var s1: Vector3 = W(4.7, 0.8, -7.2)
+	var s2: Vector3 = W(4.7, 1.2, -13.4)
+	kit.plat(s1, Vector3(1.0, 0.8, 1.0), "accent", 0.5)
+	kit.plat(s2, Vector3(1.2, 0.8, 1.2), "accent", 0.5)
+	kit.portal(s2, _yaw, W(0, 0, -21.0), _yaw, 7.0)
+	_step({"kind": "ascent_stream", "to": W(0, 0, -36.9), "stream": stream})
+	r_wallrun(W(0.5, 0, -41.1), W(1.7, 1.4, -45.6), W(1.7, 1.4, -51.5), W(-0.75, 3.8, -56.7))
+	var cp: Vector3 = W(-0.75, 3.8, -60.5)
+	kit.checkpoint(cp, -90.0)
+	r_walk(cp)
+	r_checkpoint()
+	return cp
+
+
+# ---- stage 21: the piston express - stand in front of the rams and let them throw you, twice ------------
+
+func _flat_speed() -> float:
+	return Vector2(player.velocity.x, player.velocity.z).length()
+
+
+## Bot: hold still on the plate until the ram throws us, then fly (steering only toward) the landing.
+func _throw(plate: Vector3, land: Vector3) -> void:
+	_step({"kind": "a_fly", "to": plate, "until": func() -> bool: return not player.grounded and _flat_speed() > 10.0})
+	_step({"kind": "a_fly", "to": land, "damp": 0.0})
+
+
+func _stage_21(o: Vector3) -> Vector3:
+	_frame(o, -90.0)
+	# the ledge top's far edge is at local z -2.6
+	var p1: Vector3 = W(0, 0.6, -6.2)
+	kit.plat(p1, Vector3(1.8, 0.8, 1.8), "accent", 0.7)
+	var ram1: Piston = _ram(Vector3(-1.9, 0.6 + 1.6, -6.2), 1.0, 1.8, 2.0, 3.0, 0.0, 9.0)
+	# the gap to the plate is fenced, on the ram's rhythm: dark exactly while the ram is home
+	var f1: LaserGate = _fence(0, 0, -3.95, 2.4, [0.5, 1.4, 2.3], 3.0, 0.5, 0.55)
+	var l1: Vector3 = W(9.0, -1.0, -6.2)
+	kit.plat(l1, _sz(Vector3(6.0, 1.0, 4.5)), "main", 1.2)
+	var p2: Vector3 = W(14.4, -0.4, -6.2)
+	kit.plat(p2, Vector3(1.8, 0.8, 1.8), "accent", 0.7)
+	var ram2: Piston = kit.piston(W(14.4, -0.4 + 1.6, -6.2 + 1.9), Vector3(1.8, 1.6, 2.0), _yaw, 2.0, 3.0, 0.5, 9.0)
+	var l2: Vector3 = W(14.4, -2.0, -15.5)
+	kit.plat(l2, _sz(Vector3(4.5, 1.0, 6.0)), "main", 1.2)
+	_ledge(Vector3(14.4, 1.4, -22.75), Vector3(5.0, 12.0, 8.5))
+	r_walk(W(0, 0, -1.6))
+	r_until(func() -> bool: return _ram_clear(ram1, 0.2, 1.1) and _dark(f1, 0.0, 0.6))
+	r_jump(W(0, 0, -2.25), p1)
+	_throw(p1, l1)
+	r_until(func() -> bool: return _flat_speed() < 0.5 and _ram_clear(ram2, 0.15, 1.45))
+	r_jump(_edge(l1, 3.0, p2), p2)
+	_throw(p2, l2)
+	r_until(func() -> bool: return _flat_speed() < 0.5)
+	r_mantle(W(14.4, -2.0, -17.4), W(14.4, 1.4, -19.9))
+	var cp: Vector3 = W(14.4, 1.4, -24.5)
+	kit.checkpoint(cp, -90.0)
+	r_walk(cp)
+	r_checkpoint()
+	return cp
+
+
+# ---- stage 22: the billboard chimney - four blinking screens zig-zag up, mantle out of the last kick --------
+
+func _stage_22(o: Vector3) -> Vector3:
+	_frame(o, -90.0)
+	# the ledge top's far edge is at local z -2.5
+	var per: float = 3.2
+	var gap: float = 0.95
+	var bb: Array[AscentBillboard] = [
+		_billboard(2.3, 1.2, -5.5, -12.0, per, 0.72, 0.0),
+		_billboard(-2.3, 6.0, -10.5, -18.5, per, 0.72, -gap / per),
+		_billboard(2.3, 9.0, -16.5, -24.5, per, 0.72, -2.0 * gap / per),
+		_billboard(-2.3, 12.0, -22.5, -30.5, per, 0.72, -3.0 * gap / per),
+	]
+	_ledge(Vector3(1.5, 13.9, -33.5), Vector3(6.0, 17.0, 5.0))
+	r_walk(W(0.5, 0, -0.4))
+	r_until(func() -> bool:
+		var t: float = Game.course_time
+		for i: int in 4:
+			if not bb[i].solid_through(t, gap * float(i), gap * float(i) + 1.5):
+				return false
+		return true)
+	r_wallrun(W(0.5, 0, -2.1), W(1.7, 1.4, -6.6), W(1.7, 1.4, -9.5), W(-1.7, 5.5, -13.4))
+	r_wallrun(Vector3.ZERO, W(-1.7, 5.5, -13.4), W(-1.7, 5.5, -16.4), W(1.7, 8.5, -20.0), true, true)
+	r_wallrun(Vector3.ZERO, W(1.7, 8.5, -20.0), W(1.7, 8.5, -21.4), W(-1.7, 11.5, -25.0), true, true)
+	r_wallrun(Vector3.ZERO, W(-1.7, 11.5, -25.0), W(-1.7, 11.5, -26.4), W(0.75, 13.9, -31.6), true, true)
+	var cp: Vector3 = W(1.5, 13.9, -33.5)
+	kit.checkpoint(cp, 180.0)
+	r_walk(cp)
+	r_checkpoint()
+	return cp
+
+
+# ---- stage 23: the beacon run - boost through the fence, under the press, mantle, and the summit pad ------
+
+func _stage_23(o: Vector3) -> void:
+	_frame(o, 180.0)
+	# the ledge top's far edge is at local z -3.0
+	kit.boost(W(0, 0, -8.0), Vector3(3.0, 0.4, 10.0), _yaw, 20.0)
+	_body(W(0, 0, -8.0), Vector3(3.0, 0.4, 10.0), _yaw)
+	kit.glow_strip(W(0, 0.03, -12.8), _sz(Vector3(3.0, 0.06, 0.25)), Look.c("accent2"))
+	var fence: LaserGate = _fence(0, 0, -19.3, 4.0, [0.8, 1.7, 2.6], 2.4, 0.4, 0.0)
+	kit.plat(W(0, 0, -30.0), _sz(Vector3(4.4, 1.0, 9.0)), "main", 1.2)
+	# the press runs on the fence's rhythm: leave the strip as the beams die and it is up as you land
+	var press: Crusher = kit.crusher(W(0, 0, -30.5), Vector3(3.4, 1.6, 2.8), 3.0, 2.4, 0.12)
+	_ledge(Vector3(0, 3.6, -38.5), Vector3(4.4, 12.0, 8.0))
+	r_walk(W(0, 0, -1.0))
+	r_until(func() -> bool: return _dark(fence, 0.7, 1.6) and _press_clear(press, 1.5, 2.4))
+	r_jump(W(0, 0, -12.7), W(0, 0, -27.0))
+	_speed(20.0)
+	r_mantle(W(0, 0, -32.8), W(0, 3.6, -36.2))
+	_summit(W(0, 3.6, -39.0), _yaw)
 
 
 func _surroundings() -> void:
