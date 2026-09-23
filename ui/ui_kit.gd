@@ -22,9 +22,11 @@ static func theme() -> Theme:
 	hover.set_border_width_all(2)
 	var pressed := _box(GOLD.darkened(0.2), 10)
 	var disabled := _box(Color(0.12, 0.13, 0.18, 0.7), 10)
-	var focus := _box(Color(0, 0, 0, 0), 10)
+	# a ring just outside the button: easy to follow with a pad, even over a hovered button
+	var focus := _box(Color(0, 0, 0, 0), 12)
 	focus.border_color = GOLD
-	focus.set_border_width_all(2)
+	focus.set_border_width_all(3)
+	focus.set_expand_margin_all(3)
 	t.set_stylebox("normal", "Button", normal)
 	t.set_stylebox("hover", "Button", hover)
 	t.set_stylebox("pressed", "Button", pressed)

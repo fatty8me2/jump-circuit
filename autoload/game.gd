@@ -11,6 +11,9 @@ const LEVELS: Array[Dictionary] = [
 ]
 const TITLE_SCENE: String = "res://ui/title.tscn"
 
+## The last input came from a gamepad (true) or keyboard / mouse (false): prompts follow it.
+signal input_device_changed(pad: bool)
+
 ## Seconds since the course started. Drives every kinematic obstacle.
 var course_time: float = 0.0
 var course_running: bool = false
@@ -26,6 +29,8 @@ var shot_mode: bool = false
 var intro_shown_for: String = ""
 ## Race clock: smoothed error between course_time and the session clock.
 var _clock_err_avg: float = 0.0
+## See input_device_changed.
+var using_pad: bool = false
 
 
 func _ready() -> void:
@@ -91,6 +96,37 @@ func _setup_input() -> void:
 		ub.button_index = ui_pad[action] as JoyButton
 		if not InputMap.action_has_event(action, ub):
 			InputMap.action_add_event(action, ub)
+
+
+## Tracks which device the player is using so menus can show matching button prompts.
+func _input(event: InputEvent) -> void:
+	var pad: bool = using_pad
+	if event is InputEventJoypadButton:
+		pad = pad or event.is_pressed()
+	elif event is InputEventJoypadMotion:
+		pad = pad or absf((event as InputEventJoypadMotion).axis_value) > 0.5
+	elif (event is InputEventKey or event is InputEventMouseButton) and event.is_pressed():
+		pad = false
+	elif event is InputEventMouseMotion and (event as InputEventMouseMotion).relative.length() > 4.0:
+		pad = false
+	if pad != using_pad:
+		using_pad = pad
+		input_device_changed.emit(pad)
+
+
+## Menu input that should give a focus-less menu its starting point instead of doing nothing.
+static func is_menu_nav(event: InputEvent) -> bool:
+	for a: String in ["ui_up", "ui_down", "ui_left", "ui_right", "ui_accept", "ui_focus_next", "ui_focus_prev"]:
+		if event.is_action_pressed(a):
+			return true
+	return false
+
+
+## Button prompt for an action, for whichever device is in use ("R" / "Y").
+func prompt(action: String) -> String:
+	var keys: Dictionary = {"restart": "R", "jump": "Space", "pause": "Esc", "back": "Esc"}
+	var pads: Dictionary = {"restart": "Y", "jump": "A", "pause": "Start", "back": "B"}
+	return str((pads if using_pad else keys).get(action, action))
 
 
 func _physics_process(dt: float) -> void:

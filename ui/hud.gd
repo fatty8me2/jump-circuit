@@ -98,6 +98,14 @@ func _ready() -> void:
 	Net.roster_changed.connect(_rebuild_board)
 
 
+## Results panels: if focus got lost (a mouse click on the backdrop), the first pad /
+## arrow press lands on the panel's first live button.
+func _unhandled_input(event: InputEvent) -> void:
+	if _results != null and Game.is_menu_nav(event) and get_viewport().gui_get_focus_owner() == null:
+		UiKit.focus_first(_results)
+		get_viewport().set_input_as_handled()
+
+
 func _timer_visible() -> bool:
 	if Game.race_mode or Settings.timer_mode == "on":
 		return true
@@ -313,7 +321,7 @@ func show_results(time: float, prev_best: float, is_best: bool, deaths: int, pre
 	var last: bool = Game.level_index == Game.LEVELS.size() - 1
 	var next: Button = UiKit.button("Finale" if last else "Next Level", func() -> void: Game.next_level())
 	var buttons: Array[Button] = [next,
-		UiKit.button("Run It Again  (R)", func() -> void: Game.restart_level()),
+		UiKit.button("Run It Again  (%s)" % Game.prompt("restart"), func() -> void: Game.restart_level()),
 		UiKit.button("Level Select", func() -> void: Game.goto_title("levels"))]
 	for b: Button in buttons:
 		b.disabled = true      # live once readable, so a jump mashed into the gate can't skip it

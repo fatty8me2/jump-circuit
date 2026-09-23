@@ -1820,3 +1820,60 @@ func test_zf_host_assigned_colour_is_session_only() -> void:
 	Net._shutdown()
 	check(Settings.color_index == 3 and Net.preferred_color == -1, "ending the session gives the player's own colour back")
 	Settings.color_index = saved
+
+
+## A controller always works on the main menu: stick and D-pad move, A presses, the
+## controls line switches to pad prompts, and a menu that lost focus (a stray mouse
+## click) is picked up again by the first pad press instead of ignoring it.
+func test_zf_main_menu_controller() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	add_child(title)
+	title.call("show_screen", "main")
+	await ticks(3)
+	var focused := func() -> String:
+		var f: Control = get_viewport().gui_get_focus_owner()
+		return (f as Button).text if f is Button else ""
+	var first: String = focused.call()
+	# press and release a frame apart, like a real pad (Input merges stick motion within a frame)
+	var send := func(ev: InputEvent) -> void:
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+		var up: InputEvent = ev.duplicate()
+		if up is InputEventJoypadMotion:
+			(up as InputEventJoypadMotion).axis_value = 0.0
+		else:
+			up.set("pressed", false)
+		Input.parse_input_event(up)
+	var stick := InputEventJoypadMotion.new()
+	stick.device = 2
+	stick.axis = JOY_AXIS_LEFT_Y
+	stick.axis_value = 1.0
+	await send.call(stick)
+	await ticks(2)
+	var after_stick: String = focused.call()
+	check(first != "" and after_stick != "" and after_stick != first, "the left stick moves down the main menu ('%s' -> '%s')" % [first, after_stick])
+	var hint: Label = title.get("_controls_hint")
+	check(Game.using_pad and hint.text.begins_with("Left stick"), "the controls line switches to pad prompts")
+	var dpad := InputEventJoypadButton.new()
+	dpad.device = 2
+	dpad.button_index = JOY_BUTTON_DPAD_UP
+	dpad.pressed = true
+	await send.call(dpad)
+	await ticks(2)
+	check(focused.call() == first, "the D-pad moves back up")
+	get_viewport().gui_release_focus()
+	await send.call(stick)
+	await ticks(3)
+	check(focused.call() != "", "with nothing focused, the first stick push picks the menu up again (%s)" % focused.call())
+	var key := InputEventKey.new()
+	key.keycode = KEY_DOWN
+	key.pressed = true
+	await send.call(key)
+	await ticks(2)
+	check(not Game.using_pad and hint.text.begins_with("WASD"), "a key press switches the prompts back to keyboard")
+	title.queue_free()
+	await ticks(2)

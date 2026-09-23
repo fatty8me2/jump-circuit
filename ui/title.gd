@@ -19,6 +19,8 @@ var _upnp_label: Label
 var _focus_pref: Control
 ## Screen shown before the current one: main re-focuses the button that opened it.
 var _prev_screen: String = ""
+## Main menu controls line; follows the device in use.
+var _controls_hint: Label
 
 
 func _ready() -> void:
@@ -31,6 +33,7 @@ func _ready() -> void:
 	_ui.theme = UiKit.theme()
 	layer.add_child(_ui)
 	Sfx.music("title")
+	Game.input_device_changed.connect(_update_controls_hint)
 	Net.roster_changed.connect(_refresh_lobby)
 	Net.joined_lobby.connect(func() -> void:
 		_volt.set_accent(Settings.my_color())   # the host may have assigned us a free colour
@@ -138,6 +141,12 @@ func show_screen(id: String) -> void:
 ## Esc / pad B backs out of a sub-screen exactly like its Back / Done / Leave button.
 ## A focused LineEdit or an open dropdown consumes Esc before it gets here.
 func _unhandled_input(event: InputEvent) -> void:
+	# nothing focused (e.g. after a mouse click on a text box that then went away):
+	# the first stick / D-pad / A press picks the screen's starting button
+	if Game.is_menu_nav(event) and get_viewport().gui_get_focus_owner() == null and _screen != null:
+		UiKit.focus_first(_screen, _focus_pref)
+		get_viewport().set_input_as_handled()
+		return
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	match Game.title_screen:
@@ -158,6 +167,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 	Sfx.play("ui", 0.05, 0.6)
 	get_viewport().set_input_as_handled()
+
+
+func _update_controls_hint(pad: bool) -> void:
+	if _controls_hint == null or not is_instance_valid(_controls_hint):
+		return
+	_controls_hint.text = "Left stick move   A jump   Right stick look   Y retry   Start pause" if pad 		else "WASD move   Space jump   Mouse look   R retry   Esc pause"
 
 
 func _left_column(content: Control, width: float = 420.0) -> Control:
@@ -212,7 +227,9 @@ func _main_screen() -> Control:
 	if Game.title_message != "":
 		box.add_child(UiKit.shadowed(UiKit.label(Game.title_message, 18, Color(1, 0.6, 0.5))))
 		Game.title_message = ""
-	box.add_child(UiKit.shadowed(UiKit.label("WASD move   Space jump   Mouse look   R retry   Esc pause", 16, Color(1, 1, 1, 0.75)), 5))
+	_controls_hint = UiKit.shadowed(UiKit.label("", 16, Color(1, 1, 1, 0.75)), 5)
+	box.add_child(_controls_hint)
+	_update_controls_hint(Game.using_pad)
 	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn}
 	_focus_pref = openers.get(_prev_screen, play)
 	return _left_column(box)

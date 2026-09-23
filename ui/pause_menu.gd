@@ -57,6 +57,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		_show_menu(true)
 		get_viewport().set_input_as_handled()
 		return
+	if open and Game.is_menu_nav(event) and get_viewport().gui_get_focus_owner() == null:
+		# lost focus (a mouse click elsewhere): the first pad / arrow press finds the menu again
+		UiKit.focus_first(_settings if _settings != null else _menu)
+		get_viewport().set_input_as_handled()
+		return
 	if level == null or level.finished:
 		return
 	# one chain: Esc is both "pause" and ui_cancel; B (ui_cancel) never opens the menu
@@ -101,7 +106,7 @@ func _show_menu(focus_settings: bool = false) -> void:
 	box.add_child(UiKit.label(str(Game.level_info()["name"]), 18, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER))
 	var resume: Button = UiKit.button("Resume", func() -> void: set_open(false))
 	box.add_child(resume)
-	box.add_child(UiKit.button("Back to Checkpoint  (R)", func() -> void:
+	box.add_child(UiKit.button("Back to Checkpoint  (%s)" % Game.prompt("restart"), func() -> void:
 		set_open(false)
 		level.manual_respawn()))
 	if not Game.race_mode:
