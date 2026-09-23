@@ -115,6 +115,7 @@ func _physics_process(dt: float) -> void:
 			_do_moves(step, dt)
 		"b_mantle":
 			_do_b_mantle(step, dt)
+		"ascent_stream": _do_ascent_stream(step)
 
 
 func _next() -> void:
@@ -671,3 +672,24 @@ func _do_b_mantle(step: Dictionary, dt: float) -> void:
 		_next()
 		return
 	_do_moves({"kind": "m_climb", "from": step["from"], "top": top}, dt)
+
+
+# ---- final ascent upper spire (additive) ----------------------------------------------------------
+#   ascent_stream {to, stream, tol?, lead?}   walk to `to` against an AscentDataStream belt, tap-hopping every packet
+#                                             the stream says will reach us within `lead` s (duck typed: threat(p, t, reach))
+
+func _do_ascent_stream(step: Dictionary) -> void:
+	var s: Node3D = step["stream"]
+	var to: Vector3 = step["to"]
+	if player.grounded:
+		_steer_ground(to)
+		var v: Vector3 = _flat(player.velocity)
+		var lead: float = float(step.get("lead", 0.16))
+		if _step_time > 0.05 and bool(s.call("threat", player.global_position + v * lead, Game.course_time + lead, 0.5)):
+			player.press_jump()
+			player.cmd_jump = false
+	else:
+		player.cmd_jump = false
+		_set_wish(_flat(to - player.global_position).normalized())
+	if _flat_dist(to) < float(step.get("tol", 0.6)) and player.grounded:
+		_next()
