@@ -1,6 +1,32 @@
 extends LevelBase
-## 5. CORAL DEPTHS - a dive through a sunken reef, from the sunlit crest down to a glowing
-## temple in the deep. (Stage list: see the header block below _build.)
+## 5. CORAL DEPTHS - a dive through a sunken reef: over the sunlit crest, across a wrecked galleon,
+## through vent fields, tidal channels and eel dens to a glowing temple in the deep. Seventeen stages,
+## each ending on a checkpoint; the water darkens and the bioluminescence brightens as you go.
+##
+##  1 Reef Crest      warm-up hops over coral heads, the first jellyfish bounce  [shortcut: mantle the coral pillar]
+##  2 Anemone Shelf   mantle a 3.3 m coral wall, urchin-ringed stepping stones, a taller mantle
+##  3 Kelp Current    narrow kelp beams and small heads in a steady cross-current  [shortcut: 1 m knob in the current]
+##  4 Jelly Drift     bounce across a chasm on three drifting / bobbing jellyfish
+##  5 Hull Run        WALL RUN the broken stern over the gap, MANTLE onto the wreck's deck
+##  6 Cannon Deck     BRANCH: the gangway past three deck rams (PISTONS)  |  mantle the cargo, wall-run the torn
+##                    sail, drop from the crow's nest
+##  7 Thermal Vents   ride an erupting vent (ReefVent) up to a shelf, hop, ride a second vent into a MANTLE
+##  8 Tidal Channel   hop the channel between tidal surges (ReefSurge), then ride a surge over a 9 m gap
+##  9 Eel Gallery     BRANCH: slip three electric-eel LASER fences on a 1.2 m beam  |  two MANTLES and a knife ridge
+## 10 Clam Beds       run under a giant clam (CRUSHER), MANTLE up under another, hop two snapping clams
+## 11 Wreck Chimney   three WALL RUNS zig-zag up the split hull, MANTLE out of the last kick
+## 12 Bloom Gauntlet  BRANCH: drifting jelly and blooming (blink) coral  |  three coral heads to the coral PORTAL
+## 13 Jet Stream      a current jet (boost 20 m/s) flings you over a chasm, a jellyfish carries the speed on
+##                    [shortcut: hidden portal on a 1 m knob below the checkpoint]
+## 14 Kelp Wall       WALL RUN the kelp cliff, kick onto a jellyfish, catch the ledge (MANTLE) out of the bounce
+## 15 Moray Den       two coral heads swept by circling moray eels (sweepers)  [shortcut: wall-run the den's flank]
+## 16 Abyssal Vents   ride a vent up through a LASER grid timed to its eruption, a second vent into a MANTLE
+## 17 Sunken Temple   two clam doors on the causeway, WALL RUN the temple wall, MANTLE the steps, the eel gate
+##
+## Reef mechanics (own scripts): ReefJelly (drifting jellyfish bounce pads), ReefVent (erupting updraft
+## columns), ReefSurge (tidal surges on a rhythm). Composed set pieces: eel fences (lasers + morays),
+## giant clams (crushers + shells), eel sweepers, the wreck and the temple.
+## Route variants for the bot: 0 = main line, 1 = every alternative branch, 2 = main line + every shortcut.
 
 const ROCK_SHADER: Shader = preload("res://visual/reef_rock.gdshader")
 const SKY_SHADER: Shader = preload("res://visual/reef_sky.gdshader")
@@ -23,7 +49,8 @@ func _configure() -> void:
 	theme_id = "reef"
 	music_track = "a"
 	kill_y = -90.0
-	route_variants = 2
+	# 0 = main line, 1 = every alternative branch, 2 = main line taking every optional shortcut
+	route_variants = 3
 
 
 # ---- local-frame helpers --------------------------------------------------------------------
@@ -315,6 +342,7 @@ func _clam(c: Vector3, size: Vector3, lift: float, period: float, phase: float) 
 	var b: GPUParticles3D = ReefFx.bubble_stream(8.0, 6, 0.3, 0.18)
 	b.position = _w(c + Vector3(size.x * 0.5 + 0.45, 0.2, 0))
 	add_child(b)
+	_clam_puff(cr, _w(c), sz)
 	return cr
 
 
@@ -473,9 +501,16 @@ func _stage_1() -> Vector3:
 	var cp: Dictionary = _cp(Vector3(0.6, 4.6, -45.0))
 	_hop(start, a1)
 	_hop(a1, a2)
+	# SHORTCUT: a coral pillar beside the jellyfish - mantle it from a3 and leap straight to the shelf
+	var pil: Dictionary = _ledge(Vector3(-2.4, 5.4, -28.6), Vector3(1.6, 8.0, 1.6), "accent")
+	deco.pinnacle(_w(Vector3(-2.4, -2.6, -28.6)), 0.6, 30.0)
 	_hop(a2, a3)
-	r_jump(_w(_edge(a3, jc)), _w(jc))
-	r_pad(_w(jc), _w((l1["c"] as Vector3) + Vector3(0, 0, 0.5)))
+	if route_variant == 2:
+		r_mantle(_w(_edge(a3, pil["c"])), _w((pil["c"] as Vector3) + Vector3(0, 0, 0.3)))
+		_hop(pil, l1, Vector3(0, 0, 0.6))
+	else:
+		r_jump(_w(_edge(a3, jc)), _w(jc))
+		r_pad(_w(jc), _w((l1["c"] as Vector3) + Vector3(0, 0, 0.5)))
 	_hop(l1, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	return cp["c"]
@@ -522,9 +557,15 @@ func _stage_3() -> Vector3:
 	_hop(cp0, k1, Vector3(0, 0, 1.2))
 	r_walk(_w(Vector3(-1.0, 0, -10.8)))
 	r_jump(_w(Vector3(-1.0, 0, -11.65)), _w(k2["c"]))
-	_hop(k2, k3, Vector3(0, 0, 1.0))
-	r_walk(_w(Vector3(-3.4, 1.0, -24.6)))
-	r_jump(_w(Vector3(-3.4, 1.0, -25.15)), _w(k4["c"]))
+	# SHORTCUT: a 1 m coral knob out in the current - two long jumps that skip the kelp beam
+	var knob: Dictionary = _blk(Vector3(-0.6, 1.3, -22.6), 1.0, 1.0, "accent", 0.6)
+	if route_variant == 2:
+		_hop(k2, knob)
+		_hop(knob, k4)
+	else:
+		_hop(k2, k3, Vector3(0, 0, 1.0))
+		r_walk(_w(Vector3(-3.4, 1.0, -24.6)))
+		r_jump(_w(Vector3(-3.4, 1.0, -25.15)), _w(k4["c"]))
 	_hop(k4, k5)
 	_hop(k5, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
@@ -595,7 +636,7 @@ func _stage_6() -> Vector3:
 	# signposts at the fork: gold for the climb, red for the rams
 	kit.lamp(_w(Vector3(-3.6, 0, -2.4)), 2.6, true, LedgeBlock.LIP_COLOR)
 	kit.lamp(_w(Vector3(1.9, 0, -3.2)), 2.6, true, Color(1.0, 0.35, 0.25))
-	if route_variant == 0:
+	if route_variant != 1:
 		# main: run the gangway, slipping past each ram between shots, hop the two broken planks
 		for i: int in rams.size():
 			var p: Piston = rams[i]
@@ -749,7 +790,7 @@ func _stage_9() -> Vector3:
 	kit.glow_strip(_w(Vector3(-4.0, 0.03, -9.0)), _sz(Vector3(1.0, 0.06, 1.4)), Color(1.0, 0.35, 0.25))
 	kit.glow_strip(_w(Vector3(4.0, 0.03, -9.0)), _sz(Vector3(1.4, 0.06, 1.4)), LedgeBlock.LIP_COLOR)
 	_hop(cp0, fork, Vector3(0, 0, 0.5))
-	if route_variant == 0:
+	if route_variant != 1:
 		r_walk(_w(Vector3(-4.0, 0, -9.4)))
 		r_walk(_w(Vector3(-4.0, 0, -11.8)))
 		r_until(func() -> bool: return _dark(fences[0], 0.05, 0.75))
@@ -838,9 +879,10 @@ func _stage_12() -> Vector3:
 	for b: Dictionary in [r1, r2]:
 		kit.glow_strip(_w((b["c"] as Vector3) + Vector3(0, 0.03, 0)), Vector3(0.5, 0.06, 0.5), WarpPortal.ENTRY_COLOR)
 	kit.arch(_w(Vector3(5.8, 3.0, -19.6)), 3.6, 3.4, _yaw, ReefDecor.PINK.darkened(0.2))
+	_portal_arrival(portal.exit_point())
 	for side: float in [-1.0, 1.0]:
 		deco.staghorn(_w(Vector3(5.8 + side * 2.0, 3.0, -19.6)), 1.3, ReefDecor.ORANGE)
-	if route_variant == 0:
+	if route_variant != 1:
 		r_walk(_w(Vector3(0, 0, -1.2)))
 		r_until(func() -> bool: return _blink_on(bl1, 0.9, 2.3))
 		r_jump_onto(_w(Vector3(0, 0, -2.65)), j1)
@@ -877,13 +919,21 @@ func _stage_13() -> Vector3:
 		var b: GPUParticles3D = ReefFx.bubble_stream(2.0, 10, 0.5, 0.2)
 		b.position = _w(Vector3(0, 0.1, -4.5 - 3.5 * float(i)))
 		add_child(b)
-	kit.ring(_w(Vector3(0, 1.4, -14.2)), 1.8, ReefDecor.CYAN, Vector3(90, _yaw, 0), 6.0)
-	r_walk(_w(Vector3(0, 0, -2.2)))
-	r_jump(_w(Vector3(0, 0, -13.6)), _w(Vector3(0, -4.0, -33.0)))
-	route[route.size() - 1]["speed"] = 20.0
-	r_walk(_w(Vector3(0, -4.0, -40.5)))
-	r_jump(_w(Vector3(0, -4.0, -41.65)), _w(jc))
-	r_pad(_w(jc), _w(Vector3(0, -3.0, -56.5)))
+	kit.ring(_w(Vector3(0, 2.0, -14.2)), 1.9, ReefDecor.CYAN, Vector3(90, _yaw, 0))
+	# SHORTCUT: a hidden portal on a 1 m knob tucked below the checkpoint's corner (a 90% leap) - out at L2
+	var hk: Vector3 = Vector3(5.6, -1.0, -9.0)
+	_blk(hk, 1.0, 1.0, "accent", 0.6)
+	kit.portal(_w(hk), _yaw, _w(Vector3(0, -3.0, -54.4)), _yaw, 6.0)
+	_portal_arrival(_w(Vector3(0, -3.0, -54.4)) + _b * Vector3(0, 0.15, -0.9))
+	if route_variant == 2:
+		r_jump(_w(Vector3(2.6, 0, -2.65)), _w(hk + Vector3(0, 0.3, 0)))
+	else:
+		r_walk(_w(Vector3(0, 0, -2.2)))
+		r_jump(_w(Vector3(0, 0, -13.6)), _w(Vector3(0, -4.0, -33.0)))
+		route[route.size() - 1]["speed"] = 20.0
+		r_walk(_w(Vector3(0, -4.0, -40.5)))
+		r_jump(_w(Vector3(0, -4.0, -41.65)), _w(jc))
+		r_pad(_w(jc), _w(Vector3(0, -3.0, -56.5)))
 	_hop(l2, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	return cp["c"]
@@ -914,10 +964,17 @@ func _stage_15() -> Vector3:
 	_disc(Vector3(1.0, -4.5, -23.5), 4.5, "alt")
 	var e2: Sweeper = _eel_sweeper(Vector3(1.0, -4.5, -23.5), 4.2, 3, 4.2, 0.4)
 	var cp: Dictionary = _cp(Vector3(0, -6.0, -36.0))
+	# SHORTCUT: a wall-run panel along the den's flank - run it off the first disc, skip the second den
+	_panel(6.3, -1.0, -13.0, -29.0)
 	var land1: Vector3 = _w(Vector3(0, -2.0, -6.6))
 	var land2: Vector3 = _w(Vector3(0.9, -4.5, -20.0))
 	r_until(func() -> bool: return _bar_far(e1, land1, 0.4, 0.95, 0.8))
 	_hop(_area(Vector3.ZERO, 3.0, 3.0), d1, Vector3(0, 0, 3.4))
+	if route_variant == 2:
+		route.append({"kind": "b_sweep", "to": _w(Vector3(2.4, -2.0, -9.6)), "sweeper": e1, "tol": 0.5})
+		r_wallrun(_w(Vector3(3.6, -2.0, -11.6)), _w(Vector3(5.65, -0.6, -16.5)), _w(Vector3(5.65, -0.6, -25.0)), _w((cp["c"] as Vector3) + Vector3(1.0, 0, 1.4)))
+		r_checkpoint()
+		return cp["c"]
 	route.append({"kind": "b_sweep", "to": _w(Vector3(0, -2.0, -13.9)), "sweeper": e1, "tol": 0.5})
 	var d1n: Node3D = d1["node"]
 	route.append({"kind": "h_hop", "node": d1n, "local": d1n.global_transform.affine_inverse() * _w(Vector3(0.1, -2.0, -13.9)), "sweepers": [e1],
@@ -1041,5 +1098,352 @@ func _reef_materials() -> void:
 		m.material_override = r
 
 
+## Every point the route passes (takeoffs, landings, walk targets) - background set dressing keeps clear of them.
+func _route_points() -> Array[Vector3]:
+	var pts: Array[Vector3] = []
+	for st: Dictionary in route:
+		for key: String in ["from", "to", "entry", "exit", "top"]:
+			if st.has(key) and st[key] is Vector3 and (st[key] as Vector3) != Vector3.ZERO:
+				pts.append(st[key])
+	for p: Vector3 in _cp_world:
+		pts.append(p)
+	return pts
+
+
+func _clear_of(p: Vector3, pts: Array[Vector3], dist: float) -> bool:
+	for q: Vector3 in pts:
+		if Vector2(p.x - q.x, p.z - q.z).length() < dist and p.y < q.y + 30.0:
+			return false
+	return true
+
+
 func _surroundings() -> void:
-	pass
+	var pts: Array[Vector3] = _route_points()
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for p: Vector3 in pts:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	var mid: Vector3 = (lo + hi) * 0.5
+	var span: Vector3 = hi - lo
+	var rng: RandomNumberGenerator = kit.rng
+	# the sea surface far overhead, and god rays slanting down from it
+	var sea_top: float = hi.y + 95.0
+	deco.surface(Vector3(mid.x, sea_top, mid.z), maxf(span.x, span.z) + 500.0)
+	for i: int in 22:
+		var p := Vector3(rng.randf_range(lo.x - 50.0, hi.x + 50.0), sea_top - 2.0, rng.randf_range(lo.z - 50.0, hi.z + 50.0))
+		deco.light_shaft(p, rng.randf_range(170.0, 230.0), rng.randf_range(3.0, 7.0), rng.randf_range(10.0, 22.0), Vector3(rng.randf_range(-0.14, 0.14), 0, rng.randf_range(-0.1, 0.1)))
+	# the sea floor: pale sand, dunes, boulders; kelp forests swaying up out of it
+	var floor_y: float = -46.0
+	var sand := PlaneMesh.new()
+	sand.size = Vector2(span.x + 700.0, span.z + 700.0)
+	var sand_mi := Look.mesh_node(sand, Look.flat(Color(0.55, 0.52, 0.42), 1.0), Vector3(mid.x, floor_y, mid.z))
+	sand_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(sand_mi)
+	for i: int in 40:
+		var d := Look.sphere(1.0, Look.flat(Color(0.6, 0.56, 0.45), 1.0), Vector3(rng.randf_range(lo.x - 120.0, hi.x + 120.0), floor_y - 2.0, rng.randf_range(lo.z - 120.0, hi.z + 120.0)))
+		d.scale = Vector3(rng.randf_range(12.0, 30.0), rng.randf_range(2.5, 5.0), rng.randf_range(8.0, 20.0))
+		d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(d)
+	for i: int in 9:
+		var c := Vector3(rng.randf_range(lo.x - 40.0, hi.x + 40.0), floor_y, rng.randf_range(lo.z - 40.0, hi.z + 40.0))
+		deco.kelp_forest(c, Vector2(rng.randf_range(18.0, 34.0), rng.randf_range(18.0, 34.0)), 60, 18.0, 40.0)
+	# coral mountains: huge crusted spires crowned with giant coral, well clear of the route
+	var placed: int = 0
+	var tries: int = 0
+	while placed < 26 and tries < 400:
+		tries += 1
+		var p := Vector3(rng.randf_range(lo.x - 90.0, hi.x + 90.0), 0.0, rng.randf_range(lo.z - 90.0, hi.z + 90.0))
+		if not _clear_of(p + Vector3(0, -50, 0), pts, 26.0):
+			continue
+		var top_y: float = rng.randf_range(lo.y - 10.0, hi.y + 20.0)
+		p.y = top_y
+		var r: float = rng.randf_range(3.0, 7.0)
+		deco.pinnacle(p, r, top_y - floor_y + 4.0)
+		var col: Color = deco.glow_color()
+		deco.staghorn(p + Vector3(0, -0.5, 0), r * 0.9, col)
+		deco.brain(p + Vector3(r * 0.6, -0.8, r * 0.3), r * 0.6)
+		deco.sea_fan(p + Vector3(-r * 0.5, -0.6, -r * 0.4), r * 1.6)
+		if rng.randf() < 0.6:
+			var b: GPUParticles3D = ReefFx.bubble_stream(40.0, 10, r * 0.4, 0.3)
+			b.position = p + Vector3(0, 0.2, 0)
+			add_child(b)
+		placed += 1
+	_wreck()
+	_temple()
+	# schools of fish and gliding mantas
+	for i: int in _cp_world.size():
+		if i % 2 == 1:
+			continue
+		var s := ReefSchool.new()
+		s.count = rng.randi_range(24, 40)
+		s.radius = rng.randf_range(3.0, 5.0)
+		s.wander = Vector3(rng.randf_range(6.0, 12.0), 2.0, rng.randf_range(6.0, 12.0))
+		s.speed = rng.randf_range(0.35, 0.6)
+		var cols: Array[Color] = [Color(0.95, 0.85, 0.35), Color(0.5, 0.85, 1.0), Color(1.0, 0.55, 0.4), Color(0.7, 1.0, 0.6)]
+		s.color_a = cols[rng.randi() % cols.size()]
+		s.color_b = cols[rng.randi() % cols.size()]
+		var side: float = -1.0 if rng.randf() < 0.5 else 1.0
+		s.position = _cp_world[i] + Vector3(side * rng.randf_range(16.0, 24.0), rng.randf_range(2.0, 9.0), rng.randf_range(-12.0, 12.0))
+		add_child(s)
+	for i: int in 4:
+		var c := Vector3(rng.randf_range(lo.x, hi.x), rng.randf_range(hi.y + 12.0, hi.y + 30.0), rng.randf_range(lo.z, hi.z))
+		_manta(c, rng.randf_range(30.0, 55.0), rng.randf_range(28.0, 45.0) * (1.0 if i % 2 == 0 else -1.0))
+	# ambient life along the whole route: marine snow sinking, plankton glinting, a bubble haze
+	for i: int in _cp_world.size():
+		var here: Vector3 = _cp_world[i]
+		var nxt: Vector3 = _cp_world[i + 1] if i + 1 < _cp_world.size() else _finish_pos
+		var c: Vector3 = (here + nxt) * 0.5 + Vector3(0, 5.0, 0)
+		var ext := Vector3(absf(nxt.x - here.x) + 34.0, 26.0, absf(nxt.z - here.z) + 34.0)
+		var snow: GPUParticles3D = ReefFx.marine_snow(ext, 90)
+		snow.position = c
+		add_child(snow)
+		var glint: GPUParticles3D = ReefFx.plankton(ext * Vector3(0.8, 0.7, 0.8), deco.glow_color(), 44)
+		glint.position = c
+		add_child(glint)
+	var start_snow: GPUParticles3D = ReefFx.marine_snow(Vector3(40, 24, 40), 80)
+	start_snow.position = Vector3(0, 6, -10)
+	add_child(start_snow)
+	var start_glint: GPUParticles3D = ReefFx.plankton(Vector3(30, 14, 30), ReefDecor.CYAN, 40)
+	start_glint.position = Vector3(0, 4, -12)
+	add_child(start_glint)
+
+
+## A manta ray gliding round a wide circle (visual only).
+func _manta(center: Vector3, radius: float, period: float) -> void:
+	var holder := Node3D.new()
+	holder.set_script(preload("res://visual/spin.gd"))
+	holder.set("period", period)
+	var m := Node3D.new()
+	var skin: StandardMaterial3D = Look.flat(Color(0.12, 0.16, 0.24), 0.6)
+	var glow: StandardMaterial3D = Look.flat(ReefDecor.CYAN, 0.3, 0.0, 1.8)
+	var body := Look.sphere(1.0, skin)
+	body.scale = Vector3(1.4, 0.35, 2.2)
+	m.add_child(body)
+	for side: float in [-1.0, 1.0]:
+		var wing := Node3D.new()
+		wing.set_script(preload("res://visual/reef_sway.gd"))
+		wing.set("amount", 0.22)
+		wing.set("speed", 1.4)
+		wing.set("offset", 0.0 if side > 0.0 else PI)
+		var pm := PrismMesh.new()
+		pm.size = Vector3(4.2, 0.18, 2.6)
+		var w := Look.mesh_node(pm, skin, Vector3(side * 2.4, 0, 0.2))
+		w.rotation = Vector3(PI * 0.5, 0, side * PI * 0.5)
+		wing.add_child(w)
+		wing.add_child(Look.box(Vector3(2.8, 0.06, 0.12), glow, Vector3(side * 2.0, 0.1, 0.2)))
+		m.add_child(wing)
+	var tail := Look.cylinder(0.06, 3.5, skin, Vector3(0, 0, 3.6), 0.02, 6)
+	tail.rotation.x = PI * 0.5
+	m.add_child(tail)
+	m.position = Vector3(radius, 0, 0)
+	m.rotation.y = PI if period > 0.0 else 0.0
+	holder.add_child(m)
+	holder.position = center
+	add_child(holder)
+
+
+## The wreck the Hull Run and Cannon Deck stages cross: a listing hull under the decks, ribs, a broken bow.
+func _wreck() -> void:
+	if _cp_world.size() < 6:
+		return
+	var a: Vector3 = _cp_world[4]
+	var b: Vector3 = _cp_world[5]
+	var wood: StandardMaterial3D = Look.flat(Color(0.28, 0.2, 0.15), 0.95)
+	var dark: StandardMaterial3D = Look.flat(Color(0.16, 0.12, 0.1), 0.95)
+	var rust: StandardMaterial3D = Look.flat(Color(0.45, 0.28, 0.18), 0.8, 0.3)
+	var glass: StandardMaterial3D = Look.flat(Color(1.0, 0.8, 0.45), 0.3, 0.0, 2.0)
+	var hull := Node3D.new()
+	var length: float = b.x - a.x + 2.0
+	var h: float = 14.0
+	hull.add_child(Look.box(Vector3(length, h, 10.5), wood, Vector3(0, -h * 0.5 - 1.0, 0)))
+	hull.add_child(Look.box(Vector3(length - 4.0, 4.0, 7.0), wood, Vector3(0, -h - 3.0, 0)))
+	for i: int in int(length / 3.0):
+		var x: float = -length * 0.5 + 1.5 + float(i) * 3.0
+		hull.add_child(Look.box(Vector3(0.45, h + 0.4, 11.0), dark, Vector3(x, -h * 0.5 - 1.0, 0)))
+	for i: int in int(length / 5.0):
+		var x2: float = -length * 0.5 + 3.0 + float(i) * 5.0
+		for side: float in [-1.0, 1.0]:
+			var port := Look.cylinder(0.4, 0.3, glass, Vector3(x2, -4.0, side * 5.3), -1.0, 12)
+			port.rotation.x = PI * 0.5
+			hull.add_child(port)
+	# an anchor chain hanging off the side, and a rusted cannon or two poking out
+	for i: int in 3:
+		var cn := Look.cylinder(0.35, 2.4, rust, Vector3(-length * 0.25 + float(i) * length * 0.25, -2.2, 5.6), 0.28, 10)
+		cn.rotation.x = PI * 0.5
+		hull.add_child(cn)
+	hull.position = Vector3((a.x + b.x) * 0.5 + 1.0, a.y - 1.0, a.z)
+	hull.rotation.x = deg_to_rad(-5.0)
+	add_child(hull)
+	for i: int in 4:
+		var bs: GPUParticles3D = ReefFx.bubble_stream(24.0, 8, 0.4, 0.26)
+		bs.position = hull.position + Vector3(-length * 0.4 + float(i) * length * 0.27, -8.0, 5.8)
+		add_child(bs)
+
+
+## The sunken temple behind the finish: a stepped ziggurat with glowing glyph bands, and pillars down the causeway.
+func _temple() -> void:
+	if _finish_pos == Vector3.ZERO:
+		return
+	_frame(_cp_world[_cp_world.size() - 1], 0.0)
+	var stone: StandardMaterial3D = Look.flat(Color(0.42, 0.46, 0.5), 0.9)
+	var moss: StandardMaterial3D = Look.flat(Color(0.28, 0.42, 0.3), 0.95)
+	var glyph: StandardMaterial3D = Look.flat(ReefDecor.CYAN, 0.3, 0.0, 2.6)
+	var base: Vector3 = _finish_pos + Vector3(0, 0, -16.0)
+	for i: int in 4:
+		var w: float = 34.0 - float(i) * 7.0
+		var y: float = base.y - 6.0 + float(i) * 5.0
+		kit.block(Vector3(base.x, y, base.z - float(i) * 2.0), Vector3(w, 5.0, 16.0 - float(i) * 2.5), stone.albedo_color, false)
+		kit.glow_strip(Vector3(base.x, y + 1.2, base.z - float(i) * 2.0 + (8.0 - float(i) * 1.25) + 0.05), Vector3(w - 2.0, 0.25, 0.1), ReefDecor.CYAN)
+		add_child(Look.box(Vector3(w + 0.2, 0.5, 16.2 - float(i) * 2.5), moss, Vector3(base.x, y + 2.45, base.z - float(i) * 2.0)))
+	# the shrine on top and its beacon
+	var top := Vector3(base.x, base.y + 11.5, base.z - 6.0)
+	kit.arch(top, 6.0, 6.0, 0.0, Color(0.42, 0.46, 0.5))
+	add_child(Look.sphere(1.3, Look.flat(Color(0.6, 1.0, 0.95), 0.2, 0.0, 3.5), top + Vector3(0, 3.2, 0)))
+	var beacon := OmniLight3D.new()
+	beacon.light_color = ReefDecor.CYAN
+	beacon.light_energy = 3.0
+	beacon.omni_range = 40.0
+	beacon.position = top + Vector3(0, 3.2, 0)
+	add_child(beacon)
+	var rise: GPUParticles3D = ReefFx.bubble_stream(60.0, 24, 1.2, 0.35)
+	rise.position = top + Vector3(0, 4.0, 0)
+	add_child(rise)
+	var halo: GPUParticles3D = ReefFx.plankton(Vector3(16, 12, 16), ReefDecor.CYAN, 60)
+	halo.position = top + Vector3(0, 3.0, 0)
+	add_child(halo)
+	# pillars lining the causeway and the finish terrace
+	for k: int in 4:
+		for side: float in [-1.0, 1.0]:
+			var p: Vector3 = _w(Vector3(side * 4.2, 0, -4.0 - float(k) * 3.4))
+			kit.block(p + Vector3(0, -3.0, 0), Vector3(1.1, 9.0, 1.1), stone.albedo_color, false)
+			add_child(Look.box(Vector3(1.4, 0.4, 1.4), glyph, p + Vector3(0, 1.6, 0)))
+	for side: float in [-1.0, 1.0]:
+		var gp: Vector3 = _finish_pos + Vector3(side * 5.2, 0, -2.5)
+		kit.block(gp + Vector3(0, 4.0, 0), Vector3(1.6, 8.0, 1.6), stone.albedo_color, false)
+		add_child(Look.sphere(0.6, glyph, gp + Vector3(0, 8.6, 0)))
+		var sp: GPUParticles3D = _sparks(ReefDecor.CYAN, 18, Vector3(0.8, 0.8, 0.8))
+		sp.position = gp + Vector3(0, 8.6, 0)
+		add_child(sp)
+
+
+# ---- live effects: the water darkens as you go deeper, clams puff sand, portals and the gate burst ----------
+
+## Water colours at the reef crest (0) and in the temple deep (1); the level blends along the checkpoints.
+const SHALLOW_FOG := Color(0.05, 0.36, 0.46)
+const DEEP_FOG := Color(0.03, 0.12, 0.3)
+const SHALLOW_AMBIENT := Color(0.32, 0.72, 0.82)
+const DEEP_AMBIENT := Color(0.36, 0.42, 0.9)
+
+var _depth: float = 0.0
+## [crusher, burst, was_down] for every clam: a puff of sand and bubbles each time it slams shut.
+var _clam_puffs: Array[Array] = []
+var _portal_bursts: Array[Array] = []
+
+
+func _ready() -> void:
+	super()
+	player.teleported.connect(_on_teleported)
+
+
+func _process(dt: float) -> void:
+	if _env == null or player == null:
+		return
+	var target: float = clampf(float(current_checkpoint) / float(maxi(checkpoints.size(), 1)), 0.0, 1.0)
+	_depth = move_toward(_depth, target, dt * 0.08)
+	_env.fog_light_color = SHALLOW_FOG.lerp(DEEP_FOG, _depth)
+	_env.ambient_light_color = SHALLOW_AMBIENT.lerp(DEEP_AMBIENT, _depth)
+	_env.ambient_light_energy = lerpf(0.78, 0.62, _depth)
+	_env.glow_intensity = lerpf(0.85, 1.15, _depth)
+	_sun.light_energy = lerpf(1.15, 0.7, _depth)
+	var t: float = Game.course_time
+	for rec: Array in _clam_puffs:
+		var cr: Crusher = rec[0]
+		var down: bool = cr.gap_at(t) < 0.15
+		if down and not bool(rec[2]):
+			var b: GPUParticles3D = rec[1]
+			b.restart()
+			b.emitting = true
+		rec[2] = down
+
+
+func _on_teleported() -> void:
+	for rec: Array in _portal_bursts:
+		var at: Vector3 = rec[0]
+		if player.global_position.distance_to(at) < 4.0:
+			for b: GPUParticles3D in rec[1]:
+				b.restart()
+				b.emitting = true
+
+
+## A ring of sand and bubbles thrown out from under a clam when it slams (one-shot, re-fired by _process).
+func _clam_puff(cr: Crusher, floor_world: Vector3, size: Vector3) -> void:
+	var p := GPUParticles3D.new()
+	p.amount = 36
+	p.lifetime = 1.2
+	p.one_shot = true
+	p.emitting = false
+	p.explosiveness = 0.95
+	p.visibility_aabb = AABB(Vector3(-8, -2, -8), Vector3(16, 8, 16))
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_RING
+	pm.emission_ring_axis = Vector3.UP
+	pm.emission_ring_radius = maxf(size.x, size.z) * 0.55
+	pm.emission_ring_inner_radius = maxf(size.x, size.z) * 0.4
+	pm.emission_ring_height = 0.1
+	pm.direction = Vector3(0, 0.4, 0)
+	pm.spread = 80.0
+	pm.initial_velocity_min = 2.5
+	pm.initial_velocity_max = 5.0
+	pm.gravity = Vector3(0, -1.5, 0)
+	pm.damping_min = 2.5
+	pm.damping_max = 4.0
+	pm.scale_min = 0.6
+	pm.scale_max = 1.5
+	pm.color_ramp = ReefFx.fade_ramp(Color(0.95, 0.88, 0.7), 0.8)
+	p.process_material = pm
+	p.draw_pass_1 = ReefFx.dot_quad(0.45, false)
+	p.position = floor_world + Vector3(0, 0.2, 0)
+	add_child(p)
+	var bub: GPUParticles3D = ReefFx.burst(Color(0.8, 1.0, 1.0), 20, 4.0, true, 0.3, maxf(size.x, size.z) * 0.4)
+	bub.position = floor_world + Vector3(0, 0.3, 0)
+	add_child(bub)
+	_clam_puffs.append([cr, p, false])
+	_clam_puffs.append([cr, bub, false])
+
+
+## Arrival flourish at a portal exit: a burst of bubbles and orange-blue glints (fired on teleport).
+func _portal_arrival(exit_world: Vector3) -> void:
+	var a: GPUParticles3D = ReefFx.burst(Color(0.6, 0.85, 1.0), 44, 7.0, true, 0.35, 1.2)
+	a.position = exit_world + Vector3(0, 1.2, 0)
+	add_child(a)
+	var g: GPUParticles3D = ReefFx.burst(WarpPortal.ENTRY_COLOR, 30, 8.0, false, 0.28, 0.8)
+	g.position = exit_world + Vector3(0, 1.2, 0)
+	add_child(g)
+	_portal_bursts.append([exit_world, [a, g]])
+	# a lazy swirl of plankton hangs round every exit ring so it reads from afar
+	var halo: GPUParticles3D = ReefFx.plankton(Vector3(4, 4, 4), Color(0.45, 0.75, 1.0), 26)
+	halo.position = exit_world + Vector3(0, 1.4, 0)
+	add_child(halo)
+
+
+## The temple gate: a fountain of bubbles, glints and a flash of light when you reach it.
+func _finish_sequence() -> void:
+	var col: Array[Color] = [ReefDecor.CYAN, ReefDecor.PINK, LedgeBlock.LIP_COLOR]
+	for i: int in 3:
+		var b: GPUParticles3D = ReefFx.burst(col[i], 60, 9.0 + 2.0 * float(i), i == 0, 0.4, 1.6)
+		b.position = _finish_pos + Vector3(0, 1.0 + float(i), 0)
+		b.lifetime = 1.8
+		add_child(b)
+		b.restart()
+		b.emitting = true
+	var flash := OmniLight3D.new()
+	flash.light_color = ReefDecor.CYAN
+	flash.light_energy = 6.0
+	flash.omni_range = 18.0
+	flash.position = _finish_pos + Vector3(0, 3.0, 0)
+	add_child(flash)
+	var tw: Tween = create_tween()
+	tw.tween_property(flash, "light_energy", 0.0, 1.2)
+	await get_tree().create_timer(0.9).timeout
