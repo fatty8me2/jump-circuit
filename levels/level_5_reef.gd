@@ -476,7 +476,6 @@ func _build() -> void:
 		_frame(_w(end), yaws[i + 1])
 	_surroundings()
 	_reef_materials()
-	_dev_skip()
 
 
 # ---- stage 1: Reef Crest - warm-up hops over coral heads, the first jellyfish ---------------------
@@ -659,45 +658,6 @@ func _stage_6() -> Vector3:
 		_hop(nest, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	return cp["c"]
-
-
-func fail(cause: String = "fall") -> void:
-	if OS.get_environment("REEF_DEBUG") != "" and player != null:
-		print("  t=%.2f FAIL %s at %s vel %s" % [Game.course_time, cause, str(player.global_position.snapped(Vector3.ONE * 0.01)), str(player.velocity.snapped(Vector3.ONE * 0.1))])
-	super.fail(cause)
-
-
-## DEV ONLY (remove before shipping): REEF_FROM=k starts the run (spawn + bot route) at the checkpoint
-## that opens stage k; REEF_DEBUG=1 prints every checkpoint's world position.
-func _dev_skip() -> void:
-	if OS.get_environment("REEF_DEBUG") != "":
-		for i: int in _cp_world.size():
-			print("reef cp %d at %s" % [i + 1, str(_cp_world[i])])
-		player_respawned.connect(func() -> void:
-			var why: String = ""
-			for b: Node in get_children():
-				if b is RouteBot and not (b as RouteBot).log_lines.is_empty():
-					why = (b as RouteBot).log_lines[-1]
-			print("  t=%.1f respawn, cp %d  at %s  %s" % [Game.course_time, current_checkpoint, str(player.global_position.snapped(Vector3.ONE * 0.1)), why]))
-		for c: Node in find_children("*", "Checkpoint", true, false):
-			(c as Checkpoint).reached.connect(func(w: Checkpoint) -> void:
-				print("  t=%.1f reached cp %d" % [Game.course_time, w.index]))
-	var k: int = int(OS.get_environment("REEF_FROM"))
-	if k <= 1:
-		return
-	var seen: int = 0
-	for i: int in route.size():
-		if str(route[i]["kind"]) == "checkpoint":
-			seen += 1
-			if seen == k - 1:
-				var rest: Array[Dictionary] = []
-				for j: int in range(i + 1, route.size()):
-					rest.append(route[j])
-				route = rest
-				var cps: Array[Node] = find_children("*", "Checkpoint", true, false)
-				var c: Checkpoint = cps[k - 2] as Checkpoint
-				_spawn = c.respawn_transform()
-				return
 
 
 # ---- stage 7: Thermal Vents - ride an erupting vent up to a shelf, hop, ride the next one into a mantle ----
@@ -911,7 +871,7 @@ func _stage_13() -> Vector3:
 	deco.pinnacle(_w(Vector3(0, -5.0, -39.5)), 0.9, 30.0)
 	var jc := Vector3(0, -5.5, -46.0)
 	_jelly(jc, 18.0, 1.4, [], 5.0, 0.0, 0.0, 3.0, ReefDecor.VIOLET)
-	var l2: Dictionary = _blk(Vector3(0, -3.0, -57.0), 3.4, 7.0)
+	var l2: Dictionary = _blk(Vector3(0, -3.0, -56.25), 3.4, 8.5)
 	_haz(Vector3(0, -2.3, -61.2), Vector3(3.4, 1.4, 0.5))
 	var cp: Dictionary = _cp(Vector3(0, -5.0, -67.0))
 	# the jet: streaming bubbles along the strip, a ring at its mouth
@@ -923,8 +883,8 @@ func _stage_13() -> Vector3:
 	# SHORTCUT: a hidden portal on a 1 m knob tucked below the checkpoint's corner (a 90% leap) - out at L2
 	var hk: Vector3 = Vector3(5.6, -1.0, -9.0)
 	_blk(hk, 1.0, 1.0, "accent", 0.6)
-	kit.portal(_w(hk), _yaw, _w(Vector3(0, -3.0, -54.4)), _yaw, 6.0)
-	_portal_arrival(_w(Vector3(0, -3.0, -54.4)) + _b * Vector3(0, 0.15, -0.9))
+	kit.portal(_w(hk), _yaw, _w(Vector3(0, -3.0, -52.6)), _yaw, 6.0)
+	_portal_arrival(_w(Vector3(0, -3.0, -52.6)) + _b * Vector3(0, 0.15, -0.9))
 	if route_variant == 2:
 		r_jump(_w(Vector3(2.6, 0, -2.65)), _w(hk + Vector3(0, 0.3, 0)))
 	else:
