@@ -623,7 +623,7 @@ func do_shove() -> void:
 	if hv.dot(dir) < 7.0:
 		player.add_impulse(dir * (7.0 - maxf(hv.dot(dir), 0.0)))
 	var origin: Vector3 = player.global_position + Vector3(0, 0.8, 0)
-	var basis := Basis.looking_at(dir, Vector3.UP)
+	var basis := PartyFx.facing(dir)
 	PartyFx.arc(self, origin + dir * 0.5, basis, 1.1, -0.9, 0.9, Color(1.0, 0.9, 0.6), 0.25, 0.18)
 	PartyFx.one_shot(self, origin + dir * 0.6, {"amount": 14, "lifetime": 0.3, "size": 0.3, "color": Color(1, 1, 1, 0.8),
 		"dir": dir, "spread": 25.0, "vmin": 6.0, "vmax": 10.0, "damping": 20.0})
@@ -646,7 +646,7 @@ static func remote_fx_shove(layer_ref: PartyLayer, _from_id: int, _a: String, d:
 	var dir: Vector3 = PowerUp.v3(d.get("d", []))
 	if dir.length() < 0.1:
 		return
-	PartyFx.arc(layer_ref, o + dir * 0.5, Basis.looking_at(dir, Vector3.UP), 1.1, -0.9, 0.9, Color(1.0, 0.9, 0.6), 0.25, 0.18)
+	PartyFx.arc(layer_ref, o + dir * 0.5, PartyFx.facing(dir), 1.1, -0.9, 0.9, Color(1.0, 0.9, 0.6), 0.25, 0.18)
 	layer_ref.sfx.play_at("whoosh", o, 0.7, 1.1)
 
 

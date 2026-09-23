@@ -25,14 +25,14 @@ func _ready() -> void:
 	_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	_mat.emission_enabled = true
 	_mat.emission = Color(0.5, 0.8, 1.0)
-	_mat.emission_energy_multiplier = 1.4
+	_mat.emission_energy_multiplier = 0.55
 	_mat.roughness = 0.1
 	_mat.metallic = 0.3
 	_mat.rim_enabled = true
 	_mat.rim = 1.0
 	_cube = PartyFx.part(pivot, PartyFx.box_mesh(Vector3.ONE * 0.9), _mat, Vector3.ZERO)
 	# glowing edges: a slightly larger wire-ish shell of thin bars
-	var edge: StandardMaterial3D = PartyFx.glow_mat(Color(1.0, 0.95, 0.6), 2.5)
+	var edge: StandardMaterial3D = PartyFx.glow_mat(Color(1.0, 0.9, 0.5), 1.3)
 	for axis: int in 3:
 		for a: int in [-1, 1]:
 			for b: int in [-1, 1]:
@@ -42,7 +42,7 @@ func _ready() -> void:
 				pos[(axis + 1) % 3] = 0.46 * a
 				pos[(axis + 2) % 3] = 0.46 * b
 				PartyFx.part(pivot, PartyFx.box_mesh(size), edge, pos)
-	_core = PartyFx.part(pivot, PartyFx.sphere_mesh(0.22), PartyFx.glow_mat(Color(1, 1, 1), 3.0), Vector3.ZERO)
+	_core = PartyFx.part(pivot, PartyFx.sphere_mesh(0.16), PartyFx.glow_mat(Color(1, 0.95, 0.8), 1.4), Vector3.ZERO)
 	_q = Label3D.new()
 	_q.text = "?"
 	_q.font_size = 140
@@ -79,8 +79,8 @@ func _process(dt: float) -> void:
 	_q.position.y = pivot.position.y
 	# rainbow shimmer
 	var hue: float = fmod(_t * 0.12 + float(index) * 0.13, 1.0)
-	_mat.emission = Color.from_hsv(hue, 0.5, 1.0)
-	_mat.albedo_color = Color.from_hsv(hue, 0.35, 1.0, 0.45)
+	_mat.emission = Color.from_hsv(hue, 0.7, 1.0)
+	_mat.albedo_color = Color.from_hsv(hue, 0.55, 1.0, 0.5)
 	if not available:
 		_respawn_left -= dt
 		if _respawn_left <= 0.0:

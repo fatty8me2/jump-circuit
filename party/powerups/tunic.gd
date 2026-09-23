@@ -211,7 +211,7 @@ func _slash() -> void:
 
 
 static func _slash_fx(parent: Node, o: Vector3, dir: Vector3, combo: int) -> void:
-	var b := Basis.looking_at(dir, Vector3.UP)
+	var b := PartyFx.facing(dir)
 	var col := Color(0.7, 0.92, 1.0)
 	match combo:
 		0:

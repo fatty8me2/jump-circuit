@@ -10,6 +10,8 @@ const DARK := Color(0.28, 0.05, 0.4)
 const CLAW_COOLDOWN: float = 0.45
 const CHARGE_TIME: float = 1.2
 const BOMB_SPEED: float = 28.0
+## Beads per tail.
+const SEGS: int = 12
 
 var _tails: Array[Node3D] = []
 var _t: float = 0.0
@@ -31,10 +33,10 @@ func mods() -> Vector3:
 
 func build_look() -> void:
 	# chakra cloak: a translucent glowing shell plus rising flames
-	PartyFx.part(self, PartyFx.sphere_mesh(0.62, 20), PartyFx.glow_mat(Color(CLOAK.r, CLOAK.g, CLOAK.b, 0.28), 1.6, true), Vector3(0, 0.64, 0), Vector3(1.0, 1.12, 1.0))
-	var flames: GPUParticles3D = PartyFx.emitter({"amount": 42, "lifetime": 0.55, "size": 0.34, "color": CLOAK,
-		"shape": "sphere", "radius": 0.45, "dir": Vector3.UP, "spread": 25.0, "vmin": 1.2, "vmax": 2.8,
-		"colors": [Color(1.0, 0.9, 0.5, 0.9), Color(1.0, 0.45, 0.05, 0.8), Color(0.8, 0.1, 0.0, 0.0)], "aabb": 3.0})
+	PartyFx.part(self, PartyFx.sphere_mesh(0.62, 20), PartyFx.glow_mat(Color(CLOAK.r, CLOAK.g, CLOAK.b, 0.14), 1.3, true), Vector3(0, 0.64, 0), Vector3(1.0, 1.12, 1.0))
+	var flames: GPUParticles3D = PartyFx.emitter({"amount": 42, "lifetime": 0.55, "size": 0.3, "color": CLOAK,
+		"shape": "sphere", "radius": 0.48, "dir": Vector3.UP, "spread": 25.0, "vmin": 1.2, "vmax": 2.8,
+		"colors": [Color(1.0, 0.8, 0.4, 0.6), Color(1.0, 0.4, 0.05, 0.55), Color(0.8, 0.1, 0.0, 0.0)], "aabb": 3.0})
 	flames.position = Vector3(0, 0.6, 0)
 	add_child(flames)
 	var embers: GPUParticles3D = PartyFx.emitter({"amount": 16, "lifetime": 0.9, "size": 0.09, "color": Color(1.0, 0.7, 0.2),
@@ -52,21 +54,24 @@ func build_look() -> void:
 	var eye: StandardMaterial3D = PartyFx.glow_mat(Color(1.0, 0.08, 0.05), 4.0)
 	for sx: float in [-0.11, 0.11]:
 		PartyFx.part(self, PartyFx.sphere_mesh(0.06), eye, Vector3(sx, 0.76, -0.4), Vector3(1.0, 0.55, 0.6))
-	# nine tails: chains of glowing beads fanned out behind, each with a ribbon of particles at its tip
-	var bead: StandardMaterial3D = PartyFx.glow_mat(Color(1.0, 0.5, 0.08, 0.75), 1.8, true)
+	# nine tails: chains of glowing beads fanned out up and behind like a peacock's tail, each with
+	# a ribbon of particles streaming off its tip
+	var bead: StandardMaterial3D = PartyFx.solid_mat(Color(1.0, 0.45, 0.08), 0.9, 0.6)
+	var tip_mat: StandardMaterial3D = PartyFx.solid_mat(Color(1.0, 0.9, 0.7), 1.2, 0.6)
 	for i: int in 9:
 		var pivot := Node3D.new()
-		pivot.position = Vector3(0, 0.42, 0.34)
-		var fan: float = lerpf(-70.0, 70.0, float(i) / 8.0)
-		pivot.rotation_degrees = Vector3(-35.0 - absf(fan) * 0.25, 0, fan)
+		pivot.position = Vector3(0, 0.4, 0.3)
+		var fan: float = deg_to_rad(lerpf(-80.0, 80.0, float(i) / 8.0))
+		var d := Vector3(sin(fan) * 1.0, 0.25 + 0.3 * cos(fan), 0.8).normalized()
+		pivot.basis = Basis.looking_at(-d, Vector3.UP)   # beads run along the pivot's +Z = d
 		add_child(pivot)
-		for j: int in 6:
-			var r: float = 0.13 - float(j) * 0.014
-			var seg: MeshInstance3D = PartyFx.part(pivot, PartyFx.sphere_mesh(r, 10), bead, Vector3(0, 0, 0.14 * float(j + 1)))
+		for j: int in SEGS:
+			var r: float = 0.13 - float(j) * 0.0065
+			var seg: MeshInstance3D = PartyFx.part(pivot, PartyFx.sphere_mesh(r, 10), tip_mat if j == SEGS - 1 else bead, _seg_base(j))
 			seg.name = "S%d" % j
-		var tip: GPUParticles3D = PartyFx.emitter({"amount": 18, "lifetime": 0.35, "size": 0.16, "color": CLOAK,
+		var tip: GPUParticles3D = PartyFx.emitter({"amount": 14, "lifetime": 0.35, "size": 0.14, "color": CLOAK,
 			"vmin": 0.0, "vmax": 0.3, "aabb": 4.0,
-			"colors": [Color(1.0, 0.8, 0.4, 0.9), Color(1.0, 0.3, 0.0, 0.0)]})
+			"colors": [Color(1.0, 0.7, 0.3, 0.5), Color(1.0, 0.3, 0.0, 0.0)]})
 		tip.position = Vector3(0, 0, 0.9)
 		tip.name = "Tip"
 		pivot.add_child(tip)
@@ -80,17 +85,23 @@ func build_look() -> void:
 		PartyFx.flash(world(), at + Vector3(0, 1, 0), CLOAK, 8.0, 8.0, 0.5)
 
 
+## A tail bead's resting spot along its pivot: out along +Z, curling upward toward the tip.
+static func _seg_base(j: int) -> Vector3:
+	var n: float = float(j + 1)
+	return Vector3(0, 0.006 * n * n, 0.095 * n)
+
+
 func _process(dt: float) -> void:
 	_t += dt
 	# tails sway: each bead offset by a travelling sine wave, so they flow like ribbons
 	for pivot: Node3D in _tails:
 		var ph: float = float(pivot.get_meta("phase"))
-		for j: int in 6:
+		for j: int in SEGS:
 			var seg: Node3D = pivot.get_node("S%d" % j) as Node3D
-			var k: float = float(j + 1) / 6.0
-			seg.position = Vector3(sin(_t * 5.0 + ph + k * 2.5) * 0.12 * k, cos(_t * 4.0 + ph + k * 2.0) * 0.1 * k, 0.14 * float(j + 1))
+			var k: float = float(j + 1) / float(SEGS)
+			seg.position = _seg_base(j) + Vector3(sin(_t * 5.0 + ph + k * 2.5) * 0.2 * k, cos(_t * 4.0 + ph + k * 2.0) * 0.14 * k, 0.0)
 		var tip: Node3D = pivot.get_node("Tip") as Node3D
-		var last: Node3D = pivot.get_node("S5") as Node3D
+		var last: Node3D = pivot.get_node("S%d" % (SEGS - 1)) as Node3D
 		tip.position = last.position + Vector3(0, 0, 0.1)
 	if _ball != null:
 		_ball.rotation.y += dt * 6.0
@@ -143,7 +154,7 @@ func _claw() -> void:
 
 
 static func _claw_fx(parent: Node, o: Vector3, dir: Vector3) -> void:
-	var b := Basis.looking_at(dir, Vector3.UP)
+	var b := PartyFx.facing(dir)
 	for i: int in 3:
 		var tilt := Basis(dir, deg_to_rad(-35.0 + 8.0 * float(i)))
 		PartyFx.arc(parent, o + Vector3(0, 0.25 - 0.22 * float(i), 0) + dir * 0.4, tilt * b, 1.3, -1.0, 1.0, Color(1.0, 0.3 + 0.15 * float(i), 0.05), 0.12, 0.25)

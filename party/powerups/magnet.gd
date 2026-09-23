@@ -60,7 +60,7 @@ func _process(dt: float) -> void:
 	if _ring_t <= 0.0 and is_inside_tree():
 		_ring_t = 0.35
 		# field lines: rings closing in on the wearer
-		PartyFx.ring_pulse(world(), global_position + Vector3(0, 0.25, 0), Vector3.UP, Color(1.0, 0.35, 0.4, 0.8), RANGE * 0.8, 0.8, 0.5, 0.05)
+		PartyFx.ring_pulse(world(), global_position + Vector3(0, 0.25, 0), Vector3.UP, Color(1.0, 0.35, 0.45, 0.3), RANGE * 0.8, 0.8, 0.5, 0.04)
 
 
 ## Drift toward the magnet (m/s): stronger close in. Applied as a slide of the body, not a

@@ -46,7 +46,7 @@ func build_look() -> void:
 	_hair = Node3D.new()
 	_hair.position = Vector3(0, 0.96, 0.05)
 	add_child(_hair)
-	var hair_mat: StandardMaterial3D = PartyFx.glow_mat(GOLDEN, 1.9)
+	var hair_mat: StandardMaterial3D = PartyFx.solid_mat(Color(1.0, 0.82, 0.15), 1.6, 0.35, 0.2)
 	var spikes: Array = [
 		[Vector3(0, 0.18, 0.02), Vector3(-8, 0, 0), 0.62, 0.13],
 		[Vector3(-0.17, 0.12, 0.02), Vector3(-10, 0, 34), 0.5, 0.12],
@@ -66,10 +66,11 @@ func build_look() -> void:
 		PartyFx.part(piv, PartyFx.cone_mesh(float(s[3]), float(s[2]), 8), hair_mat, Vector3(0, float(s[2]) * 0.5, 0))
 	PartyFx.part(_hair, PartyFx.sphere_mesh(0.3, 16), hair_mat, Vector3(0, 0.02, 0.04), Vector3(1.05, 0.5, 1.0))
 	# aura: a pulsing golden shell, flames licking upward, lifted pebbles of light, electric sparks
-	_aura_shell = PartyFx.part(self, PartyFx.sphere_mesh(0.75, 20), PartyFx.glow_mat(Color(1.0, 0.8, 0.2, 0.16), 2.0, true), Vector3(0, 0.7, 0), Vector3(1.0, 1.35, 1.0))
-	var flames: GPUParticles3D = PartyFx.emitter({"amount": 64, "lifetime": 0.5, "size": 0.36, "color": GOLDEN,
-		"shape": "ring", "radius": 0.55, "inner": 0.3, "height": 0.2, "dir": Vector3.UP, "spread": 12.0, "vmin": 3.0, "vmax": 5.5,
-		"colors": [Color(1.0, 1.0, 0.8, 0.0), Color(1.0, 0.9, 0.35, 0.9), Color(1.0, 0.6, 0.1, 0.0)], "aabb": 4.0})
+	_aura_shell = PartyFx.part(self, PartyFx.sphere_mesh(0.75, 20), PartyFx.glow_mat(Color(1.0, 0.8, 0.2, 0.06), 1.5, true), Vector3(0, 0.7, 0), Vector3(1.0, 1.35, 1.0))
+	# the aura: tongues of golden flame licking up around the body (a ring, so the body stays visible)
+	var flames: GPUParticles3D = PartyFx.emitter({"amount": 56, "lifetime": 0.5, "size": 0.26, "color": GOLDEN,
+		"shape": "ring", "radius": 0.62, "inner": 0.5, "height": 0.2, "dir": Vector3.UP, "spread": 8.0, "vmin": 3.0, "vmax": 5.5,
+		"colors": [Color(1.0, 1.0, 0.8, 0.0), Color(1.0, 0.85, 0.3, 0.55), Color(1.0, 0.6, 0.1, 0.0)], "aabb": 4.0})
 	flames.position = Vector3(0, 0.05, 0)
 	add_child(flames)
 	var motes: GPUParticles3D = PartyFx.emitter({"amount": 20, "lifetime": 1.0, "size": 0.08, "color": Color(1.0, 0.95, 0.6),

@@ -561,6 +561,14 @@ static func shake(level: Node, amount: float) -> void:
 		(cam as OrbitCamera).add_trauma(amount)
 
 
+## A basis looking along `dir` that never fails (zero / vertical directions from the network).
+static func facing(dir: Vector3) -> Basis:
+	if dir.length() < 0.001:
+		return Basis.IDENTITY
+	var d: Vector3 = dir.normalized()
+	return Basis.looking_at(d, Vector3.UP if absf(d.y) < 0.95 else Vector3.RIGHT)
+
+
 # ---- small mesh helpers for costumes ------------------------------------------------
 
 static func part(parent: Node3D, mesh: Mesh, mat: Material, pos: Vector3, scl: Vector3 = Vector3.ONE, rot_deg: Vector3 = Vector3.ZERO) -> MeshInstance3D:

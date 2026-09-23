@@ -2413,3 +2413,173 @@ func test_zp_item_roll_weighting() -> void:
 			every = false
 	check(every and PartyItems.PRACTICE_ORDER.size() >= 13, "every item can roll and has a script and a display name (%d items)" % PartyItems.PRACTICE_ORDER.size())
 	check(PartyItems.place_fraction(1, 4) == 0.0 and PartyItems.place_fraction(4, 4) == 1.0, "race place maps to 0 (leader) .. 1 (last)")
+
+
+## Presses a pad button (or key) like a real device: press, a frame, release.
+func _zp_press(ev: InputEvent) -> void:
+	Input.parse_input_event(ev)
+	await get_tree().process_frame
+	var up: InputEvent = ev.duplicate()
+	if up is InputEventJoypadMotion:
+		(up as InputEventJoypadMotion).axis_value = 0.0
+	else:
+		up.set("pressed", false)
+	Input.parse_input_event(up)
+	await ticks(2)
+
+
+func _zp_pad(button: JoyButton) -> InputEventJoypadButton:
+	var b := InputEventJoypadButton.new()
+	b.device = 2
+	b.button_index = button
+	b.pressed = true
+	return b
+
+
+func _focused_text() -> String:
+	var f: Control = get_viewport().gui_get_focus_owner()
+	return (f as Button).text if f is Button else ("<%s>" % f.get_class() if f != null else "")
+
+
+func test_zp_party_menus_pad() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	add_child(title)
+	title.call("show_screen", "main")
+	await ticks(3)
+	var e0: int = trap.count()
+	# main menu -> Party Practice with the pad
+	var found: bool = false
+	for i: int in 8:
+		if _focused_text() == PartyNames.mode_name("practice"):
+			found = true
+			break
+		await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(found, "the D-pad reaches Party Practice on the main menu")
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	await ticks(3)
+	check(Game.title_screen == "practice", "A opens the Party Practice screen")
+	check(_focused_text().begins_with("1 "), "the first course is focused (%s)" % _focused_text())
+	var first: String = _focused_text()
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(_focused_text() != first and _focused_text() != "", "the D-pad moves through the course list (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_B))
+	await ticks(3)
+	check(Game.title_screen == "main" and _focused_text() == PartyNames.mode_name("practice"), "B goes back, onto the Party Practice button (%s)" % _focused_text())
+	# the lobby's mode picker and team rows
+	check(Net.host(24597) == OK, "hosting opens the lobby")
+	await ticks(3)
+	var pick: Array[Node] = title.find_children("*", "OptionButton", true, false)
+	check(Game.title_screen == "lobby" and pick.size() >= 1, "the host's lobby offers a game-mode picker")
+	Net.host_set_mode("team")
+	await ticks(3)
+	var labels: String = ""
+	for l: Node in title.find_children("*", "Label", true, false):
+		labels += (l as Label).text + "|"
+	check(labels.contains("[%s]" % PartyNames.team_name(0)) and labels.contains(PartyNames.mode_name("team")), "Team Party lists racers by team")
+	Net.host_set_mode("party")
+	await ticks(2)
+	check(Net.game_mode == "party" and Net.teams.is_empty(), "switching to Party clears the teams")
+	Net.leave()
+	await ticks(2)
+	title.queue_free()
+	await ticks(2)
+	check(trap.count() == e0, ("party menus build without errors %s" % trap.since(e0)).strip_edges())
+
+	# Party Practice clear panel: focused, pad-navigable
+	var lvl: LevelBase = await _load_practice(0)
+	var p: PartyLayer = lvl.party
+	p.on_local_finish(42.0)
+	await seconds(1.6)
+	check(p.results != null and p.hud.has_panel() and _focused_text() == "Run It Again", "the practice results panel opens focused on Run It Again (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(_focused_text() == "Next Course", "the D-pad moves to Next Course (%s)" % _focused_text())
+
+	# a round results panel (a guest's view): scores, cup, focus on its button
+	var rows: Array[Dictionary] = PartyRules.score_round([1], [1, 7], {1: 1}, {})
+	p.rules.add_round(rows)
+	p.last_rows = rows
+	p.show_results()
+	await seconds(0.9)
+	check(p.results.find_children("*", "Label", true, false).size() > 10 and _focused_text() == "Leave Party", "the round results panel builds and focuses its button (%s)" % _focused_text())
+	Game.party = null
+
+
+func test_zp_party_controls_rebind() -> void:
+	var keep: Dictionary = Settings.party_binds.duplicate(true)
+	Settings.party_binds = {}
+	Game.apply_party_binds()
+	var pc := PartyControls.new()
+	add_child(pc)
+	await ticks(2)
+	var b: Button = pc.find_child("Bind_attack", true, false) as Button
+	check(b != null and b.text.contains("F") and b.text.contains("X"), "the Attack button shows its key and pad bindings (%s)" % (b.text if b != null else ""))
+	b.grab_focus()
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(_focused_text().begins_with("Shove"), "the D-pad moves between the bindings (%s)" % _focused_text())
+	b.grab_focus()
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	await ticks(2)
+	check(pc.capturing == "attack", "A starts listening for a new Attack input")
+	var space := InputEventKey.new()
+	space.physical_keycode = KEY_SPACE
+	space.keycode = KEY_SPACE
+	space.pressed = true
+	await _zp_press(space)
+	check(pc.capturing == "attack" and int(Game.party_bind("attack")["key"]) == KEY_F, "Space (jump) is refused")
+	var g := InputEventKey.new()
+	g.physical_keycode = KEY_G
+	g.keycode = KEY_G
+	g.pressed = true
+	await _zp_press(g)
+	check(pc.capturing == "" and int(Game.party_bind("attack")["key"]) == KEY_G, "G becomes the Attack key")
+	var probe := InputEventKey.new()
+	probe.physical_keycode = KEY_G
+	check(InputMap.event_is_action(probe, "attack"), "the input map follows the new binding")
+	# a pad button another party action had moves over to this one
+	pc.find_child("Bind_attack", true, false).call("grab_focus")
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	await ticks(2)
+	await _zp_press(_zp_pad(JOY_BUTTON_RIGHT_SHOULDER))
+	check(int(Game.party_bind("attack")["pad"]) == JOY_BUTTON_RIGHT_SHOULDER and int(Game.party_bind("use_item")["pad"]) == -1, "RB moves from Use item to Attack")
+	check(Game.prompt("attack") in ["G / LMB", "RB"], "prompts show the new binding (%s)" % Game.prompt("attack"))
+	# Start cancels a capture
+	pc.find_child("Bind_shove", true, false).call("grab_focus")
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	await ticks(2)
+	await _zp_press(_zp_pad(JOY_BUTTON_START))
+	check(pc.capturing == "" and int(Game.party_bind("shove")["pad"]) == JOY_BUTTON_B, "Start cancels without changing anything")
+	(pc.find_child("ResetBinds", true, false) as Button).pressed.emit()
+	await ticks(2)
+	check(Settings.party_binds.is_empty() and int(Game.party_bind("attack")["key"]) == KEY_F, "Reset restores the defaults")
+	pc.queue_free()
+	Settings.party_binds = keep
+	Game.apply_party_binds()
+	await ticks(2)
+
+
+func test_zp_relay_party_tunnel() -> void:
+	var got: Array = []
+	var cb := func(from_id: int, m: Dictionary) -> void: got.append([from_id, m])
+	Net.party_message.connect(cb)
+	var had: bool = Net.roster.has(5)
+	if not had:
+		Net.roster[5] = {"name": "Relay", "color": 0, "finished": -1.0, "cp": 0}
+	# as the relay delivers it: a pose event carrying {"party": msg, "to": id}
+	Net.call("_handle_relay_event", 5, "pose", {"party": {"k": "fx", "p": "glove", "a": "punch"}, "to": 0})
+	Net.call("_handle_relay_event", 5, "pose", {"party": {"k": "hit"}, "to": Net.my_id()})
+	Net.call("_handle_relay_event", 5, "pose", {"party": {"k": "hit"}, "to": Net.my_id() + 99})
+	Net.call("_handle_relay_event", 6, "pose", {"party": {"k": "hit"}, "to": 0})
+	check(got.size() == 2 and int(got[0][0]) == 5 and str((got[0][1] as Dictionary)["k"]) == "fx", "party packets ride the relay's pose event: broadcast and addressed-to-us arrive, others are dropped (%d)" % got.size())
+	var poses: Array = []
+	var pcb := func(id: int, _p: Vector3, _v: Vector3, _g: bool, _s: int) -> void: poses.append(id)
+	Net.racer_pose.connect(pcb)
+	Net.call("_handle_relay_event", 5, "pose", {"party": {"k": "fx"}, "to": 0})
+	check(poses.is_empty(), "a tunnelled party packet is never mistaken for a pose")
+	Net.racer_pose.disconnect(pcb)
+	Net.party_message.disconnect(cb)
+	if not had:
+		Net.roster.erase(5)

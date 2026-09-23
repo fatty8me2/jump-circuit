@@ -43,7 +43,7 @@ func _build() -> void:
 	_spin = Node3D.new()
 	add_child(_spin)
 	# the funnel: stacked translucent cones and swirling rings of dust, wider toward the top
-	var mat: StandardMaterial3D = PartyFx.glow_mat(Color(0.8, 0.9, 1.0, 0.13), 1.4, true)
+	var mat: StandardMaterial3D = PartyFx.glow_mat(Color(0.8, 0.9, 1.0, 0.07), 1.2, true)
 	var c: CylinderMesh = PartyFx.cyl_mesh(0.35, HEIGHT, 2.0, 20)
 	c.cap_top = false
 	c.cap_bottom = false
@@ -51,20 +51,21 @@ func _build() -> void:
 	var c2: CylinderMesh = PartyFx.cyl_mesh(0.2, HEIGHT * 0.8, 1.3, 16)
 	c2.cap_top = false
 	c2.cap_bottom = false
-	PartyFx.part(_spin, c2, PartyFx.glow_mat(Color(1.0, 1.0, 1.0, 0.1), 1.6, true), Vector3(0, HEIGHT * 0.42, 0))
+	PartyFx.part(_spin, c2, PartyFx.glow_mat(Color(1.0, 1.0, 1.0, 0.06), 1.4, true), Vector3(0, HEIGHT * 0.42, 0))
 	for i: int in 6:
 		var h: float = 0.3 + float(i) * (HEIGHT / 6.0)
 		var r: float = lerpf(0.45, 2.1, float(i) / 5.0)
-		var e: GPUParticles3D = PartyFx.emitter({"amount": 26, "lifetime": 0.7, "size": 0.35 + 0.08 * float(i), "color": GREY,
+		# swirling dust: alpha-blended grey-white puffs whipped round the funnel wall
+		var e: GPUParticles3D = PartyFx.emitter({"amount": 34, "lifetime": 0.7, "size": 0.55 + 0.12 * float(i), "color": Color(0.86, 0.9, 0.95, 0.75),
 			"shape": "ring", "radius": r, "inner": r * 0.8, "height": 0.3, "vmin": 0.0, "vmax": 0.3, "dir": Vector3.UP,
-			"spread": 20.0, "orbit": 0.0, "tangential": 26.0, "radial": -r * 3.0, "local": true, "aabb": 6.0,
-			"colors": [Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.55), Color(1, 1, 1, 0.0)]})
+			"spread": 20.0, "orbit": 1.6 - 0.15 * float(i), "local": true, "aabb": 6.0, "additive": false, "angle": true, "shrink": false,
+			"colors": [Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0.0)]})
 		e.position = Vector3(0, h, 0)
 		add_child(e)
 	# debris (leaves, pebbles) whipped around, and a dust skirt at the base
 	add_child(PartyFx.emitter({"amount": 20, "lifetime": 1.2, "size": 0.12, "color": Color(0.55, 0.75, 0.4),
 		"shape": "ring", "radius": 1.2, "inner": 0.6, "height": 2.0, "vmin": 2.0, "vmax": 4.0, "dir": Vector3.UP,
-		"spread": 15.0, "tangential": 18.0, "local": true, "additive": false, "angle": true, "aabb": 6.0}))
+		"spread": 15.0, "orbit": 1.2, "local": true, "additive": false, "angle": true, "aabb": 6.0}))
 	add_child(PartyFx.emitter({"amount": 30, "lifetime": 0.9, "size": 0.7, "color": Color(0.7, 0.65, 0.55, 0.45),
 		"shape": "ring", "radius": 1.0, "inner": 0.4, "vmin": 2.0, "vmax": 4.0, "dir": Vector3(1, 0.2, 0), "spread": 180.0,
 		"flat": 1.0, "tangential": 10.0, "additive": false, "grow": true, "aabb": 6.0,

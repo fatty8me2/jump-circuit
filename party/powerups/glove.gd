@@ -40,7 +40,7 @@ func begin() -> void:
 static func _punch_fx(parent: Node, o: Vector3, dir: Vector3, reach: float) -> void:
 	var root := Node3D.new()
 	parent.add_child(root)
-	root.global_transform = Transform3D(Basis.looking_at(dir, Vector3.UP if absf(dir.y) < 0.95 else Vector3.RIGHT), o)
+	root.global_transform = Transform3D(PartyFx.facing(dir), o)
 	var head := Node3D.new()
 	root.add_child(head)
 	var red: StandardMaterial3D = PartyFx.solid_mat(RED, 0.5, 0.35)
