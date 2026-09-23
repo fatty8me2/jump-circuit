@@ -1422,7 +1422,8 @@ func _stage_22_stack() -> void:
 	kit.lamp(Vector3(-6.5, S_TOP, -151.0), 3.0)
 	kit.lamp(Vector3(-20.0, S_TOP, -165.0), 3.0, false)
 	kit.banner(Vector3(-2.6, S_TOP, -155.4), 3.6, WALL_CYAN, 0.0)
-	_net(Vector3(-4.0, S_TOP - 6.0, -176.0), Vector3(16, 0.6, 14))
+	# (kept 5 m above checkpoint 19's ledge below: hops there peak 2.5 m up)
+	_net(Vector3(-6.0, S_TOP - 3.0, -176.5), Vector3(12, 0.6, 13))
 
 
 func _build_ambient_fx() -> void:
