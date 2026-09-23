@@ -13,7 +13,8 @@ the original pause notes, kept for history. What session 2 added on top:
 - RouteBot resumes after the checkpoint the level respawns at (a checkpoint touched mid-step no longer sends every
   retry back to the previous stage's steps).
 - RouteBot: a landing (or a stale fall speed) no longer counts as a kick; a bounce handed to the next step lasts only
-  that step; w_run aims ahead along the wall after a fast takeoff instead of turning back at its entry.
+  that step. (w_run still steers straight at `entry`: an "aim ahead along entry->exit" change broke Orbital Drift's
+  boosted run and was reverted - place entries well ahead of fast takeoffs.)
 - Test runs end without "leaked instances / resources still in use": everything quits through Sfx.quit().
 - Not bugs, still open: Orbital Drift is on the easy side (0 bot respawns) - tighten after playtesting; the party relay
   path is covered by a message-level test only (no live relay in CI); a few old shortcuts were not re-probed.

@@ -647,13 +647,9 @@ func _do_moves(step: Dictionary, dt: float) -> void:
 				else:
 					if player.velocity.y <= 0.0:
 						player.cmd_jump = false
-					var aim: Vector3 = entry
-					if _flat(entry - player.global_position).dot(_flat(player.velocity)) < 0.0:
-						# a fast takeoff carried us past the entry: turning back at it would steer away from
-						# the run - aim at the wall line a little ahead of us instead
-						var run_dir: Vector3 = _flat(exit - entry).normalized()
-						aim = entry + run_dir * maxf(_flat(player.global_position - entry).dot(run_dir) + 2.0, 0.0)
-					_set_wish(_flat(aim - player.global_position).normalized())
+					# steers straight at `entry`: after a fast takeoff, place entry well ahead of the takeoff
+					# (levels are tuned to this; aiming along entry->exit instead lost Orbital Drift's boosted run)
+					_set_wish(_flat(entry - player.global_position).normalized())
 					return
 			if _phase == 2:
 				var along: Vector3 = _flat(exit - entry).normalized()
