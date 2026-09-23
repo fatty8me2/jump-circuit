@@ -588,18 +588,22 @@ func piston(top: Vector3, size: Vector3, yaw_deg: float = 0.0, stroke: float = 3
 
 
 ## Press hanging `lift` m above `floor_top` that slams down on a rhythm; deadly underneath.
-func crusher(floor_top: Vector3, size: Vector3, lift: float = 3.2, period: float = 3.2, phase: float = 0.0) -> Crusher:
+## `yaw_deg` turns the press and its frame: the guide columns stand on its local X sides, so
+## for a course running along the press's local Z they flank the path (yaw 90 = path along X).
+func crusher(floor_top: Vector3, size: Vector3, lift: float = 3.2, period: float = 3.2, phase: float = 0.0, yaw_deg: float = 0.0) -> Crusher:
 	var c := Crusher.new()
 	c.size = size
 	c.lift = lift
 	c.period = period
 	c.phase = phase
+	c.rotation_degrees.y = yaw_deg
 	_add(c, floor_top)
 	# the guide columns it runs between
+	var turn := Basis(Vector3.UP, deg_to_rad(yaw_deg))
 	var h: float = lift + size.y + 1.5
 	for sx: float in [-1.0, 1.0]:
-		block(floor_top + Vector3(sx * (size.x * 0.5 + 0.35), h * 0.5, 0), Vector3(0.35, h, 0.35), Look.c("metal"), true)
-	block(floor_top + Vector3(0, h + 0.2, 0), Vector3(size.x + 1.1, 0.4, 0.6), Look.c("metal"), false)
+		block(floor_top + turn * Vector3(sx * (size.x * 0.5 + 0.35), h * 0.5, 0), Vector3(0.35, h, 0.35), Look.c("metal"), true, yaw_deg)
+	block(floor_top + Vector3(0, h + 0.2, 0), Vector3(size.x + 1.1, 0.4, 0.6), Look.c("metal"), false, yaw_deg)
 	return c
 
 

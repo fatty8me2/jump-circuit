@@ -930,6 +930,34 @@ func test_x_mantle() -> void:
 	check(player.global_position.y < 1.0 and not player.is_mantling(), "an ordinary 3.4 m block cannot be climbed (y %.2f)" % player.global_position.y)
 
 
+## A turned crusher turns its press, its deadly underside and its guide frame together.
+func test_x_crusher_yaw() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var base: Vector3 = lvl.checkpoints[0].global_position
+	lvl.player.use_device_input = false
+	lvl.kit.plat(base + Vector3(40, 0, 0), Vector3(30, 1, 40), "main", 0.0)
+	var at: Vector3 = base + Vector3(40, 0, 0)
+	# a long, narrow press turned 90: 4 m along world Z, 1.2 m along X
+	var cr: Crusher = lvl.kit.crusher(at, Vector3(4, 1.5, 1.2), 3.0, 3.0, 0.0, 90.0)
+	var cols: Array[Vector3] = []
+	for n: Node in lvl.get_children():
+		if n is StaticBody3D and n != cr and (n as Node3D).global_position.distance_to(at) < 4.0 and (n as Node3D).global_position.y > at.y + 1.0:
+			cols.append((n as Node3D).global_position - at)
+	var along_z: bool = cols.size() == 2
+	for c: Vector3 in cols:
+		along_z = along_z and absf(c.x) < 0.05 and absf(c.z) > 2.2
+	check(along_z, "a crusher turned 90 stands its guide columns on world Z, clear of a path along X (%s)" % str(cols))
+	var walk: bool = lvl.kit.crusher(at + Vector3(10, 0, 0), Vector3(3, 1.5, 3)).rotation_degrees.y == 0.0
+	check(walk, "the default crusher is unturned (existing levels unchanged)")
+	# stand where only the TURNED footprint reaches (1.5 m along Z; unturned it would be 0.6 m)
+	await seconds(0.3)   # let the new press settle into the physics server before standing under it
+	await wait_until(func() -> bool: return cr.is_clear_for(Game.course_time, 0.4), 3.5, "crusher up")
+	var d0: int = lvl.deaths
+	lvl.player.teleport(Transform3D(Basis(), at + Vector3(0, 0.1, 1.5)))
+	var hit: bool = await wait_until(func() -> bool: return lvl.deaths > d0, 3.5, "turned crusher slams")
+	check(hit, "its deadly underside turns with it")
+
+
 func test_x_lasers_crushers_pistons_portals() -> void:
 	var lvl: LevelBase = await load_level(0)
 	var base: Vector3 = lvl.checkpoints[0].global_position

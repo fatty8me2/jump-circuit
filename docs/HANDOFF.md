@@ -8,8 +8,9 @@ the original pause notes, kept for history. What session 2 added on top:
 - Spectating: after finishing a race you can watch the racers still running (results "Spectate", LB/RB or Q/E,
   B/Esc back); party races offer it from the waiting bar.
 - Wall-run fix: latching needs the panel beside the body (no more leading-edge latch that burned the panel).
-- Known shared-code follow-ups reported by the level agents (not done): `kit.crusher` has no yaw (guide columns
-  always on world X); RouteBot's restart point is stale when a checkpoint is touched mid-step; the `kick` step
+- Crusher yaw: `kit.crusher(..., yaw_deg)` turns the press, its kill zone and its guide frame. Existing calls are
+  unchanged (yaw 0); Orbital Drift and Balance Works still use their own workarounds, which is fine.
+- Known shared-code follow-ups reported by the level agents (not done): RouteBot's restart point is stale when a checkpoint is touched mid-step; the `kick` step
   treats a hard landing as a kick; after a pad bounce the bot's bounce flag stays set. Orbital Drift is on the easy
   side (0 bot respawns) - tighten after playtesting.
 

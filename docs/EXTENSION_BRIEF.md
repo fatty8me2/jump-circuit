@@ -48,7 +48,7 @@ The validator (test_m) only measures plain `jump` steps; the bot playthrough (te
 |---|---|---|
 | `kit.laser(center, size, period, on_fraction, phase, yaw)` | kill beam between two posts; guide line flickers bright for 0.45 s before it fires | `is_on_at(t)`, `time_until_on(t)`, `time_until_off(t)` |
 | `kit.piston(top, size, yaw, stroke, period, phase, strength)` | ram punches out along its arrow (local -Z by yaw) at u 0.45-0.55 of its cycle, holds, retracts; shoves a player caught in front (stroke speed + strength, +5 up); its top is rideable; housing built behind | `extension_at(t)` 0..1, `is_punching_at(t)` |
-| `kit.crusher(floor_top, size, lift, period, phase)` | press hangs `lift` above the floor, shudders (red plate glows), slams, holds, rises; deadly underneath from the slam until it is ~20% back up; top rideable | `gap_at(t)`, `is_clear_for(t, window)` |
+| `kit.crusher(floor_top, size, lift, period, phase, yaw)` | press (and its guide frame) turned by yaw; hangs `lift` above the floor, shudders (red plate glows), slams, holds, rises; deadly underneath from the slam until it is ~20% back up; top rideable | `gap_at(t)`, `is_clear_for(t, window)` |
 | `kit.portal(entry_floor, entry_yaw, exit_floor, exit_yaw, min_exit_speed)` | one-way warp ring pair (orange entry -> blue exit); you exit facing exit_yaw with your entry speed (>= min) and your upward speed; camera turns with you | `exit_point()` |
 Plus everything in HARD_MODE_BRIEF (boost, slick, conveyor, hazard, sweeper, pendulum, bumper, wind, blink, pads, movers, spinners, tilt, collapse...).
 
