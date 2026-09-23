@@ -1138,12 +1138,13 @@ func _stage_22(o: Vector3) -> Vector3:
 	_frame(o, -90.0)
 	# the ledge top's far edge is at local z -2.5
 	var per: float = 3.2
-	var gap: float = 0.95
+	# each screen lights up when a runner who left on the first one's cue reaches it (the chain's real cadence)
+	var at: Array[float] = [0.0, 1.1, 1.75, 2.35]
 	var bb: Array[AscentBillboard] = [
 		_billboard(2.3, 1.2, -5.5, -12.0, per, 0.72, 0.0),
-		_billboard(-2.3, 6.0, -10.5, -18.5, per, 0.72, -gap / per),
-		_billboard(2.3, 9.0, -16.5, -24.5, per, 0.72, -2.0 * gap / per),
-		_billboard(-2.3, 12.0, -22.5, -30.5, per, 0.72, -3.0 * gap / per),
+		_billboard(-2.3, 6.0, -10.5, -18.5, per, 0.72, -at[1] / per),
+		_billboard(2.3, 9.0, -16.5, -24.5, per, 0.72, -at[2] / per),
+		_billboard(-2.3, 12.0, -22.5, -30.5, per, 0.72, -at[3] / per),
 	]
 	_ledge(Vector3(1.5, 13.9, -33.5), Vector3(6.0, 17.0, 5.0))
 	_glitter(W(0, 8.0, -18.0))
@@ -1151,7 +1152,7 @@ func _stage_22(o: Vector3) -> Vector3:
 	r_until(func() -> bool:
 		var t: float = Game.course_time
 		for i: int in 4:
-			if not bb[i].solid_through(t, gap * float(i), gap * float(i) + 1.5):
+			if not bb[i].solid_through(t, at[i], at[i] + 1.5):
 				return false
 		return true)
 	r_wallrun(W(0.5, 0, -2.1), W(1.7, 1.4, -6.6), W(1.7, 1.4, -9.5), W(-1.7, 5.5, -13.4))
