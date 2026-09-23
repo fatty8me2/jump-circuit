@@ -25,7 +25,16 @@ func _ready() -> void:
 		var kz := KillZone.new()
 		kz.size = Vector3(arm_length, bar_thickness, bar_thickness)
 		kz.position = Vector3(arm_length * 0.5 + 0.3, bar_height, 0)
+		kz.embers = false        # the sweep trail below is its effect
 		holder.add_child(kz)
+		# a glowing wake swept out behind the bar (world-space dots left in its path)
+		var wake: GPUParticles3D = Fx.trail({"amount": clampi(int(arm_length * 7.0), 14, 44), "lifetime": 0.32,
+			"shape": "box", "extents": Vector3(arm_length * 0.5, bar_thickness * 0.3, bar_thickness * 0.3),
+			"size": bar_thickness * 1.1, "color": Color(2.2, 0.55, 0.3, 0.6), "emitting": true,
+			"fade": PackedFloat32Array([0.7, 0.0]),
+			"aabb": AABB(Vector3(-arm_length - 2.0, -2.0, -arm_length - 2.0), Vector3(arm_length * 2.0 + 4.0, 4.0, arm_length * 2.0 + 4.0))})
+		wake.position = kz.position
+		holder.add_child(wake)
 	_apply()
 	add_to_group("course_clock")
 

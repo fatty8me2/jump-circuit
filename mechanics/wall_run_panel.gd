@@ -40,6 +40,23 @@ func _ready() -> void:
 	# capped ends so the slab reads as a built thing, not a floating plane
 	for ex: float in [-1.0, 1.0]:
 		add_child(Look.box(Vector3(0.25, size.y + 0.2, size.z + 0.2), frame, Vector3(ex * (size.x * 0.5 + 0.12), 0, 0)))
+	_build_fx()
+
+
+## Glints drifting along both run lines on both faces (visual only; local, cheap).
+func _build_fx() -> void:
+	var glint: Color = Fx.hot(RUN_COLOR.lerp(Color.WHITE, 0.35), 2.2)
+	var n: int = clampi(int(size.x * 0.5), 3, 10)
+	var vis := AABB(Vector3(-size.x * 0.5 - 1.0, -0.6, -0.6), Vector3(size.x + 2.0, 1.2, 1.2))
+	for side: float in [-1.0, 1.0]:
+		var z: float = side * (size.z * 0.5 + 0.07)
+		for h: float in [0.3, 0.68]:
+			var p: GPUParticles3D = Fx.emitter({"amount": n, "lifetime": 1.8, "local": true, "shape": "box",
+				"extents": Vector3(size.x * 0.5 - 0.3, 0.0, 0.0), "dir": Vector3.RIGHT, "spread": 180.0,
+				"flatness": 1.0, "speed": Vector2(0.3, 0.9), "tex": Fx.Tex.STAR, "size": 0.5,
+				"scale": Vector2(0.5, 1.0), "curve": "pop", "color": glint, "aabb": vis, "preprocess": 1.8})
+			p.position = Vector3(0, -size.y * 0.5 + size.y * h, z)
+			add_child(p)
 
 
 func is_wall_run() -> bool:

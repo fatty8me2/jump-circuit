@@ -18,6 +18,11 @@ var _shape: CollisionShape3D
 var _fall_speed: float = 0.0
 var _mat: ShaderMaterial
 var _grow: Tween
+# effects (visual only): grit sifting off the underside while it shakes; a burst of
+# chunks and dust when it gives way
+var _grit: GPUParticles3D
+var _crumble: GPUParticles3D
+var _crumble_dust: GPUParticles3D
 
 
 func _ready() -> void:
@@ -45,6 +50,26 @@ func _ready() -> void:
 		var slit := Look.box(Vector3(size.x * 0.8, 0.02, 0.05), Look.flat(Color(0.25, 0.1, 0.1), 0.9), Vector3(0, size.y * 0.5 + 0.005, 0))
 		slit.rotation.y = i * PI / 3.0 + 0.3
 		_vis.add_child(slit)
+	_build_fx()
+
+
+func _build_fx() -> void:
+	var ext := Vector3(size.x * 0.4, 0.02, size.z * 0.4)
+	var vis := AABB(Vector3(-size.x - 2.0, -12.0, -size.z - 2.0), Vector3(size.x * 2.0 + 4.0, 16.0, size.z * 2.0 + 4.0))
+	_grit = Fx.emitter({"amount": clampi(int(size.x * size.z * 3.0), 8, 24), "lifetime": 0.8, "emitting": false,
+		"shape": "box", "extents": ext, "dir": Vector3.DOWN, "spread": 15.0, "speed": Vector2(0.3, 1.2),
+		"gravity": Vector3(0, -14, 0), "additive": false, "size": 0.12, "scale": Vector2(0.5, 1.2),
+		"color": Color(0.42, 0.3, 0.26, 0.95), "fade": PackedFloat32Array([1.0, 1.0, 0.0]), "aabb": vis})
+	_grit.position = Vector3(0, -size.y * 0.5 - 0.02, 0)
+	add_child(_grit)
+	_crumble = Fx.debris({"amount": 20, "lifetime": 1.1, "shape": "box",
+		"extents": Vector3(size.x * 0.45, size.y * 0.4, size.z * 0.45), "dir": Vector3.UP, "spread": 70.0,
+		"speed": Vector2(1.0, 4.0), "color": Color(0.62, 0.36, 0.3), "chunk": 0.2, "aabb": vis})
+	add_child(_crumble)
+	_crumble_dust = Fx.smoke({"amount": 12, "lifetime": 0.9, "shape": "box",
+		"extents": Vector3(size.x * 0.5, size.y * 0.3, size.z * 0.5), "dir": Vector3.UP, "spread": 80.0,
+		"speed": Vector2(0.5, 2.0), "size": 1.0, "color": Color(0.8, 0.7, 0.62, 0.6), "aabb": vis})
+	add_child(_crumble_dust)
 
 
 ## Player contract: called every tick while stood on.
@@ -53,6 +78,8 @@ func apply_rider_load(_point: Vector3, _force: float) -> void:
 		_state = State.SHAKING
 		_timer = 0.0
 		Sfx.play_at("crumble", global_position)
+		if _grit != null:
+			_grit.emitting = true
 
 
 func reset_state() -> void:
@@ -65,6 +92,8 @@ func reset_state() -> void:
 	_vis.visible = true
 	_mat.set_shader_parameter("trim_glow", 0.5)
 	_shape.set_deferred("disabled", false)
+	if _grit != null:
+		_grit.emitting = false
 	# a regrow tween left running would keep shrinking the restored stone, and the
 	# jump home from the fall must not be drawn as an interpolated streak
 	if _grow != null and _grow.is_valid():
@@ -86,6 +115,9 @@ func _physics_process(dt: float) -> void:
 				_timer = 0.0
 				_shape.set_deferred("disabled", true)
 				Sfx.play_at("collapse", global_position)
+				_grit.emitting = false
+				_crumble.restart()
+				_crumble_dust.restart()
 		State.FALLING:
 			_timer += dt
 			_fall_speed += 30.0 * dt

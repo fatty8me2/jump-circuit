@@ -18,6 +18,11 @@ var _flare_tw: Tween
 ## One-shot spark ring rising off the floor ring; built with the checkpoint (inside the level
 ## load, not as a hitch on the first touch) and restarted on every celebration.
 var _burst: GPUParticles3D
+# effects (visual only): a fountain of sparks and glitter off the orb on activation,
+# and a gentle column of motes inside the ring while it is the live checkpoint
+var _fountain: GPUParticles3D
+var _glitter: GPUParticles3D
+var _motes: GPUParticles3D
 
 
 func _ready() -> void:
@@ -61,6 +66,28 @@ func _ready() -> void:
 	add_child(_orb)
 	_burst = _make_burst()
 	add_child(_burst)
+	_build_fx()
+
+
+func _build_fx() -> void:
+	var hot: Color = Fx.hot(Look.c("accent").lerp(Color.WHITE, 0.25), 2.4)
+	var vis := AABB(Vector3(-radius - 4.0, -1.0, -radius - 4.0), Vector3(radius * 2.0 + 8.0, 12.0, radius * 2.0 + 8.0))
+	_fountain = Fx.sparks({"amount": 56, "lifetime": 1.3, "explosiveness": 0.6, "dir": Vector3.UP,
+		"spread": 28.0, "speed": Vector2(6.0, 11.0), "gravity": Vector3(0, -14, 0), "damping": Vector2(0.5, 1.0),
+		"color": hot, "size": Vector2(0.07, 0.5), "curve": "flat",
+		"fade": PackedFloat32Array([1.0, 1.0, 0.0]), "aabb": vis})
+	_fountain.position = Vector3(0, 2.75, 0)
+	add_child(_fountain)
+	_glitter = Fx.burst({"amount": 30, "lifetime": 1.0, "shape": "sphere", "radius": 0.4, "tex": Fx.Tex.STAR,
+		"size": 0.35, "speed": Vector2(1.5, 4.0), "damping": Vector2(2.0, 3.0), "gravity": Vector3(0, -2, 0),
+		"curve": "pop", "color": hot, "aabb": vis})
+	_glitter.position = Vector3(0, 2.75, 0)
+	add_child(_glitter)
+	_motes = Fx.embers({"amount": 10, "lifetime": 2.2, "shape": "ring", "ring_radius": radius * 0.75,
+		"ring_inner": radius * 0.2, "speed": Vector2(0.4, 1.0), "tex": Fx.Tex.STAR, "size": 0.18,
+		"curve": "pop", "color": hot, "turbulence": 0.3, "emitting": false, "aabb": vis})
+	_motes.position = Vector3(0, 0.1, 0)
+	add_child(_motes)
 
 
 func _octa() -> Mesh:
@@ -82,6 +109,8 @@ func set_active(on: bool, celebrate: bool = true) -> void:
 	_ring_mat.emission_energy_multiplier = 2.4 if on else 0.15
 	_orb_mat.emission_energy_multiplier = 3.5 if on else 0.1
 	_orb_mat.albedo_color = Look.c("accent") if on else Color(0.35, 0.38, 0.45)
+	if _motes != null:
+		_motes.emitting = on
 	if on and celebrate:
 		var tw: Tween = create_tween()
 		_orb.scale = Vector3.ONE * 2.2
@@ -91,6 +120,9 @@ func set_active(on: bool, celebrate: bool = true) -> void:
 		_flare_tw = create_tween()
 		_flare_tw.tween_property(_ring_mat, "emission_energy_multiplier", 2.4, 0.6).set_ease(Tween.EASE_OUT)
 		_burst.restart()
+		_fountain.restart()
+		_glitter.restart()
+		Fx.flash(self, global_position + Vector3(0, 2.2, 0), Look.c("accent"), 4.0, 9.0, 0.6)
 
 
 func _make_burst() -> GPUParticles3D:

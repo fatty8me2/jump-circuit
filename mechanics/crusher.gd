@@ -20,6 +20,15 @@ const RISE: float = 0.72
 var _floor: Vector3
 var _kill: Area3D
 var _plate_mat: StandardMaterial3D
+# effects (visual only): grit sifting off the underside while it shudders; on the slam a
+# dust ring rolling out over the floor, flying debris, edge sparks, a ground ring, a flash
+var _grit: GPUParticles3D
+var _dust: GPUParticles3D
+var _debris: GPUParticles3D
+var _sparks: GPUParticles3D
+var _ring: GPUParticles3D
+var _lamp: OmniLight3D
+var _fx_u: float = -1.0
 
 
 func _ready() -> void:
@@ -54,6 +63,62 @@ func _ready() -> void:
 	position = _floor + Vector3(0, gap_at(Game.course_time) + size.y * 0.5, 0)
 	reset_physics_interpolation()
 	add_to_group("course_clock")
+	_build_fx()
+
+
+func _build_fx() -> void:
+	var under: float = -size.y * 0.5 - 0.15
+	var reach: float = maxf(size.x, size.z)
+	var vis := AABB(Vector3(-reach - 4.0, under - lift - 2.0, -reach - 4.0), Vector3(reach * 2.0 + 8.0, lift + size.y + 8.0, reach * 2.0 + 8.0))
+	# (it only shudders ~0.25 s, so the rate is high)
+	_grit = Fx.emitter({"amount": clampi(int(size.x * size.z * 5.0), 24, 60), "lifetime": 0.7, "emitting": false,
+		"shape": "box", "extents": Vector3(size.x * 0.45, 0.02, size.z * 0.45), "dir": Vector3.DOWN,
+		"spread": 10.0, "speed": Vector2(0.2, 1.0), "gravity": Vector3(0, -14, 0), "additive": false,
+		"size": 0.16, "scale": Vector2(0.5, 1.2), "color": Color(0.42, 0.36, 0.3, 0.95),
+		"fade": PackedFloat32Array([1.0, 1.0, 0.0]), "aabb": vis})
+	_grit.position = Vector3(0, under, 0)
+	add_child(_grit)
+	_dust = Fx.smoke({"amount": 26, "lifetime": 1.0, "shape": "ring", "ring_radius": reach * 0.5,
+		"ring_inner": reach * 0.35, "dir": Vector3(0, 0.15, 0), "spread": 180.0, "flatness": 0.9,
+		"radial_vel": Vector2(4.0, 8.0), "speed": Vector2(0.0, 0.4), "damping": Vector2(5.0, 8.0),
+		"gravity": Vector3(0, 0.6, 0), "size": 1.1, "color": Color(0.85, 0.8, 0.72, 0.75), "aabb": vis})
+	add_child(_dust)
+	_debris = Fx.debris({"amount": 18, "shape": "ring", "ring_radius": reach * 0.5, "ring_inner": reach * 0.3,
+		"dir": Vector3.UP, "spread": 50.0, "radial_vel": Vector2(2.0, 5.0), "speed": Vector2(3.0, 7.0),
+		"color": Color(0.4, 0.33, 0.27), "chunk": 0.22, "aabb": vis})
+	add_child(_debris)
+	_sparks = Fx.sparks({"amount": 30, "lifetime": 0.45, "shape": "ring", "ring_radius": reach * 0.55,
+		"ring_inner": reach * 0.45, "dir": Vector3.UP, "spread": 70.0, "radial_vel": Vector2(3.0, 7.0),
+		"speed": Vector2(2.0, 6.0), "color": Color(3.0, 1.5, 0.6), "aabb": vis})
+	add_child(_sparks)
+	_ring = Fx.shockwave(reach * 1.4, {"lifetime": 0.5, "color": Color(2.2, 1.7, 1.2), "aabb": vis})
+	add_child(_ring)
+	_lamp = OmniLight3D.new()
+	_lamp.light_color = Color(1.0, 0.55, 0.3)
+	_lamp.omni_range = reach * 2.0 + 2.0
+	_lamp.light_energy = 0.0
+	_lamp.visible = false
+	add_child(_lamp)
+
+
+## Visual state only (the kill check never reads any of this).
+func _process(_dt: float) -> void:
+	var u: float = fposmod(Game.course_time / period + phase, 1.0)
+	var was: float = _fx_u
+	_fx_u = u
+	if was < 0.0:
+		return
+	var shudder: bool = u >= SHUDDER and u < DOWN
+	if _grit.emitting != shudder:
+		_grit.emitting = shudder
+	# the frame the press reaches the floor (u passes DOWN; a wrap never counts)
+	if was < DOWN and u >= DOWN and u - was < 0.25:
+		var floor_local := Vector3(0, -size.y * 0.5 - gap_at(Game.course_time), 0)
+		for p: GPUParticles3D in [_dust, _debris, _sparks, _ring]:
+			p.position = floor_local + Vector3(0, 0.08, 0)
+			p.restart()
+		_lamp.position = floor_local + Vector3(0, 0.8, 0)
+		Fx.pulse(_lamp, 3.0, 0.0, 0.4)
 
 
 func snap_to_clock() -> void:

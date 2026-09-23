@@ -671,10 +671,15 @@ func connect_feedback() -> void:
 		visual.on_bounce(strength)
 		Sfx.play("bounce", 0.04, 1.0, clampf(1.25 - strength / 60.0, 0.75, 1.2)))
 	# the hazard plays its own positional hit sound
-	knocked.connect(func(v: Vector3) -> void: visual.on_bounce(v.length()))
-	wall_run_started.connect(func(_n: Vector3) -> void: Sfx.play("step", 0.08, 0.45, 1.35))
+	knocked.connect(func(v: Vector3) -> void: visual.on_knock(v))
+	wall_run_started.connect(func(n: Vector3) -> void:
+		visual.on_wall_run(n)
+		Sfx.play("step", 0.08, 0.45, 1.35))
+	wall_jumped.connect(func() -> void: visual.on_wall_jump())
 	mantled.connect(func() -> void:
 		visual.on_mantle()
+		# the lip is ~0.55 m out from where the climb ends, at its height (read-only)
+		visual.on_mantle_grab(_mantle_to - _mantle_dir * 0.55, _mantle_dir)
 		Sfx.play("step", 0.05, 0.5, 0.8))
 	teleported.connect(func() -> void:
 		visual.on_respawn()

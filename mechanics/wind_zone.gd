@@ -58,6 +58,20 @@ func _ready() -> void:
 	m.material = qm  # no billboard: a thin box reads along the wind from any angle
 	p.draw_pass_1 = m
 	add_child(p)
+	_build_motes(along, axis, span)
+
+
+## Soft motes tumbling along with the streaks, on turbulent paths (visual only).
+func _build_motes(along: Vector3, axis: Vector3, span: float) -> void:
+	var life: float = maxf(span / 5.0, 0.4)
+	var motes: GPUParticles3D = Fx.emitter({"amount": int(clampf(size.x * size.y * size.z * 0.08, 6, 30)),
+		"lifetime": life, "preprocess": life, "local": true, "shape": "box",
+		"extents": size * 0.5 * (Vector3.ONE - axis) + axis * 0.1, "offset": -along * span * 0.5,
+		"dir": along, "spread": 6.0, "speed": Vector2(4.0, 5.0), "turbulence": 1.2, "turbulence_scale": 3.0,
+		"tex": Fx.Tex.DOT, "size": 0.16, "scale": Vector2(0.5, 1.0),
+		"fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0]), "color": Color(1.6, 1.8, 2.0, 0.7),
+		"aabb": AABB(-size, size * 2.0)})
+	add_child(motes)
 
 
 func _physics_process(dt: float) -> void:

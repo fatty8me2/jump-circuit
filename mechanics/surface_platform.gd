@@ -49,6 +49,23 @@ func _ready() -> void:
 			m.set_shader_parameter("glow", 1.2)
 		mi.material_override = m
 	add_child(mi)
+	if kind == Kind.BOOST:
+		_build_boost_fx()
+
+
+## Boost strips stream sparks along their arrow (local -Z), riding just over the deck:
+## born at the back end, gone by the front. Visual only; one cheap local emitter.
+func _build_boost_fx() -> void:
+	var v: float = maxf(speed * 0.55, 4.0)
+	var p: GPUParticles3D = Fx.emitter({"amount": clampi(int(size.x * size.z * 0.9), 10, 36),
+		"lifetime": size.z / v, "local": true, "shape": "box",
+		"extents": Vector3(size.x * 0.4, 0.02, 0.1), "offset": Vector3(0, 0, size.z * 0.5 - 0.2),
+		"dir": Vector3.FORWARD, "spread": 2.0, "speed": Vector2(v * 0.8, v * 1.2),
+		"facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.14, 1.1),
+		"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0]), "color": Color(1.2, 3.4, 3.0),
+		"aabb": AABB(-size * 0.5 - Vector3(1, 0, 1), size + Vector3(2, 2, 2)), "preprocess": size.z / v})
+	p.position = Vector3(0, size.y * 0.5 + 0.12, 0)
+	add_child(p)
 
 
 func _dir() -> Vector3:

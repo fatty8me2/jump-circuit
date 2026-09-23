@@ -15,6 +15,16 @@ var _area: Area3D
 var _beam: MeshInstance3D
 var _guide: MeshInstance3D
 var _guide_mat: StandardMaterial3D
+# effects (visual only): charge crackle at the eyes, sparks and heat haze along a live
+# beam, a snap burst and flash when it switches on
+var _crackle: Array[GPUParticles3D] = []
+var _eye_glow: Array[MeshInstance3D] = []
+var _beam_sparks: GPUParticles3D
+var _snap: GPUParticles3D
+var _haze: MeshInstance3D
+var _lamp: OmniLight3D
+var _fx_on: bool = false
+var _fx_charging: bool = false
 
 
 func _ready() -> void:
@@ -50,6 +60,7 @@ func _ready() -> void:
 	for sx: float in [-1.0, 1.0]:
 		add_child(Look.box(Vector3(0.36, post_h, 0.36), post_mat, Vector3(sx * (size.x * 0.5 + 0.18), 0, 0)))
 		add_child(Look.box(Vector3(0.1, maxf(size.y, 0.2) + 0.1, maxf(size.z, 0.2) + 0.1), eye_mat, Vector3(sx * (size.x * 0.5 + 0.02), 0, 0)))
+	_build_fx()
 	_apply()
 
 
@@ -82,6 +93,83 @@ func _apply() -> void:
 		var c: Color = _guide_mat.albedo_color
 		c.a = a
 		_guide_mat.albedo_color = c
+
+
+const HOT_RED: Color = Color(3.0, 0.55, 0.3)
+
+
+func _build_fx() -> void:
+	var half: float = size.x * 0.5
+	for sx: float in [-1.0, 1.0]:
+		var c: GPUParticles3D = Fx.sparks({"amount": 16, "lifetime": 0.22, "one_shot": false, "emitting": false,
+			"explosiveness": 0.0, "randomness": 0.8, "spread": 180.0, "speed": Vector2(2.0, 5.0),
+			"gravity": Vector3.ZERO, "damping": Vector2(6.0, 9.0), "size": Vector2(0.06, 0.4),
+			"shape": "sphere", "radius": 0.12, "color": Color(3.0, 1.2, 0.8), "local": true,
+			"aabb": AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2))})
+		c.position = Vector3(sx * (half - 0.08), 0, 0)
+		add_child(c)
+		_crackle.append(c)
+		# the eye swells with light as the charge builds
+		var glow: MeshInstance3D = Fx.sprite(Color(3.0, 0.9, 0.5, 0.0), 1.0, Fx.Tex.DOT, true)
+		glow.position = c.position
+		glow.visible = false
+		add_child(glow)
+		_eye_glow.append(glow)
+	var beam_box := Vector3(half, size.y * 0.4, size.z * 0.4)
+	var vis := AABB(Vector3(-half - 1.0, -3.0, -1.5), Vector3(size.x + 2.0, 5.0, 3.0))
+	_beam_sparks = Fx.sparks({"amount": clampi(int(size.x * 4.0), 8, 36), "lifetime": 0.45, "one_shot": false,
+		"emitting": false, "explosiveness": 0.0, "randomness": 0.5, "shape": "box", "extents": beam_box,
+		"dir": Vector3(0, 1, 0), "spread": 75.0, "speed": Vector2(1.0, 3.5), "gravity": Vector3(0, -12, 0),
+		"size": Vector2(0.06, 0.36), "color": Color(3.2, 1.0, 0.45), "aabb": vis})
+	add_child(_beam_sparks)
+	_snap = Fx.sparks({"amount": clampi(int(size.x * 7.0), 14, 60), "lifetime": 0.4, "shape": "box",
+		"extents": beam_box, "spread": 180.0, "speed": Vector2(3.0, 8.0), "gravity": Vector3(0, -8, 0),
+		"damping": Vector2(3.0, 5.0), "color": HOT_RED, "size": Vector2(0.09, 0.6), "aabb": vis})
+	add_child(_snap)
+	# heat shimmer rising off the live beam (reads the screen: Medium / High only)
+	if Fx.density() > 0.5:
+		var hm := ShaderMaterial.new()
+		hm.shader = preload("res://visual/heat_haze.gdshader")
+		var q := QuadMesh.new()
+		q.size = Vector2(size.x, 1.1)
+		_haze = Look.mesh_node(q, hm, Vector3(0, 0.55 + size.y * 0.3, 0))
+		_haze.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_haze.visible = false
+		add_child(_haze)
+	_lamp = OmniLight3D.new()
+	_lamp.light_color = Color(1.0, 0.25, 0.15)
+	_lamp.omni_range = maxf(size.x * 0.7, 3.0)
+	_lamp.light_energy = 0.0
+	_lamp.visible = false
+	add_child(_lamp)
+	_fx_on = is_on_at(Game.course_time)
+
+
+## Visual state only (the kill check in _physics_process never reads any of this).
+func _process(_dt: float) -> void:
+	var t: float = Game.course_time
+	var on: bool = is_on_at(t)
+	var charging: bool = not on and time_until_on(t) < warn
+	if charging != _fx_charging:
+		_fx_charging = charging
+		for c: GPUParticles3D in _crackle:
+			c.emitting = charging
+		for g: MeshInstance3D in _eye_glow:
+			g.visible = charging
+	if charging:
+		var k: float = clampf(1.0 - time_until_on(t) / maxf(warn, 0.01), 0.0, 1.0)
+		var flick: float = 0.75 + 0.25 * sin(t * 83.0) * sin(t * 57.0)
+		for g: MeshInstance3D in _eye_glow:
+			g.scale = Vector3.ONE * lerpf(0.35, 1.3, k) * flick
+			(g.material_override as StandardMaterial3D).albedo_color.a = lerpf(0.3, 1.0, k)
+	if on != _fx_on:
+		_fx_on = on
+		_beam_sparks.emitting = on
+		if _haze != null:
+			_haze.visible = on
+		if on:
+			_snap.restart()
+			Fx.pulse(_lamp, 4.0, 0.0, 0.35)
 
 
 func _physics_process(_dt: float) -> void:

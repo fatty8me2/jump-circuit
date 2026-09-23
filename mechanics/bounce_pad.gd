@@ -20,6 +20,9 @@ var _surface_tilt: float = 0.0
 var _shock: MeshInstance3D
 var _shock_mat: StandardMaterial3D
 var _shock_tw: Tween
+# effects (visual only): a few motes shimmering up off the cushion, a sparkle column
+# (along the launch heading on angled pads) on every launch
+var _launch_fx: GPUParticles3D
 
 
 func _ready() -> void:
@@ -91,6 +94,25 @@ func _build_visual() -> void:
 		_build_hoop(col)
 	if show_arc:
 		_build_arc(col)
+	_build_fx(col)
+
+
+func _build_fx(col: Color) -> void:
+	var hot: Color = Fx.hot(col.lerp(Color.WHITE, 0.3), 2.2)
+	var vis := AABB(Vector3(-4, -1, -4), Vector3(8, 10, 8))
+	var shimmer: GPUParticles3D = Fx.emitter({"amount": 8, "lifetime": 1.3, "local": true, "shape": "ring",
+		"ring_radius": radius * 0.8, "ring_inner": radius * 0.2, "dir": Vector3.UP, "spread": 8.0,
+		"speed": Vector2(0.5, 1.2), "tex": Fx.Tex.STAR, "size": 0.32, "curve": "pop", "color": hot,
+		"aabb": vis, "preprocess": 1.3})
+	shimmer.position = Vector3(0, LIP + 0.05, 0)
+	add_child(shimmer)
+	var up: Vector3 = _local_launch().normalized() if pitch_deg >= 1.0 else Vector3.UP
+	_launch_fx = Fx.sparks({"amount": 26, "lifetime": 0.55, "shape": "ring", "ring_radius": radius * 0.7,
+		"ring_inner": radius * 0.3, "dir": Vector3.UP, "spread": 10.0, "speed": Vector2(6.0, 14.0),
+		"gravity": Vector3(0, -10, 0), "damping": Vector2(3.0, 6.0), "color": hot,
+		"size": Vector2(0.07, 0.6), "aabb": vis})
+	_launch_fx.transform = Transform3D(Fx.basis_up(up), Vector3(0, LIP + 0.05, 0))
+	add_child(_launch_fx)
 
 
 func _build_arc(col: Color) -> void:
@@ -189,6 +211,8 @@ func on_bounced(_player: Node) -> void:
 	_shock_tw.tween_property(ring, "scale", Vector3(2.4, 0.3, 2.4), 0.3).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	_shock_tw.tween_property(_shock_mat, "albedo_color:a", 0.0, 0.3)
 	_shock_tw.chain().tween_callback(ring.hide)
+	if _launch_fx != null:
+		_launch_fx.restart()
 
 
 ## Built on first use. Own material (Look.flat is shared per colour, and the

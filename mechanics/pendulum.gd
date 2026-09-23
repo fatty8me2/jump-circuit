@@ -14,6 +14,8 @@ extends Node3D
 var _arm: Node3D
 var _area: Area3D
 var _cool: float = 0.0
+# effects (visual only): a smear of glow left behind the head, strongest at the bottom
+var _smear: GPUParticles3D
 
 
 func _ready() -> void:
@@ -38,6 +40,19 @@ func _ready() -> void:
 	_arm.add_child(_area)
 	_apply(Game.course_time)
 	add_to_group("course_clock")
+	_smear = Fx.trail({"amount": 40, "lifetime": 0.22, "shape": "box",
+		"extents": Vector3(head_radius * 0.7, head_radius * 0.75, head_radius * 0.75),
+		"size": head_radius * 0.9, "curve": "shrink", "color": Color(1.4, 0.45, 0.35, 0.35),
+		"fade": PackedFloat32Array([0.8, 0.0]), "emitting": true,
+		"aabb": AABB(Vector3(-length * 2.0, -length * 1.5, -length), Vector3(length * 4.0, length * 2.0, length * 2.0))})
+	_smear.position = Vector3(0, -length, 0)
+	_arm.add_child(_smear)
+
+
+func _process(_dt: float) -> void:
+	# fraction of the top swing speed right now
+	var w: float = absf(cos(TAU * (Game.course_time / period + phase)))
+	_smear.amount_ratio = clampf((w - 0.25) / 0.75, 0.0, 1.0)
 
 
 ## restart_run() winds the clock back in place: take the new pose now, without a streak.
