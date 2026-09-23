@@ -15,6 +15,11 @@ signal racer_pose(id: int, pos: Vector3, vel: Vector3, grounded: bool, seq: int)
 signal racer_finished(id: int, time: float)
 signal lobby_requested
 signal upnp_result(text: String)
+## Party Mode game packet (hits, pickups, power-up events, round results). Host-only kinds
+## are checked by the receiver against from_id == 1; see party/party_layer.gd.
+signal party_message(from_id: int, msg: Dictionary)
+## A racer's checkpoint was accepted (first time they reached `index`); `at` is their session time.
+signal racer_checkpoint(id: int, index: int, at: float)
 
 const PORT: int = 24565
 const MAX_PLAYERS: int = 8
@@ -40,6 +45,13 @@ var upnp_text: String = ""
 var preferred_color: int = -1
 ## Share this short code with friends. The host creates it and the relay routes its sockets.
 var room_code: String = ""
+## Lobby game mode picked by the host: "race" (the classic race), "party" or "team".
+## Synced with every roster snapshot; "race" keeps every party system switched off.
+var game_mode: String = "race"
+## Team Party: peer id -> team (0 / 1). Synced with the roster.
+var teams: Dictionary = {}
+## Party Cup round of the race in progress (sent with the race start; 0 = not a party race).
+var party_round: int = 0
 
 var _clock_offset: float = 0.0
 var _best_rtt: float = 999.0
@@ -211,6 +223,9 @@ func _shutdown() -> void:
 	_clock_offset = 0.0
 	upnp_text = ""
 	room_code = ""
+	game_mode = "race"
+	teams.clear()
+	party_round = 0
 	if preferred_color >= 0:
 		Settings.color_index = preferred_color
 		preferred_color = -1
@@ -237,10 +252,11 @@ func _begin_clock_sync(delay: float = 0.0) -> void:
 
 func _on_peer_disconnected(id: int) -> void:
 	# a kicked joiner was never in the roster: nothing to tell anyone
+	teams.erase(id)
 	if roster.erase(id):
 		roster_changed.emit()
 		if is_host():
-			_sync_roster.rpc(roster)
+			_sync_roster.rpc(roster, _party_cfg())
 
 
 func _process(dt: float) -> void:
@@ -348,6 +364,7 @@ func _handle_relay_packet(message: String) -> void:
 		"peer_left":
 			if is_host():
 				var id := int(packet.get("id", 0))
+				teams.erase(id)
 				if roster.erase(id):
 					roster_changed.emit()
 					_broadcast_roster()
@@ -365,7 +382,7 @@ func _handle_relay_event(from_id: int, event: String, raw_data: Variant) -> void
 				_register_player(from_id, str(data.get("name", "Runner")), int(data.get("color", 0)))
 		"roster":
 			if not is_host():
-				_sync_roster(_roster_from_wire(data.get("players", [])))
+				_sync_roster(_roster_from_wire(data.get("players", [])), data.get("party", {}))
 		"kick":
 			if from_id == 1 and not is_host():
 				_shutdown()
@@ -381,11 +398,18 @@ func _handle_relay_event(from_id: int, event: String, raw_data: Variant) -> void
 				_apply_pong(float(data.get("client_time", 0.0)), float(data.get("server_time", 0.0)))
 		"start_race":
 			if from_id == 1:
-				_start_race(int(data.get("level_index", -1)), float(data.get("start_time", 0.0)))
+				_start_race(int(data.get("level_index", -1)), float(data.get("start_time", 0.0)),
+					str(data.get("mode", "")), int(data.get("round", 0)))
 		"return_lobby":
 			if from_id == 1:
 				_return_to_lobby()
 		"pose":
+			if data.has("party"):
+				# a Party Mode packet riding the pose event (see send_party)
+				var to: int = int(data.get("to", 0))
+				if roster.has(from_id) and (to == 0 or to == my_id()) and typeof(data["party"]) == TYPE_DICTIONARY:
+					party_message.emit(from_id, data["party"])
+				return
 			var p: Array = data.get("pos", [])
 			var v: Array = data.get("vel", [])
 			if p.size() == 3 and v.size() == 3:
@@ -408,9 +432,9 @@ func _relay_send_event(event: String, data: Dictionary, to_id: int = 0) -> void:
 
 func _broadcast_roster() -> void:
 	if _relay_mode:
-		_relay_send_event("roster", {"players": _roster_to_wire()})
+		_relay_send_event("roster", {"players": _roster_to_wire(), "party": _party_cfg()})
 	else:
-		_sync_roster.rpc(roster)
+		_sync_roster.rpc(roster, _party_cfg())
 
 
 func _roster_to_wire() -> Array[Dictionary]:
@@ -468,6 +492,8 @@ func _register_player(id: int, player_name: String, color: int) -> void:
 	# a newcomer gets a colour nobody else wears; later explicit picks are honoured
 	entry["color"] = _free_color(id, color) if joining else posmod(color, Settings.RACER_COLORS.size())
 	roster[id] = entry
+	if joining and game_mode == "team" and not teams.has(id):
+		teams[id] = PartyRules.smaller_team(teams)
 	_broadcast_roster()
 	roster_changed.emit()
 
@@ -496,7 +522,8 @@ func _free_color(id: int, want: int) -> int:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _sync_roster(new_roster: Dictionary) -> void:
+func _sync_roster(new_roster: Dictionary, party_cfg: Variant = {}) -> void:
+	_apply_party_cfg(party_cfg)
 	# "joined" = the first snapshot that lists us (the host has accepted our registration)
 	var first: bool = not roster.has(my_id()) and new_roster.has(my_id())
 	if in_race:
@@ -560,7 +587,7 @@ func update_identity() -> void:
 	if is_host():
 		roster[1]["name"] = Settings.player_name
 		roster[1]["color"] = Settings.color_index
-		_sync_roster.rpc(roster)
+		_sync_roster.rpc(roster, _party_cfg())
 		roster_changed.emit()
 	else:
 		_register.rpc_id(1, Settings.player_name, Settings.color_index)
@@ -569,18 +596,24 @@ func update_identity() -> void:
 # ---- race flow --------------------------------------------------------------------
 
 func host_start_race(level_index: int, countdown: float = 4.0) -> void:
+	# every party race is the next round of the Party Cup (the round travels with the start)
+	var round_no: int = party_round + 1 if game_mode != "race" else 0
 	if _relay_mode and is_host() and _relay_ready:
 		var start_time := now() + countdown
-		_start_race(level_index, start_time)
-		_relay_send_event("start_race", {"level_index": level_index, "start_time": start_time})
+		_start_race(level_index, start_time, game_mode, round_no)
+		_relay_send_event("start_race", {"level_index": level_index, "start_time": start_time, "mode": game_mode, "round": round_no})
 	elif is_host():
-		_start_race.rpc(level_index, now() + countdown)
+		_start_race.rpc(level_index, now() + countdown, game_mode, round_no)
 
 
+## `mode` / `round_no`: the lobby mode and Party Cup round ("" = keep the synced mode).
 @rpc("authority", "call_local", "reliable")
-func _start_race(level_index: int, start_time: float) -> void:
+func _start_race(level_index: int, start_time: float, mode: String = "", round_no: int = 0) -> void:
 	if not is_host() and not roster.has(my_id()):
 		return   # joined a moment ago and not registered yet: the host will turn us away
+	if mode in ["race", "party", "team"]:
+		game_mode = mode
+	party_round = round_no if game_mode != "race" else 0
 	race_level = level_index
 	race_start_time = start_time
 	in_race = true
@@ -662,6 +695,7 @@ func _apply_checkpoint(id: int, index: int, at: float) -> void:
 		roster[id]["cp"] = index
 		roster[id]["cp_at"] = at
 		roster_changed.emit()
+		racer_checkpoint.emit(id, index, at)
 
 
 func send_finished(time: float) -> void:
@@ -712,6 +746,96 @@ func all_finished() -> bool:
 		if float(roster[id]["finished"]) < 0.0:
 			return false
 	return not roster.is_empty()
+
+
+# ---- party mode ------------------------------------------------------------------
+
+## Sends a Party Mode packet to everyone (to_id 0) or one peer. Kinds only the host may send
+## are enforced by the receiving PartyLayer (from_id == 1).
+## Over the room relay the packet rides the existing broadcast "pose" event as
+## {"party": msg, "to": id}: the deployed relay forwards it unchanged (no redeploy needed),
+## receivers drop packets addressed to someone else, and a pose without "pos" is ignored by
+## older game builds.
+func send_party(msg: Dictionary, to_id: int = 0) -> void:
+	if not active or to_id == my_id():
+		return
+	if _relay_mode:
+		if roster.size() > 1:
+			_relay_send_event("pose", {"party": msg, "to": to_id})
+		return
+	if multiplayer.multiplayer_peer == null or multiplayer.get_peers().is_empty():
+		return
+	if to_id > 0:
+		_party.rpc_id(to_id, msg)
+	else:
+		_party.rpc(msg)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _party(msg: Dictionary) -> void:
+	var from_id: int = multiplayer.get_remote_sender_id()
+	if roster.has(from_id):
+		party_message.emit(from_id, msg)
+
+
+## Host: picks the lobby mode. Team Party balances the teams afresh.
+func host_set_mode(mode: String) -> void:
+	if not is_host() or mode not in ["race", "party", "team"] or in_race:
+		return
+	if mode != game_mode:
+		party_round = 0   # a new mode starts a new cup
+	game_mode = mode
+	if mode == "team":
+		teams = PartyRules.balance_teams(roster.keys())
+	else:
+		teams.clear()
+	_broadcast_roster()
+	roster_changed.emit()
+
+
+## Host: moves one player to a team (the lobby's Swap buttons).
+func host_set_team(id: int, team: int) -> void:
+	if not is_host() or game_mode != "team" or not roster.has(id):
+		return
+	teams[id] = clampi(team, 0, 1)
+	_broadcast_roster()
+	roster_changed.emit()
+
+
+## Host: starts a fresh Party Cup (round numbers from 1 again).
+func host_reset_cup() -> void:
+	if not is_host():
+		return
+	party_round = 0
+	_broadcast_roster()
+	roster_changed.emit()
+
+
+func team_of(id: int) -> int:
+	return int(teams.get(id, 0))
+
+
+func _party_cfg() -> Dictionary:
+	var t: Array = []
+	for id: Variant in teams:
+		t.append([int(id), int(teams[id])])
+	return {"mode": game_mode, "teams": t, "round": party_round}
+
+
+func _apply_party_cfg(raw: Variant) -> void:
+	if typeof(raw) != TYPE_DICTIONARY or (raw as Dictionary).is_empty():
+		return
+	var cfg: Dictionary = raw
+	var mode: String = str(cfg.get("mode", "race"))
+	game_mode = mode if mode in ["race", "party", "team"] else "race"
+	teams.clear()
+	var t: Variant = cfg.get("teams", [])
+	if typeof(t) == TYPE_ARRAY:
+		for e: Variant in t:
+			if typeof(e) == TYPE_ARRAY and (e as Array).size() == 2:
+				teams[int(e[0])] = clampi(int(e[1]), 0, 1)
+	if not in_race:
+		party_round = int(cfg.get("round", party_round))
 
 
 # ---- router-free lobby ------------------------------------------------------------

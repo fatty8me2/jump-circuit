@@ -56,6 +56,56 @@ How it works: each racer simulates their own character locally (zero input lag);
 30 times a second and smoothed; moving/rotating obstacles run off a clock synchronized with the
 host, so every racer sees identical cycles. Tilting and collapsing pieces react only to you.
 
+## Party Mode
+
+A second, sillier way to play: item boxes, crazy power-ups and griefing. It only exists in Party Mode -
+solo play and classic races are completely unaffected.
+
+* **Party / Team Party** (multiplayer): in the lobby the host picks **Mode: Race** (the classic race),
+  **Party** (free-for-all) or **Team Party** (two teams, Blaze vs Tide, balanced automatically; the host
+  can move anyone with the *Move to* buttons). Each race is a round of the **Party Cup**: 1st 10 points,
+  then 8, 6, 5, 4, 3, 2, 1; **+3 per KO** (a rival who falls or is KO'd within 4 s of your hit); **+2**
+  for the first racer through each checkpoint. A round ends when everyone is home or 45 s after the
+  first finisher. In Team Party a team scores the sum of its members. After each round everyone sees the
+  round breakdown and the cup standings; the host picks the next course or ends the cup.
+* **Party Practice** (title menu): any unlocked course with item boxes and practice dummies on the
+  checkpoint lawns. Every box hands out the next power-up, so you can try them all. Nothing is saved.
+
+Spinning **?** boxes wait in a row at the start and on every checkpoint lawn. The leader mostly rolls
+small or defensive items; racers at the back get the wild stuff. Everyone always has a **Shove**.
+
+| Input (default; rebind in Settings > Party Mode controls) | Action |
+|---|---|
+| F / left mouse / X, or RT | Attack (the Shove, or the transformation's attack; hold to charge) |
+| E / right mouse / RB, or LT | Use the item in your slot (Hero's Tunic: throw the current tool) |
+| Q / B | Shove |
+| C / LB | Next tool (Hero's Tunic) |
+
+Power-ups (display names live in `party/party_names.gd`, so they are easy to rename):
+
+| Power-up | What it does |
+|---|---|
+| Nine-Tailed Fox (10 s) | Chakra cloak, ears and nine flowing tails. x1.6 speed, x1.35 jump. Tap Attack: Fox Claw, a lunging swipe that KOs. Hold: charge a Tailed Beast Bomb and release for a huge blast. |
+| Hero's Tunic (10 s) | Tunic, cap, shield and the Legend Blade: a three-swing combo; hold for a Spin Attack. Use throws the current tool - Boomerang (stuns), Hookshot (yank a rival to you, or pull yourself to a wall), Bombs. Next tool cycles them. |
+| Golden Surge Hair (10 s) | Spiky golden hair and a crackling aura. x1.4 speed, a double jump. Tap: Dash Punch. Hold: "Ka... me..." - release an Energy Wave beam that shoves everyone along it. |
+| Thunder Cloud | Lightning strikes every rival ahead of you: stunned, then slowed. |
+| Slick Puddle | Dropped behind you; the first rival through it spins out. |
+| Spring Glove | A boxing glove on a spring punches the rival in front. |
+| Mega Magnet (5 s) | Drags nearby rivals toward you - off beams, into gaps. |
+| Shrink Ray | The rival in front shrinks for 7 s: slower, weaker jumps, knocked further. |
+| Swap Warp | Trade places with the racer just ahead. |
+| Balloon Shield (15 s) | Absorbs the next hit (even a KO) and bounces it back at the attacker. |
+| Jetpack (5 s) | A rocket burst up and forward, half gravity, hold Jump to thrust. |
+| Tornado | A tornado wanders up the course for 9 s flinging every rival it catches. |
+| Gravity Bomb | Lobbed; rivals caught in the blast float helplessly in a bubble. |
+| Ice Beam | Freezes the rival in front in a block of ice. |
+
+How it works online: every hit is detected by the attacker against the victim's ghost and sent to the
+victim, whose game applies it to its own character (knockback, stun, status effects, KOs). Hazards
+(puddles, tornadoes, magnet pull) are checked by each player against their own character. The host
+decides item-box pickups, checkpoint bonuses and the round end, so every screen shows the same scores.
+Over the room relay, party packets ride the existing pose event - no relay redeploy is needed.
+
 ## Project layout
 
 ```

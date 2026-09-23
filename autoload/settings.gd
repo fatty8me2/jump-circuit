@@ -24,6 +24,9 @@ var timer_mode: String = "auto"
 var player_name: String = "Runner"
 var color_index: int = 0
 var last_room_code: String = ""
+## Party Mode rebinds: action -> {"key": physical keycode, "mouse": button, "pad": button}
+## (only what differs from Game.PARTY_BIND_DEFAULTS is needed; 0 / -1 = unbound).
+var party_binds: Dictionary = {}
 
 var _env: Environment
 var _sun: DirectionalLight3D
@@ -79,6 +82,21 @@ func _sanitize() -> void:
 	player_name = player_name.strip_edges().substr(0, 14)
 	if player_name == "":
 		player_name = "Runner"
+	# party binds: known actions only, int fields only
+	var clean: Dictionary = {}
+	for action: Variant in party_binds:
+		var raw: Variant = party_binds[action]
+		if typeof(action) != TYPE_STRING or typeof(raw) != TYPE_DICTIONARY:
+			continue
+		if str(action) not in ["attack", "use_item", "shove", "cycle_item"]:
+			continue
+		var b: Dictionary = {}
+		for k: String in ["key", "mouse", "pad"]:
+			var v: Variant = (raw as Dictionary).get(k, null)
+			if typeof(v) == TYPE_INT or typeof(v) == TYPE_FLOAT:
+				b[k] = clampi(int(v), -1, 1 << 30)
+		clean[action] = b
+	party_binds = clean
 
 
 static func _finite_clamp(x: float, lo: float, hi: float, fallback: float) -> float:
@@ -114,7 +132,7 @@ func toggle_fullscreen() -> void:
 
 func _props() -> Array[String]:
 	return ["mouse_sensitivity", "invert_y", "fov", "master_volume", "sfx_volume", "music_volume",
-		"quality", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_room_code"]
+		"quality", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_room_code", "party_binds"]
 
 
 func my_color() -> Color:

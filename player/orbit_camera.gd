@@ -110,7 +110,7 @@ func _process(dt: float) -> void:
 	if follow != null:
 		p = follow.global_position
 		grounded = follow.is_grounded()
-		vel = follow.reported_velocity()
+		vel = follow.velocity()
 	else:
 		target.camera_yaw = yaw
 		p = target.get_global_transform_interpolated().origin

@@ -75,3 +75,29 @@
   via look_* actions); F11 / Alt+Enter fullscreen; settings save however the panel closes.
 - Test harness: any engine/script error during a test fails it (TestLib.ErrorTrap), per-test watchdog, --only/--level
   that select nothing exit 2. Tools and tests never write the real progress.json or open a real UPnP port. The engine binary and build/ are not in git (size).
+
+
+## Party Mode (2026-09-23)
+- One switch: `Game.party` (a PartyRules) is null in solo play and classic races; LevelBase only adds the PartyLayer
+  when it is set. Player gained hook fields only (`party_stun`, `party_air_jumps`; `speed/jump/gravity_mult` came
+  with the foundation) and they stay 0 / 1.0 in the main mode - tested (test_zp_main_mode_stays_pure).
+- Hits are victim-applied: the attacker checks its attack against the rival's ghost (RemoteRacer) and sends a
+  `hit` to that peer, which applies knockback / stun / status / KO to its own Player. Hazards that live in the
+  world (Slick Puddle, Tornado, Mega Magnet's pull) are checked by every client against its OWN player only,
+  so nothing is decided from stale ghost positions and nobody can be hit twice. Projectiles and effects replay
+  on every screen from their spawn event (deterministic flight); the owner reports where they burst.
+- Host-authoritative: item-box pickups (first touch wins; a taken box ignores later touches), checkpoint
+  bonuses and the round end / scores (`round_end` carries the rows and cup totals, everyone shows those).
+- KO credit is the victim's call: a fall or KO within 4 s of the last hit credits the last hitter (`ko`).
+- Relay: party packets ride the existing broadcast `pose` event as `{"party": msg, "to": id}` instead of a new
+  relay event, so the already-deployed Cloudflare relay needs no redeploy; receivers drop packets addressed to
+  someone else and older builds ignore a pose without `pos`. (A relay-side "party" event was drafted and dropped.)
+- Rolls are weighted by race position (PartyItems.WEIGHTS: leader -> balloons / puddles / gloves, last -> the three
+  transformations, Thunder Cloud, Swap Warp; the leader can never roll Swap Warp or Thunder Cloud).
+- Attack is on the release for taps (a hold past 0.22 s becomes a charge), so one button carries both the quick
+  move and the charged special on every transformation.
+- Effects are many modest GPUParticles3D on unshaded additive soft quads (PartyFx), plus short OmniLight flashes,
+  tweened meshes and camera trauma; materials are cached for the level and dropped when the layer leaves.
+- Sounds: 18 party clips synthesised by party/gen_party_audio.py (same helpers as tools/gen_audio.py); PartySfx
+  falls back to pitched main-game clips if a file is missing.
+- Names are nods, not trademarks, and all live in party/party_names.gd.

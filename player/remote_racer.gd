@@ -43,6 +43,35 @@ func setup(p_name: String, color: Color) -> void:
 	_label.modulate = color.lerp(Color.WHITE, 0.4)
 
 
+# ---- Party Mode accessors (read-only views; party attachments hang off visual()) -------
+
+## The Volt model (party costumes and status effects are added as its children).
+func visual() -> PlayerVisual:
+	return _visual
+
+
+## Last reported velocity / grounded flag (hit checks: "from behind", "in the air").
+func velocity() -> Vector3:
+	return _vel
+
+
+func is_grounded() -> bool:
+	return _grounded
+
+
+## Team Party: the name tag shows the team colour and name.
+func set_team(team_name: String, color: Color) -> void:
+	_label.text = "%s  [%s]" % [racer_name, team_name]
+	_label.modulate = color.lerp(Color.WHITE, 0.25)
+	_visual.set_accent(color)
+
+
+## Cosmetic flinch the moment a local attack connects (the real knockback arrives with
+## the victim's next poses).
+func flinch() -> void:
+	_visual.on_bounce(12.0)
+
+
 func push_state(pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
 	if not _has_state or seq != _seq or pos.distance_to(global_position) > 12.0:
 		# first packet, a respawn / teleport, or a long packet gap: snap, don't slide
@@ -68,15 +97,7 @@ func push_state(pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
 	_seq = seq
 
 
-## Last reported velocity / footing / heading (the spectator camera follows these).
-func reported_velocity() -> Vector3:
-	return _vel
-
-
-func is_grounded() -> bool:
-	return _grounded
-
-
+## Last reported heading (the spectator camera starts behind it).
 func facing() -> Vector3:
 	return _facing
 
