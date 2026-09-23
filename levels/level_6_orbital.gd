@@ -7,6 +7,15 @@ var _yaw: float = 0.0
 var _tuning: MovementTuning
 var _sparks: Array[GPUParticles3D] = []
 var _spark_next: Array[float] = []
+## World midpoint and end of every stage (ambient particle layers are hung around them).
+var _mids: Array[Vector3] = []
+var _ends: Array[Vector3] = []
+## Course-clock bursts: {"p": GPUParticles3D, "period": float, "offset": float, "last": int}
+var _clock_fx: Array[Dictionary] = []
+## Press slam sparks: {"c": Crusher, "p": GPUParticles3D, "gap": float}
+var _slams: Array[Dictionary] = []
+## Arrival bursts that fire when the player comes within 2.5 m: {"at": Vector3, "p": GPUParticles3D, "cool": float}
+var _arrivals: Array[Dictionary] = []
 
 
 func _configure() -> void:
@@ -149,45 +158,84 @@ func _build() -> void:
 	set_spawn(Vector3(0, 0.1, 4), 0.0)
 	_frame(Vector3.ZERO, 0.0)
 	var cp: Vector3 = _stage_1_arrival()
+	_mark(cp)
 	_frame(_w(cp), 0.0)
 	cp = _stage_2_lowg()
+	_mark(cp)
 	_frame(_w(cp), -90.0 + _yaw)
 	cp = _stage_3_solar()
+	_mark(cp)
 	_frame(_w(cp), -90.0 + _yaw)
 	cp = _stage_4_cargo()
+	_mark(cp)
 	_frame(_w(cp), -90.0 + _yaw)
 	cp = _stage_5_airlock()
+	_mark(cp)
 	_frame(_w(cp), _yaw)
 	cp = _stage_6_hydraulics()
+	_mark(cp)
 	_frame(_w(cp), _yaw)
 	cp = _stage_7_thrusters()
+	_mark(cp)
 	_frame(_w(cp), _yaw - 90.0)
 	cp = _stage_8_compactor()
+	_mark(cp)
 	_frame(_w(cp), _yaw)
 	cp = _stage_9_flare()
+	_mark(cp)
 	_frame(_w(cp), _yaw)
 	cp = _stage_10_junction()
+	_mark(cp)
 	_frame(_w(cp), _yaw - 90.0)
 	cp = _stage_11_carousel()
+	_mark(cp)
 	_frame(_w(cp), _yaw)
 	cp = _stage_12_pulse()
+	_mark(cp)
 	_frame(_w(cp), _yaw)
 	cp = _stage_13_mast()
+	_mark(cp)
 	_frame(_w(cp), _yaw)
 	cp = _stage_14_cargo_line()
+	_mark(cp)
 	_frame(_w(cp), _yaw - 90.0)
 	cp = _stage_15_lattice()
+	_mark(cp)
 	_frame(_w(cp), _yaw)
 	cp = _stage_16_stacks()
+	_mark(cp)
 	_frame(_w(cp), _yaw)
 	cp = _stage_17_reactor()
+	_mark(cp)
 	_frame(_w(cp), _yaw)
 	_stage_18_approach()
+	_decor()
+
+
+func _mark(cp_local: Vector3) -> void:
+	_mids.append((_o + _w(cp_local)) * 0.5)
+	_ends.append(_w(cp_local))
 
 
 func _process(dt: float) -> void:
-	# sparking cables: each spark emitter fires on its own pseudo-random clock
 	var t: float = Game.course_time
+	for e: Dictionary in _clock_fx:
+		var k: int = int(floor((t + float(e["offset"])) / float(e["period"])))
+		if k != int(e["last"]):
+			e["last"] = k
+			(e["p"] as GPUParticles3D).restart()
+	for e: Dictionary in _slams:
+		var g: float = (e["c"] as Crusher).gap_at(t)
+		if g < 0.05 and float(e["gap"]) >= 0.05:
+			(e["p"] as GPUParticles3D).restart()
+		e["gap"] = g
+	if player != null:
+		for e: Dictionary in _arrivals:
+			e["cool"] = maxf(float(e["cool"]) - dt, 0.0)
+			if float(e["cool"]) <= 0.0 and player.global_position.distance_to(e["at"]) < 2.5:
+				e["cool"] = 3.0
+				(e["p"] as GPUParticles3D).restart()
+	# sparking cables: each spark emitter fires on its own pseudo-random clock
 	for i: int in _sparks.size():
 		if t >= _spark_next[i]:
 			_sparks[i].restart()
@@ -485,6 +533,63 @@ func _press(floor_top: Vector3, size: Vector3, lift: float, period: float, phase
 	return c
 
 
+## The reactor core: a white-hot sphere in a cage of containment rings, plasma motes orbiting it,
+## arcs of sparks and a pulsing light (its kill volume sits just inside the glow).
+func _reactor_core(c: Vector3) -> void:
+	var w: Vector3 = _w(c)
+	add_child(Look.sphere(2.05, Look.flat(Color(0.75, 0.95, 1.0), 0.2, 0.0, 6.0), w))
+	var halo_mat := StandardMaterial3D.new()
+	halo_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	halo_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	halo_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	halo_mat.albedo_color = Color(0.3, 0.7, 1.0, 0.18)
+	var halo := Look.sphere(3.0, halo_mat, w)
+	halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(halo)
+	for i: int in 3:
+		var ring := TorusMesh.new()
+		ring.inner_radius = 3.3 + float(i) * 0.5
+		ring.outer_radius = 3.5 + float(i) * 0.5
+		ring.rings = 48
+		ring.ring_segments = 6
+		var holder := Node3D.new()
+		holder.set_script(preload("res://visual/spin.gd"))
+		holder.set("period", 5.0 + float(i) * 2.0)
+		holder.set("axis", Vector3(0.3 * float(i), 1.0, 0.2).normalized())
+		holder.position = w
+		holder.rotation = Vector3(0.6 * float(i), 0.4, 0.9 - 0.5 * float(i))
+		holder.add_child(Look.mesh_node(ring, Look.flat(Color(0.6, 0.64, 0.72), 0.4, 0.8)))
+		add_child(holder)
+	var light := OmniLight3D.new()
+	light.light_color = Color(0.55, 0.85, 1.0)
+	light.light_energy = 3.0
+	light.omni_range = 16.0
+	light.position = w
+	add_child(light)
+	OrbitalFx.swirl(self, w + Vector3(0, -1.5, 0), 3.4, Color(0.5, 0.9, 1.0), 60)
+	OrbitalFx.glints(self, w, Vector3(4.0, 4.0, 4.0), 24, Color(0.7, 0.95, 1.0))
+	for i: int in 3:
+		var a: float = TAU * float(i) / 3.0
+		var sp: GPUParticles3D = OrbitalFx.sparks(self, w + Vector3(cos(a), 0.3, sin(a)) * 2.2, Vector3(cos(a), 0.4, sin(a)), 18, Color(0.6, 0.9, 1.0), 6.0)
+		_sparks.append(sp)
+		_spark_next.append(float(i) * 0.5)
+
+
+## Sparks spraying off the floor round a press every time it slams (course clock).
+func _slam_fx(c: Crusher, floor_top: Vector3) -> void:
+	var p: GPUParticles3D = OrbitalFx.sparks(self, _w(floor_top + Vector3(0, 0.1, 0)), Vector3.UP, 36, Color(1.0, 0.7, 0.3), 8.0)
+	(p.process_material as ParticleProcessMaterial).spread = 80.0
+	(p.process_material as ParticleProcessMaterial).flatness = 0.7
+	_slams.append({"c": c, "p": p, "gap": c.gap_at(Game.course_time)})
+
+
+## A burst of motes that fires when the player arrives at local point `at` (portal exits).
+func _arrival_fx(at: Vector3, col: Color) -> void:
+	var p: GPUParticles3D = OrbitalFx.burst(self, _w(at + Vector3(0, 1.0, 0)), col, 60, 7.0, 0.28)
+	_arrivals.append({"at": _w(at), "p": p, "cool": 0.0})
+	OrbitalFx.swirl(self, _w(at + Vector3(0, 0.1, 0)), 1.4, col, 24)
+
+
 ## Bot: a crusher leaves at least `head` m of room (and is harmless) from `a` to `b` seconds from now.
 func _under_ok(c: Crusher, a: float, b: float, head: float = 2.3) -> bool:
 	var t: float = Game.course_time
@@ -505,9 +610,11 @@ func _stage_8_compactor() -> Vector3:
 	var zs: Array[float] = [-9.5, -15.5, -21.5]
 	for i: int in zs.size():
 		presses.append(kit.crusher(_w(Vector3(0, 0, zs[i])), Vector3(3.0, 1.6, 3.0), 3.4, 2.8, 0.3 * float(i)))
+		_slam_fx(presses[i], Vector3(0, 0, zs[i]))
 	kit.ledge(_w(Vector3(0, 3.3, -30.5)), Vector3(3.0, 5.0, 4.0), _yaw, "alt")
 	var l1: Dictionary = _area(Vector3(0, 3.3, -30.5), 1.5, 2.0)
 	var c4: Crusher = kit.crusher(_w(Vector3(0, 3.3, -30.5)), Vector3(3.4, 1.6, 4.4), 3.2, 3.4, 0.55)
+	_slam_fx(c4, Vector3(0, 3.3, -30.5))
 	var end: Dictionary = _dock(Vector3(0, 3.3, -40.0), 0.0)
 	# SHORTCUT: the hull panel beside the last press - run it past press and ledge, kick onto the dock
 	kit.wallrun(_w(Vector3(-3.4, 1.5, -30.5)), Vector3(14.0, 7.0, 0.5), _yaw + 90.0)
@@ -643,6 +750,8 @@ func _stage_10_junction() -> Vector3:
 	var p1: Dictionary = _deck(Vector3(2.8, 0, -26.2), 3.0, 4.0, "alt")
 	kit.ledge(_w(Vector3(2.8, 3.3, -31.5)), Vector3(3.0, 5.0, 4.0), _yaw, "main")
 	kit.portal(_w(Vector3(2.8, 3.3, -32.6)), _yaw, _w(Vector3(-3.0, 0.6, -29.4)), _yaw, 7.0)
+	_arrival_fx(Vector3(-3.0, 0.6, -30.3), WarpPortal.EXIT_COLOR)
+	OrbitalFx.swirl(self, _w(Vector3(2.8, 3.4, -32.6)), 1.6, WarpPortal.ENTRY_COLOR, 26)
 	_sign(Vector3(-2.2, 0, -2.4), Color(1.0, 0.3, 0.2))
 	_sign(Vector3(2.2, 0, -2.4), WarpPortal.ENTRY_COLOR)
 	if route_variant == 0:
@@ -818,6 +927,7 @@ func _stage_14_cargo_line() -> Vector3:
 	var k2: Dictionary = _deck(Vector3(-3.5, 3.3, -14.0), 2.2, 2.2)
 	var k3: Dictionary = _deck(Vector3(-2.5, 3.3, -20.5), 2.2, 2.2, "alt")
 	var press: Crusher = _press(Vector3(-2.5, 3.3, -20.5), Vector3(2.8, 1.4, 2.8), 3.4, 3.2, 0.0)
+	_slam_fx(press, Vector3(-2.5, 3.3, -20.5))
 	var k4: Dictionary = _deck(Vector3(-3.0, 2.0, -27.0), 2.0, 2.0)
 	# -- mass driver (route 1) --
 	kit.boost(_w(Vector3(3.4, 0, -8.5)), Vector3(2.2, 0.3, 11.0), _yaw, 20.0)
@@ -945,7 +1055,8 @@ func _stage_17_reactor() -> Vector3:
 	var end: Dictionary = _dock(Vector3(-1.0, 10.0, -52.0), 0.0)
 	# the core: a kill sphere hanging beside the lift shaft, and the trench under the first leap
 	var core_c: Vector3 = Vector3(-6.5, 6.0, -21.0)
-	kit.hazard(_w(core_c), Vector3(3.2, 3.2, 3.2))
+	kit.hazard(_w(core_c), Vector3(2.3, 2.3, 2.3))
+	_reactor_core(core_c)
 	_haz(Vector3(0, -0.2, -7.8), Vector3(2.4, 0.8, 1.4), 0.0)
 	_float(dock, r1)
 	_hop(r1, _area(gc, 1.5, 1.5))
@@ -979,6 +1090,9 @@ func _stage_18_approach() -> void:
 	var b2: Dictionary = _deck(Vector3(0, 0.6, -40.8), 2.0, 2.0)
 	var fin: Dictionary = _deck(Vector3(0, 0.6, -51.0), 10.0, 12.0, "main", 1.0)
 	kit.finish(_w(Vector3(0, 0.6, -52.0)), _yaw)
+	_mids.append(_w(Vector3(0, 0, -26.0)))
+	_ends.append(_w(Vector3(0, 0.6, -52.0)))
+	_docking_ring(Vector3(0, 0.6, -52.0))
 	# leg 1: dock -> pocket 1
 	r_until(func() -> bool: return _flare_go(f, 24.0, 13.4, 2.0))
 	_hop(dock, d1, Vector3(0, 0, 2.0))
@@ -999,6 +1113,119 @@ func _stage_18_approach() -> void:
 	r_walk(_w(Vector3(0, 0.6, -52.5)))
 	d1.clear()
 	d2.clear()
+
+
+## The docking ring round the finish: a huge standing torus with running lights, a slow swirl of
+## gold motes and bursts of light on the course clock.
+func _docking_ring(at: Vector3) -> void:
+	var c: Vector3 = at + Vector3(0, 5.5, -1.5)
+	var ring := TorusMesh.new()
+	ring.inner_radius = 8.0
+	ring.outer_radius = 9.2
+	ring.rings = 64
+	ring.ring_segments = 12
+	var rm := Look.mesh_node(ring, Look.flat(Color(0.82, 0.84, 0.88), 0.45, 0.4), _w(c))
+	rm.rotation = Vector3(PI * 0.5, deg_to_rad(_yaw), 0)
+	add_child(rm)
+	var lights := TorusMesh.new()
+	lights.inner_radius = 7.85
+	lights.outer_radius = 8.05
+	lights.rings = 64
+	lights.ring_segments = 6
+	var lm := Look.mesh_node(lights, Look.flat(Color(1.0, 0.75, 0.3), 0.3, 0.0, 4.0), _w(c))
+	lm.rotation = Vector3(PI * 0.5, deg_to_rad(_yaw), 0)
+	add_child(lm)
+	for i: int in 8:
+		var a: float = TAU * float(i) / 8.0
+		var clamp_box := Look.box(Vector3(1.4, 1.4, 2.2), Look.flat(Look.c("decor"), 0.5, 0.6))
+		clamp_box.position = _w(c + Vector3(cos(a) * 8.6, sin(a) * 8.6, 0))
+		clamp_box.rotation = Vector3(0, deg_to_rad(_yaw), a)
+		add_child(clamp_box)
+	OrbitalFx.swirl(self, _w(at + Vector3(0, 0.2, 0)), 3.2, Color(1.0, 0.8, 0.35), 48)
+	for i: int in 3:
+		var b: GPUParticles3D = OrbitalFx.burst(self, _w(c + Vector3(cos(TAU * float(i) / 3.0) * 8.0, sin(TAU * float(i) / 3.0) * 8.0, 0)), Color(1.0, 0.78, 0.35), 40, 6.0, 0.3)
+		_clock_fx.append({"p": b, "period": 1.8, "offset": float(i) * 0.6, "last": -99})
+
+
+## Set dressing and ambient life for the whole station (visual only, all well off the course).
+func _decor() -> void:
+	# -- two layered ambient systems round every stage: drifting dust and twinkling ion glints --
+	for i: int in _mids.size():
+		var m: Vector3 = _mids[i]
+		OrbitalFx.dust(self, m + Vector3(0, 3.0, 0), Vector3(20.0, 9.0, 20.0), 46)
+		var col: Color = Color(0.4, 0.9, 1.0) if i % 2 == 0 else Color(0.78, 0.55, 1.0)
+		OrbitalFx.glints(self, m + Vector3(0, 4.0, 0), Vector3(16.0, 7.0, 16.0), 16, col)
+	# micrometeor streaks far out round the station
+	OrbitalFx.streaks(self, Vector3(40, 60, -80), Vector3(160, 40, 160), 10)
+	OrbitalFx.streaks(self, Vector3(60, -40, -60), Vector3(180, 30, 180), 8)
+	# -- the central hub: habitat wheel, spine modules, solar wings, radiators, dish --
+	var hub: Vector3 = Vector3(98, 30, -95)
+	OrbitalStation.habitat_wheel(self, hub, Basis(Vector3.BACK, PI * 0.5), 26.0, 70.0)
+	var along_x: Basis = Basis(Vector3.UP, PI * 0.5)
+	OrbitalStation.module(self, hub + Vector3(-20, 0, 0), along_x, 16.0, 3.4)
+	OrbitalStation.module(self, hub + Vector3(21, 0, 0), along_x, 18.0, 3.4, Color(0.6, 0.9, 1.0))
+	OrbitalStation.module(self, hub + Vector3(0, -14, 0), Basis(Vector3.RIGHT, PI * 0.5), 14.0, 2.8)
+	OrbitalStation.truss(self, hub + Vector3(0, 0, -28), hub + Vector3(0, 0, -62), 1.8)
+	OrbitalStation.truss(self, hub + Vector3(0, 0, 28), hub + Vector3(0, 0, 60), 1.8)
+	var face_sun: Basis = Basis(Vector3.RIGHT, deg_to_rad(-60.0))
+	for zc: float in [-50.0, 48.0]:
+		for sx: float in [-1.0, 1.0]:
+			OrbitalStation.solar_wing(self, hub + Vector3(sx * 13.5, 0, zc), face_sun, Vector2(24.0, 10.0))
+	OrbitalStation.radiator(self, hub + Vector3(-20, -8, 9), Basis.IDENTITY, Vector2(10.0, 6.0), 6)
+	OrbitalStation.radiator(self, hub + Vector3(21, -8, -9), Basis(Vector3.UP, PI), Vector2(10.0, 6.0), 6)
+	OrbitalStation.dish(self, hub + Vector3(30, 5, 0), Vector3(0.4, 1.0, 0.3), 5.0)
+	OrbitalFx.exhaust(self, hub + Vector3(33, 0, 0), Vector3(1, 0, 0), 5.0, 0.7)
+	OrbitalFx.swirl(self, hub + Vector3(0, -2, 0), 7.0, Color(0.5, 0.85, 1.0), 40)
+	# -- the west power yard (under stages 7-10): a module string and two big wings --
+	var west: Vector3 = Vector3(-30, 2, -105)
+	OrbitalStation.module(self, west, Basis.IDENTITY, 26.0, 3.0)
+	OrbitalStation.truss(self, west + Vector3(0, 0, 16), west + Vector3(0, 0, 50), 1.5)
+	for sx: float in [-1.0, 1.0]:
+		OrbitalStation.solar_wing(self, west + Vector3(sx * 11.0, -1, 36), face_sun, Vector2(18.0, 9.0))
+	OrbitalStation.radiator(self, west + Vector3(6, -6, -4), Basis(Vector3.UP, PI * 0.5), Vector2(8.0, 5.0), 5)
+	OrbitalFx.vent(self, west + Vector3(0, 0, -16.5), Vector3(0, -0.2, -1), 18)
+	# -- under the opening stages: an old supply module and its truss down into the dark --
+	OrbitalStation.module(self, Vector3(12, -22, -60), Basis(Vector3.UP, 0.3), 30.0, 4.0)
+	OrbitalStation.truss(self, Vector3(12, -22, -40), Vector3(0, -2, -12), 1.3)
+	OrbitalStation.module(self, Vector3(40, -14, -130), along_x, 22.0, 3.2, Color(0.6, 0.9, 1.0))
+	# -- the arrival bay: a docked shuttle, the bay frame over the start deck, a dish --
+	OrbitalStation.shuttle(self, Vector3(-21.0, -4.0, 3.0), 12.0)
+	OrbitalStation.truss(self, Vector3(-19.0, -3.5, 3.0), Vector3(-6.0, -0.8, 1.0), 0.9)
+	OrbitalStation.dish(self, Vector3(13.0, 1.0, -8.0), Vector3(0.5, 1.0, -0.2), 3.2)
+	_truss_v_world(Vector3(13.0, 0.8, -8.0), 22.0)
+	for sx: float in [-1.0, 1.0]:
+		kit.block(Vector3(sx * 5.4, 3.2, -5.6), Vector3(0.5, 6.4, 0.5), Look.c("side"), false)
+		kit.glow_strip(Vector3(sx * 5.4, 0.03, -5.6), Vector3(0.9, 0.05, 0.9), Look.c("accent"))
+	kit.block(Vector3(0, 6.6, -5.6), Vector3(11.3, 0.5, 0.6), Look.c("side"), false)
+	kit.glow_strip(Vector3(0, 6.3, -5.35), Vector3(10.0, 0.08, 0.1), Look.c("accent2"))
+	for i: int in 3:
+		kit.glow_strip(Vector3(0, 0.03, 1.5 - float(i) * 2.2), Vector3(1.8 - float(i) * 0.4, 0.04, 0.3), Look.c("accent"))
+	# -- the east radiator farm beside stages 15-17 --
+	for i: int in 4:
+		OrbitalStation.radiator(self, Vector3(162, 38 + float(i) * 4.0, -150 + float(i) * 28.0), Basis(Vector3.UP, PI * 0.5), Vector2(12.0, 7.0), 5)
+	OrbitalStation.truss(self, Vector3(156, 40, -160), Vector3(156, 52, -50), 1.6)
+	OrbitalStation.module(self, Vector3(170, 60, -20), Basis(Vector3.UP, 0.2), 24.0, 3.6)
+	# -- venting pipes and sparking cable joints under the docks --
+	for i: int in _ends.size():
+		var e: Vector3 = _ends[i]
+		if i % 3 == 0:
+			OrbitalFx.vent(self, e + Vector3(3.4, -1.6, 0.0), Vector3(1, -0.3, 0.2), 12)
+		if i % 2 == 1:
+			var sp: GPUParticles3D = OrbitalFx.sparks(self, e + Vector3(-0.4, -4.0, 0.4), Vector3(0.3, -1, 0.2), 20)
+			_sparks.append(sp)
+			_spark_next.append(float(i) * 0.37)
+
+
+## Vertical truss hanging down from a world point (the local-frame _truss_v without the frame).
+func _truss_v_world(top: Vector3, length: float) -> void:
+	var o: Vector3 = _o
+	var y: float = _yaw
+	var b: Basis = _b
+	_frame(Vector3.ZERO, 0.0)
+	_truss_v(top, length)
+	_o = o
+	_yaw = y
+	_b = b
 
 
 # ---- environment ------------------------------------------------------------------------------

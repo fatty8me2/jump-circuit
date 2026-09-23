@@ -124,8 +124,8 @@ void sky() {
 		float spec = pow(max(dot(n, h), 0.0), 60.0) * (1.0 - landm) * (1.0 - cl) * day;
 		surf += vec3(1.0, 0.95, 0.85) * spec * 1.6;
 		// city lights on the night side
-		float lights = smoothstep(0.62, 0.8, noise3(n * 60.0)) * smoothstep(0.45, 0.7, noise3(n * 9.0 + 3.0));
-		surf += city * lights * landm * (1.0 - day) * (1.0 - cl * 0.8) * 1.4;
+		float lights = smoothstep(0.78, 0.92, noise3(n * 520.0)) * smoothstep(0.55, 0.75, noise3(n * 14.0 + 3.0));
+		surf += city * lights * landm * (1.0 - day) * (1.0 - cl * 0.8) * 0.45;
 		// atmosphere: blue limb, strongest on the lit side
 		float rim = pow(1.0 - max(dot(n, -d), 0.0), 3.0);
 		surf += atmo * rim * (0.25 + 1.5 * smoothstep(-0.35, 0.5, ndl));
