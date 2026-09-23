@@ -55,13 +55,14 @@ const THEMES: Dictionary = {
 		"cloud_light": Color(0.60, 0.95, 1.0), "cloud_shade": Color(0.10, 0.40, 0.50),
 	},
 	# Orbital Drift: a space station in low orbit - black sky, hard white sunlight, a planet below.
+	# (levels/level_6_orbital.gd swaps in its own star-and-planet sky shader and planetshine.)
 	"orbital": {
-		"sky_top": Color(0.0, 0.0, 0.02), "sky_horizon": Color(0.08, 0.06, 0.18), "sky_bottom": Color(0.02, 0.05, 0.14),
-		"sun": Color(1.0, 0.98, 0.94), "sun_energy": 1.9, "sun_rot": Vector3(-28, 120, 0),
-		"ambient": Color(0.35, 0.40, 0.60), "ambient_energy": 0.55, "fog": Color(0.05, 0.05, 0.12), "fog_density": 0.0004,
-		"top": Color(0.90, 0.92, 0.95), "side": Color(0.34, 0.37, 0.44), "trim": Color(1.0, 0.55, 0.12),
-		"alt_top": Color(0.62, 0.66, 0.74), "accent": Color(1.0, 0.55, 0.12), "accent2": Color(0.35, 0.85, 1.0),
-		"decor": Color(0.22, 0.24, 0.30), "decor2": Color(1.0, 0.80, 0.25), "metal": Color(0.70, 0.72, 0.78),
+		"sky_top": Color(0.0, 0.0, 0.01), "sky_horizon": Color(0.03, 0.04, 0.10), "sky_bottom": Color(0.02, 0.06, 0.16),
+		"sun": Color(1.0, 0.98, 0.95), "sun_energy": 2.0, "sun_rot": Vector3(-30, 125, 0),
+		"ambient": Color(0.42, 0.50, 0.72), "ambient_energy": 0.6, "fog": Color(0.03, 0.04, 0.09), "fog_density": 0.0016,
+		"top": Color(0.80, 0.82, 0.86), "side": Color(0.24, 0.26, 0.32), "trim": Color(1.0, 0.52, 0.10),
+		"alt_top": Color(0.52, 0.58, 0.68), "accent": Color(1.0, 0.52, 0.10), "accent2": Color(0.30, 0.85, 1.0),
+		"decor": Color(0.20, 0.22, 0.27), "decor2": Color(1.0, 0.76, 0.28), "metal": Color(0.68, 0.70, 0.76),
 		"cloud_light": Color(0.85, 0.90, 1.0), "cloud_shade": Color(0.30, 0.40, 0.60),
 	},
 	"ascent": {
