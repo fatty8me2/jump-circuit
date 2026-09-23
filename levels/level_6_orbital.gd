@@ -220,7 +220,7 @@ func _bay(c: Vector3, size: Vector3, period: float = 0.0, on_fraction: float = 0
 func _stage_3_solar() -> Vector3:
 	kit.wallrun(_w(Vector3(2.0, 1.2, -13.0)), Vector3(14.0, 6.0, 0.5), _yaw + 90.0)
 	var l1: Dictionary = _deck(Vector3(-1.0, 0, -25.0), 5.0, 6.0, "alt")
-	kit.wallrun(_w(Vector3(-3.5, 1.2, -36.0)), Vector3(12.0, 6.0, 0.5), _yaw + 90.0)
+	kit.wallrun(_w(Vector3(-3.5, 1.2, -35.25)), Vector3(13.5, 6.0, 0.5), _yaw + 90.0)
 	var l2: Dictionary = _deck(Vector3(1.5, 0, -46.5), 2.6, 2.6)
 	var end: Dictionary = _dock(Vector3(1.5, 0, -56.0), -90.0)
 	r_wallrun(_w(Vector3(0.3, 0, -2.6)), _w(Vector3(1.6, 1.2, -7.0)), _w(Vector3(1.6, 1.2, -17.0)), _w(Vector3(-1.0, 0, -24.0)))
