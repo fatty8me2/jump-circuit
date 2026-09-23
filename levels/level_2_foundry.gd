@@ -164,6 +164,9 @@ func _build() -> void:
 	_stage_16_ingot_feed()
 	_stage_17_kiln()
 	_stage_18_pour_run()
+	_stage_19_quench()
+	_stage_20_hammer_lift()
+	_stage_21_crown()
 	_build_surroundings()
 	_build_ambient_fx()
 
@@ -1182,8 +1185,196 @@ func _stage_18_pour_run() -> void:
 	_net(Vector3(-13.0, y - 9.0, -146.0), Vector3(40, 0.6, 16))
 
 
+# ---- 19. quench stack: mantle the ingot stack between laser curtains, or bounce into a wall run --
+
+const WALL_CYAN := Color(0.3, 0.9, 1.0)
+
+
+func _stage_19_quench() -> void:
+	var y: float = ROOF_Y + 34.2                # 141.6, the CP18 deck
+	var cp18 := Vector3(-30.5, y, -155.0)
+	var a := Vector3(-29.4, y + 0.6, -161.4)
+	var b := Vector3(-31.4, y + 1.2, -166.2)
+	_chain(_edge(cp18, a, 5.0), [a, b], 1.8)
+	for p: Vector3 in [a, b]:
+		kit.pillar(p - Vector3(0, 1.0, 0), 0.35, 6.0)
+	# the fork deck
+	var f := Vector3(-26.0, y + 1.6, -175.0)                                             # 143.2
+	kit.plat(f, Vector3(9, 1.2, 9), "main", 2.0)                                         # x -30.5 .. -21.5, z -170.5 .. -179.5
+	kit.pillar(f - Vector3(0, 1.2, 0), 1.0, 8.0)
+	r_jump(_edge(b, f, 1.8), Vector3(-29.0, f.y, -171.6))
+	# route 0 (inner lane, gold): mantle the ingot stack; a laser curtain sweeps each top
+	var l1 := Vector3(-17.0, f.y + 3.2, -173.0)                                          # 146.4
+	var l2 := Vector3(-11.0, f.y + 6.4, -173.0)                                          # 149.6
+	kit.ledge(l1, Vector3(3.0, 4.6, 4.0), 0.0, "alt")                                    # x -18.5 .. -15.5
+	kit.ledge(l2, Vector3(3.0, 7.8, 4.0), 0.0, "alt")                                    # x -12.5 .. -9.5
+	var gates: Array = []
+	var eta: Array[float] = [1.25, 2.1]
+	var tops: Array[Vector3] = [l1, l2]
+	for i: int in 2:
+		for h: float in [0.45, 1.3]:
+			var g: LaserGate = kit.laser(tops[i] + Vector3(0, h, 0), Vector3(3.6, 0.2, 0.2), 3.0, 0.35, fposmod(-eta[i] / 3.0, 1.0), 90.0)
+			gates.append([g, eta[i]])
+	# checkpoint 19: a broad ledge both lanes arrive on
+	var cp_top := Vector3(-3.0, f.y + 6.4, -175.0)                                       # 149.6
+	kit.ledge(cp_top, Vector3(9.0, 7.8, 6.0), 0.0, "main")                               # x -7.5 .. 1.5, z -178 .. -172
+	var cp19 := Vector3(-1.5, cp_top.y, -175.0)
+	_checkpoint(cp19, -90.0, Vector3(2.0, 0, 2.2))
+	# route 1 (outer lane, cyan): sprint over the pad into the tall panel, run it, kick and mantle
+	kit.wallrun(Vector3(-13.5, f.y + 4.3, -180.75), Vector3(14, 8, 0.5), 0.0)            # x -20.5 .. -6.5, face z -180.5
+	var sp := Vector3(-22.6, f.y, -178.2)
+	kit.pad(sp, 16.0, 0.0, 0.0, 0.9)
+	kit.glow_strip(Vector3(-25.4, f.y + 0.02, -176.9), Vector3(3.2, 0.04, 0.22), WALL_CYAN, 25.0)
+	kit.glow_strip(Vector3(-23.2, f.y + 0.02, -173.0), Vector3(2.4, 0.04, 0.22), LedgeBlock.LIP_COLOR)
+	kit.banner(Vector3(-22.2, f.y, -170.9), 3.8, LedgeBlock.LIP_COLOR, 0.0)
+	kit.banner(Vector3(-22.2, f.y, -179.3), 3.8, WALL_CYAN, 0.0)
+	if route_variant == 0:
+		r_walk(Vector3(-25.0, f.y, -173.0))
+		r_until(func() -> bool: return _clear_at(gates, 0.4))
+		r_mantle(Vector3(-21.9, f.y, -173.0), Vector3(-17.9, l1.y, -173.0))
+		r_mantle(Vector3(-15.9, l1.y, -173.0), Vector3(-11.9, l2.y, -173.0))
+		r_jump(Vector3(-9.85, l2.y, -173.0), Vector3(-6.0, l2.y, -173.6))
+	else:
+		r_walk(Vector3(-27.5, f.y, -175.3))
+		# chain=true: the run-up crosses the pad, which throws us at the panel mid-air. The pad's
+		# bounce is still flagged when we kick off, so the w_run step hands the flight over at
+		# once - the r_pad step after it steers that flight onto the ledge (mantle) and lands.
+		r_wallrun(Vector3.ZERO, Vector3(-17.5, f.y + 3.8, -180.1), Vector3(-8.5, f.y + 3.8, -180.1), cp_top + Vector3(-3.0, 0, -1.5), true, true)
+		r_pad(sp, cp_top + Vector3(-3.0, 0, -1.5))
+	r_walk(cp19)
+	r_checkpoint()
+	# quench troughs steaming far below, the slag channel they drain into
+	_slag_pool(Vector3(-18.0, y - 7.6, -174.0), Vector2(30, 16))
+	for sx: float in [-28.0, -18.0, -8.0]:
+		FoundryFx.steam(self, Vector3(sx, y - 6.8, -183.5), Vector3.UP, 12, 3.2, 1.8)
+		kit.block(Vector3(sx, y - 7.4, -184.5), Vector3(6.0, 1.6, 2.4), Look.c("metal"), false)
+		kit.glow_strip(Vector3(sx, y - 6.55, -184.5), Vector3(5.4, 0.05, 1.8), Color(0.35, 0.75, 1.0))
+	FoundryFx.embers(self, Vector3(-14.0, y + 4.0, -175.0), Vector3(12.0, 4.0, 5.0), 45)
+	FoundryFx.sparks(self, Vector3(-18.5, l1.y - 2.2, -175.1), Vector3(0.3, 0.4, -1), 12, 4.0, 25.0, 0.7)
+	_net(Vector3(-28.0, y - 6.0, -163.0), Vector3(10, 0.6, 14))
+
+
+# ---- 20. hammer lift: ride two forge presses up; mistime a hop and you are under one ---------------
+
+func _stage_20_hammer_lift() -> void:
+	var y: float = ROOF_Y + 42.2                # 149.6, the CP19 ledge top
+	var cp19 := Vector3(-1.5, y, -175.0)
+	var b := Vector3(4.2, y + 0.4, -175.6)      # 150.0
+	_blk(b, 1.8)
+	kit.pillar(b - Vector3(0, 1.0, 0), 0.4, 7.0)
+	# press 1 rests level with the step and lifts 3.4 m; press 2 rests where press 1 tops out
+	var f1 := Vector3(8.0, b.y - 1.2, -170.5)
+	var f2 := Vector3(8.0, b.y + 2.2, -165.0)
+	var p1: Crusher = kit.crusher(f1, Vector3(3.0, 1.2, 3.0), 3.4, 3.0, 0.0)          # x 6.5 .. 9.5, z -172 .. -169
+	var p2: Crusher = kit.crusher(f2, Vector3(3.0, 1.2, 3.0), 3.4, 3.0, 0.5)          # z -166.5 .. -163.5
+	for fl: Vector3 in [f1, f2]:
+		kit.block(fl - Vector3(0, 0.6, 0), Vector3(3.4, 1.2, 3.4), Look.c("metal"))     # the anvil it slams onto
+		kit.glow_strip(fl + Vector3(0, 0.02, 0), Vector3(2.4, 0.04, 2.4), Look.c("decor2"))
+		kit.pillar(fl - Vector3(0, 1.2, 0), 0.6, 8.0)
+	_slam_fx(p1, f1)
+	_slam_fx(p2, f2)
+	var cp20 := Vector3(8.0, y + 6.4, -157.0)                                           # 156.0
+	kit.plat(cp20, Vector3(5, 1.2, 5), "main", 2.4)                                      # z -159.5 .. -154.5
+	kit.pillar(cp20 - Vector3(0, 1.2, 0), 1.0, 9.0)
+	kit.pipe(cp20 + Vector3(-2.0, -1.4, 0), Vector3(SX + SCORE * 0.5, cp20.y - 8.0, -158.0), 0.4)
+	_checkpoint(cp20, 180.0, Vector3(2.1, 0, -2.1))
+	r_jump(Vector3(1.15, y, -175.4), b)
+	r_until(func() -> bool:
+		var u: float = fposmod((Game.course_time + 0.5) / p1.period + p1.phase, 1.0)
+		return u > 0.58 and u < 0.8)
+	r_jump_onto(_edge(b, f1, 1.8), p1, Vector3(0, 0.6, 0))
+	r_until(func() -> bool:
+		var t: float = Game.course_time
+		var u1: float = fposmod(t / p1.period + p1.phase, 1.0)
+		var u2: float = fposmod((t + 0.45) / p2.period + p2.phase, 1.0)
+		return u1 < 0.3 and u2 > 0.58 and u2 < 0.8)
+	r_jump_onto(Vector3(8.0, f1.y + 4.6, -169.4), p2, Vector3(0, 0.6, 0))
+	r_until(func() -> bool: return fposmod(Game.course_time / p2.period + p2.phase, 1.0) < 0.3)
+	r_jump(Vector3(8.0, f2.y + 4.6, -163.85), cp20 + Vector3(0, 0, -1.4))
+	r_walk(cp20)
+	r_checkpoint()
+	# SHORTCUT: the tall anvil. A running mantle from the step (4.1 m) skips the first press.
+	kit.ledge(Vector3(3.6, b.y + 4.1, -170.0), Vector3(2.4, 5.2, 2.4), 0.0, "alt")      # x 2.4 .. 4.8, z -171.2 .. -168.8
+	kit.glow_strip(Vector3(3.6, b.y + 0.02, -174.5), Vector3(0.22, 0.04, 0.9), LedgeBlock.LIP_COLOR)
+	FoundryFx.embers(self, Vector3(7.0, y + 3.0, -166.0), Vector3(4.0, 4.0, 7.0), 40)
+	_net(Vector3(5.0, y - 6.0, -166.0), Vector3(14, 0.6, 24))
+
+
+# ---- 21. crown pour: a beam under the crown ladles, a wall run, kick and mantle onto the crown -------
+
+func _stage_21_crown() -> void:
+	var cp20 := Vector3(8.0, ROOF_Y + 48.6, -157.0)     # 156.0
+	var k1 := Vector3(7.0, cp20.y - 1.2, -150.6)           # 154.8
+	var d1 := Vector3(5.0, cp20.y - 3.0, -145.0)           # 153.0
+	_blk(k1, 1.8)
+	kit.pillar(k1 - Vector3(0, 1.0, 0), 0.4, 7.0)
+	kit.plat(d1, Vector3(6, 1.0, 4.4), "main", 1.4)                                      # x 2 .. 8, z -147.2 .. -142.8
+	kit.pillar(d1 - Vector3(0, 1.0, 0), 0.8, 8.0)
+	r_jump(_edge(cp20, k1, 5.0), k1)
+	r_jump(_edge(k1, d1, 1.8), d1 + Vector3(0.5, 0, -1.0))
+	# the pour beam: two crown ladles tip across it
+	var beam := Vector3(-4.0, d1.y, -145.0)
+	kit.plat(beam, Vector3(12.0, 0.8, 1.0), "main", 1.0)                                  # x -10 .. 2
+	kit.pillar(beam - Vector3(0, 0.8, 0), 0.4, 7.0)
+	var drum: float = d1.y + 8.0
+	var etas: Array[float] = [0.6, 1.25]
+	var lx: Array[float] = [-1.0, -6.5]
+	var ladles: Array = []
+	for i: int in 2:
+		var l: FoundryLadle = _ladle(Vector3(lx[i], d1.y, -145.0), 2.4, drum - d1.y, 2.6, 0.35, fposmod(-etas[i] / 2.6, 1.0), 90.0)
+		ladles.append([l, etas[i]])
+	var rail_y: float = drum + 3.3
+	kit.block(Vector3(-4.0, rail_y, -145.0), Vector3(14.0, 0.7, 0.9), Look.c("metal"), false)
+	kit.block(Vector3(-4.0, rail_y + 0.55, -145.0), Vector3(14.0, 0.3, 1.4), Look.c("decor"), false)
+	kit.glow_strip(Vector3(-4.0, rail_y - 0.4, -145.0), Vector3(14.0, 0.1, 0.2), Look.c("decor2"))
+	for xx: float in [-10.0, 2.0]:
+		kit.block(Vector3(xx, rail_y, -148.5), Vector3(0.8, 0.8, 7.0), Look.c("metal"), false)
+	_slag_pool(Vector3(-8.0, d1.y - 9.0, -146.0), Vector2(26, 8))
+	# the last wall run, and the crown's south lip with a press over it
+	kit.wallrun(Vector3(-19.0, d1.y + 1.3, -143.35), Vector3(12, 7, 0.5), 0.0)            # x -25 .. -13, face z -143.6
+	var m := Vector3(-18.0, S_TOP, -148.5)
+	kit.ledge(m, Vector3(10.0, 3.0, 3.0), 0.0, "alt")                                    # x -23 .. -13, z -150 .. -147
+	var cm: Crusher = kit.crusher(Vector3(-20.5, S_TOP, -148.5), Vector3(3.0, 1.2, 2.4), 3.2, 2.6, 0.34)
+	_slam_fx(cm, Vector3(-20.5, S_TOP, -148.5))
+	var fin := Vector3(-14.0, S_TOP, -157.0)
+	kit.finish(fin, 0.0)
+	r_walk(Vector3(3.0, d1.y, -145.0))
+	r_until(func() -> bool: return _clear_at(ladles, 0.2) and cm.is_clear_for(Game.course_time + 2.2, 1.3))
+	r_wallrun(Vector3(-9.7, d1.y, -145.0), Vector3(-14.0, d1.y + 1.2, -144.0), Vector3(-17.5, d1.y + 1.2, -144.0), Vector3(-20.5, S_TOP, -149.0))
+	r_walk(Vector3(-19.5, S_TOP, -151.8))
+	r_walk(fin)
+	_net(Vector3(-8.0, d1.y - 6.0, -146.0), Vector3(36, 0.6, 12))
+	# SHORTCUT: the lip panel. Run it past the pours and kick straight across onto the last wall run.
+	kit.wallrun(Vector3(-4.5, d1.y + 1.3, -147.75), Vector3(9, 7, 0.5), 0.0)             # x -9 .. 0, face z -147.5
+	kit.glow_strip(Vector3(2.4, d1.y + 0.02, -146.6), Vector3(0.9, 0.04, 0.22), WALL_CYAN, 0.0)
+	# the crown: finish fireworks and spark fountains at its corners
+	var fb1: GPUParticles3D = FoundryFx.burst(90, 12.0)
+	var fb2: GPUParticles3D = FoundryFx.glitter(70, 9.0, Look.c("accent2"))
+	var fb3: GPUParticles3D = FoundryFx.glitter(50, 7.0, FoundryFx.EMBER)
+	FoundryFx.near_burst(self, fin + Vector3(0, 1.0, 0), 3.0, [fb1, fb2, fb3], 1.2)
+	for c: Vector3 in [Vector3(-3.5, 0, -151.5), Vector3(-20.5, 0, -168.5), Vector3(-3.5, 0, -168.5)]:
+		kit.chimney(Vector3(c.x, S_TOP, c.z), 2.5, 0.7, false)
+		FoundryFx.sparks(self, Vector3(c.x, S_TOP + 2.7, c.z), Vector3.UP, 26, 7.0, 14.0, 1.1)
+	kit.lamp(Vector3(-8.0, S_TOP, -152.5), 3.0)
+	kit.lamp(Vector3(-20.0, S_TOP, -166.0), 3.0, false)
+
+
 func _build_ambient_fx() -> void:
-	pass
+	# embers rising round the old tower, ash drifting down the whole course (two layers)
+	for yy: float in [4.0, 24.0, 44.0, 64.0, 86.0]:
+		FoundryFx.embers(self, Vector3(0, yy, OZ - 10.0), Vector3(20.0, 7.0, 22.0), 50)
+	for yy2: float in [20.0, 60.0, 100.0, 140.0]:
+		FoundryFx.ash(self, Vector3(-6.0, yy2, -95.0), Vector3(40.0, 14.0, 70.0), 70)
+	# the furnace core shimmers
+	FoundryFx.motes(self, Vector3(0, (GLOW_LO + GLOW_HI) * 0.5, OZ), Vector3(7.0, 13.0, 7.0), 40)
+	FoundryFx.rising_sparks(self, Vector3(-5.2, ROOF_Y + 8.2, OZ + 5.2), Vector3(0.5, 0.2, 0.5), 24, 4.0)
+	FoundryFx.rising_sparks(self, Vector3(5.6, ROOF_Y + 10.2, OZ + 4.6), Vector3(0.5, 0.2, 0.5), 24, 4.0)
+	# the pour line and the Smelter: embers climbing round it
+	FoundryFx.embers(self, Vector3(0, ROOF_Y + 4.0, -90.0), Vector3(6.0, 5.0, 40.0), 60)
+	for yy3: float in [112.0, 128.0, 144.0]:
+		FoundryFx.embers(self, Vector3(SX, yy3, SZ), Vector3(24.0, 7.0, 24.0), 60)
+	for c2: Vector3 in [Vector3(SX - 11.0, 96.0, SZ - 11.0), Vector3(SX + 11.0, 96.0, SZ + 11.0)]:
+		FoundryFx.rising_sparks(self, c2, Vector3(3.0, 0.5, 3.0), 30, 6.0)
 
 
 func _build_surroundings() -> void:
