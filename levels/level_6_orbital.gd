@@ -13,7 +13,7 @@ func _configure() -> void:
 	theme_id = "orbital"
 	music_track = "b"
 	kill_y = -80.0
-	route_variants = 2
+	route_variants = 3
 
 
 # ---- local-frame helpers --------------------------------------------------------------------
@@ -98,6 +98,17 @@ func _dock(c: Vector3, cp_yaw: float = 0.0, size: float = 6.0) -> Dictionary:
 	# a truss mast down into the dark so docks read as bolted to the station
 	_truss_v(c + Vector3(0, -1.4, 0), 18.0)
 	return d
+
+
+## Antenna mast: a 1 m square top on a thin lattice mast (shortcut footing), with a red tip light.
+func _mast(top: Vector3) -> Dictionary:
+	kit.plat(_w(top), Vector3(1.0, 0.3, 1.0), "alt", 0.0, _yaw)
+	_truss_v(top + Vector3(0, -0.3, 0), 16.0, 0.5)
+	var lamp := Look.sphere(0.1, Look.flat(Color(1.0, 0.25, 0.2), 0.3, 0.0, 4.0), _w(top + Vector3(0.4, 0.2, 0.4)))
+	lamp.set_script(preload("res://visual/orbital_blink.gd"))
+	lamp.set("period", 1.1)
+	add_child(lamp)
+	return {"c": top, "hx": 0.5, "hz": 0.5}
 
 
 ## Nav beacon: a short post with a red (port) or green (starboard) blinking light.
@@ -198,9 +209,19 @@ func _stage_1_arrival() -> Vector3:
 	_hop(a1, a2)
 	_hop(a2, a3)
 	_hop(a3, a4)
-	r_wait(tug, _w(Vector3(0, 1.75, -36.0)), 0.5)
-	r_jump_onto(_w(_edge(a4, Vector3(0, 2.0, -36.0))), tug, Vector3(0, 0.25, 0))
-	r_jump_from_ride(tug, _w(Vector3(0, 1.75, -44.0)), 0.4, _w(Vector3(0, 2.0, -50.5)))
+	# SHORTCUT: three antenna masts beside the tug lane (1 m tops, 85-90% jumps) - no waiting for the tug
+	var m1: Dictionary = _mast(Vector3(-2.8, 2.4, -34.9))
+	var m2: Dictionary = _mast(Vector3(-2.8, 2.8, -40.9))
+	var m3: Dictionary = _mast(Vector3(-2.2, 2.4, -46.0))
+	if route_variant == 2:
+		_hop(a4, m1)
+		_hop(m1, m2)
+		_hop(m2, m3)
+		_hop(m3, end, Vector3(0, 0, 1.6))
+	else:
+		r_wait(tug, _w(Vector3(0, 1.75, -36.0)), 0.5)
+		r_jump_onto(_w(_edge(a4, Vector3(0, 2.0, -36.0))), tug, Vector3(0, 0.25, 0))
+		r_jump_from_ride(tug, _w(Vector3(0, 1.75, -44.0)), 0.4, _w(Vector3(0, 2.0, -50.5)))
 	r_checkpoint()
 	return end["c"]
 
@@ -488,6 +509,8 @@ func _stage_8_compactor() -> Vector3:
 	var l1: Dictionary = _area(Vector3(0, 3.3, -30.5), 1.5, 2.0)
 	var c4: Crusher = kit.crusher(_w(Vector3(0, 3.3, -30.5)), Vector3(3.4, 1.6, 4.4), 3.2, 3.4, 0.55)
 	var end: Dictionary = _dock(Vector3(0, 3.3, -40.0), 0.0)
+	# SHORTCUT: the hull panel beside the last press - run it past press and ledge, kick onto the dock
+	kit.wallrun(_w(Vector3(-3.4, 1.5, -30.5)), Vector3(14.0, 7.0, 0.5), _yaw + 90.0)
 	_hop(dock, w1, Vector3(0, 0, 9.5))
 	# wait in each gap between presses, dash under the next one while it is up
 	var waits: Array[float] = [-6.8, -12.75, -18.5, -24.8]
@@ -496,10 +519,13 @@ func _stage_8_compactor() -> Vector3:
 		var c: Crusher = presses[i]
 		r_until(func() -> bool: return _under_ok(c, 0.0, 0.75))
 		r_walk(_w(Vector3(0, 0, waits[i + 1])))
-	r_walk(_w(Vector3(0, 0, -26.4)))
-	r_until(func() -> bool: return _under_ok(c4, 0.15, 1.6))
-	r_mantle(_w(Vector3(0, 0, -26.7)), _w(Vector3(0, 3.3, -29.3)))
-	_hop(l1, end, Vector3(0, 0, 1.6))
+	if route_variant == 2:
+		r_wallrun(_w(Vector3(-0.8, 0, -25.0)), _w(Vector3(-2.7, 1.4, -29.0)), _w(Vector3(-2.7, 1.4, -34.5)), _w(Vector3(0.5, 3.3, -40.0)))
+	else:
+		r_walk(_w(Vector3(0, 0, -26.4)))
+		r_until(func() -> bool: return _under_ok(c4, 0.15, 1.6))
+		r_mantle(_w(Vector3(0, 0, -26.7)), _w(Vector3(0, 3.3, -29.3)))
+		_hop(l1, end, Vector3(0, 0, 1.6))
 	r_checkpoint()
 	return end["c"]
 
@@ -843,11 +869,19 @@ func _stage_15_lattice() -> Vector3:
 	r_walk(_w(Vector3(0, 0, -6.2)))
 	r_until(func() -> bool: return _clear([l1], [0.45], 0.35))
 	r_walk(_w(Vector3(0, 0, -12.4)))
-	# the blinking plates
-	r_until(func() -> bool: return _blink_ok(p1, 0.4, 1.3) and _blink_ok(p2, 1.4, 2.4))
-	r_jump(_w(Vector3(0, 0, -12.6)), _w(Vector3(1.5, 0.8, -16.4)))
-	r_jump(_w(Vector3(1.2, 0.8, -17.0)), _w(Vector3(-0.5, 1.6, -21.6)))
-	r_jump(_w(Vector3(-0.4, 1.6, -22.2)), _w(Vector3(0, 1.6, -25.8)))
+	# SHORTCUT: two fixed 1 m relay pillars beside the blinking plates - no waiting, no margin
+	var y1: Dictionary = _mast(Vector3(-1.4, 0.8, -17.9))
+	var y2: Dictionary = _mast(Vector3(1.3, 1.6, -22.6))
+	if route_variant == 2:
+		_hop(b1, y1)
+		_hop(y1, y2)
+		_hop(y2, b2, Vector3(0, 0, 4.2))
+	else:
+		# the blinking plates
+		r_until(func() -> bool: return _blink_ok(p1, 0.4, 1.3) and _blink_ok(p2, 1.4, 2.4))
+		r_jump(_w(Vector3(0, 0, -12.6)), _w(Vector3(1.5, 0.8, -16.4)))
+		r_jump(_w(Vector3(1.2, 0.8, -17.0)), _w(Vector3(-0.5, 1.6, -21.6)))
+		r_jump(_w(Vector3(-0.4, 1.6, -22.2)), _w(Vector3(0, 1.6, -25.8)))
 	r_walk(_w(Vector3(0, 1.6, -25.6)))
 	r_until(func() -> bool: return _clear(gates, leads, 0.35))
 	r_walk(_w(Vector3(0, 1.6, -34.6)))
@@ -873,10 +907,17 @@ func _stage_16_stacks() -> Vector3:
 		rams.append(kit.piston(_w(Vector3(3.0, 11.5, z)), Vector3(2.2, 1.6, 1.6), _yaw + 90.0, 2.6, 2.4, fposmod(0.2 - lead / 2.4, 1.0), 13.0))
 		leads.append(lead)
 	var end: Dictionary = _dock(Vector3(0, 9.9, -38.3), 0.0)
-	r_mantle(_w(Vector3(0, 0, -2.7)), _w(Vector3(0, 3.3, -5.4)))
-	r_walk(_w(Vector3(0, 3.3, -7.2)))
-	r_until(func() -> bool: return _clear([s1], [0.25], 0.3))
-	r_mantle(_w(Vector3(0, 3.3, -8.9)), _w(Vector3(0, 6.6, -11.4)))
+	# SHORTCUT: the coolant-shield panel along the first stack - run it past the first scanner and
+	# mantle straight onto the second stack out of the kick
+	kit.wallrun(_w(Vector3(2.6, 2.3, -7.5)), Vector3(11.0, 7.0, 0.5), _yaw + 90.0)
+	if route_variant == 2:
+		r_until(func() -> bool: return _clear([s1], [0.75], 0.35))
+		r_wallrun(_w(Vector3(0.9, 0, -2.6)), _w(Vector3(2.0, 1.4, -5.0)), _w(Vector3(2.0, 1.4, -8.6)), _w(Vector3(0, 6.6, -12.0)))
+	else:
+		r_mantle(_w(Vector3(0, 0, -2.7)), _w(Vector3(0, 3.3, -5.4)))
+		r_walk(_w(Vector3(0, 3.3, -7.2)))
+		r_until(func() -> bool: return _clear([s1], [0.25], 0.3))
+		r_mantle(_w(Vector3(0, 3.3, -8.9)), _w(Vector3(0, 6.6, -11.4)))
 	r_walk(_w(Vector3(0, 6.6, -13.2)))
 	r_until(func() -> bool: return _clear([s2], [0.25], 0.3))
 	r_mantle(_w(Vector3(0.5, 6.6, -14.9)), _w(Vector3(1.0, 9.9, -17.4)))
