@@ -1,9 +1,12 @@
 extends LevelBase
 ## 2. BOUNCE FOUNDRY (hard mode) - a brutal vertical obby wound two and a half times
-## around a floating furnace tower. Bounce physics and carried momentum rule:
-## vertical pads KEEP the speed you bring, angled pads REPLACE it with their arc.
+## around a floating furnace tower, then over the ladle pour line to the Smelter and twice
+## round it to the stack on its crown. Bounce physics and carried momentum rule:
+## vertical pads KEEP the speed you bring, angled pads REPLACE it with their arc; the second
+## half adds wall runs, mantles and the timed machines (lasers, pistons, crushers, a portal).
+## route_variants = 2: variant 0 takes the main line at every fork, variant 1 the alternative.
 ##
-## Stages (each ends on a checkpoint):
+## Stages (each ends on a checkpoint, the last on the finish):
 ##  1 Stamping yard      safe pad, sprint-bounce, block hops, first angled pad
 ##  2 West chain         four offset vertical pads, steer between molten pillars
 ##  3 Blast run          boost strip -> sprint-bounce over the slag pool, boost strip -> 13 m leap
@@ -16,8 +19,31 @@ extends LevelBase
 ##  9 Ice chute          slide, fly off the lip onto an angled pad that fires you back up
 ## 10 Crucible I         angled, angled, two offset vertical pads around the glowing core
 ## 11 Crucible II        angled pad to a blink landing, two sprint-bounces, two angled pads, roof
-## Set piece: the Crucible (nine bounces). Shortcuts: the red sprint pad after checkpoint 1,
-## the hammer ride from checkpoint 4.
+## --- second half: over the pour line to the Smelter, then twice round it to its crown ---
+## 12 Gatehouse          sprint-bounce off the roof; FORK: a green wave through three lasers in the
+##                       gate tunnel (0) or mantle over the gate wings (1); first wall run across a slag gap
+## 13 Pour line          boost rollers under two ladle pours, leap through a third, a belt
+##                       dragging you back under the fourth
+## 14 The flue           three-panel wall-run zig-zag up the Smelter's face, mantle out of the last kick
+## 15 Forge press        dash under a press, mantle an anvil under the next press, mantle out under a third
+## 16 Ingot feed         FORK: a belt through three stamping rams (0) or stand on the launch ram's
+##                       mark and ride its punch, then mantle (1); sprint pad through a molten gate
+## 17 Kiln works         FORK: two blinking kiln plates (0) or a narrow plank to the kiln portal (1);
+##                       a beam swept by two lasers, sprint pad up
+## 18 Pour run           two wall runs under three ladle pours, kick onto a sprint pad
+## 19 Quench stack       FORK: mantle the ingot stack through two laser curtains (0) or sprint over
+##                       a pad into a tall panel, run it, kick and mantle the checkpoint ledge (1)
+## 20 Hammer lift        ride two forge presses up as elevators - mistime a hop and you are under one
+## 21 Crown pour         a narrow beam under two crown ladles, a wall run, kick and mantle onto the
+##                       crown's lip under a press
+## 22 Crown stack        hop the crucible sweeper, bounce into a wall-run zig-zag, mantle the stack: finish
+## Set pieces: the Crucible (nine bounces); the POUR LINE - FoundryLadle drums (mechanics/foundry_ladle.gd)
+## pouring molten sheets across the path on the course clock (stages 13, 18, 21).
+## Shortcuts: the red sprint pad after checkpoint 1, the hammer ride from checkpoint 4, the tall anvil
+## (a 4.1 m running mantle that skips press 1, stage 20), the lip panel (a wall run past the crown
+## pours that kicks straight onto the last wall run, stage 21).
+## Particles: visual/foundry_fx.gd - ember and ash layers, core motes, flue sparks, quench steam,
+## ladle streams/splashes/drips, press-slam and ram-punch bursts, checkpoint gates, finish fireworks.
 
 const OZ: float = -40.0          # tower axis is x = 0, z = OZ
 const CORE: float = 10.0         # tower core is CORE x CORE
@@ -167,6 +193,7 @@ func _build() -> void:
 	_stage_19_quench()
 	_stage_20_hammer_lift()
 	_stage_21_crown()
+	_stage_22_stack()
 	_build_surroundings()
 	_build_ambient_fx()
 
@@ -1327,36 +1354,75 @@ func _stage_21_crown() -> void:
 	kit.block(Vector3(-4.0, rail_y, -145.0), Vector3(14.0, 0.7, 0.9), Look.c("metal"), false)
 	kit.block(Vector3(-4.0, rail_y + 0.55, -145.0), Vector3(14.0, 0.3, 1.4), Look.c("decor"), false)
 	kit.glow_strip(Vector3(-4.0, rail_y - 0.4, -145.0), Vector3(14.0, 0.1, 0.2), Look.c("decor2"))
-	for xx: float in [-10.0, 2.0]:
-		kit.block(Vector3(xx, rail_y, -148.5), Vector3(0.8, 0.8, 7.0), Look.c("metal"), false)
+	# the rail hangs from two brackets standing on the crown's south rim
+	for xx: float in [-10.0, -2.8]:
+		kit.block(Vector3(xx, rail_y, -148.2), Vector3(0.8, 0.8, 6.4), Look.c("metal"), false)
+		kit.block(Vector3(xx, (S_TOP + rail_y) * 0.5, -151.0), Vector3(0.7, rail_y - S_TOP + 0.4, 0.7), Look.c("metal"))
 	_slag_pool(Vector3(-8.0, d1.y - 9.0, -146.0), Vector2(26, 8))
 	# the last wall run, and the crown's south lip with a press over it
-	kit.wallrun(Vector3(-19.0, d1.y + 1.3, -143.35), Vector3(12, 7, 0.5), 0.0)            # x -25 .. -13, face z -143.6
+	kit.wallrun(Vector3(-18.0, d1.y + 1.3, -143.35), Vector3(14, 7, 0.5), 0.0)            # x -25 .. -11, face z -143.6
 	var m := Vector3(-18.0, S_TOP, -148.5)
 	kit.ledge(m, Vector3(10.0, 3.0, 3.0), 0.0, "alt")                                    # x -23 .. -13, z -150 .. -147
 	var cm: Crusher = kit.crusher(Vector3(-20.5, S_TOP, -148.5), Vector3(3.0, 1.2, 2.4), 3.2, 2.6, 0.34)
 	_slam_fx(cm, Vector3(-20.5, S_TOP, -148.5))
-	var fin := Vector3(-14.0, S_TOP, -157.0)
-	kit.finish(fin, 0.0)
+	var cp21 := Vector3(-19.5, S_TOP, -153.5)
+	_checkpoint(cp21, -90.0, Vector3(-1.6, 0, -2.2))
 	r_walk(Vector3(3.0, d1.y, -145.0))
 	r_until(func() -> bool: return _clear_at(ladles, 0.2) and cm.is_clear_for(Game.course_time + 2.2, 1.3))
 	r_wallrun(Vector3(-9.7, d1.y, -145.0), Vector3(-14.0, d1.y + 1.2, -144.0), Vector3(-17.5, d1.y + 1.2, -144.0), Vector3(-20.5, S_TOP, -149.0))
 	r_walk(Vector3(-19.5, S_TOP, -151.8))
-	r_walk(fin)
+	r_walk(cp21)
+	r_checkpoint()
 	_net(Vector3(-8.0, d1.y - 6.0, -146.0), Vector3(36, 0.6, 12))
 	# SHORTCUT: the lip panel. Run it past the pours and kick straight across onto the last wall run.
 	kit.wallrun(Vector3(-4.5, d1.y + 1.3, -147.75), Vector3(9, 7, 0.5), 0.0)             # x -9 .. 0, face z -147.5
-	kit.glow_strip(Vector3(2.4, d1.y + 0.02, -146.6), Vector3(0.9, 0.04, 0.22), WALL_CYAN, 0.0)
-	# the crown: finish fireworks and spark fountains at its corners
+	kit.glow_strip(Vector3(3.2, d1.y + 0.02, -146.75), Vector3(1.6, 0.04, 0.22), WALL_CYAN, 0.0)
+
+
+# ---- 22. crown stack: hop the crown sweeper, bounce into a wall-run zig-zag, mantle the stack ----
+
+func _stage_22_stack() -> void:
+	var cp21 := Vector3(-19.5, S_TOP, -153.5)
+	# the crucible sweeper on the crown deck
+	var swc := Vector3(-12.5, S_TOP, -154.5)
+	var sw: Sweeper = kit.sweeper(swc, 4.0, 2, 3.6, 0.0, 0.45)
+	kit.glow_strip(swc + Vector3(0, 0.02, 0), Vector3(1.4, 0.04, 1.4), Look.c("decor2"), 45.0)
+	FoundryFx.motes(self, swc + Vector3(0, 0.6, 0), Vector3(3.0, 0.4, 3.0), 24)
+	# panel A along the crown's east rim, panel B hung off its north edge, the stack beyond
+	kit.wallrun(Vector3(-3.25, S_TOP + 4.0, -162.0), Vector3(12, 8, 0.5), 90.0)           # z -168 .. -156, face x -3.5
+	kit.wallrun(Vector3(-6.85, S_TOP + 7.5, -171.5), Vector3(7, 8, 0.5), 90.0)            # z -175 .. -168, face x -6.6
+	kit.block(Vector3(-6.85, S_TOP + 11.8, -171.5), Vector3(0.9, 0.6, 7.4), Look.c("metal"), false)
+	kit.pipe(Vector3(-6.85, S_TOP + 11.8, -168.2), Vector3(-9.0, S_TOP, -165.0), 0.25)
+	var pad := Vector3(-5.36, S_TOP, -157.4)
+	kit.pad(pad, 16.0, 0.0, 0.0, 0.9)
+	var st := Vector3(-3.5, S_TOP + 10.0, -178.0)                                          # 168
+	kit.ledge(st, Vector3(6.0, 8.0, 6.0), 0.0, "main")                                    # x -6.5 .. -0.5, z -181 .. -175
+	kit.block(Vector3(-3.5, S_TOP + 1.4, -172.0), Vector3(2.0, 1.2, 7.6), Look.c("metal"))  # girder back to the crown
+	kit.pipe(Vector3(-3.5, st.y - 8.5, -178.0), Vector3(-6.0, st.y - 20.0, SZ - SCORE * 0.5 + 1.0), 0.6)
+	kit.chimney(Vector3(-1.4, st.y, -180.0), 4.0, 0.8)
+	kit.chimney(Vector3(-5.6, st.y, -180.2), 3.0, 0.6, false)
+	var fin := Vector3(-3.5, st.y, -177.6)
+	kit.finish(fin, 0.0)
+	r_walk(Vector3(-17.2, S_TOP, -155.0))
+	route.append({"kind": "b_sweep", "to": Vector3(-6.0, S_TOP, -155.0), "sweeper": sw})
+	# the run-up crosses the pad (chain=true: latch A in the air), kick to B, kick onto the stack
+	r_wallrun(Vector3.ZERO, Vector3(-4.0, S_TOP + 4.2, -162.5), Vector3(-4.0, S_TOP + 4.2, -166.5), Vector3(-6.2, S_TOP + 7.0, -169.5), true, true)
+	r_wallrun(Vector3.ZERO, Vector3(-6.2, S_TOP + 7.0, -169.5), Vector3(-6.2, S_TOP + 7.0, -173.0), fin + Vector3(-1.0, 0, 1.4), true, true)
+	r_walk(fin)
+	# the finish: fireworks on arrival, spark fountains round the crown
 	var fb1: GPUParticles3D = FoundryFx.burst(90, 12.0)
 	var fb2: GPUParticles3D = FoundryFx.glitter(70, 9.0, Look.c("accent2"))
 	var fb3: GPUParticles3D = FoundryFx.glitter(50, 7.0, FoundryFx.EMBER)
 	FoundryFx.near_burst(self, fin + Vector3(0, 1.0, 0), 3.0, [fb1, fb2, fb3], 1.2)
-	for c: Vector3 in [Vector3(-3.5, 0, -151.5), Vector3(-20.5, 0, -168.5), Vector3(-3.5, 0, -168.5)]:
+	for c: Vector3 in [Vector3(-20.5, 0, -168.5), Vector3(-13.0, 0, -168.8), Vector3(-21.0, 0, -160.0)]:
 		kit.chimney(Vector3(c.x, S_TOP, c.z), 2.5, 0.7, false)
 		FoundryFx.sparks(self, Vector3(c.x, S_TOP + 2.7, c.z), Vector3.UP, 26, 7.0, 14.0, 1.1)
-	kit.lamp(Vector3(-8.0, S_TOP, -152.5), 3.0)
-	kit.lamp(Vector3(-20.0, S_TOP, -166.0), 3.0, false)
+	FoundryFx.rising_sparks(self, Vector3(-1.4, st.y + 4.3, -180.0), Vector3(0.4, 0.2, 0.4), 24, 4.0)
+	FoundryFx.embers(self, Vector3(-8.0, S_TOP + 5.0, -168.0), Vector3(8.0, 5.0, 10.0), 50)
+	kit.lamp(Vector3(-6.5, S_TOP, -151.0), 3.0)
+	kit.lamp(Vector3(-20.0, S_TOP, -165.0), 3.0, false)
+	kit.banner(Vector3(-2.6, S_TOP, -155.4), 3.6, WALL_CYAN, 0.0)
+	_net(Vector3(-4.0, S_TOP - 6.0, -176.0), Vector3(16, 0.6, 14))
 
 
 func _build_ambient_fx() -> void:
