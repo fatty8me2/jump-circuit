@@ -927,7 +927,7 @@ func _stage_14_flowers() -> Vector3:
 			add_child(petal)
 		_cue(_w(pc + Vector3(0, 0.3, 0)), GardensFx.sparkle_ring(petal_cols[i]), 1.6)
 	# RIGHT - the trellis walkway and its two panels
-	_blk(Vector3(5.0, 0, -10.75), 1.6, 8.5, "alt", 0.6)
+	_blk(Vector3(5.0, 0, -10.75), 2.0, 8.5, "alt", 0.6)
 	_panel(6.8, 1.2, -17.1, -24.5)
 	_panel(2.2, 6.0, -23.0, -34.0)
 	# the terrace where they meet, and the lawn
@@ -955,6 +955,7 @@ func _stage_14_flowers() -> Vector3:
 		r_pad(_w(pads[1]), _w(pads[2]))
 		r_pad(_w(pads[2]), _w(Vector3(-3.5, 6.0, -39.8)))
 	else:
+		r_walk(_w(Vector3(4.6, 0, -5.0)))
 		r_walk(_w(Vector3(5.0, 0, -8.0)))
 		r_wallrun(_w(Vector3(5.0, 0, -14.6)), _w(Vector3(6.2, 1.4, -19.1)), _w(Vector3(6.2, 1.4, -22.0)), _w(Vector3(2.8, 5.5, -25.9)))
 		r_wallrun(Vector3.ZERO, _w(Vector3(2.8, 5.5, -25.9)), _w(Vector3(2.8, 5.5, -31.9)), _w(Vector3(5.0, 6.0, -40.0)), true, true)
@@ -1050,6 +1051,7 @@ func _stage_16_chimney() -> Vector3:
 	var top: Dictionary = _area(Vector3(-0.75, 11.9, -28.0), 2.25, 2.0)
 	_ledge(Vector3(-0.75, 11.9, -28.0), Vector3(4.5, 14.0, 4.0))
 	_topiary(Vector3(-2.6, 11.9, -29.6), 0.45)
+	r_walk(_w(Vector3(0.4, 0, 1.6)))
 	r_wallrun(_w(Vector3(0.5, 0, -2.1)), _w(Vector3(1.7, 1.4, -6.6)), _w(Vector3(1.7, 1.4, -9.5)), _w(Vector3(-1.7, 5.5, -13.4)))
 	r_wallrun(Vector3.ZERO, _w(Vector3(-1.7, 5.5, -13.4)), _w(Vector3(-1.7, 5.5, -16.4)), _w(Vector3(1.7, 8.5, -20.0)), true, true)
 	r_wallrun(Vector3.ZERO, _w(Vector3(1.7, 8.5, -20.0)), _w(Vector3(1.7, 8.5, -21.4)), _w(Vector3(-0.75, 11.9, -26.6)), true, true)
@@ -1187,11 +1189,11 @@ func _stage_18_summit() -> void:
 	r_until(func() -> bool: return _dark(gate, 0.0, 0.7))
 	r_walk(_w(Vector3(2.4, 6.6, -95.0)))
 	# effects: fireworks over the summit on a beat, a blossom burst at the gate
-	var colors: Array = [[Color(1.0, 0.45, 0.6), Color(1.0, 0.9, 0.5)], [Color(0.5, 0.8, 1.0), Color(1, 1, 1)], [Color(1.0, 0.7, 0.2), Color(1.0, 0.35, 0.2)], [Color(0.7, 1.0, 0.5), Color(1.0, 1.0, 0.7)]]
+	var colors: Array = [[Color(1.0, 0.2, 0.45), Color(1.0, 0.8, 0.15)], [Color(0.2, 0.55, 1.0), Color(0.5, 0.95, 1.0)], [Color(1.0, 0.5, 0.05), Color(1.0, 0.15, 0.1)], [Color(0.35, 1.0, 0.25), Color(1.0, 0.95, 0.3)]]
 	for i: int in 4:
 		var off: float = 0.8 * float(i)
 		var at: Vector3 = _w(Vector3(2.4 + [-5.0, 5.0, -3.0, 4.0][i], 18.0 + 2.0 * float(i % 2), -96.0 + [-3.0, 2.0, 5.0, -5.0][i]))
-		_cue(at, GardensFx.firework(colors[i]), 0.0, func() -> bool: return fposmod(Game.course_time + off, 3.2) < 0.1, 1.0)
+		_cue(at, GardensFx.firework(colors[i], 90), 0.0, func() -> bool: return fposmod(Game.course_time + off, 3.2) < 0.1, 1.0)
 	_cue_near(_w(Vector3(2.4, 6.9, -94.0)), 3.0, GardensFx.petal_fountain(70, 8.0))
 	_amb(_w(Vector3(2.4, 9.0, -96.0)), GardensFx.petals(_ext(Vector3(6, 2, 6)), 30))
 	_amb(_w(Vector3(0, 3.0, -55.0)), GardensFx.seeds(_ext(Vector3(4, 3, 10)), _b * Vector3(-0.8, 0.2, -0.4), 24))

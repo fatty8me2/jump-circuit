@@ -347,8 +347,8 @@ static func firework(colors: Array, amount: int = 70) -> GPUParticles3D:
 	var pm := ParticleProcessMaterial.new()
 	pm.direction = Vector3(0, 1, 0)
 	pm.spread = 180.0
-	pm.initial_velocity_min = 6.0
-	pm.initial_velocity_max = 8.5
+	pm.initial_velocity_min = 8.0
+	pm.initial_velocity_max = 11.0
 	pm.gravity = Vector3(0, -3.5, 0)
 	pm.damping_min = 1.6
 	pm.damping_max = 2.4
@@ -359,6 +359,6 @@ static func firework(colors: Array, amount: int = 70) -> GPUParticles3D:
 	for i: int in colors.size():
 		offs.append(float(i) / float(maxi(colors.size() - 1, 1)))
 	pm.color_initial_ramp = _ramp(offs, colors)
-	var p := _burst_base(amount, 1.8, _quad(Vector2(0.24, 0.24), soft()), pm, 16.0)
+	var p := _burst_base(amount, 1.8, _quad(Vector2(0.45, 0.45), soft()), pm, 18.0)
 	p.explosiveness = 0.97
 	return p
