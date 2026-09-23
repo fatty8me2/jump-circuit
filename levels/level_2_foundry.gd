@@ -896,14 +896,14 @@ func _stage_13_pour_line() -> void:
 	var l3: FoundryLadle = _ladle(Vector3(0, y - 4.0, -125.2), 2.8, RAIL_Y - y + 4.0, 2.4, 0.35, 0.388)
 	_slag_pool(Vector3(0, y - 7.0, -126.0), Vector2(8, 20))
 	var i2 := Vector3(0, y + 1.8, -131.8)
-	kit.plat(i2, Vector3(2.4, 1.0, 4.0), "alt", 1.3)                                        # z -129.8 .. -133.8
+	kit.plat(i2 + Vector3(0, 0, 0.5), Vector3(2.4, 1.0, 5.0), "alt", 1.3)                   # z -128.8 .. -133.8
 	kit.pillar(i2 - Vector3(0, 1.0, 0), 0.4, 5.0)
 	# belt 2 runs AGAINST you under the last ladle
 	kit.conveyor(Vector3(0, y + 1.8, -138.8), Vector3(3.0, 0.4, 10.0), 180.0, 4.0)           # z -133.8 .. -143.8
 	kit.pillar(Vector3(0, y + 1.4, -138.8), 0.5, 7.0)
 	var l4: FoundryLadle = _ladle(Vector3(0, y + 1.8, -139.0), 3.4, RAIL_Y - y - 1.8, 2.4, 0.4, 0.1)
 	var cp13 := Vector3(0, y + 3.0, -148.5)
-	kit.plat(cp13, Vector3(5, 1.2, 5), "main", 2.4)                                          # z -146 .. -151
+	kit.plat(cp13 + Vector3(0, 0, 0.5), Vector3(5, 1.2, 6), "main", 2.4)                     # z -145 .. -151
 	_checkpoint(cp13, 90.0, Vector3(2.1, 0, 2.1))
 	r_walk(Vector3(0, y, -107.6))
 	r_until(func() -> bool: return _clear_at([[l1, 0.45], [l2, 0.7], [l3, 1.15]], 0.18))
