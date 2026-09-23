@@ -2070,3 +2070,79 @@ func test_zf_main_menu_controller() -> void:
 	check(not Game.using_pad and hint.text.begins_with("WASD"), "a key press switches the prompts back to keyboard")
 	title.queue_free()
 	await ticks(2)
+
+
+# ---- Party Mode -----------------------------------------------------------------------------------
+
+## Loads a level as Party Practice (item boxes, dummies) and waits for the layer to place them.
+func _load_practice(index: int) -> LevelBase:
+	Game.party = PartyRules.new("practice")
+	var lvl: LevelBase = await load_level(index)
+	await ticks(4)
+	return lvl
+
+
+## Stands the player `dist` m in front of a dummy, facing it, on the dummy's lawn.
+func _face_dummy(lvl: LevelBase, d: PracticeDummy, dist: float = 1.6) -> void:
+	# stand on the dummy's front side (dummies face -Z of their rotation), facing it
+	var fwd: Vector3 = Vector3(0, 0, -1).rotated(Vector3.UP, d.rotation.y)
+	var at: Vector3 = d.home + fwd * dist
+	lvl.player.teleport(Transform3D(Basis.looking_at(d.home - at, Vector3.UP), at + Vector3(0, 0.1, 0)))
+	lvl.player.camera_yaw = atan2(-(d.home - at).x, -(d.home - at).z)
+	await ticks(3)
+
+
+## Presses the party's Attack for `hold` seconds (0 = a tap).
+func _attack(p: PartyLayer, hold: float = 0.0) -> void:
+	p.cmd_attack = true
+	await ticks(maxi(1, int(hold * 120.0)))
+	p.cmd_attack = false
+	await ticks(2)
+
+
+func test_zp_practice_core_loop() -> void:
+	var lvl: LevelBase = await _load_practice(0)
+	var p: PartyLayer = lvl.party
+	check(p != null and p.practice, "Party Practice adds the party layer to the level")
+	if p == null:
+		return
+	p.use_device_input = false
+	lvl.player.use_device_input = false
+	check(p.boxes.size() >= 3 * (lvl.checkpoints.size() + 1) - 2, "item boxes are placed across the start and every checkpoint lawn (%d boxes, %d checkpoints)" % [p.boxes.size(), lvl.checkpoints.size()])
+	check(p.dummies.size() >= 2, "practice dummies stand on the lawns (%d)" % p.dummies.size())
+	# every box sits on solid ground
+	var grounded: int = 0
+	for b: ItemBox in p.boxes:
+		var q := PhysicsRayQueryParameters3D.create(b.global_position, b.global_position + Vector3(0, -2.0, 0), 1)
+		if not lvl.get_world_3d().direct_space_state.intersect_ray(q).is_empty():
+			grounded += 1
+	check(grounded == p.boxes.size(), "every item box floats just above solid ground (%d/%d)" % [grounded, p.boxes.size()])
+	# run through the first box
+	var box: ItemBox = p.boxes[0]
+	lvl.player.teleport(Transform3D(Basis(), box.global_position - Vector3(0, 1.1, 0)))
+	await ticks(3)
+	check(p.item == "fox" and not box.available, "touching a box pops it and fills the slot (practice hands out the Nine-Tailed Fox first: %s)" % p.item)
+	await seconds(PartyLayer.BOX_RESPAWN + 0.3)
+	check(box.available, "the box respawns after %.0f s" % PartyLayer.BOX_RESPAWN)
+	# transform
+	var pu: PowerUp = p.activate_item()
+	await ticks(2)
+	check(pu != null and p.transformation() == pu and p.item == "", "using the item transforms the player")
+	check(is_equal_approx(lvl.player.speed_mult, 1.6) and is_equal_approx(lvl.player.jump_mult, 1.35), "the fox runs x1.6 and jumps x1.35 (%.2f, %.2f)" % [lvl.player.speed_mult, lvl.player.jump_mult])
+	# claw a dummy
+	var d: PracticeDummy = p.dummies[0]
+	await _face_dummy(lvl, d, 1.8)
+	await _attack(p)
+	check(d.hits == 1 and d.knocked_out and d.last_src == "claw", "the Fox Claw KOs a practice dummy (hits %d, ko %s)" % [d.hits, d.knocked_out])
+	await seconds(2.0)
+	check(not d.knocked_out, "a KO'd dummy pops back home")
+	# charge and fire a Tailed Beast Bomb at it from further back
+	await _face_dummy(lvl, d, 7.0)
+	var before: int = d.hits
+	await _attack(p, 1.3)
+	await seconds(0.8)
+	check(d.hits > before and d.last_src == "beast_bomb", "a charged Tailed Beast Bomb blasts the dummy (%s)" % d.last_src)
+	pu.finish()
+	await ticks(3)
+	check(p.actives.is_empty() and is_equal_approx(lvl.player.speed_mult, 1.0) and is_equal_approx(lvl.player.jump_mult, 1.0), "when it ends the movement multipliers are restored")
+	Game.party = null

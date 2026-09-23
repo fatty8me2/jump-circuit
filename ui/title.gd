@@ -20,6 +20,8 @@ var _focus_pref: Control
 var _prev_screen: String = ""
 ## Main menu controls line; follows the device in use.
 var _controls_hint: Label
+## Lobby: the game mode and its blurb (+ Party Cup progress).
+var _mode_label: Label
 
 
 func _ready() -> void:
@@ -117,6 +119,7 @@ func show_screen(id: String) -> void:
 	_roster_box = null
 	_status = null
 	_start_button = null
+	_mode_label = null
 	_focus_pref = null
 	_prev_screen = Game.title_screen
 	Game.title_screen = id
@@ -131,6 +134,8 @@ func show_screen(id: String) -> void:
 			_screen = _lobby_screen()
 		"settings":
 			_screen = _settings_screen()
+		"practice":
+			_screen = _practice_screen()
 		"victory":
 			_screen = _victory_screen()
 		"update":
@@ -153,7 +158,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	match Game.title_screen:
-		"levels", "victory", "update":
+		"levels", "victory", "update", "practice":
 			show_screen("main")
 		"settings":
 			Settings.save_settings()  # same as the panel's Done
@@ -222,6 +227,8 @@ func _main_screen() -> Control:
 	box.add_child(levels_btn)
 	var race_btn: Button = UiKit.button("Race Friends", func() -> void: show_screen("race"), 380)
 	box.add_child(race_btn)
+	var practice_btn: Button = UiKit.button(PartyNames.mode_name("practice"), func() -> void: show_screen("practice"), 380)
+	box.add_child(practice_btn)
 	var settings_btn: Button = UiKit.button("Settings", func() -> void: show_screen("settings"), 380)
 	box.add_child(settings_btn)
 	if Game.dev_mode:
@@ -235,7 +242,7 @@ func _main_screen() -> Control:
 	_controls_hint = UiKit.shadowed(UiKit.label("", 16, Color(1, 1, 1, 0.75)), 5)
 	box.add_child(_controls_hint)
 	_update_controls_hint(Game.using_pad)
-	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn}
+	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn, "practice": practice_btn}
 	_focus_pref = openers.get(_prev_screen, play)
 	return _left_column(box)
 
@@ -299,6 +306,55 @@ func _levels_screen() -> Control:
 	_focus_pref = first_open if first_open != null else last_unlocked
 	box.add_child(UiKit.button("Back", func() -> void: show_screen("main"), 520))
 	return _left_column(box, 540)
+
+
+## Party Practice: pick any unlocked course; the right column lists every power-up.
+func _practice_screen() -> Control:
+	var root: HBoxContainer = UiKit.hbox(40)
+	var box: VBoxContainer = UiKit.vbox(10)
+	box.add_child(UiKit.shadowed(UiKit.label(PartyNames.mode_name("practice").to_upper(), 40, Color.WHITE), 8))
+	var blurb: Label = UiKit.shadowed(UiKit.label(PartyNames.MODE_BLURBS["practice"], 17, UiKit.SOFT), 5)
+	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	blurb.custom_minimum_size = Vector2(520, 0)
+	box.add_child(blurb)
+	var first: Button = null
+	for i: int in Game.LEVELS.size():
+		var unlocked: bool = Game.is_level_unlocked(i)
+		var text: String = "%d   %s" % [i + 1, Game.LEVELS[i]["name"]]
+		if not unlocked:
+			text += "     (locked)"
+		var b: Button = UiKit.button(text, func() -> void: Game.play_party_practice(i), 520)
+		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		b.disabled = not unlocked
+		box.add_child(b)
+		if unlocked and first == null:
+			first = b
+	box.add_child(UiKit.button("Back", func() -> void: show_screen("main"), 520))
+	var keys: String = "Attack %s    Use item %s    Shove %s    Next tool %s" % [Game.prompt("attack"), Game.prompt("use_item"), Game.prompt("shove"), Game.prompt("cycle_item")]
+	box.add_child(UiKit.shadowed(UiKit.label(keys, 16, Color(1, 1, 1, 0.8)), 5))
+	root.add_child(box)
+	# the power-up list
+	var list_panel: PanelContainer = UiKit.panel(Vector2(560, 0))
+	var list: VBoxContainer = UiKit.vbox(4)
+	list_panel.add_child(list)
+	list.add_child(UiKit.label("POWER-UPS", 16, UiKit.TEAL))
+	for id: String in PartyItems.PRACTICE_ORDER:
+		var row: HBoxContainer = UiKit.hbox(10)
+		var icon := PartyIcon.new()
+		icon.custom_minimum_size = Vector2(40, 40)
+		icon.item_id = id
+		row.add_child(icon)
+		var txt: VBoxContainer = UiKit.vbox(0)
+		txt.add_child(UiKit.label(PartyNames.item_name(id), 17, PartyNames.item_color(id).lightened(0.3)))
+		var d: Label = UiKit.label(PartyNames.item_desc(id), 13, UiKit.SOFT)
+		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		d.custom_minimum_size = Vector2(470, 0)
+		txt.add_child(d)
+		row.add_child(txt)
+		list.add_child(row)
+	root.add_child(list_panel)
+	_focus_pref = first
+	return _left_column(root, 1140)
 
 
 func _settings_screen() -> Control:
@@ -434,6 +490,20 @@ func _lobby_screen() -> Control:
 	else:
 		box.add_child(UiKit.label("Connected. The host picks the course and starts the race.", 17, UiKit.TEAL))
 	box.add_child(_identity_row())
+	if Net.is_host():
+		# game mode: Race (unchanged classic), Party, Team Party
+		var modes: Array[String] = ["race", "party", "team"]
+		var mode_pick := OptionButton.new()
+		mode_pick.custom_minimum_size = Vector2(0, 46)
+		for m: String in modes:
+			mode_pick.add_item("Mode:  %s" % PartyNames.mode_name(m))
+		mode_pick.selected = maxi(modes.find(Net.game_mode), 0)
+		mode_pick.item_selected.connect(func(i: int) -> void: Net.host_set_mode(modes[i]))
+		box.add_child(mode_pick)
+	_mode_label = UiKit.label("", 15, UiKit.SOFT)
+	_mode_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_mode_label.custom_minimum_size = Vector2(520, 0)
+	box.add_child(_mode_label)
 	_roster_box = UiKit.vbox(4)
 	box.add_child(_roster_box)
 	if Net.is_host():
@@ -460,11 +530,32 @@ func _lobby_screen() -> Control:
 func _refresh_lobby() -> void:
 	if _roster_box == null or not is_instance_valid(_roster_box):
 		return
+	# a rebuild must not drop a pad user's focus off the team Swap button they are on
+	var keep_swap: int = 0
+	var f: Control = get_viewport().gui_get_focus_owner()
+	if f != null and _roster_box.is_ancestor_of(f) and f.has_meta("swap_id"):
+		keep_swap = int(f.get_meta("swap_id"))
 	for c: Node in _roster_box.get_children():
+		_roster_box.remove_child(c)
 		c.queue_free()
+	var mode: String = Net.game_mode
+	var team: bool = mode == "team"
+	if _mode_label != null and is_instance_valid(_mode_label):
+		var t: String = "%s:  %s" % [PartyNames.mode_name(mode), PartyNames.MODE_BLURBS.get(mode, "")]
+		if mode != "race" and Net.party_round > 0:
+			t += "\n%s: %d round%s played - the next race is round %d." % [PartyNames.CUP, Net.party_round, "" if Net.party_round == 1 else "s", Net.party_round + 1]
+		_mode_label.text = t
+		_mode_label.add_theme_color_override("font_color", UiKit.GOLD if mode != "race" else UiKit.SOFT)
+	if _start_button != null and is_instance_valid(_start_button):
+		_start_button.text = "Start Race" if mode == "race" else "Start Round %d" % (Net.party_round + 1)
 	_roster_box.add_child(UiKit.label("RACERS  (%d/%d)" % [Net.roster.size(), Net.MAX_PLAYERS], 15, UiKit.SOFT))
 	var ids: Array = Net.roster.keys()
 	ids.sort()
+	if team:
+		# grouped by team, each in its team colour
+		ids.sort_custom(func(a: int, b: int) -> bool:
+			return Net.team_of(a) < Net.team_of(b) or (Net.team_of(a) == Net.team_of(b) and a < b))
+	var regrab: Button = null
 	for id: int in ids:
 		var e: Dictionary = Net.roster[id]
 		var col: Color = Settings.RACER_COLORS[int(e["color"]) % Settings.RACER_COLORS.size()]
@@ -472,6 +563,36 @@ func _refresh_lobby() -> void:
 		if id == Net.my_id():
 			tag += "  (you)"
 		var last: String = ""
-		if float(e.get("finished", -1.0)) >= 0.0:
+		if float(e.get("finished", -1.0)) >= 0.0 and mode == "race":
 			last = "     last race %s" % SaveData.format_time(float(e["finished"]))
-		_roster_box.add_child(UiKit.label("%s%s%s" % [e["name"], tag, last], 22, col.lerp(Color.WHITE, 0.3)))
+		var cup: String = ""
+		if mode != "race" and Net.party_round > 0 and Game.party != null and Game.party.cup.has(id):
+			cup = "     cup %d" % int(Game.party.cup[id])
+		if not team:
+			_roster_box.add_child(UiKit.label("%s%s%s%s" % [e["name"], tag, last, cup], 22, col.lerp(Color.WHITE, 0.3)))
+			continue
+		var tm: int = Net.team_of(id)
+		var row: HBoxContainer = UiKit.hbox(10)
+		var l: Label = UiKit.label("[%s]  %s%s%s" % [PartyNames.team_name(tm), e["name"], tag, cup], 22, PartyNames.team_color(tm).lerp(Color.WHITE, 0.25))
+		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		row.add_child(l)
+		if Net.is_host():
+			var other: int = 1 - tm
+			var swap: Button = UiKit.button("Move to %s" % PartyNames.team_name(other), func() -> void: Net.host_set_team(id, other), 190)
+			swap.custom_minimum_size.y = 40
+			swap.set_meta("swap_id", id)
+			row.add_child(swap)
+			if id == keep_swap:
+				regrab = swap
+		_roster_box.add_child(row)
+	if team:
+		var sizes: Array[int] = [0, 0]
+		for id: int in ids:
+			sizes[Net.team_of(id)] += 1
+		_roster_box.add_child(UiKit.label("%s %d  vs  %d %s" % [PartyNames.team_name(0), sizes[0], sizes[1], PartyNames.team_name(1)], 16, UiKit.SOFT))
+	if regrab != null:
+		regrab.grab_focus.call_deferred()
+	if Net.is_host() and mode != "race" and Net.party_round > 0:
+		var reset: Button = UiKit.button("Start a New %s" % PartyNames.CUP, func() -> void: Net.host_reset_cup(), 300)
+		reset.name = "ResetCup"
+		_roster_box.add_child(reset)

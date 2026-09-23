@@ -6,6 +6,8 @@ extends Node3D
 
 signal level_finished(time: float)
 signal player_respawned
+## A counted fall / hazard death (before the respawn). Party Mode credits KOs from it.
+signal player_failed(cause: String)
 
 const PLAYER_SCENE: PackedScene = preload("res://player/player.tscn")
 
@@ -30,6 +32,8 @@ var deaths: int = 0
 var splits: Array[float] = []
 ## Set false by automated tests to skip HUD/camera/audio side effects.
 var headless_mode: bool = false
+## Party Mode layer (item boxes, power-ups, hits, scoring). Only exists while Game.party is set.
+var party: PartyLayer
 
 var _spawn: Transform3D = Transform3D.IDENTITY
 ## Physics tick of the last respawn (see fail()).
@@ -58,6 +62,10 @@ func _ready() -> void:
 		_setup_race()
 	else:
 		_begin_run()
+	if Game.party != null:
+		party = PartyLayer.new()
+		add_child(party)
+		party.setup(self)
 
 
 ## Override: set level_id/theme_id/kill_y etc.
@@ -257,6 +265,7 @@ func fail(cause: String = "fall") -> void:
 	if finished or Engine.get_physics_frames() - _respawn_tick <= 1:
 		return
 	deaths += 1
+	player_failed.emit(cause)
 	respawn(cause)
 
 
@@ -352,6 +361,13 @@ func _on_finish() -> void:
 	Sfx.play("finish")
 	player.visual.on_cheer()
 	level_finished.emit(time)
+	if party != null:
+		# power-ups and practice runs never count as records; the party layer shows its own panels
+		if Game.race_mode:
+			Net.send_checkpoint(checkpoints.size() + 1)
+			Net.send_finished(time)
+		party.on_local_finish(time)
+		return
 	if Game.race_mode:
 		Net.send_checkpoint(checkpoints.size() + 1)
 		Net.send_finished(time)

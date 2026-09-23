@@ -44,6 +44,11 @@ var move_input: float = 0.0
 var speed_mult: float = 1.0
 var jump_mult: float = 1.0
 var gravity_mult: float = 1.0
+## Party Mode only (0 in the main mode): seconds of stun left (input ignored, like control
+## off but gravity and knockback still act), and extra mid-air jumps per airtime.
+var party_stun: float = 0.0
+var party_air_jumps: int = 0
+var _air_jumps_used: int = 0
 
 var _coyote: float = 0.0
 var _buffer: float = 0.0
@@ -105,6 +110,11 @@ func _physics_process(dt: float) -> void:
 		move = Input.get_vector("move_left", "move_right", "move_back", "move_forward")
 		jump_held = Input.is_action_pressed("jump")
 	if not control_enabled:
+		move = Vector2.ZERO
+		jump_held = false
+		_jump_press_queued = false
+	if party_stun > 0.0:
+		party_stun = maxf(party_stun - dt, 0.0)
 		move = Vector2.ZERO
 		jump_held = false
 		_jump_press_queued = false
@@ -199,6 +209,18 @@ func _physics_process(dt: float) -> void:
 		_no_snap = 0.12
 		_begin_flight_stats()
 		jumped.emit()
+	elif party_air_jumps > 0 and _buffer > 0.0 and not on_floor and control_enabled and _wall_body == null \
+			and _air_jumps_used < party_air_jumps:
+		# Party Mode double jump (Golden Surge Hair); party_air_jumps is 0 everywhere else
+		_air_jumps_used += 1
+		_buffer = 0.0
+		velocity.y = maxf(velocity.y, t.jump_velocity * jump_mult)
+		_jumping = true
+		_no_snap = 0.12
+		_begin_flight_stats()
+		jumped.emit()
+	if on_floor:
+		_air_jumps_used = 0
 
 	floor_snap_length = 0.0 if _no_snap > 0.0 else t.floor_snap
 	var pre_move_velocity: Vector3 = velocity

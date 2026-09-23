@@ -12,6 +12,24 @@ const LEVELS: Array[Dictionary] = [
 	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_7_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon."},
 ]
 const TITLE_SCENE: String = "res://ui/title.tscn"
+## Party Mode actions and their default bindings (Settings can rebind the key / mouse and pad
+## button). None of them clash with jump / retry / pause / camera; in the main mode nothing
+## listens to them. RT / LT also attack / use (fixed).
+const PARTY_ACTIONS: Array[String] = ["attack", "use_item", "shove", "cycle_item"]
+const PARTY_BIND_DEFAULTS: Dictionary = {
+	"attack": {"key": KEY_F, "mouse": MOUSE_BUTTON_LEFT, "pad": JOY_BUTTON_X},
+	"use_item": {"key": KEY_E, "mouse": MOUSE_BUTTON_RIGHT, "pad": JOY_BUTTON_RIGHT_SHOULDER},
+	"shove": {"key": KEY_Q, "mouse": 0, "pad": JOY_BUTTON_B},
+	"cycle_item": {"key": KEY_C, "mouse": 0, "pad": JOY_BUTTON_LEFT_SHOULDER},
+}
+const PAD_BUTTON_NAMES: Dictionary = {
+	JOY_BUTTON_A: "A", JOY_BUTTON_B: "B", JOY_BUTTON_X: "X", JOY_BUTTON_Y: "Y",
+	JOY_BUTTON_LEFT_SHOULDER: "LB", JOY_BUTTON_RIGHT_SHOULDER: "RB", JOY_BUTTON_BACK: "Back",
+	JOY_BUTTON_START: "Start", JOY_BUTTON_LEFT_STICK: "L3", JOY_BUTTON_RIGHT_STICK: "R3",
+	JOY_BUTTON_DPAD_UP: "D-pad Up", JOY_BUTTON_DPAD_DOWN: "D-pad Down",
+	JOY_BUTTON_DPAD_LEFT: "D-pad Left", JOY_BUTTON_DPAD_RIGHT: "D-pad Right",
+	JOY_BUTTON_GUIDE: "Guide", JOY_BUTTON_MISC1: "Share",
+}
 
 ## The last input came from a gamepad (true) or keyboard / mouse (false): prompts follow it.
 signal input_device_changed(pad: bool)
@@ -33,11 +51,15 @@ var intro_shown_for: String = ""
 var _clock_err_avg: float = 0.0
 ## See input_device_changed.
 var using_pad: bool = false
+## Party Mode rules + Party Cup while a party race or Party Practice is on; null in the main
+## mode. This is the one switch: levels only add the party layer when it is set.
+var party: PartyRules = null
 
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_setup_input()
+	apply_party_binds()
 	dev_mode = "--dev" in OS.get_cmdline_user_args()
 	Net.race_starting.connect(_on_race_starting)
 	Net.lobby_requested.connect(func() -> void: goto_title("lobby"))
@@ -125,10 +147,93 @@ static func is_menu_nav(event: InputEvent) -> bool:
 
 
 ## Button prompt for an action, for whichever device is in use ("R" / "Y").
+## Party actions follow their current (rebindable) bindings.
 func prompt(action: String) -> String:
+	if action in PARTY_ACTIONS:
+		return bind_text(action, using_pad)
 	var keys: Dictionary = {"restart": "R", "jump": "Space", "pause": "Esc", "back": "Esc"}
 	var pads: Dictionary = {"restart": "Y", "jump": "A", "pause": "Start", "back": "B"}
 	return str((pads if using_pad else keys).get(action, action))
+
+
+# ---- party actions: bindings --------------------------------------------------------
+
+## The binding in force for a party action: {"key", "mouse", "pad"} (0 / -1 = none).
+func party_bind(action: String) -> Dictionary:
+	var d: Dictionary = (PARTY_BIND_DEFAULTS.get(action, {}) as Dictionary).duplicate()
+	var over: Variant = Settings.party_binds.get(action, null)
+	if typeof(over) == TYPE_DICTIONARY:
+		for k: String in ["key", "mouse", "pad"]:
+			if (over as Dictionary).has(k):
+				d[k] = int((over as Dictionary)[k])
+	return d
+
+
+## Rebuilds the InputMap events of every party action from its binding.
+func apply_party_binds() -> void:
+	for action: String in PARTY_ACTIONS:
+		if not InputMap.has_action(action):
+			InputMap.add_action(action, 0.35)
+		InputMap.action_erase_events(action)
+		var b: Dictionary = party_bind(action)
+		if int(b.get("key", 0)) > 0:
+			var k := InputEventKey.new()
+			k.physical_keycode = int(b["key"]) as Key
+			InputMap.action_add_event(action, k)
+		if int(b.get("mouse", 0)) > 0:
+			var m := InputEventMouseButton.new()
+			m.button_index = int(b["mouse"]) as MouseButton
+			InputMap.action_add_event(action, m)
+		if int(b.get("pad", -1)) >= 0:
+			var jb := InputEventJoypadButton.new()
+			jb.device = -1
+			jb.button_index = int(b["pad"]) as JoyButton
+			InputMap.action_add_event(action, jb)
+		var trigger: int = {"attack": JOY_AXIS_TRIGGER_RIGHT, "use_item": JOY_AXIS_TRIGGER_LEFT}.get(action, -1)
+		if trigger >= 0:
+			var jm := InputEventJoypadMotion.new()
+			jm.device = -1
+			jm.axis = trigger as JoyAxis
+			jm.axis_value = 1.0
+			InputMap.action_add_event(action, jm)
+
+
+## "F / LMB" or "X" for an action's binding.
+func bind_text(action: String, pad: bool) -> String:
+	var b: Dictionary = party_bind(action)
+	if pad:
+		return pad_button_name(int(b.get("pad", -1)))
+	var parts: PackedStringArray = []
+	if int(b.get("key", 0)) > 0:
+		parts.append(OS.get_keycode_string(int(b["key"]) as Key))
+	if int(b.get("mouse", 0)) > 0:
+		parts.append(mouse_button_name(int(b["mouse"])))
+	return " / ".join(parts) if not parts.is_empty() else "-"
+
+
+static func pad_button_name(button: int) -> String:
+	if button < 0:
+		return "-"
+	return str(PAD_BUTTON_NAMES.get(button, "Button %d" % button))
+
+
+static func mouse_button_name(button: int) -> String:
+	return {MOUSE_BUTTON_LEFT: "LMB", MOUSE_BUTTON_RIGHT: "RMB", MOUSE_BUTTON_MIDDLE: "MMB",
+		MOUSE_BUTTON_XBUTTON1: "Mouse 4", MOUSE_BUTTON_XBUTTON2: "Mouse 5"}.get(button, "Mouse %d" % button)
+
+
+## Which fixed game action already uses this input (a rebind onto it is refused), or "".
+func fixed_action_for(event: InputEvent) -> String:
+	for action: String in ["jump", "restart", "pause", "move_forward", "move_back", "move_left", "move_right",
+			"debug_overlay", "show_board", "ui_accept", "ui_cancel"]:
+		if InputMap.has_action(action) and InputMap.event_is_action(event, action, true):
+			# pad B / A are menu back / confirm too, but only while a menu is open
+			if action in ["ui_accept", "ui_cancel"] and event is InputEventJoypadButton:
+				continue
+			return action
+	if event is InputEventMouseButton and (event as InputEventMouseButton).button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+		return "zoom"
+	return ""
 
 
 func _physics_process(dt: float) -> void:
@@ -168,12 +273,29 @@ func _process(_dt: float) -> void:
 
 func play_level(index: int) -> void:
 	race_mode = false
+	party = null
+	level_index = clampi(index, 0, LEVELS.size() - 1)
+	_load_level()
+
+
+## Party Practice: a solo run of any unlocked level with item boxes, power-ups and practice
+## dummies. Nothing is scored or saved.
+func play_party_practice(index: int) -> void:
+	race_mode = false
+	party = PartyRules.new("practice")
 	level_index = clampi(index, 0, LEVELS.size() - 1)
 	_load_level()
 
 
 func _on_race_starting(index: int, start_time: float) -> void:
 	race_mode = true
+	# a party race is the next round of the cup; a plain race switches every party system off
+	if Net.game_mode == "race":
+		party = null
+	else:
+		if party == null or party.mode != Net.game_mode or Net.party_round <= 1:
+			party = PartyRules.new(Net.game_mode)
+		party.round_no = Net.party_round
 	level_index = index
 	course_time = Net.now() - start_time
 	_clock_err_avg = 0.0
@@ -190,6 +312,7 @@ func _load_level() -> void:
 
 func play_playground() -> void:
 	race_mode = false
+	party = null
 	level_index = -1
 	get_tree().paused = false
 	course_time = 0.0
@@ -207,6 +330,9 @@ func restart_level() -> void:
 
 
 func next_level() -> void:
+	if party != null:
+		play_party_practice(level_index + 1 if level_index + 1 < LEVELS.size() else 0)
+		return
 	if level_index + 1 < LEVELS.size():
 		play_level(level_index + 1)
 	else:
@@ -217,6 +343,9 @@ func goto_title(screen: String = "main") -> void:
 	get_tree().paused = false
 	course_running = false
 	race_mode = false
+	# the Party Cup lives on while the session does (back in the lobby between rounds)
+	if not Net.active or screen != "lobby":
+		party = null
 	title_screen = screen
 	intro_shown_for = ""
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
