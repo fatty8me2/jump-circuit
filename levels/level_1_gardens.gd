@@ -172,15 +172,15 @@ func _build() -> void:
 	var cp11: Vector3 = _stage_11_greenhouse()
 	_frame(_w(cp11), 180.0)
 	var cp12: Vector3 = _stage_12_maze()
-	_frame(_w(cp12), 90.0)
+	_frame(_w(cp12), -90.0)
 	var cp13: Vector3 = _stage_13_windmill()
-	_frame(_w(cp13), 90.0)
+	_frame(_w(cp13), 0.0)
 	var cp14: Vector3 = _stage_14_flowers()
 	_frame(_w(cp14), 0.0)
 	var cp15: Vector3 = _stage_15_press()
 	_frame(_w(cp15), -90.0)
 	var cp16: Vector3 = _stage_16_chimney()
-	_frame(_w(cp16), -90.0)
+	_frame(_w(cp16), 180.0)
 	var cp17: Vector3 = _stage_17_orchard()
 	_frame(_w(cp17), 180.0)
 	_stage_18_summit()
@@ -483,6 +483,360 @@ func _stage_9_circuit() -> Vector3:
 	r_walk(_w(cp))
 	r_checkpoint()
 	return cp
+
+
+# ==== THE EXTENSION (stages 10-18) =============================================================
+
+# ---- helpers for the new half ----------------------------------------------------------------
+
+func _fx_on() -> bool:
+	return DisplayServer.get_name() != "headless"
+
+
+## Half-extents of a local box in world axes (for emission boxes of unrotated emitters).
+func _ext(v: Vector3) -> Vector3:
+	return (_b * v).abs()
+
+
+## Feedback trigger at world `pos`: fires `fx` when `test` turns true, or (no test) when the
+## player comes within `radius`. Headless runs build nothing.
+func _cue(pos: Vector3, fx: GPUParticles3D, radius: float = 0.0, test: Callable = Callable(), cooldown: float = 0.5) -> void:
+	if not _fx_on():
+		fx.free()
+		return
+	var c := GardensCue.new()
+	c.radius = radius
+	c.test = test
+	c.cooldown = cooldown
+	c.position = pos
+	c.add_child(fx)
+	add_child(c)
+
+
+func _cue_near(pos: Vector3, radius: float, fx: GPUParticles3D) -> void:
+	_cue(pos, fx, radius)
+
+
+## Ambient emitter at world `pos` (skipped headless).
+func _amb(pos: Vector3, fx: GPUParticles3D) -> void:
+	if not _fx_on():
+		fx.free()
+		return
+	fx.position = pos
+	add_child(fx)
+
+
+## Decorative or solid hedge box (local centre, local size).
+func _hedge(c: Vector3, size: Vector3, collide: bool = true) -> void:
+	kit.block(_w(c), size, HEDGE.lightened(kit.rng.randf_range(0.0, 0.08)), collide, _yaw)
+
+
+## Clipped topiary ball sitting on a hedge top (decor).
+func _topiary(top: Vector3, r: float = 0.5) -> void:
+	var n := Look.sphere(r, Look.flat(HEDGE.lightened(0.12), 0.9))
+	n.position = _w(top + Vector3(0, r * 0.85, 0))
+	add_child(n)
+
+
+## Wall-run panel along the stage heading at local x, from z0 to z1 (z0 > z1), centre height y.
+func _panel(x: float, y: float, z0: float, z1: float, height: float = 7.0) -> WallRunPanel:
+	var w: WallRunPanel = kit.wallrun(_w(Vector3(x, y, (z0 + z1) * 0.5)), Vector3(absf(z0 - z1), height, 0.5), _yaw + 90.0)
+	# trellis posts at the ends and ivy on the back face
+	var back: float = signf(x) * 0.45
+	for z: float in [z0, z1]:
+		kit.block(_w(Vector3(x + back, y - 0.5, z)), Vector3(0.35, height + 1.0, 0.35), Look.c("trim"), false, _yaw)
+	for i: int in int(absf(z0 - z1) / 2.5):
+		var z: float = z0 - 1.25 - 2.5 * float(i)
+		kit.block(_w(Vector3(x + back * 1.1, y + kit.rng.randf_range(-1.5, 1.5), z)), Vector3(0.3, kit.rng.randf_range(1.2, 2.6), 0.9), HEDGE.lightened(0.1), false, _yaw)
+	kit.pillar(_w(Vector3(x + back, y - height * 0.5, (z0 + z1) * 0.5)), 0.5, 30.0)
+	return w
+
+
+func _ledge(top: Vector3, size: Vector3, style: String = "main") -> LedgeBlock:
+	return kit.ledge(_w(top), size, _yaw, style)
+
+
+## A fence of stacked laser beams across the path (local centre x/z, floor y), one rhythm.
+func _fence(x: float, y: float, z: float, width: float, heights: Array, period: float, on: float, phase: float) -> LaserGate:
+	var first: LaserGate = null
+	for h: float in heights:
+		var g: LaserGate = kit.laser(_w(Vector3(x, y + h, z)), Vector3(width, 0.22, 0.22), period, on, phase, _yaw)
+		if first == null:
+			first = g
+	return first
+
+
+## The beam stays dark for the whole window [now + a, now + b].
+func _dark(g: LaserGate, a: float, b: float) -> bool:
+	var t: float = Game.course_time + a
+	while t <= Game.course_time + b:
+		if g.is_on_at(t):
+			return false
+		t += 0.04
+	return true
+
+
+## Nothing of the ram is out (no punch, not extended) during [now + a, now + b].
+func _ram_clear(p: Piston, a: float, b: float) -> bool:
+	var t: float = Game.course_time + a
+	while t <= Game.course_time + b:
+		if p.is_punching_at(t) or p.extension_at(t) > 0.03:
+			return false
+		t += 0.04
+	return true
+
+
+## Signpost for a fork: a lamp and a glow pad at local `p`.
+func _sign(p: Vector3, color: Color) -> void:
+	kit.lamp(_w(p + Vector3(0, 0, 0.8)), 3.0, true, color)
+	kit.glow_strip(_w(p + Vector3(0, 0.03, 0)), Vector3(1.4, 0.06, 1.4), color, _yaw)
+
+
+## Dev helper: `-- --gardens_from=N` starts the run on checkpoint N and drops the route before it
+## (fast iteration on late stages; the game never passes it).
+func _debug_start() -> void:
+	var n: int = 0
+	for a: String in OS.get_cmdline_user_args():
+		if a.begins_with("--gardens_from="):
+			n = int(a.trim_prefix("--gardens_from="))
+	if n <= 0:
+		return
+	var cps: Array[Node] = find_children("*", "Checkpoint", true, false)
+	if n > cps.size():
+		return
+	var cp := cps[n - 1] as Node3D
+	set_spawn(cp.global_position + Vector3(0, 0.1, 0), cp.global_rotation_degrees.y)
+	var seen: int = 0
+	var cut: int = 0
+	for i: int in route.size():
+		if str(route[i]["kind"]) == "checkpoint":
+			seen += 1
+			if seen == n:
+				cut = i + 1
+				break
+	route = route.slice(cut)
+
+
+# ---- stage 10: Topiary Runs - the first wall run and the first mantle -------------------------
+# From the old finish plaza (now checkpoint 9) through its arch: a 19 m gap with nothing under it
+# but a trellis panel on the right - run it and kick off onto the landing. A hedge wall too tall to
+# jump (3.4 m) has a gold lip: mantle it. Then hedge-top hops (a trimmer behind the rise) to the lawn.
+func _stage_10_topiary() -> Vector3:
+	_panel(2.3, 1.2, -12.6, -27.6)
+	var l1: Dictionary = _blk(Vector3(-2.4, 0, -33.1), 3.6, 3.6, "alt")
+	var wall: Dictionary = _area(Vector3(-2.4, 3.4, -37.2), 1.8, 2.3)
+	_ledge(Vector3(-2.4, 3.4, -37.2), Vector3(3.6, 6.0, 4.6))
+	var t1: Dictionary = _blk(Vector3(-0.2, 3.4, -45.2), 1.8, 1.8)
+	var t2: Dictionary = _blk(Vector3(3.0, 4.4, -50.2), 1.8, 1.8, "alt")
+	var beam: Dictionary = _blk(Vector3(3.2, 4.4, -58.6), 0.9, 5.0, "accent", 0.6)
+	var end: Dictionary = _lawn(Vector3(3.2, 5.4, -69.0), 7.0, true, -90.0)
+	# hedge walls either side of the mantle, topiary on top
+	_hedge(Vector3(-4.8, 1.4, -37.2), Vector3(1.2, 4.0, 4.6), false)
+	_hedge(Vector3(0.0, 1.4, -37.2), Vector3(1.2, 4.0, 4.6), false)
+	_topiary(Vector3(-4.8, 3.4, -37.2), 0.6)
+	_topiary(Vector3(0.0, 3.4, -37.2), 0.6)
+	for z: float in [-45.2, -58.6]:
+		kit.pillar(_w(Vector3(3.2 if z < -50 else -0.2, 2.4 if z < -50 else 1.4, z)), 0.7, 16.0)
+	kit.lamp(_w(Vector3(-4.2, 0, -31.8)), 2.6, false)
+	kit.tree(_w(Vector3(-5.8, 3.4, -38.6)), 1.1)
+	r_wallrun(_w(Vector3(0.5, 0, -9.2)), _w(Vector3(1.7, 1.4, -13.7)), _w(Vector3(1.7, 1.4, -25.3)), _w(Vector3(-2.4, 0, -32.8)))
+	r_mantle(_w(Vector3(-2.4, 0, -33.3)), _w(Vector3(-2.4, 3.4, -36.4)))
+	_hop(wall, t1)
+	_hop(t1, t2)
+	_hop(t2, beam, Vector3(0, 0, 1.6))
+	_hop(beam, end, Vector3(0, 0, 1.8))
+	r_checkpoint()
+	_cue_near(_w(end["c"] + Vector3(0, 0.2, 0)), 2.4, GardensFx.petal_fountain())
+	_amb(_w(Vector3(1.0, 3.0, -20.0)), GardensFx.seeds(Vector3(5, 3, 9), _b * Vector3(-0.6, 0.15, -0.4), 26))
+	return end["c"]
+
+
+# ---- stage 11: The Greenhouse - BRANCH ----------------------------------------------------------
+# A fork under the glasshouse frame. LEFT (red lamps): the planter walkway, a 1.2 m beam swept by
+# three sprinkler pistons - read the rhythm and walk through. RIGHT (gold lamps): the rafters - two
+# mantle walls, a blinking seed tray and the drop to the merge deck. Both rejoin before the lawn.
+func _stage_11_greenhouse() -> Vector3:
+	_blk(Vector3(0, 0, -5.0), 12.0, 3.0, "main", 1.0)
+	_sign(Vector3(-4.0, 0, -4.6), Color(1.0, 0.35, 0.3))
+	_sign(Vector3(4.0, 0, -4.6), LedgeBlock.LIP_COLOR)
+	# LEFT - the planter walkway and its pistons
+	_blk(Vector3(-4.0, 0, -18.5), 1.2, 24.0, "alt", 0.6)
+	var rams: Array[Piston] = []
+	var zs: Array[float] = [-11.0, -17.5, -24.0]
+	for i: int in 3:
+		var p: Piston = kit.piston(_w(Vector3(-6.2, 1.65, zs[i])), Vector3(2.2, 1.6, 2.0), _yaw - 90.0, 2.8, 2.4, 0.2 * float(i), 10.0)
+		rams.append(p)
+		_cue(_w(Vector3(-4.0, 1.0, zs[i])), GardensFx.spray(_b * Vector3(1, 0.5, 0)), 0.0, func() -> bool: return p.is_punching_at(Game.course_time), 0.8)
+		# planter boxes between the rams (off the walkway)
+		_hedge(Vector3(-6.4, 0.5, zs[i] + 3.25), Vector3(1.6, 1.0, 1.6), false)
+		kit.bush(_w(Vector3(-6.4, 1.0, zs[i] + 3.25)), 0.8)
+	# sprinkler pipe over the walkway, drizzling
+	kit.pipe(_w(Vector3(-4.0, 6.5, -6.0)), _w(Vector3(-4.0, 6.5, -30.0)), 0.12, Look.c("metal"))
+	_amb(_w(Vector3(-4.0, 4.0, -18.0)), GardensFx.drizzle(_ext(Vector3(0.5, 2.2, 11.0)), 60))
+	# RIGHT - the rafters
+	_ledge(Vector3(4.0, 3.2, -9.5), Vector3(3.0, 6.0, 3.0), "alt")
+	_ledge(Vector3(4.0, 6.4, -16.0), Vector3(3.0, 9.2, 3.0), "alt")
+	var bk: Vector3 = Vector3(4.0, 6.4, -22.6)
+	var blink: BlinkPlatform = kit.blink(_w(bk), Vector3(1.8, 0.5, 1.8), 2.4, 0.55, 0.3)
+	# merge deck and the lawn
+	var merge: Dictionary = _blk(Vector3(0, 0, -31.5), 12.0, 5.0, "main", 1.0)
+	var end: Dictionary = _lawn(Vector3(0, 1.5, -40.8), 7.0, true, 0.0)
+	# the glasshouse frame: white ribs arching over both routes
+	for z: float in [-7.0, -14.0, -21.0, -28.0]:
+		for sx: float in [-1.0, 1.0]:
+			kit.block(_w(Vector3(sx * 11.5, 4.0, z)), Vector3(0.3, 14.0, 0.3), Look.c("trim"), false, _yaw)
+		kit.block(_w(Vector3(0, 11.0, z)), Vector3(23.3, 0.3, 0.3), Look.c("trim"), false, _yaw)
+		kit.block(_w(Vector3(0, 12.4, z)), Vector3(12.0, 0.25, 0.25), Look.c("trim"), false, _yaw)
+	for sx: float in [-1.0, 1.0]:
+		kit.block(_w(Vector3(sx * 11.5, 11.0, -17.5)), Vector3(0.25, 0.25, 21.3), Look.c("trim"), false, _yaw)
+	kit.block(_w(Vector3(0, 12.6, -17.5)), Vector3(0.25, 0.25, 21.3), Look.c("trim"), false, _yaw)
+	_amb(_w(Vector3(0, 5.0, -18.0)), GardensFx.pollen(_ext(Vector3(9, 4, 12)), 40))
+	if route_variant == 0:
+		r_walk(_w(Vector3(-4.0, 0, -6.2)))
+		for i: int in 3:
+			var p: Piston = rams[i]
+			r_walk(_w(Vector3(-4.0, 0, zs[i] + 2.9)))
+			r_until(func() -> bool: return _ram_clear(p, 0.0, 0.75))
+		r_walk(_w(Vector3(-4.0, 0, -29.6)))
+	else:
+		r_walk(_w(Vector3(4.0, 0, -4.4)))
+		r_mantle(_w(Vector3(4.0, 0, -5.9)), _w(Vector3(4.0, 3.2, -9.0)))
+		r_mantle(_w(Vector3(4.0, 3.2, -10.6)), _w(Vector3(4.0, 6.4, -15.2)))
+		r_until(func() -> bool: return blink.is_on_at(Game.course_time + 0.7) and blink.is_on_at(Game.course_time + 1.6))
+		r_jump(_w(Vector3(4.0, 6.4, -17.15)), _w(bk))
+		r_jump(_w(bk + Vector3(0, 0, -0.55)), _w(Vector3(1.5, 0, -30.8)))
+	_hop(merge, end, Vector3(0, 0, 1.8))
+	r_checkpoint()
+	_cue_near(_w(end["c"] + Vector3(0, 0.2, 0)), 2.4, GardensFx.petal_fountain())
+	return end["c"]
+
+
+# ---- stage 12: The Hedge Maze - SET PIECE: THE TRIMMER -------------------------------------------
+# A 30 m hedge alley. The Trimmer - a laser curtain between two shear posts riding the hedge tops -
+# glides down the alley and back on the course clock. Follow it in, hop the kill hedges, duck into a
+# side pocket while it comes back past you, then run for the exit behind it. Mantle out of the maze and
+# cross two laser gaps to the lawn.
+var _trim: GardensTrimmer
+
+
+## Where the Trimmer's beam is along the alley (metres from its start) and whether it is heading out.
+func _trim_s(t: float) -> float:
+	return _trim.a.z - _trim.offset_at(t).z
+
+
+func _trim_out(t: float) -> bool:
+	return fposmod(t / _trim.period + _trim.phase, 1.0) < 0.5
+
+
+func _stage_12_maze() -> Vector3:
+	var floor_c := Vector3(0, 0, -21.25)
+	_blk(floor_c, 3.0, 35.5, "alt", 1.0)
+	# hedge walls with pockets: left at -14 and -30, right at -22
+	var pockets: Array = [[-1.0, -14.0], [1.0, -22.0], [-1.0, -30.0]]
+	for sx: float in [-1.0, 1.0]:
+		var cuts: Array[float] = []
+		for pk: Array in pockets:
+			if float(pk[0]) == sx:
+				cuts.append(float(pk[1]))
+		var z: float = -5.5
+		cuts.append(-37.0 - 1.2)
+		for cz: float in cuts:
+			var z_end: float = cz + 1.2
+			if z - z_end > 0.1:
+				_hedge(Vector3(sx * 2.1, 1.2, (z + z_end) * 0.5), Vector3(1.2, 4.4, z - z_end))
+			z = cz - 1.2
+	for pk: Array in pockets:
+		var sx: float = float(pk[0])
+		var pz: float = float(pk[1])
+		_blk(Vector3(sx * 2.4, 0, pz), 1.8, 2.4, "main", 1.0)
+		_hedge(Vector3(sx * 3.9, 1.2, pz), Vector3(1.2, 4.4, 4.8))
+		_hedge(Vector3(sx * 3.0, 1.2, pz + 1.8), Vector3(0.6, 4.4, 1.2))
+		_hedge(Vector3(sx * 3.0, 1.2, pz - 1.8), Vector3(0.6, 4.4, 1.2))
+		kit.glow_strip(_w(Vector3(sx * 2.4, 0.03, pz)), Vector3(1.0, 0.06, 1.6), Look.c("accent2"), _yaw)
+		_topiary(Vector3(sx * 3.9, 3.4, pz), 0.55)
+	# kill hedges across the alley floor
+	for z: float in [-18.0, -26.0]:
+		_haz(Vector3(0, 0.25, z), Vector3(3.0, 0.5, 0.5))
+	# THE TRIMMER
+	_trim = GardensTrimmer.new()
+	_trim.a = Vector3(0, 1.5, -6.0)
+	_trim.b = Vector3(0, 1.5, -36.0)
+	_trim.period = 7.0
+	_trim.beam_size = Vector3(3.0, 3.0, 0.25)
+	_trim.position = _o
+	_trim.rotation_degrees.y = _yaw
+	add_child(_trim)
+	# the maze beyond the alley (decor hedges, no collision)
+	for i: int in 10:
+		var sx: float = -1.0 if i % 2 == 0 else 1.0
+		var zz: float = -6.0 - 3.2 * float(i)
+		_hedge(Vector3(sx * kit.rng.randf_range(6.5, 9.0), 0.8, zz), Vector3(kit.rng.randf_range(2.5, 5.0), 3.0, 1.0), false)
+		_hedge(Vector3(sx * 10.5, 0.8, zz - 1.6), Vector3(1.0, 3.0, kit.rng.randf_range(2.0, 4.0)), false)
+	kit.block(_w(Vector3(0, -0.6, -21.0)), Vector3(22.0, 0.8, 34.0), HEDGE.darkened(0.3), false, _yaw)
+	kit.pillar(_w(Vector3(0, -1.0, -21.0)), 2.4, 18.0)
+	kit.arch(_w(Vector3(0, 0, -4.6)), 4.0, 4.4, _yaw, HEDGE.lightened(0.15))
+	# out of the maze: a 3.4 m hedge wall to mantle, then two laser gaps
+	_ledge(Vector3(0, 3.4, -41.5), Vector3(3.6, 6.0, 5.0))
+	_hedge(Vector3(-2.4, 1.4, -41.5), Vector3(1.2, 4.0, 5.0), false)
+	_hedge(Vector3(2.4, 1.4, -41.5), Vector3(1.2, 4.0, 5.0), false)
+	var f1: LaserGate = _fence(0, 3.4, -46.7, 3.2, [0.5, 1.4, 2.3], 2.4, 0.45, 0.0)
+	var b1: Dictionary = _blk(Vector3(0, 3.4, -49.6), 1.8, 1.8)
+	var f2: LaserGate = _fence(1.5, 4.4, -52.9, 4.4, [0.5, 1.4, 2.3], 2.4, 0.45, 0.5)
+	var b2: Dictionary = _blk(Vector3(2.8, 4.4, -54.8), 1.8, 1.8, "alt")
+	var end: Dictionary = _lawn(Vector3(2.8, 5.4, -62.8), 7.0, true, 90.0)
+	kit.pillar(_w(Vector3(0, 2.4, -49.6)), 0.7, 14.0)
+	kit.pillar(_w(Vector3(2.8, 3.4, -54.8)), 0.7, 14.0)
+	# route: follow the curtain in, pocket 2 while it comes back, then out behind it
+	r_walk(_w(Vector3(0, 0, -4.4)))
+	r_until(func() -> bool:
+		var u: float = fposmod(Game.course_time / _trim.period + _trim.phase, 1.0)
+		return u > 0.1 and u < 0.16)
+	r_walk(_w(Vector3(0, 0, -16.4)))
+	r_jump(_w(Vector3(0, 0, -16.9)), _w(Vector3(0, 0, -19.4)))
+	r_walk(_w(Vector3(0.4, 0, -21.0)))
+	r_walk(_w(Vector3(2.5, 0, -22.0)))
+	r_until(func() -> bool: return not _trim_out(Game.course_time) and _trim_s(Game.course_time) < 13.0)
+	r_walk(_w(Vector3(0, 0, -23.6)))
+	r_jump(_w(Vector3(0, 0, -24.9)), _w(Vector3(0, 0, -27.4)))
+	r_walk(_w(Vector3(0, 0, -36.0)))
+	r_mantle(_w(Vector3(0, 0, -37.4)), _w(Vector3(0, 3.4, -40.6)))
+	r_until(func() -> bool: return _dark(f1, 0.1, 0.95))
+	r_jump(_w(Vector3(0, 3.4, -43.65)), _w(b1["c"]))
+	r_until(func() -> bool: return _dark(f2, 0.0, 0.8))
+	_hop(b1, b2)
+	_hop(b2, end, Vector3(0, 0, 1.8))
+	r_checkpoint()
+	_cue_near(_w(end["c"] + Vector3(0, 0.2, 0)), 2.4, GardensFx.petal_fountain())
+	_amb(_w(Vector3(0, 2.0, -21.0)), GardensFx.fireflies(_ext(Vector3(4, 1.5, 15)), 30))
+	return end["c"]
+
+
+func _stage_13_windmill() -> Vector3:
+	return Vector3.ZERO
+
+
+func _stage_14_flowers() -> Vector3:
+	return Vector3.ZERO
+
+
+func _stage_15_press() -> Vector3:
+	return Vector3.ZERO
+
+
+func _stage_16_chimney() -> Vector3:
+	return Vector3.ZERO
+
+
+func _stage_17_orchard() -> Vector3:
+	return Vector3.ZERO
+
+
+func _stage_18_summit() -> void:
+	kit.finish(_w(Vector3.ZERO), _yaw)
+
+
+func _ambience() -> void:
+	pass
 
 
 func _surroundings() -> void:
