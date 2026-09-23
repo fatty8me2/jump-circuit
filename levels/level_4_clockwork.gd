@@ -134,6 +134,8 @@ func _build() -> void:
 	_stage_16()
 	_stage_17()
 	_stage_18()
+	_stage_19()
+	_stage_20()
 	_build_surroundings()
 
 
@@ -1390,6 +1392,143 @@ func _build_cuckoo_house(c: Vector3) -> void:
 	_fx_clock(c + V(0, 5.3, 1.2), CUCKOO_PERIOD, 0.0, [0.1], [
 		ClockworkFx.puff_burst(14, Color(1.0, 0.9, 0.7, 0.9), 3.0, 0.25, 1.4, false, 0.0, 0.6),
 		ClockworkFx.spark_burst(10, Color(1.0, 0.8, 0.4), 4.0, V(0, 1, 1), 50.0, 0.7)])
+
+
+# =================================================================================================
+# 19. THE STRIKE TRAIN: a 16 m case wall is the only way across the gap, and two curtains of light
+#     cut across the run - they go dark in a travelling wave, so launch on the wave and ride it
+#     through. Kick to a perch, mantle the 3.4 m striking tower, then jump past the bell hammer.
+# =================================================================================================
+
+var _cp19 := Vector3.ZERO
+
+
+func _stage_19() -> void:
+	var o: Vector3 = _cp18
+	kit.wallrun(o + V(2.3, 1.2, -13.0), V(16.0, 7.0, 0.5), 90.0)
+	kit.pillar(o + V(2.3, -2.3, -13.0), 0.5, 30.0, Look.c("metal"))
+	kit.glow_strip(o + V(2.3, -2.42, -13.0), V(0.2, 0.1, 15.6), Look.c("accent2"))
+	var wave: Array = []
+	var gz: Array[float] = [-10.5, -15.5]
+	var taus: Array[float] = [1.2, 1.7]
+	for k: int in 2:
+		var g: LaserGate = kit.laser(o + V(0.9, 2.6, gz[k]), V(2.4, 3.4, 0.18), 2.4, 0.5, -0.5 * float(k) / 2.4)
+		wave.append([g, taus[k]])
+	var perch: Vector3 = o + V(-2.4, 0, -25.6)
+	kit.plat(perch, V(3.0, 0.8, 3.0), "alt", 0.7)
+	var tower: Vector3 = o + V(-2.4, 3.4, -29.6)
+	kit.ledge(tower, V(3.4, 9.0, 3.0))
+	# the bell and its hammer between the tower and the checkpoint
+	var ham: Pendulum = kit.pendulum(o + V(-1.2, 8.4, -33.4), 7.0, 2.6, 0.0)
+	for sx: int in [-1, 1]:
+		kit.pillar(o + V(-1.2 + sx * 8.2, 8.8, -33.4), 0.3, 18.0, Look.c("metal"))
+	kit.block(o + V(-1.2, 8.6, -33.4), V(16.8, 0.5, 0.7), Look.c("decor"), false)
+	var bell := Look.cylinder(1.6, 2.0, Look.flat(Look.c("accent"), 0.35, 0.6, 0.8), V(0, 0, 0), 0.7, 24)
+	add_child(_at(bell, o + V(-9.0, 5.0, -33.4)))
+	_fx_clock(o + V(-8.0, 4.4, -33.4), 2.6, 0.0, [0.25], [
+		ClockworkFx.spark_burst(24, Color(1.0, 0.85, 0.4), 8.0, V(1, 0.6, 0), 45.0, 0.6),
+		ClockworkFx.puff_burst(10, Color(1.0, 0.9, 0.6, 0.6), 3.0, 0.7, 0.8, true, 0.0, 0.4)])
+	_cp19 = o + V(0, 3.4, -38.0)
+	_cp(_cp19, V(6, 2, 6))
+	_cp_fx(_cp19)
+
+	r_walk(o + V(0.5, 0, 2.0))
+	r_until(func() -> bool: return _lasers_off(wave, 0.3))
+	r_wallrun(o + V(0.5, 0, -2.1), o + V(1.7, 1.4, -6.6), o + V(1.7, 1.4, -18.2), perch + V(0, 0, 0.3))
+	r_mantle(perch + V(0, 0, -0.9), tower + V(0, 0, 0.6))
+	r_walk(tower + V(0.4, 0, -0.8))
+	t_wait(func() -> bool:
+		var t: float = Game.course_time
+		return _pend_clear(ham, t + 0.15, t + 0.9, 26.0))
+	r_jump(tower + V(0.5, 0, -1.2), _cp19 + V(0, 0, 2.2))
+	r_walk(_cp19)
+	r_checkpoint()
+
+
+# =================================================================================================
+# 20. THE CROWN (finale): the escapement again, meaner - six smaller pallets farther apart, two
+#     curtains of light that only open on the beat, 13 m of ticking climb, then a 3.3 m mantle onto
+#     the crown of the tower, where the finish gate waits in a fountain of sparks.
+# =================================================================================================
+
+var _crown := Vector3.ZERO
+
+
+func _stage_20() -> void:
+	var o: Vector3 = _cp19
+	var sz: Vector3 = V(2.2, 0.6, 2.2)
+	var pallets: Array[ClockworkPallet] = []
+	var tops: Array[Vector3] = []
+	for i: int in 6:
+		var low: Vector3 = o + V(-1.8 if i % 2 == 0 else 1.8, ESC_RISE * i, -6.9 - 5.4 * i)
+		pallets.append(_pallet(low, sz, i % 2))
+		tops.append(low)
+		var side: float = -1.0 if i % 2 == 0 else 1.0
+		_fx_clock(low + V(side * 1.4, ESC_RISE * 0.5, 0), ESC_BEAT * 2.0, 0.0, [0.0, 0.5], [
+			ClockworkFx.spark_burst(14, Color(1.0, 0.8, 0.35), 6.0, V(side, 1.0, 0), 40.0, 0.6),
+			ClockworkFx.puff_burst(8, Color(0.95, 0.92, 1.0, 0.5), 2.4, 0.9, 1.0, false, 0.0, 0.2)])
+	# curtains between pallets 2-3 and 4-5 (0-based 1-2, 3-4): dark only on the beat that levels them
+	for i: int in [1, 3]:
+		var mid: Vector3 = (tops[i] + tops[i + 1]) * 0.5 + V(0, ESC_RISE * 0.5 + 1.4, 0)
+		kit.laser(mid, V(6.0, 2.8, 0.18), ESC_BEAT * 2.0, 0.5, 0.0)
+	_build_escape_wheel_b(o + V(-11.0, ESC_RISE * 3.0, -20.0))
+	_fx(ClockworkFx.embers(V(5.0, 8.0, 16.0), 80, Color(1.0, 0.62, 0.25)), o + V(0, 8.0, -20.0))
+	# the crown
+	var hi5: Vector3 = tops[5] + V(0, ESC_RISE, 0)
+	_crown = V(o.x, hi5.y + 3.3, hi5.z - 1.1 - 0.5 - 6.0)
+	kit.ledge(_crown, V(12.0, 8.0, 12.0), 0.0, "alt")
+	_build_crown(_crown)
+
+	r_walk(o + V(-1.0, 0, -1.2))
+	r_until(func() -> bool: return _esc_go(null, pallets[0]))
+	var d0: Vector3 = _flat_dir(o + V(-1.0, 0, -1.2), tops[0])
+	route.append({"kind": "b_jump", "from": o + V(-1.0, 0, -1.2) + d0 * 1.6, "to": tops[0] - d0 * 0.2, "hold": true})
+	for i: int in 5:
+		var a: ClockworkPallet = pallets[i]
+		var b: ClockworkPallet = pallets[i + 1]
+		var lvl: Vector3 = tops[i] + V(0, ESC_RISE, 0)
+		var dir: Vector3 = _flat_dir(lvl, tops[i + 1])
+		r_until(func() -> bool: return _esc_go(a, b))
+		route.append({"kind": "b_jump", "from": lvl + dir * 0.75, "to": tops[i + 1] - dir * 0.2, "hold": true})
+	var p5: ClockworkPallet = pallets[5]
+	r_until(func() -> bool:
+		var t: float = Game.course_time
+		return p5.is_high_at(t) and p5.into_beat(t) > ESC_SNAP + 0.03 and p5.into_beat(t) < ESC_SNAP + 0.3)
+	r_mantle(hi5 + V(0.6, 0, -0.7), V(hi5.x + 0.6, _crown.y, _crown.z + 4.4))
+	r_walk(_crown + V(0, 0, 1.5))
+	r_walk(_crown + V(0, 0, -2.0))
+
+
+## The second escape wheel, on the left of the crown climb.
+func _build_escape_wheel_b(c: Vector3) -> void:
+	kit.gear(c, 7.0, 13, 0.7, -ESC_BEAT * 13.0, Vector3(0, 0, 90), Look.c("decor"))
+	kit.block(c + V(-2.2, -8.5, 0), V(1.0, 17.0, 2.0), Look.c("decor2"), false)
+	kit.pipe(c + V(-3.0, 0, 0), c + V(1.2, 0, 0), 0.45, Look.c("metal"))
+
+
+## The crown of the tower: finish gate, a ring of golden spikes and a fountain of sparks.
+func _build_crown(c: Vector3) -> void:
+	kit.finish(c + V(0, 0, -2.0), 0.0)
+	kit.glow_strip(c + V(0, 0.03, 2.0), V(0.3, 0.05, 7.6), Look.c("accent"))
+	var gold: StandardMaterial3D = Look.flat(Look.c("accent"), 0.3, 0.8, 0.6)
+	for i: int in 12:
+		var a: float = TAU * float(i) / 12.0
+		var p: Vector3 = c + V(cos(a) * 6.6, 0, sin(a) * 6.6)
+		var tall: float = 5.0 if i % 2 == 0 else 3.2
+		add_child(_at(Look.cylinder(0.05, tall, gold, Vector3.ZERO, 0.55, 6), p + V(0, tall * 0.5 - 0.2, 0)))
+		add_child(_at(Look.sphere(0.35, Look.flat(Look.c("accent2"), 0.3, 0.0, 2.6)), p + V(0, tall, 0)))
+	kit.ring(c + V(0, 0.2, 0), 6.9, Look.c("accent"), Vector3.ZERO, 30.0)
+	kit.ring(c + V(0, 9.5, -2.0), 4.2, Look.c("accent"), Vector3(90, 0, 0), -12.0)
+	for sx: int in [-1, 1]:
+		kit.lamp(c + V(sx * 4.8, 0, 4.8), 3.2, sx < 0)
+		# spark fountains either side of the gate
+		_fx(ClockworkFx.spark_stream(40, Color(1.0, 0.8, 0.35), 7.0, V(0, 1, 0), 18.0, 1.2), c + V(sx * 4.2, 0.2, -2.0))
+	_fx(ClockworkFx.motes(V(7.0, 5.0, 7.0), 60, Color(1.0, 0.9, 0.55), 0.16), c + V(0, 4.0, 0))
+	# the finish: a crown of fireworks as you reach the gate
+	_fx_near(c + V(0, 1.0, -2.0), 3.0, [
+		ClockworkFx.spark_burst(60, Color(1.0, 0.82, 0.35), 13.0, V(0, 1, 0), 55.0, 1.2),
+		ClockworkFx.spark_burst(40, Color(0.55, 0.9, 1.0), 10.0, V(0, 1, 0), 80.0, 1.1),
+		ClockworkFx.puff_burst(30, Color(1.0, 0.9, 0.6, 0.7), 6.0, 0.8, 1.2, true, 0.0, 0.8)])
 
 
 ## The escape wheel beside the pallets: turns one tooth per beat, with the anchor rocking over it.
