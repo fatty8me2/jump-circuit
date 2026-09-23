@@ -1,5 +1,34 @@
 extends LevelBase
-## 6. ORBITAL DRIFT - a space station in low orbit (WIP header, rewritten when the course is done).
+## 6. ORBITAL DRIFT - a space station in low orbit above a night-side ocean planet. 18 stages that
+## loop round the station's hub (a spinning habitat wheel, solar wings, radiators); black sky,
+## hard sunlight, planetshine, and dust / ion glints / micrometeor streaks everywhere.
+##
+##  1 arrival        deck hops and a cargo-tug ferry                      [shortcut: antenna masts]
+##  2 low-g bay      floaty 10-12 m leaps over drifting debris (OrbitalGravityBay)
+##  3 solar wing     a gap crossed only along a solar panel, a second wall run onto a plate
+##  4 cargo hold     up a belt dragging you back, mantle a container, mantle the tall one
+##  5 airlock        FORK: laser corridor on a green wave | container climb (two mantles)
+##  6 hydraulics     side rams sweep the catwalk, then the catapult ram hurls you 11 m
+##  7 thruster shaft launch grates (OrbitalThruster) blast you up two decks, a side jet across the gap
+##  8 compactor      three presses out of step, mantle a ledge under the last press
+##                                                                      [shortcut: hull panel run]
+##  9 flare deck     SET PIECE: a solar-flare front (OrbitalFlare) sweeps the deck; shelter behind
+##                   the shield walls, dash pocket to pocket and out through the flare gate
+## 10 junction       FORK: blinking plates + ram catwalk | hull wall run, mantle, teleporter skip
+## 11 carousels      board two spinning habitat hubs, ride and leap off (second turns the other way)
+## 12 pulse bay      the gravity field cycles: one floaty leap per pulse, longer each time
+## 13 solar mast     chimney of three solar wings (run, kick, run, kick, run) and mantle the cap
+## 14 cargo line     FORK: container stacks + a press | mass-driver boost into an 18 m/s wall run
+## 15 laser lattice  beam walk, airlock laser, blinking plates, two lasers + a side jet on one beat
+##                                                                      [shortcut: relay pillars]
+## 16 reactor stacks three 3.3 m mantles under scanning lasers, then a ram catwalk
+##                                                                      [shortcut: shield wall run]
+## 17 reactor hall   low-g hall round the white-hot core: float, grate lift, wall run, low-g kick
+## 18 final approach the last flare deck over crumbling plates, through the docking ring to the finish
+##
+## Route variants (tests): 0 = main forks, 1 = the alternative at every fork, 2 = alternatives plus
+## the four shortcuts. Own pieces: mechanics/orbital_{gravity_bay,thruster,flare}.gd,
+## visual/orbital_{sky,fx,station,blink}.gd.
 
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
