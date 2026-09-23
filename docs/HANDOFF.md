@@ -15,7 +15,8 @@ the original pause notes, kept for history. What session 2 added on top:
 - RouteBot: a landing (or a stale fall speed) no longer counts as a kick; a bounce handed to the next step lasts only
   that step. (w_run still steers straight at `entry`: an "aim ahead along entry->exit" change broke Orbital Drift's
   boosted run and was reverted - place entries well ahead of fast takeoffs.)
-- Test runs end without "leaked instances / resources still in use": everything quits through Sfx.quit().
+- Exit noise: everything quits through Sfx.quit() (stops sounds first), which removed most "leaked instances /
+  resources still in use" warnings at exit, but some test groups still print them (harmless, exit-time only).
 - Not bugs, still open: Orbital Drift is on the easy side (0 bot respawns) - tighten after playtesting; the party relay
   path is covered by a message-level test only (no live relay in CI); a few old shortcuts were not re-probed.
 
