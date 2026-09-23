@@ -16,6 +16,7 @@ var _fill: DirectionalLight3D
 ## World-space checkpoint positions in build order (for set dressing along the route).
 var _cp_world: Array[Vector3] = []
 var _cp_bursts: Dictionary = {}
+var _finish_pos: Vector3 = Vector3.ZERO
 
 
 func _configure() -> void:
@@ -54,10 +55,10 @@ func _blk(c: Vector3, sx: float, sz: float, style: String = "main", thick: float
 
 
 func _disc(c: Vector3, r: float, style: String = "main", thick: float = 0.8, stalk: bool = true) -> Dictionary:
-	kit.disc(_w(c), r, thick, style, 0.0)
+	var body: StaticBody3D = kit.disc(_w(c), r, thick, style, 0.0)
 	if stalk:
 		deco.pinnacle(_w(c - Vector3(0, thick, 0)), clampf(r * 0.45, 0.4, 1.8), kit.rng.randf_range(26.0, 40.0))
-	return {"c": c, "r": r}
+	return {"c": c, "r": r, "node": body}
 
 
 func _ledge(top: Vector3, size: Vector3, style: String = "main") -> Dictionary:
@@ -356,6 +357,45 @@ func _hull(x: float, y0: float, y1: float, z0: float, z1: float, side: float) ->
 	add_child(n)
 
 
+## Eel sweeper: rotating kill bars dressed as morays swimming round a coral head.
+func _eel_sweeper(floor_c: Vector3, arm: float, bars: int, period: float, phase: float) -> Sweeper:
+	var sw: Sweeper = kit.sweeper(_w(floor_c), arm, bars, period, phase)
+	var pivot: Node3D = sw.get_child(0) as Node3D
+	var skin: StandardMaterial3D = Look.flat(Color(0.3, 0.45, 0.16), 0.6)
+	var belly: StandardMaterial3D = Look.flat(Color(0.95, 0.35, 0.2), 0.4, 0.0, 1.4)
+	var eye: StandardMaterial3D = Look.flat(Color(1.0, 0.9, 0.3), 0.3, 0.0, 3.0)
+	for holder: Node in pivot.get_children():
+		var h := holder as Node3D
+		var n: int = int(arm / 0.45)
+		for i: int in n:
+			var x: float = 0.4 + float(i) * arm / float(n)
+			var r: float = 0.3 - 0.1 * float(i) / float(n)
+			h.add_child(Look.sphere(r, skin, Vector3(x, 0.45 + 0.05 * sin(float(i) * 1.3), 0.06 * sin(float(i) * 0.9))))
+			if i % 2 == 0:
+				h.add_child(Look.sphere(0.08, belly, Vector3(x, 0.45 - r * 0.7, 0)))
+		var head := Look.sphere(0.3, skin, Vector3(0.45, 0.55, 0))
+		head.scale = Vector3(1.3, 0.9, 0.9)
+		h.add_child(head)
+		for side: float in [-1.0, 1.0]:
+			h.add_child(Look.sphere(0.06, eye, Vector3(0.6, 0.68, side * 0.17)))
+	deco.brain(_w(floor_c), 0.7, ReefDecor.LIME)
+	return sw
+
+
+## No eel bar comes within `min_ang` (rad) of world point `p` during [now + a, now + b].
+static func _bar_far(sw: Sweeper, p: Vector3, a: float, b: float, min_ang: float) -> bool:
+	var rel: Vector3 = p - sw.global_position
+	var me: float = atan2(-rel.z, rel.x)
+	var s: float = a
+	while s <= b:
+		for i: int in sw.bar_count:
+			var bar: float = sw.angle_at(Game.course_time + s) + TAU * float(i) / float(sw.bar_count)
+			if absf(wrapf(me - bar, -PI, PI)) < min_ang:
+				return false
+		s += 0.05
+	return true
+
+
 # ---- bot helpers (all deterministic, from the course clock) --------------------------------------
 
 func _wait(test: Callable, hold: Variant = null) -> void:
@@ -398,18 +438,14 @@ func _build() -> void:
 	deco = ReefDecor.new(self, kit.rng)
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 4), 0.0)
-	var yaws: Array[float] = [0.0, 0.0, 0.0, -90.0, -90.0, -90.0, -90.0, 0.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12]
+	var yaws: Array[float] = [0.0, 0.0, 0.0, -90.0, -90.0, -90.0, -90.0, 0.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9,
+			_stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16, _stage_17]
 	_frame(Vector3.ZERO, yaws[0])
 	for i: int in stages.size():
 		_next_yaw = yaws[i + 1]
 		var end: Vector3 = stages[i].call()
 		_frame(_w(end), yaws[i + 1])
-	# TEMP finish while the course is being built
-	kit.plat(_w(Vector3(0, 0, -10)), Vector3(10, 1, 10))
-	kit.finish(_w(Vector3(0, 0, -10)), _yaw)
-	r_jump(_w(Vector3(0, 0, -2.65)), _w(Vector3(0, 0, -8)))
-	r_walk(_w(Vector3(0, 0, -10)))
 	_surroundings()
 	_reef_materials()
 	_dev_skip()
@@ -582,6 +618,12 @@ func _stage_6() -> Vector3:
 		_hop(nest, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	return cp["c"]
+
+
+func fail(cause: String = "fall") -> void:
+	if OS.get_environment("REEF_DEBUG") != "" and player != null:
+		print("  t=%.2f FAIL %s at %s vel %s" % [Game.course_time, cause, str(player.global_position.snapped(Vector3.ONE * 0.01)), str(player.velocity.snapped(Vector3.ONE * 0.1))])
+	super.fail(cause)
 
 
 ## DEV ONLY (remove before shipping): REEF_FROM=k starts the run (spawn + bot route) at the checkpoint
@@ -816,6 +858,137 @@ func _stage_12() -> Vector3:
 	r_checkpoint()
 	return cp["c"]
 
+
+# ---- stage 13: Jet Stream - a current jet flings you over a chasm, a jellyfish carries the speed on -----------
+
+func _stage_13() -> Vector3:
+	kit.boost(_w(Vector3(0, 0, -8.5)), _sz(Vector3(2.4, 0.5, 11.0)), _yaw, 20.0)
+	deco.pinnacle(_w(Vector3(0, -0.5, -9.0)), 1.0, 34.0)
+	_blk(Vector3(0, -4.0, -36.0), 3.4, 12.0, "alt", 1.0, false)
+	deco.pinnacle(_w(Vector3(0, -5.0, -33.0)), 1.1, 30.0)
+	deco.pinnacle(_w(Vector3(0, -5.0, -39.5)), 0.9, 30.0)
+	var jc := Vector3(0, -5.5, -46.0)
+	_jelly(jc, 18.0, 1.4, [], 5.0, 0.0, 0.0, 3.0, ReefDecor.VIOLET)
+	var l2: Dictionary = _blk(Vector3(0, -3.0, -57.0), 3.4, 7.0)
+	_haz(Vector3(0, -2.3, -61.2), Vector3(3.4, 1.4, 0.5))
+	var cp: Dictionary = _cp(Vector3(0, -5.0, -67.0))
+	# the jet: streaming bubbles along the strip, a ring at its mouth
+	for i: int in 3:
+		var b: GPUParticles3D = ReefFx.bubble_stream(2.0, 10, 0.5, 0.2)
+		b.position = _w(Vector3(0, 0.1, -4.5 - 3.5 * float(i)))
+		add_child(b)
+	kit.ring(_w(Vector3(0, 1.4, -14.2)), 1.8, ReefDecor.CYAN, Vector3(90, _yaw, 0), 6.0)
+	r_walk(_w(Vector3(0, 0, -2.2)))
+	r_jump(_w(Vector3(0, 0, -13.6)), _w(Vector3(0, -4.0, -33.0)))
+	route[route.size() - 1]["speed"] = 20.0
+	r_walk(_w(Vector3(0, -4.0, -40.5)))
+	r_jump(_w(Vector3(0, -4.0, -41.65)), _w(jc))
+	r_pad(_w(jc), _w(Vector3(0, -3.0, -56.5)))
+	_hop(l2, cp, Vector3(0, 0, 1.5))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 14: Kelp Wall - wall run the kelp-hung cliff, kick onto a jellyfish, catch the ledge from the bounce ---
+
+func _stage_14() -> Vector3:
+	_panel(2.3, 1.0, -5.5, -19.0)
+	for z: float in [-7.0, -11.0, -15.0]:
+		deco.sea_fan(_w(Vector3(2.9, 4.6, z)), 1.6, ReefDecor.LIME)
+	var jc := Vector3(-2.0, -3.0, -23.5)
+	_jelly(jc, 20.0, 1.4, [], 5.0, 0.0, 0.0, 3.0, ReefDecor.PINK)
+	var top: Dictionary = _ledge(Vector3(-2.0, 4.8, -31.0), Vector3(3.6, 9.0, 3.0))
+	var cp: Dictionary = _cp(Vector3(-1.0, 4.8, -40.5))
+	r_wallrun(_w(Vector3(0.5, 0, -2.6)), _w(Vector3(1.7, 1.4, -7.1)), _w(Vector3(1.7, 1.4, -15.0)), _w(jc))
+	r_pad(_w(jc), _w((top["c"] as Vector3) + Vector3(0, 0, 0.3)))
+	_hop(top, cp, Vector3(0, 0, 1.5))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 15: Moray Den - two coral heads swept by circling eels, down into the trench ------------------------
+
+func _stage_15() -> Vector3:
+	var d1: Dictionary = _disc(Vector3(0, -2.0, -10.0), 4.5, "alt")
+	var e1: Sweeper = _eel_sweeper(Vector3(0, -2.0, -10.0), 4.2, 2, 3.4, 0.0)
+	_disc(Vector3(1.0, -4.5, -23.5), 4.5, "alt")
+	var e2: Sweeper = _eel_sweeper(Vector3(1.0, -4.5, -23.5), 4.2, 3, 4.2, 0.4)
+	var cp: Dictionary = _cp(Vector3(0, -6.0, -36.0))
+	var land1: Vector3 = _w(Vector3(0, -2.0, -6.6))
+	var land2: Vector3 = _w(Vector3(0.9, -4.5, -20.0))
+	r_until(func() -> bool: return _bar_far(e1, land1, 0.4, 0.95, 0.8))
+	_hop(_area(Vector3.ZERO, 3.0, 3.0), d1, Vector3(0, 0, 3.4))
+	route.append({"kind": "b_sweep", "to": _w(Vector3(0, -2.0, -13.9)), "sweeper": e1, "tol": 0.5})
+	var d1n: Node3D = d1["node"]
+	route.append({"kind": "h_hop", "node": d1n, "local": d1n.global_transform.affine_inverse() * _w(Vector3(0.1, -2.0, -13.9)), "sweepers": [e1],
+			"until": func() -> bool: return _bar_far(e2, land2, 0.55, 0.85, 0.6)})
+	r_jump(_w(Vector3(0.1, -2.0, -14.15)), land2)
+	route.append({"kind": "b_sweep", "to": _w(Vector3(0.8, -4.5, -27.4)), "sweeper": e2, "tol": 0.5})
+	r_jump(_w(Vector3(0.7, -4.5, -27.65)), _w((cp["c"] as Vector3) + Vector3(0, 0, 1.5)))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 16: Abyssal Vents - ride a vent up through the eel-light grid, then the second vent into a mantle -------
+
+func _stage_16() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var v1f: Dictionary = _blk(Vector3(0, 0, -9.5), 4.0, 6.0, "alt")
+	var v1: ReefVent = _vent(Vector3(0, 0, -10.6), 9.0, 4.4, 0.0, 0.45)
+	# the grid: beams across the column at 3.5 and 6 m, both ways
+	var grid: Array[LaserGate] = []
+	for h: float in [3.5, 6.0]:
+		grid.append(kit.laser(_w(Vector3(0, h, -10.6)), Vector3(4.4, 0.22, 0.22), 2.2, 0.4, 0.4, _yaw))
+		grid.append(kit.laser(_w(Vector3(0, h + 0.4, -10.6)), Vector3(4.4, 0.22, 0.22), 2.2, 0.4, 0.4, _yaw + 90.0))
+	var s1: Dictionary = _blk(Vector3(0, 8.0, -17.4), 3.0, 3.0)
+	var b1: Dictionary = _blk(Vector3(-2.0, 7.0, -23.4), 1.8, 1.8, "alt")
+	var v2f: Dictionary = _blk(Vector3(-2.0, 4.5, -30.9), 3.6, 5.0, "alt")
+	var v2: ReefVent = _vent(Vector3(-2.0, 4.5, -32.1), 4.5, 3.6, 0.3)
+	var top: Dictionary = _ledge(Vector3(-2.0, 11.5, -35.4), Vector3(4.0, 9.0, 3.6))
+	var cp: Dictionary = _cp(Vector3(-1.0, 11.5, -45.0))
+	_urchin_behind(s1, b1)
+	_hop(cp0, v1f, Vector3(0, 0, 1.8))
+	r_walk(_w(Vector3(0, 0, -8.2)))
+	_wait(func() -> bool: return _erupting(v1, 1.4) and _dark(grid[0], 0.0, 1.0))
+	var s1y: float = _w(s1["c"]).y
+	_fly(_w(Vector3(0, 0, -10.6)), func() -> bool: return player.global_position.y > s1y + 1.2)
+	_fly(_w(s1["c"]))
+	_hop(s1, b1)
+	_hop(b1, v2f, Vector3(0, 0, 1.4))
+	r_walk(_w(Vector3(-2.0, 4.5, -29.4)))
+	_wait(func() -> bool: return _erupting(v2, 1.1))
+	_fly(_w((top["c"] as Vector3) + Vector3(0, 0, 0.4)))
+	_hop(top, cp, Vector3(0, 0, 1.5))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 17: The Sunken Temple - clam doors on the causeway, run the temple wall, mantle the steps, the gate ------
+
+func _stage_17() -> Vector3:
+	_blk(Vector3(0, 0, -8.5), 2.6, 11.0, "alt", 1.0, false)
+	deco.pinnacle(_w(Vector3(0, -1.0, -9.0)), 1.0, 36.0)
+	var c1: Crusher = _clam(Vector3(0, 0, -7.0), Vector3(3.0, 1.6, 2.4), 3.2, 2.4, 0.0)
+	var c2: Crusher = _clam(Vector3(0, 0, -11.4), Vector3(3.0, 1.6, 2.4), 3.2, 2.4, 0.8)
+	_panel(2.3, 1.0, -16.0, -30.0)
+	var t1: Dictionary = _blk(Vector3(-1.5, 1.0, -34.0), 3.4, 3.4)
+	_ledge(Vector3(-1.5, 4.2, -39.2), Vector3(4.0, 7.0, 3.0), "alt")
+	_ledge(Vector3(-1.5, 7.4, -43.7), Vector3(4.0, 10.0, 3.0), "alt")
+	_blk(Vector3(-1.5, 7.4, -47.0), 3.4, 3.6, "accent", 1.0, false)
+	var fin: Dictionary = _blk(Vector3(0, 7.4, -53.3), 12.0, 9.0, "main", 1.6)
+	var gate: LaserGate = _eel_fence(Vector3(-1.5, 7.4, -47.0), 3.4, [0.5, 1.4, 2.3], 2.0, 0.45, 0.2)
+	kit.finish(_w(Vector3(0, 7.4, -54.0)), _yaw)
+	_finish_pos = _w(Vector3(0, 7.4, -54.0))
+	r_walk(_w(Vector3(0, 0, -4.6)))
+	r_until(func() -> bool: return _open(c1, 0.0, 0.7) and _open(c2, 0.35, 1.2))
+	r_walk(_w(Vector3(0, 0, -12.6)))
+	r_wallrun(_w(Vector3(0.4, 0, -13.65)), _w(Vector3(1.7, 1.4, -17.6)), _w(Vector3(1.7, 1.4, -26.0)), _w(t1["c"]))
+	r_mantle(_w(Vector3(-1.5, 1.0, -35.35)), _w(Vector3(-1.5, 4.2, -38.4)))
+	r_mantle(_w(Vector3(-1.5, 4.2, -40.35)), _w(Vector3(-1.5, 7.4, -43.0)))
+	r_until(func() -> bool: return _dark(gate, 0.05, 0.6))
+	r_walk(_w(Vector3(-1.2, 7.4, -50.0)))
+	r_walk(_w(Vector3(0, 7.4, -54.0)))
+	return fin["c"]
 
 # ---- environment ----------------------------------------------------------------------------------
 
