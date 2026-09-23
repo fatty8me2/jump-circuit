@@ -160,7 +160,9 @@ func _setup_race() -> void:
 	Net.roster_changed.connect(_on_roster_changed)
 	Net.racer_finished.connect(func(id: int, time: float) -> void:
 		if id != Net.my_id() and Net.roster.has(id) and is_inside_tree():
-			hud.toast("%s finished - %s" % [Net.roster[id]["name"], SaveData.format_time(time)]))
+			hud.toast("%s finished - %s" % [Net.roster[id]["name"], SaveData.format_time(time)])
+			if id == spectating_id:
+				_spectate_moved_on())
 	hud.start_countdown()
 
 
@@ -189,6 +191,80 @@ func _on_roster_changed() -> void:
 				hud.toast("%s left the race" % g.racer_name)
 			g.queue_free()
 			_ghosts.erase(id)
+			if id == spectating_id:
+				_spectate_moved_on()
+
+
+# ---- spectating (race, after you finish) ------------------------------------------------------
+# The camera follows a racer still on the course; LB / RB (Q / E, clicks, D-pad) cycle
+# through them and B / Esc goes back to the results panel. The race board stays up.
+
+## Roster id of the racer being watched (-1 = not spectating).
+var spectating_id: int = -1
+
+
+## Racers you can watch: everyone else still on the course, in a stable (join) order.
+func spectate_candidates() -> Array[int]:
+	var ids: Array[int] = []
+	for id: int in Net.roster.keys():
+		if id != Net.my_id() and _ghosts.has(id) and float(Net.roster[id]["finished"]) < 0.0:
+			ids.append(id)
+	ids.sort()
+	return ids
+
+
+## Watch the next (+1) or previous (-1) racer still running. False if nobody is left.
+func spectate(step: int = 1) -> bool:
+	if not finished or not Game.race_mode:
+		return false
+	var ids: Array[int] = spectate_candidates()
+	if ids.is_empty():
+		stop_spectating()
+		return false
+	var i: int = ids.find(spectating_id)
+	i = 0 if i < 0 else posmod(i + step, ids.size())
+	spectating_id = ids[i]
+	camera.follow_racer(_ghosts[spectating_id] as RemoteRacer)
+	camera.mouse_enabled = true
+	if not headless_mode:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	hud.set_spectating(true)
+	return true
+
+
+func stop_spectating() -> void:
+	if spectating_id < 0:
+		return
+	spectating_id = -1
+	camera.follow_racer(null)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	hud.set_spectating(false)
+
+
+## The watched racer finished or left: move on to the next one, or back to the results.
+func _spectate_moved_on() -> void:
+	if not spectate(1):
+		hud.toast("Everyone has finished")
+
+
+func _spectate_input(event: InputEvent) -> void:
+	var step: int = 0
+	if event.is_action_pressed("spectate_next") or event.is_action_pressed("ui_right"):
+		step = 1
+	elif event.is_action_pressed("spectate_prev") or event.is_action_pressed("ui_left"):
+		step = -1
+	elif event is InputEventMouseButton and event.is_pressed():
+		var mb := event as InputEventMouseButton
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			step = 1
+		elif mb.button_index == MOUSE_BUTTON_RIGHT:
+			step = -1
+	if step != 0:
+		spectate(step)
+		get_viewport().set_input_as_handled()
+	elif event.is_action_pressed("pause") or event.is_action_pressed("ui_cancel"):
+		stop_spectating()
+		get_viewport().set_input_as_handled()
 
 
 # ---- main loop ------------------------------------------------------------------------------
@@ -215,8 +291,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	if player == null or (_pause != null and _pause.open):
 		return
 	if finished:
+		if Game.race_mode:
+			if spectating_id >= 0:
+				_spectate_input(event)
+			elif (event.is_action_pressed("spectate_next") or event.is_action_pressed("spectate_prev")) \
+					and hud.results_ready():
+				# LB / RB from the results panel jumps straight into watching
+				get_viewport().set_input_as_handled()
+				spectate(1 if event.is_action_pressed("spectate_next") else -1)
+			return
 		# results screen: R / Y runs it again, once the panel takes input
-		if not Game.race_mode and hud.results_ready() and event.is_action_pressed("restart"):
+		if hud.results_ready() and event.is_action_pressed("restart"):
 			get_viewport().set_input_as_handled()
 			Game.restart_level()
 		return

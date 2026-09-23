@@ -27,6 +27,12 @@ var _peak_speed: float = 0.0
 var _stage: Label
 var _stage_tw: Tween
 var _speed: Label
+## Race results: "Spectate" button, shown while someone is still on the course.
+var _spectate_btn: Button
+## Bottom bar while spectating: who you are watching and the controls.
+var _spec_bar: VBoxContainer
+var _spec_name: Label
+var _spec_hint: Label
 
 
 func _ready() -> void:
@@ -91,6 +97,18 @@ func _ready() -> void:
 	_board.visible = Game.race_mode
 	_root.add_child(_board)
 
+	_spec_bar = UiKit.vbox(2)
+	_spec_bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_spec_bar.position = Vector2(-300, -118)
+	_spec_bar.custom_minimum_size = Vector2(600, 0)
+	_spec_bar.visible = false
+	_spec_bar.add_child(UiKit.shadowed(UiKit.label("SPECTATING", 18, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), 5))
+	_spec_name = UiKit.shadowed(UiKit.label("", 34, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER), 8)
+	_spec_bar.add_child(_spec_name)
+	_spec_hint = UiKit.shadowed(UiKit.label("", 18, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER), 5)
+	_spec_bar.add_child(_spec_hint)
+	_root.add_child(_spec_bar)
+
 	_debug = UiKit.shadowed(UiKit.label("", 15, Color(0.7, 1.0, 0.8)), 4)
 	_debug.position = Vector2(16, 60)
 	_debug.visible = Game.dev_mode
@@ -101,7 +119,7 @@ func _ready() -> void:
 ## Results panels: if focus got lost (a mouse click on the backdrop), the first pad /
 ## arrow press lands on the panel's first live button.
 func _unhandled_input(event: InputEvent) -> void:
-	if _results != null and Game.is_menu_nav(event) and get_viewport().gui_get_focus_owner() == null:
+	if _results != null and _results.visible and Game.is_menu_nav(event) and get_viewport().gui_get_focus_owner() == null:
 		UiKit.focus_first(_results)
 		get_viewport().set_input_as_handled()
 
@@ -245,6 +263,8 @@ func _process(dt: float) -> void:
 			Sfx.play("tick")
 		elif n > 3:
 			_count.text = "READY"
+	if _spec_bar.visible:
+		_update_spectate_bar()
 	if Game.race_mode:
 		_board_refresh -= dt
 		if _board_refresh <= 0.0:
@@ -267,12 +287,19 @@ func _rebuild_board() -> void:
 		var e: Dictionary = Net.roster[id]
 		var col: Color = Settings.RACER_COLORS[int(e["color"]) % Settings.RACER_COLORS.size()]
 		var status: String = SaveData.format_time(float(e["finished"])) if float(e["finished"]) >= 0.0 else "%d/%d" % [int(e["cp"]), total]
-		var me: String = "  <" if id == Net.my_id() else ""
+		var me: String = "  <" if id == Net.my_id() else ("  - watching" if level != null and id == level.spectating_id else "")
 		var l: Label = UiKit.shadowed(UiKit.label("%d  %s   %s%s" % [place, e["name"], status, me], 20, col.lerp(Color.WHITE, 0.35)), 5)
 		_board.add_child(l)
 		if id == Net.my_id() and is_instance_valid(_race_place) and float(e["finished"]) >= 0.0:
 			_race_place.text = "%d%s place of %d" % [place, _ordinal(place), Net.roster.size()] if Net.roster.size() > 1 else ""
 		place += 1
+	if is_instance_valid(_spectate_btn) and level != null:
+		var can: bool = not level.spectate_candidates().is_empty()
+		if _spectate_btn.visible != can:
+			var had_focus: bool = _spectate_btn.has_focus()
+			_spectate_btn.visible = can
+			if had_focus and _results.visible:
+				UiKit.focus_first(_results)
 
 
 func _update_debug() -> void:
@@ -360,6 +387,11 @@ func show_race_results(time: float) -> void:
 		Game.goto_title("main")
 	var first: Button
 	var leave: Button
+	# watching the racers still out there never ends anything, so it can be the first focus
+	_spectate_btn = UiKit.button("Spectate Racers  (%s / %s)" % [Game.prompt("spectate_prev"), Game.prompt("spectate_next")],
+		func() -> void: level.spectate(1))
+	_spectate_btn.visible = not level.spectate_candidates().is_empty()
+	box.add_child(_spectate_btn)
 	# these buttons get focus, and Space / A are also the jump inputs: anything that
 	# ends the race for someone still running takes two presses
 	if Net.is_host():
@@ -387,8 +419,39 @@ func show_race_results(time: float) -> void:
 	tw.tween_property(_results, "modulate:a", 1.0, 0.35)
 	tw.tween_interval(0.65)
 	tw.tween_callback(func() -> void:
-		if is_instance_valid(first) and get_viewport().gui_get_focus_owner() == null:
+		_results_ready = true
+		if not _results.visible:
+			return      # already spectating (LB / RB); focus waits for the panel
+		if _spectate_btn.visible and get_viewport().gui_get_focus_owner() == null:
+			_spectate_btn.grab_focus()
+		elif is_instance_valid(first) and get_viewport().gui_get_focus_owner() == null:
 			first.grab_focus())
+
+
+## Spectating hides the results panel (the race board stays) and shows who you are watching.
+func set_spectating(on: bool) -> void:
+	_spec_bar.visible = on
+	if _results != null:
+		_results.visible = not on
+		if not on:
+			UiKit.focus_first(_results, _spectate_btn)
+	if on:
+		_update_spectate_bar()
+	_rebuild_board()
+
+
+func _update_spectate_bar() -> void:
+	var id: int = level.spectating_id
+	if not Net.roster.has(id):
+		return
+	var e: Dictionary = Net.roster[id]
+	var col: Color = Settings.RACER_COLORS[int(e["color"]) % Settings.RACER_COLORS.size()]
+	_spec_name.text = str(e["name"])
+	_spec_name.add_theme_color_override("font_color", col.lerp(Color.WHITE, 0.35))
+	var n: int = level.spectate_candidates().size()
+	var cycle: String = "%s / %s  switch racer (%d racing)" % [Game.prompt("spectate_prev"), Game.prompt("spectate_next"), n] if n > 1 else "the last racer on the course"
+	_spec_hint.text = "Stage %d / %d      %s      %s  results" % [
+		mini(int(e["cp"]) + 1, level.checkpoints.size() + 1), level.checkpoints.size() + 1, cycle, Game.prompt("back")]
 
 
 ## "st" / "nd" / "rd" / "th" for a place number.

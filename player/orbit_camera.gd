@@ -15,6 +15,8 @@ extends Camera3D
 @export var pitch_max_deg: float = 40.0
 
 var target: Player
+## Spectating: when set, the camera orbits this racer instead of `target` (see follow_racer()).
+var follow: RemoteRacer
 var yaw: float = 0.0
 var pitch: float = deg_to_rad(-22.0)
 var mouse_enabled: bool = true
@@ -58,6 +60,16 @@ func face(dir: Vector3) -> void:
 	_cur_dist = distance
 
 
+## Orbit another racer (null = back to our own player). Cuts straight to them, looking
+## the way they are heading.
+func follow_racer(r: RemoteRacer) -> void:
+	follow = r
+	if r != null:
+		face(r.facing())
+	elif target != null and is_instance_valid(target):
+		_focus_ready = false
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if not mouse_enabled:
 		return
@@ -81,6 +93,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _process(dt: float) -> void:
+	if follow != null and not is_instance_valid(follow):
+		follow = null
+		_focus_ready = false
 	if target == null or not is_instance_valid(target):
 		return
 	# right stick (any pad; get_vector applies the look_* deadzone and rescales past it)
@@ -88,23 +103,33 @@ func _process(dt: float) -> void:
 	if mouse_enabled and stick != Vector2.ZERO:
 		yaw -= stick.x * 2.6 * dt * Settings.mouse_sensitivity
 		pitch = clampf(pitch - stick.y * 1.8 * dt * (-1.0 if Settings.invert_y else 1.0), deg_to_rad(pitch_min_deg), deg_to_rad(pitch_max_deg))
-	target.camera_yaw = yaw
 
-	var p: Vector3 = target.get_global_transform_interpolated().origin
+	var p: Vector3
+	var grounded: bool
+	var vel: Vector3
+	if follow != null:
+		p = follow.global_position
+		grounded = follow.is_grounded()
+		vel = follow.reported_velocity()
+	else:
+		target.camera_yaw = yaw
+		p = target.get_global_transform_interpolated().origin
+		grounded = target.grounded
+		vel = target.velocity
 	if not _focus_ready:
 		_focus = p
 		_focus_ready = true
 		_fall_look = 0.0
 	_focus.x = p.x
 	_focus.z = p.z
-	var rate: float = 14.0 if target.grounded else 5.5
+	var rate: float = 14.0 if grounded else 5.5
 	_focus.y = lerpf(_focus.y, p.y, 1.0 - exp(-rate * dt))
 	_focus.y = clampf(_focus.y, p.y - 1.6, p.y + 2.6)
-	var fall_target: float = clampf((-target.velocity.y - 10.0) * 0.12, 0.0, 2.6) if not target.grounded else 0.0
+	var fall_target: float = clampf((-vel.y - 10.0) * 0.12, 0.0, 2.6) if not grounded else 0.0
 	_fall_look = lerpf(_fall_look, fall_target, 1.0 - exp(-4.0 * dt))
 
 	# speed opens the lens a little: momentum should be felt, not just measured
-	var kick_target: float = clampf((target.horizontal_speed() - 10.5) * 1.1, 0.0, 17.0)
+	var kick_target: float = clampf((Vector2(vel.x, vel.z).length() - 10.5) * 1.1, 0.0, 17.0)
 	_fov_kick = lerpf(_fov_kick, kick_target, 1.0 - exp(-3.5 * dt))
 	fov = Settings.fov + _fov_kick
 

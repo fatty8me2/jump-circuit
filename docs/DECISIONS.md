@@ -39,7 +39,8 @@
   the RouteBot, and frame captures through the real camera. Expect to want small tuning passes after playing.
 - RouteBot only covers each level main route; optional shortcuts are analysed/physics-probed, not bot-played.
 - Level 1 is short (bot 19 s); a second garden loop would be a natural extension.
-- Races have no late join or spectator camera; finished racers wait on the standings panel.
+- Races have no late join. Finished racers can spectate the ones still running (results panel "Spectate", LB/RB or
+  Q/E cycle, B/Esc back); the camera follows the racer's pose snapshots, so it sees what their ghost shows.
 
 ## Hard mode rebuild (owner feedback: "way way harder, more momentum, obby-style")
 - Direction: Roblox-obby / Minecraft-parkour structure - 8-12 short brutal stages per level, a checkpoint per stage,

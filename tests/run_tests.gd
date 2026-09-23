@@ -2070,3 +2070,81 @@ func test_zf_main_menu_controller() -> void:
 	check(not Game.using_pad and hint.text.begins_with("WASD"), "a key press switches the prompts back to keyboard")
 	title.queue_free()
 	await ticks(2)
+
+
+# ---- spectating: after you finish a race you can watch the racers still running ----------------
+func test_zg_race_spectate_after_finish() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	check(Net.host(24597) == OK, "hosting a race with two other racers")
+	Net.roster[2] = {"name": "Ada", "color": 1, "cp": 3, "finished": -1.0, "cp_at": 0.0}
+	Net.roster[3] = {"name": "Bo", "color": 2, "cp": 1, "finished": -1.0, "cp_at": 0.0}
+	Game.level_index = 0
+	Game.race_mode = true
+	Net.race_start_time = Net.now() - 1.0
+	var lvl: LevelBase = (load(Game.LEVELS[0]["scene"]) as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	var far: Vector3 = lvl.player.global_position + Vector3(0, 6, -40)
+	lvl._on_racer_pose(2, far, Vector3(0, 0, -8), true, 0)
+	lvl._on_racer_pose(3, far + Vector3(20, 0, 0), Vector3.ZERO, true, 0)
+	check(not lvl.spectate(1), "no spectating before you finish")
+	lvl._on_finish()
+	var btn: Button = null
+	for n: Node in lvl.hud._results.find_children("*", "Button", true, false):
+		if (n as Button).text.begins_with("Spectate"):
+			btn = n as Button
+	check(btn != null and btn.visible, "race results offer Spectate while others still race")
+	await real_seconds(1.1)
+	check(get_viewport().gui_get_focus_owner() == btn, "Spectate is focused first for keyboard / pad")
+	btn.pressed.emit()
+	await ticks(3)
+	check(lvl.spectating_id == 2 and lvl.camera.follow == lvl._ghosts[2] and not lvl.hud._results.visible and lvl.hud._spec_bar.visible,
+		"Spectate follows the first racer, hides the results and shows the spectate bar")
+	check(lvl.hud._spec_name.text == "Ada" and lvl.hud._spec_hint.text.contains("Stage 4 /"), "the bar names the racer and their stage (%s)" % lvl.hud._spec_hint.text)
+	await ticks(10)
+	check(lvl.camera.global_position.distance_to(far) < 14.0, "the camera orbits the watched racer (%.1f m away)" % lvl.camera.global_position.distance_to(far))
+	# RB on a pad, press and release a frame apart
+	var rb := InputEventJoypadButton.new()
+	rb.device = 0
+	rb.button_index = JOY_BUTTON_RIGHT_SHOULDER
+	rb.pressed = true
+	Input.parse_input_event(rb)
+	await get_tree().process_frame
+	var rb_up: InputEventJoypadButton = rb.duplicate()
+	rb_up.pressed = false
+	Input.parse_input_event(rb_up)
+	await ticks(2)
+	check(lvl.spectating_id == 3, "RB switches to the next racer")
+	var q := InputEventAction.new()
+	q.action = "spectate_prev"
+	q.pressed = true
+	lvl._unhandled_input(q)
+	check(lvl.spectating_id == 2, "LB / Q goes back (wrapping)")
+	Net._apply_finished(2, 55.0)
+	await ticks(2)
+	check(lvl.spectating_id == 3 and lvl.camera.follow == lvl._ghosts[3], "when the watched racer finishes, the camera moves to one still running")
+	var b := InputEventAction.new()
+	b.action = "ui_cancel"
+	b.pressed = true
+	lvl._unhandled_input(b)
+	await ticks(2)
+	check(lvl.spectating_id == -1 and lvl.camera.follow == null and lvl.hud._results.visible and not lvl.hud._spec_bar.visible,
+		"B / Esc returns to the results panel")
+	check(get_viewport().gui_get_focus_owner() == btn, "and focus lands back on Spectate")
+	var rb2 := InputEventAction.new()
+	rb2.action = "spectate_next"
+	rb2.pressed = true
+	lvl._unhandled_input(rb2)
+	check(lvl.spectating_id == 3, "RB from the results panel starts spectating directly")
+	Net._apply_finished(3, 61.0)
+	await ticks(2)
+	check(lvl.spectating_id == -1 and lvl.hud._results.visible and not btn.visible, "once everyone is in, spectating ends and the button goes away")
+	Net.leave()
+	Game.race_mode = false
+	world.queue_free()
+	world = null
+	await ticks(2)

@@ -59,6 +59,7 @@ func _setup_input() -> void:
 		"move_left": [KEY_A, KEY_LEFT], "move_right": [KEY_D, KEY_RIGHT],
 		"jump": [KEY_SPACE], "restart": [KEY_R], "pause": [KEY_ESCAPE],
 		"debug_overlay": [KEY_F3], "dev_next_checkpoint": [KEY_F6], "show_board": [KEY_TAB],
+		"spectate_prev": [KEY_Q], "spectate_next": [KEY_E],
 	}
 	for action: String in keys:
 		if not InputMap.has_action(action):
@@ -71,7 +72,8 @@ func _setup_input() -> void:
 	# controller that enumerates on another slot (second pad, wheel, virtual pad).
 	var pad: Dictionary = {"jump": JOY_BUTTON_A, "restart": JOY_BUTTON_Y, "pause": JOY_BUTTON_START,
 		"move_forward": JOY_BUTTON_DPAD_UP, "move_back": JOY_BUTTON_DPAD_DOWN,
-		"move_left": JOY_BUTTON_DPAD_LEFT, "move_right": JOY_BUTTON_DPAD_RIGHT}
+		"move_left": JOY_BUTTON_DPAD_LEFT, "move_right": JOY_BUTTON_DPAD_RIGHT,
+		"spectate_prev": JOY_BUTTON_LEFT_SHOULDER, "spectate_next": JOY_BUTTON_RIGHT_SHOULDER}
 	for action: String in pad:
 		var jb := InputEventJoypadButton.new()
 		jb.device = -1
@@ -126,8 +128,10 @@ static func is_menu_nav(event: InputEvent) -> bool:
 
 ## Button prompt for an action, for whichever device is in use ("R" / "Y").
 func prompt(action: String) -> String:
-	var keys: Dictionary = {"restart": "R", "jump": "Space", "pause": "Esc", "back": "Esc"}
-	var pads: Dictionary = {"restart": "Y", "jump": "A", "pause": "Start", "back": "B"}
+	var keys: Dictionary = {"restart": "R", "jump": "Space", "pause": "Esc", "back": "Esc",
+		"spectate_prev": "Q", "spectate_next": "E"}
+	var pads: Dictionary = {"restart": "Y", "jump": "A", "pause": "Start", "back": "B",
+		"spectate_prev": "LB", "spectate_next": "RB"}
 	return str((pads if using_pad else keys).get(action, action))
 
 

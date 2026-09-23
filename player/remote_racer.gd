@@ -68,6 +68,19 @@ func push_state(pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
 	_seq = seq
 
 
+## Last reported velocity / footing / heading (the spectator camera follows these).
+func reported_velocity() -> Vector3:
+	return _vel
+
+
+func is_grounded() -> bool:
+	return _grounded
+
+
+func facing() -> Vector3:
+	return _facing
+
+
 func _process(dt: float) -> void:
 	if not _has_state:
 		return
