@@ -132,6 +132,8 @@ func _build() -> void:
 	_stage_14()
 	_stage_15()
 	_stage_16()
+	_stage_17()
+	_stage_18()
 	_build_surroundings()
 
 
@@ -1240,6 +1242,156 @@ func _stage_16() -> void:
 	r_checkpoint()
 
 
+# =================================================================================================
+# 17. THE LONGCASE: the inside of a tall case clock with no floor - three case walls zig-zag up
+#     the shaft. Run the first, wall-jump across to the second, again to the third, and the last
+#     kick throws you at a 3 m ledge you can only mantle. Two cracked stones to the checkpoint.
+# =================================================================================================
+
+var _cp17 := Vector3.ZERO
+var _case_bob: Node3D
+
+
+func _case_wall(o: Vector3, x: float, y: float, z0: float, z1: float) -> void:
+	var c: Vector3 = o + V(x, y, (z0 + z1) * 0.5)
+	kit.wallrun(c, V(absf(z0 - z1), 7.0, 0.5), 90.0)
+	kit.pillar(c + V(0, -3.5, 0), 0.45, 24.0, Look.c("metal"))
+	kit.glow_strip(c + V(0, -3.62, 0), V(0.2, 0.1, absf(z0 - z1) - 0.4), Look.c("accent2"))
+
+
+func _stage_17() -> void:
+	var o: Vector3 = _cp16 + V(0, 0, -1.0)
+	_case_wall(o, 2.3, 1.2, -5.5, -12.0)
+	_case_wall(o, -2.3, 6.0, -10.5, -18.5)
+	_case_wall(o, 2.3, 9.0, -16.5, -24.5)
+	var top: Vector3 = o + V(-0.75, 11.9, -28.0)
+	kit.ledge(top, V(4.5, 14.0, 4.0))
+	r_wallrun(o + V(0.5, 0, -2.1), o + V(1.7, 1.4, -6.6), o + V(1.7, 1.4, -9.5), o + V(-1.7, 5.5, -13.4))
+	r_wallrun(Vector3.ZERO, o + V(-1.7, 5.5, -13.4), o + V(-1.7, 5.5, -16.4), o + V(1.7, 8.5, -20.0), true, true)
+	r_wallrun(Vector3.ZERO, o + V(1.7, 8.5, -20.0), o + V(1.7, 8.5, -21.4), top + V(0, 0, 1.4), true, true)
+	# the case: a clock face high on the far wall and the great pendulum swinging through the dark below
+	var face: Vector3 = o + V(-12.0, 16.0, -16.0)
+	kit.ring(face, 6.0, Look.c("accent"), Vector3(0, 0, 90))
+	kit.ring(face, 5.2, Look.c("trim"), Vector3(0, 0, 90))
+	var dial: Node3D = _at(Look.cylinder(5.4, 0.4, Look.flat(Look.c("decor2"), 0.6), Vector3.ZERO, -1.0, 40), face + V(-0.3, 0, 0))
+	dial.rotation_degrees.z = 90.0
+	add_child(dial)
+	for h: int in 12:
+		var a: float = TAU * float(h) / 12.0
+		add_child(_at(Look.box(V(0.2, 0.9 if h % 3 == 0 else 0.5, 0.25), Look.flat(Look.c("accent"), 0.35, 0.0, 1.6)), face + V(0.05, cos(a) * 4.5, sin(a) * 4.5)))
+	_case_bob = Node3D.new()
+	_case_bob.position = o + V(-7.5, 22.0, -15.0)
+	add_child(_case_bob)
+	_case_bob.add_child(Look.box(V(0.25, 26.0, 0.25), Look.flat(Look.c("metal"), 0.4, 0.7), V(0, -13.0, 0)))
+	_case_bob.add_child(Look.cylinder(2.2, 0.5, Look.flat(Look.c("accent"), 0.3, 0.7, 0.6), V(0, -26.0, 0), -1.0, 28))
+	_case_bob.get_child(1).rotation.z = PI * 0.5
+	_fx(ClockworkFx.motes(V(5.0, 9.0, 12.0), 50, Color(1.0, 0.85, 0.5)), o + V(0, 7.0, -15.0))
+
+	# two cracked stones to the checkpoint
+	var s1: Vector3 = o + V(1.0, 12.5, -33.6)
+	var s2: Vector3 = o + V(-1.0, 13.1, -38.8)
+	kit.collapse(s1, 1.8, 0.45)
+	kit.collapse(s2, 1.8, 0.45)
+	_cp17 = o + V(0, 13.5, -45.5)
+	_cp(_cp17, V(6, 2, 6), 0.0, "alt")
+	_cp_fx(_cp17)
+	r_walk(top + V(0.9, 0, -1.2))
+	_hop(top + V(0.9, 0, -1.2), s1, 0.4)
+	_hop(s1, s2, 0.55)
+	r_jump(s2 + _flat_dir(s2, _cp17 + V(0, 0, 2.2)) * 0.55, _cp17 + V(0, 0, 2.2))
+	r_walk(_cp17)
+	r_checkpoint()
+
+
+# =================================================================================================
+# 18. THE CUCKOO (fork): CLIMB - two 3.3 m ledges, each crossed by a curtain of light: mantle,
+#     time the curtain, mantle again. DOOR - three 1.1 m perches out to the right lead to the
+#     cuckoo's door, a warp that drops you on the top ledge. Every 4 s the cuckoo pops out.
+# =================================================================================================
+
+var _cp18 := Vector3.ZERO
+var _cuckoo: Node3D
+var _cuckoo_home_z: float = 0.0
+const CUCKOO_PERIOD: float = 4.0
+
+
+func _stage_18() -> void:
+	var o: Vector3 = _cp17
+	# CLIMB
+	kit.plat(o + V(0, 0, -8.5), V(3.4, 0.8, 7.0), "main", 1.2)
+	var l1: Vector3 = o + V(0, 3.3, -15.0)
+	kit.ledge(l1, V(4.0, 6.0, 6.0))
+	var l2: Vector3 = o + V(0, 6.6, -24.0)
+	kit.ledge(l2, V(6.0, 9.0, 12.0), 0.0, "alt")
+	var g1: LaserGate = kit.laser(l1 + V(0, 1.3, -0.4), V(4.4, 2.6, 0.18), 2.4, 0.45, 0.0)
+	var g2: LaserGate = kit.laser(l2 + V(0, 1.3, 2.8), V(6.4, 2.6, 0.18), 2.4, 0.45, 0.5)
+	kit.banner(o + V(-2.4, 0, -2.6), 3.2, Look.c("accent"))
+	# DOOR: perches, then the cuckoo's door
+	var perches: Array[Vector3] = [o + V(5.2, 0.6, -7.8), o + V(7.0, 1.4, -13.9), o + V(6.2, 2.2, -19.4)]
+	for p: Vector3 in perches:
+		kit.disc(p, 0.55, 0.6, "accent", 3.0)
+		kit.glow_strip(p + V(0, 0.04, 0), V(0.5, 0.05, 0.5), Look.c("accent2"), 45.0)
+	var door: Vector3 = o + V(6.2, 2.6, -25.0)
+	kit.plat(door, V(2.4, 0.6, 3.0), "accent", 1.0)
+	var exit_floor: Vector3 = l2 + V(0, 0, 1.6)
+	var warp: WarpPortal = kit.portal(door + V(0, 0, -0.6), 0.0, exit_floor, 0.0, 7.0)
+	kit.banner(o + V(2.6, 0, -2.6), 3.2, Look.c("accent2"))
+	_build_cuckoo_house(door + V(0, 0, -2.2))
+	_cp18 = l2 + V(0, 0, -3.5)
+	kit.checkpoint(_cp18, 0.0)
+	kit.lamp(_cp18 + V(2.5, 0, -2.0), 2.8)
+	kit.lamp(_cp18 + V(-2.5, 0, -2.0), 2.8, false)
+	_cp_fx(_cp18)
+	# blue arrival sparkle where the warp drops you
+	_fx_near(warp.exit_point() + V(0, 0.8, 0), 1.8, [
+		ClockworkFx.puff_burst(24, Color(0.45, 0.75, 1.0, 0.8), 4.0, 0.5, 0.8, true, 0.0, 0.6),
+		ClockworkFx.spark_burst(20, Color(0.55, 0.85, 1.0), 6.5, V(0, 1, 0), 70.0, 0.6)])
+
+	if route_variant == 0:
+		r_walk(o + V(0, 0, -2.4))
+		r_jump(o + V(0, 0, -2.7), o + V(0, 0, -6.0))
+		r_walk(o + V(0, 0, -10.8))
+		r_mantle(o + V(0, 0, -11.2), l1 + V(0, 0, 1.6))
+		r_until(func() -> bool: return _lasers_off([[g1, 0.3]], 0.3))
+		r_walk(l1 + V(0, 0, -2.4))
+		r_mantle(l1 + V(0, 0, -2.6), l2 + V(0, 0, 4.9))
+		r_until(func() -> bool: return _lasers_off([[g2, 0.3]], 0.3))
+		r_walk(l2 + V(0, 0, 2.6))
+	else:
+		r_walk(o + V(2.4, 0, -1.6))
+		_hop(o + V(2.4, 0, -1.6), perches[0], 0.9)
+		_hop(perches[0], perches[1], 0.4)
+		_hop(perches[1], perches[2], 0.4)
+		r_jump(perches[2] + V(0, 0, -0.4), door + V(0, 0, 0.8))
+		r_portal(door + V(0, 0, -0.9), warp.exit_point())
+	r_walk(_cp18)
+	r_checkpoint()
+
+
+## The cuckoo clock facade behind its door, and the bird that pops out on the course clock.
+func _build_cuckoo_house(c: Vector3) -> void:
+	var wood: StandardMaterial3D = Look.flat(Look.c("decor"), 0.7)
+	kit.block(c + V(0, 3.2, -0.6), V(5.2, 6.4, 1.2), Look.c("decor2"), false)
+	for sx: int in [-1, 1]:
+		var roof := Look.box(V(3.6, 0.4, 2.0), wood, c + V(sx * 1.5, 7.1, -0.4))
+		roof.rotation.z = -sx * 0.6
+		add_child(roof)
+		kit.block(c + V(sx * 2.0, 1.6, 0.2), V(0.5, 3.2, 0.5), Look.c("metal"), false)
+	kit.ring(c + V(0, 5.3, 0.05), 1.0, Look.c("accent"), Vector3(90, 0, 0))
+	_cuckoo = Node3D.new()
+	_cuckoo.position = c + V(0, 5.3, -0.2)
+	_cuckoo_home_z = _cuckoo.position.z
+	add_child(_cuckoo)
+	_cuckoo.add_child(Look.sphere(0.45, Look.flat(Color(0.85, 0.5, 0.35), 0.5)))
+	_cuckoo.add_child(Look.sphere(0.3, Look.flat(Color(0.95, 0.65, 0.4), 0.5), V(0, 0.35, 0.25)))
+	var beak := Look.box(V(0.12, 0.12, 0.35), Look.flat(Look.c("accent"), 0.4), V(0, 0.33, 0.6))
+	_cuckoo.add_child(beak)
+	# a puff of feathers every time it calls
+	_fx_clock(c + V(0, 5.3, 1.2), CUCKOO_PERIOD, 0.0, [0.1], [
+		ClockworkFx.puff_burst(14, Color(1.0, 0.9, 0.7, 0.9), 3.0, 0.25, 1.4, false, 0.0, 0.6),
+		ClockworkFx.spark_burst(10, Color(1.0, 0.8, 0.4), 4.0, V(0, 1, 1), 50.0, 0.7)])
+
+
 ## The escape wheel beside the pallets: turns one tooth per beat, with the anchor rocking over it.
 func _build_escape_wheel(c: Vector3) -> void:
 	var holder: Node3D = kit.gear(c, 8.5, ESC_TEETH, 0.8, 0.0, Vector3(0, 0, 90), Look.c("decor"))
@@ -1301,6 +1453,14 @@ func _process(_dt: float) -> void:
 		_spokes.rotation.x = -fposmod(Game.course_time / WHEEL_PERIOD, 1.0) * TAU
 	if _bell != null:
 		_bell.rotation.z = sin(Game.course_time * TAU / 4.0) * 0.22
+	if _case_bob != null:
+		_case_bob.rotation.x = sin(Game.course_time * TAU / 3.2) * 0.22
+	if _cuckoo != null:
+		# out of its door for a moment every CUCKOO_PERIOD seconds
+		var u: float = fposmod(Game.course_time / CUCKOO_PERIOD, 1.0)
+		var out: float = clampf(minf(u / 0.06, (0.4 - u) / 0.08), 0.0, 1.0)
+		_cuckoo.position.z = _cuckoo_home_z + out * 1.3
+		_cuckoo.rotation.x = -sin(u * TAU * 6.0) * 0.3 * out
 	if _esc_wheel != null:
 		# one tooth per beat, snapping with the pallets
 		var t: float = Game.course_time
