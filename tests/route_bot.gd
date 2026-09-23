@@ -113,6 +113,8 @@ func _physics_process(dt: float) -> void:
 			_do_ascent(step)
 		"w_run", "m_climb", "portal":
 			_do_moves(step, dt)
+		"b_mantle":
+			_do_b_mantle(step, dt)
 
 
 func _next() -> void:
@@ -657,3 +659,15 @@ func _do_moves(step: Dictionary, dt: float) -> void:
 				_next()
 				return
 			_set_wish(_flat((step["to"] as Vector3) - player.global_position).normalized())
+
+
+# ---- balance works: a mantle that also accepts landing straight on the top (additive) ----------
+#   b_mantle {from, top}   m_climb, except that a jump which lands cleanly on the top also completes it:
+#                          on a rising / sinking counterweight cage the lip can be low enough to jump onto,
+#                          and m_climb would wait for a mantle that never comes.
+func _do_b_mantle(step: Dictionary, dt: float) -> void:
+	var top: Vector3 = step["top"]
+	if _phase == 1 and _was_air and player.grounded and not player.is_mantling() and player.global_position.y > top.y - 0.5:
+		_next()
+		return
+	_do_moves({"kind": "m_climb", "from": step["from"], "top": top}, dt)

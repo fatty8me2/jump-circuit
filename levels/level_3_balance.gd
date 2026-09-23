@@ -474,8 +474,10 @@ func WR(x: float, yc: float, dc: float, ln: float, h: float, th: float = 0.5) ->
 	return kit.wallrun(L(x, yc, dc), Vector3(ln, h, th), _yaw + 90.0)
 
 
+## r_mantle as the b_mantle bot step (tests/route_bot.gd): off a moving cage the lip can come within
+## plain-jump reach, and landing straight on top must count as done too.
 func MANTLE(fx: float, fy: float, fd: float, tx: float, ty: float, td: float) -> void:
-	r_mantle(L(fx, fy, fd), L(tx, ty, td))
+	route.append({"kind": "b_mantle", "from": L(fx, fy, fd), "top": L(tx, ty, td)})
 
 
 ## Crane-hook cargo (mantle onto it) riding `travel` metres forward. Top centre at (x, y, d).
