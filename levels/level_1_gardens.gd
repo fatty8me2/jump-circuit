@@ -10,21 +10,32 @@ extends LevelBase
 ##   7 Frost Chute      an ice slide that fires you across a ravine
 ##   8 The Great Leap   a 2 m-per-rung ladder up to the ring-gate launch pad (set piece), hard exit
 ##   9 Grand Circuit    hop + boost -> leap -> pad -> pad -> small landing -> the old finish plaza
-## The extension (the gardens climb on round a loop to the summit):
-##  10 Topiary Runs     the first wall run (a 19 m gap only the panel crosses), the first mantle, hedge hops
-##  11 The Greenhouse   BRANCH: a planter walkway swept by three sprinkler pistons, or mantle up to the rafters
-##  12 The Hedge Maze   SET PIECE - THE TRIMMER, a laser curtain sweeping a hedge alley (hide in the side
-##                      pockets), then two laser gates and a mantle; BRANCH: mantle onto the hedge tops instead
-##  13 The Windmill     ride a seed tray on the sails up and leap off the top; shortcut: the vine ladder
-##  14 Flower Beds      BRANCH: a sprint-bounce chain over three flower pads, or a zig-zag of two trellis wall runs
-##  15 The Potting Press run a line of slamming presses, mantle up under a press, ride a press up like a lift;
-##                      shortcut: three 1 m pot tiles past the press line
-##  16 Topiary Chimney  three alternating wall runs climbing a chimney, the last kick ends in a mantle
-##  17 The Orchard      BRANCH: boost leap + a laser bridge, or an 87 % hop to the warp ring on the apple terrace
-##  18 Summit Garden    hop + boost leap, a wall run over the void, a bounce-pad mantle up the summit wall,
-##                      a piston and a laser, finish (fireworks)
+## The extension (stages 10-18) climbs on east in a serpentine to the summit, ~60 m higher:
+##  10 Topiary Runs      the first wall run (a 16 m gap only the trellis panel crosses), the first mantle (3.4 m
+##                       hedge wall), hedge-top hops
+##  11 The Greenhouse    BRANCH: the planter walkway swept by three sprinkler PISTONS, or the rafters (two mantles
+##                       and a blinking seed tray)
+##  12 The Hedge Maze    SET PIECE - THE TRIMMER (mechanics/gardens_trimmer.gd): a laser curtain gliding up and down a
+##                       30 m hedge alley; follow it in, hop the kill hedges, duck into a side pocket while it comes back,
+##                       then out behind it; mantle out of the maze and time two LASER gaps
+##  13 The Windmill      board a seed tray on the turning sails, ride it up and leap onto the roof gallery, drop to a
+##                       flower pad; shortcut: the vine ladder spiralling up the tower (crosses the trays' path)
+##  14 Flower Beds       BRANCH: sprint-bounce three giant flower pads, or the trellis (two chained wall runs)
+##  15 The Potting Press a walkway under three slamming CRUSHERS with a gap between, a mantle whose lip sits under a
+##                       fourth press, then ride the last press up like a lift; shortcut: four 1 m pot tiles (90 % hops)
+##  16 Topiary Chimney   three alternating wall runs up a chimney, the last kick ends in a mantle; tap-hops under
+##                       trimmer ceilings
+##  17 The Orchard       BRANCH: boost strip into an 11 m leap and a laser bridge, or three hops (an 88 % one) up the
+##                       apple terrace to a WARP RING that drops you at the merge deck
+##  18 Summit Garden     hop + boost to 20 m/s and a 12 m leap, a wall run over the void, sprint onto the bounce pad at
+##                       the foot of the summit wall and mantle its lip at the top of the bounce, a piston and a laser
+##                       on the ridge, finish under fireworks
+## Shortcuts: the 1 m tiles (5), the mower hub (6), the pink bumper (8), the vine ladder (13), the pot tiles (15).
+## Particles (visual/gardens_fx.gd): pollen, petals and dandelion seeds all along the course, plus per-stage effects -
+## greenhouse drizzle and sprinkler sprays, the Trimmer's clippings, sail petals, leaf updraft, soil bursts from the
+## presses, sparkle rings, petal fountains on every checkpoint lawn and fireworks over the summit (GardensCue).
 ## The course is built stage by stage in a local frame (heading = local -Z) so it can turn.
-## Route variants: 0 = main lines; 1 = every alternative branch (rafters, hedge tops, trellis, portal).
+## Route variants: 0 = main lines; 1 = every alternative branch (rafters, trellis, warp ring).
 
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
@@ -865,8 +876,8 @@ func _stage_13_windmill() -> Vector3:
 	kit.pillar(_w(Vector3(0, 7.7, -33.6)), 0.7, 12.0)
 	var end: Dictionary = _lawn(Vector3(0, 10.5, -44.6), 7.0, true, 90.0)
 	# shortcut: the vine ladder up the tower's left side
-	var vine: Array[Vector3] = [Vector3(-4.0, 1.0, -23.2), Vector3(-4.6, 2.9, -26.6), Vector3(-4.6, 4.8, -23.2),
-			Vector3(-4.6, 6.7, -26.6), Vector3(-4.6, 8.6, -23.2), Vector3(-4.6, 10.5, -26.6)]
+	var vine: Array[Vector3] = [Vector3(-4.0, 1.0, -23.2), Vector3(-4.6, 2.9, -26.2), Vector3(-3.6, 4.8, -29.4),
+			Vector3(-0.6, 6.7, -30.0), Vector3(2.6, 8.6, -29.4), Vector3(4.0, 10.5, -26.4)]
 	for v: Vector3 in vine:
 		_blk(v, 1.0, 1.0, "accent", 0.5)
 		kit.block(_w(v + Vector3(0.1, -1.2, 0)), Vector3(0.25, 2.0, 0.25), HEDGE.lightened(0.15), false, _yaw)
@@ -917,7 +928,7 @@ func _stage_14_flowers() -> Vector3:
 		_cue(_w(pc + Vector3(0, 0.3, 0)), GardensFx.sparkle_ring(petal_cols[i]), 1.6)
 	# RIGHT - the trellis walkway and its two panels
 	_blk(Vector3(5.0, 0, -10.75), 1.6, 8.5, "alt", 0.6)
-	_panel(6.8, 1.2, -18.0, -24.5)
+	_panel(6.8, 1.2, -17.1, -24.5)
 	_panel(2.2, 6.0, -23.0, -34.0)
 	# the terrace where they meet, and the lawn
 	var merge: Dictionary = _blk(Vector3(0.5, 6.0, -41.25), 17.0, 7.5, "main", 1.0)
@@ -1033,7 +1044,7 @@ func _stage_15_press() -> Vector3:
 # left, kick back to the right, and the last kick throws you at a hedge ledge 3 m above - mantle it.
 # Then three tap-hops under red trimmer ceilings to the lawn.
 func _stage_16_chimney() -> Vector3:
-	_panel(2.3, 1.2, -5.5, -12.0)
+	_panel(2.3, 1.2, -4.6, -12.0)
 	_panel(-2.3, 6.0, -10.5, -18.5)
 	_panel(2.3, 9.0, -16.5, -24.5)
 	var top: Dictionary = _area(Vector3(-0.75, 11.9, -28.0), 2.25, 2.0)
@@ -1186,17 +1197,38 @@ func _stage_18_summit() -> void:
 	_amb(_w(Vector3(0, 3.0, -55.0)), GardensFx.seeds(_ext(Vector3(4, 3, 10)), _b * Vector3(-0.8, 0.2, -0.4), 24))
 
 
+## Course-wide ambient particles, layered: golden pollen hanging over every checkpoint lawn, petals
+## drifting down over every other one, and dandelion seeds riding the breeze all along the route.
 func _ambience() -> void:
-	pass
+	var i: int = 0
+	for cp: Node in find_children("*", "Checkpoint", true, false):
+		var p: Vector3 = (cp as Node3D).global_position
+		_amb(p + Vector3(0, 2.0, 0), GardensFx.pollen(Vector3(4.0, 2.0, 4.0), 22))
+		if i % 2 == 0:
+			_amb(p + Vector3(0, 7.0, 0), GardensFx.petals(Vector3(5.0, 1.0, 5.0), 16))
+		i += 1
+	var last := Vector3(INF, INF, INF)
+	for step: Dictionary in route:
+		var to: Variant = step.get("to", null)
+		if not (to is Vector3) or (to as Vector3) == Vector3.ZERO:
+			continue
+		var q: Vector3 = to
+		if q.distance_to(last) > 28.0:
+			_amb(q + Vector3(0, 3.0, 0), GardensFx.seeds(Vector3(6.0, 3.0, 6.0), Vector3(0.7, 0.12, -0.35), 14))
+			last = q
 
 
 func _surroundings() -> void:
 	kit.cloud_field(Vector3(-60, -14, -130), Vector3(170, 8, 170), 34)
-	kit.cloud_field(Vector3(-60, 60, -130), Vector3(200, 10, 200), 12)
-	kit.monolith_ring(Vector3(-60, 10, -130), 190.0, 260.0, 20, 26.0)
+	kit.cloud_field(Vector3(160, 4, -220), Vector3(100, 8, 110), 20)
+	kit.cloud_field(Vector3(40, 125, -160), Vector3(240, 10, 200), 14)
+	kit.monolith_ring(Vector3(45, 20, -160), 280.0, 340.0, 24, 40.0)
 	for spot: Vector3 in [Vector3(-16, -2, -30), Vector3(14, 3, -75), Vector3(-30, 12, -80), Vector3(-70, 14, -115), Vector3(-100, 16, -80),
 			Vector3(-150, 18, -125), Vector3(-108, 20, -150), Vector3(-150, 22, -185), Vector3(-95, 12, -215), Vector3(-45, 14, -170),
-			Vector3(-92, 20, -235), Vector3(-40, 20, -262), Vector3(-20, 22, -222)]:
+			Vector3(-92, 20, -235), Vector3(-40, 20, -262), Vector3(-20, 22, -222),
+			Vector3(95, 26, -305), Vector3(90, 30, -250), Vector3(143, 46, -205), Vector3(100, 38, -140), Vector3(190, 64, -245),
+			Vector3(140, 60, -300), Vector3(240, 78, -250), Vector3(245, 88, -150), Vector3(180, 80, -140), Vector3(230, 70, -305),
+			Vector3(190, 76, -190)]:
 		kit.disc(spot, kit.rng.randf_range(2.5, 4.0), 1.0, "main")
 		kit.tree(spot + Vector3(0.5, 0, 0.3), kit.rng.randf_range(1.2, 1.9))
 		kit.bush(spot + Vector3(-1.2, 0, 0.8))
