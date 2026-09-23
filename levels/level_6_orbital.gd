@@ -163,6 +163,8 @@ func _build() -> void:
 	_frame(_w(cp), _yaw)
 	cp = _stage_13_mast()
 	_frame(_w(cp), _yaw)
+	cp = _stage_14_cargo_line()
+	_frame(_w(cp), _yaw)
 	_stage_end()
 
 
@@ -437,6 +439,23 @@ func _stage_7_thrusters() -> Vector3:
 	_hop(u3, end, Vector3(0, 0, 1.6))
 	r_checkpoint()
 	return end["c"]
+
+
+## Crusher whose guide columns stand across the local heading (kit.crusher puts them on world X,
+## which would block a course running along X). Square presses only.
+func _press(floor_top: Vector3, size: Vector3, lift: float, period: float, phase: float) -> Crusher:
+	var c := Crusher.new()
+	c.size = size
+	c.lift = lift
+	c.period = period
+	c.phase = phase
+	c.position = _w(floor_top)
+	add_child(c)
+	var h: float = lift + size.y + 1.5
+	for sx: float in [-1.0, 1.0]:
+		kit.block(_w(floor_top + Vector3(sx * (size.x * 0.5 + 0.35), h * 0.5, 0)), Vector3(0.35, h, 0.35), Look.c("metal"), true, _yaw)
+	kit.block(_w(floor_top + Vector3(0, h + 0.2, 0)), Vector3(size.x + 1.1, 0.4, 0.6), Look.c("metal"), false, _yaw)
+	return c
 
 
 ## Bot: a crusher leaves at least `head` m of room (and is harmless) from `a` to `b` seconds from now.
@@ -752,6 +771,41 @@ func _stage_13_mast() -> Vector3:
 	r_wallrun(Vector3.ZERO, _w(Vector3(1.8, 9.3, z - 18.0)), _w(Vector3(1.8, 9.3, z - 19.4)), _w(Vector3(-0.75, 12.7, z - 24.6)), true, true)
 	r_walk(_w(Vector3(-0.75, 12.7, z - 26.5)))
 	_hop(cap, end, Vector3(0, 0, 1.6))
+	r_checkpoint()
+	return end["c"]
+
+
+# Stage 14: the cargo line - FORK. Left (gold): the container stacks, a mantle, crate hops and a
+# press to slip under. Right (cyan): the mass-driver rail - a boost strip flings you at a hull
+# panel, you run it at 18 m/s and kick off onto the dock.
+func _stage_14_cargo_line() -> Vector3:
+	var end: Dictionary = _dock(Vector3(0, 2.0, -36.0), 0.0)
+	# -- container stacks (route 0) --
+	kit.ledge(_w(Vector3(-3.0, 3.3, -6.6)), Vector3(3.0, 5.0, 4.0), _yaw, "alt")
+	var k1: Dictionary = _area(Vector3(-3.0, 3.3, -6.6), 1.5, 2.0)
+	var k2: Dictionary = _deck(Vector3(-3.5, 3.3, -14.0), 2.2, 2.2)
+	var k3: Dictionary = _deck(Vector3(-2.5, 3.3, -20.5), 2.2, 2.2, "alt")
+	var press: Crusher = _press(Vector3(-2.5, 3.3, -20.5), Vector3(2.8, 1.4, 2.8), 3.4, 3.2, 0.0)
+	var k4: Dictionary = _deck(Vector3(-3.0, 2.0, -27.0), 2.0, 2.0)
+	# -- mass driver (route 1) --
+	kit.boost(_w(Vector3(3.4, 0, -8.5)), Vector3(2.2, 0.3, 11.0), _yaw, 20.0)
+	_deck(Vector3(3.4, -0.3, -8.5), 2.6, 11.0, "alt", 0.4)
+	kit.wallrun(_w(Vector3(5.0, 1.5, -19.5)), Vector3(15.0, 7.0, 0.5), _yaw + 90.0)
+	_sign(Vector3(-2.2, 0, -2.4), LedgeBlock.LIP_COLOR)
+	_sign(Vector3(2.2, 0, -2.4), Color(0.3, 0.85, 1.0))
+	if route_variant == 0:
+		r_mantle(_w(Vector3(-3.0, 0, -2.7)), _w(Vector3(-3.0, 3.3, -5.4)))
+		_hop(k1, k2)
+		# the press covers k3: go when it has just risen, land and leap straight on
+		r_walk(_w(_edge(k2, k3["c"], 0.7)))
+		r_until(func() -> bool: return _under_ok(press, 0.4, 1.7, 2.0))
+		_hop(k2, k3)
+		_hop(k3, k4)
+		_hop(k4, end, Vector3(-1.0, 0, 1.6))
+	else:
+		r_walk(_w(Vector3(2.6, 0, -2.7)))
+		r_walk(_w(Vector3(3.9, 0, -4.0)))
+		r_wallrun(_w(Vector3(3.9, 0, -13.6)), _w(Vector3(4.7, 1.6, -20.0)), _w(Vector3(4.4, 1.6, -23.5)), _w(end["c"] + Vector3(0, 0, 0.5)))
 	r_checkpoint()
 	return end["c"]
 
