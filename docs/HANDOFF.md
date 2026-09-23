@@ -1,4 +1,17 @@
-# HANDOFF - big expansion, paused 2026-09-23
+# HANDOFF - big expansion (resumed and merged 2026-09-23, session 2)
+
+**Status: all nine workstreams finished and merged into `extend-levels`, then into `main`.** The sections below are
+the original pause notes, kept for history. What session 2 added on top:
+- Every WIP branch finished against its brief and merged: levels 1-4 and 7 roughly doubled (18 / 22 / 20 / 20 / 23
+  stages), new levels 5 Coral Depths (17) and 6 Orbital Drift (18), party mode (14 power-ups, teams, cup scoring,
+  online over the existing relay - no redeploy), the shared effects pass.
+- Spectating: after finishing a race you can watch the racers still running (results "Spectate", LB/RB or Q/E,
+  B/Esc back); party races offer it from the waiting bar.
+- Wall-run fix: latching needs the panel beside the body (no more leading-edge latch that burned the panel).
+- Known shared-code follow-ups reported by the level agents (not done): `kit.crusher` has no yaw (guide columns
+  always on world X); RouteBot's restart point is stale when a checkpoint is touched mid-step; the `kick` step
+  treats a hard landing as a kick; after a pad bounce the bot's bounce flag stays set. Orbital Drift is on the easy
+  side (0 bot respawns) - tighten after playtesting.
 
 Read this first if you are picking this work up (new session / other account).
 
