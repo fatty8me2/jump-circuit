@@ -1842,6 +1842,31 @@ func test_w2_route_bot_gives_up_when_route_ends() -> void:
 	check(bot.stuck and not bot.done and why.begins_with("route exhausted"), "route bot gives up soon when its route ends short of the finish (%s)" % why)
 
 
+## A checkpoint touched in the middle of a step moves the level's respawn point; the bot must
+## resume from that checkpoint's steps, not replay the stage before it from the wrong spot.
+func test_w2_route_bot_resumes_at_touched_checkpoint() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var marks: Array[int] = []
+	for i: int in lvl.route.size():
+		if str(lvl.route[i]["kind"]) == "checkpoint":
+			marks.append(i)
+	check(marks.size() == lvl.checkpoints.size() and marks.size() >= 2, "level 1's route marks every checkpoint (%d marks, %d checkpoints)" % [marks.size(), lvl.checkpoints.size()])
+	var bot := RouteBot.new()
+	lvl.add_child(bot)
+	bot.attach(lvl)
+	await ticks(2)
+	bot.set_physics_process(false)
+	# the bot is still before checkpoint 1's mark, but the player has touched checkpoint 2
+	bot.step_index = 1
+	lvl.player.teleport(lvl.checkpoints[1].respawn_transform())
+	await wait_until(func() -> bool: return lvl.current_checkpoint == 2, 1.0, "touch checkpoint 2")
+	lvl.respawn()
+	check(bot.step_index == marks[1] + 1, "after a respawn the bot resumes after checkpoint 2's mark (step %d, want %d)" % [bot.step_index, marks[1] + 1])
+	lvl.respawn()
+	check(bot.step_index == marks[1] + 1, "and stays there on the next retry")
+	bot.queue_free()
+
+
 # ---- B4b: game feel (respawn veil, checkpoint / finish celebrations, Volt feedback) --------------
 
 ## The respawn veil overlays a respawn that has already happened: cause-tinted, never

@@ -40,10 +40,31 @@ func attach(lvl: LevelBase) -> void:
 func _on_respawn() -> void:
 	retries += 1
 	log_lines.append("respawn during step %d (%s)" % [step_index, str(level.route[mini(step_index, level.route.size() - 1)]["kind"])])
+	_sync_checkpoint_step()
 	step_index = _checkpoint_step
 	_begin_step()
 	if retries > 45:
 		stuck = true
+
+
+## The level respawns us at the checkpoint we last TOUCHED, which can be ahead of the last
+## "checkpoint" step the bot has run (touched mid-step, then a fall or a step timeout). Resume from
+## the step after that checkpoint's annotation, or every retry would replay the steps before it
+## from the wrong spot. Only when the route marks every checkpoint (k-th mark = checkpoint k).
+func _sync_checkpoint_step() -> void:
+	var cp: int = level.current_checkpoint
+	if cp <= 0:
+		return
+	var marks: Array[int] = []
+	for i: int in level.route.size():
+		if str(level.route[i]["kind"]) == "checkpoint":
+			marks.append(i)
+	if marks.size() != level.checkpoints.size() or cp > marks.size():
+		return
+	var resume: int = marks[cp - 1] + 1
+	if resume > _checkpoint_step:
+		log_lines.append("resume after checkpoint %d (touched mid-step): step %d -> %d" % [cp, _checkpoint_step, resume])
+		_checkpoint_step = resume
 
 
 func _begin_step() -> void:
