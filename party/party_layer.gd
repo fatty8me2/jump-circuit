@@ -976,6 +976,8 @@ func apply_round_end(m: Dictionary) -> void:
 
 
 func show_results() -> void:
+	if level.has_method("stop_spectating"):
+		level.call("stop_spectating")   # the camera comes home for the scoreboard
 	if results != null and is_instance_valid(results):
 		results.queue_free()
 	results = PartyResults.new()
@@ -998,4 +1000,9 @@ func on_local_finish(time: float) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		return
 	var place: int = Net.standings().find(Net.my_id()) + 1
-	hud.announce("FINISHED  %d%s" % [place, Hud._ordinal(place)], UiKit.GOLD)
+	hud.announce("FINISHED  %d%s" % [place, Hud._ordinal(place)] if place > 0 else "FINISHED", UiKit.GOLD)
+	# while the others race on: a small bar that can switch to watching them (when the level
+	# offers spectating), without covering the course like the results panel does
+	var watch: bool = level.has_method("spectate")
+	hud.show_finished(place, watch, func() -> void: level.call("spectate", 1))
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE

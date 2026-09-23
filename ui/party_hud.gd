@@ -28,6 +28,7 @@ var _announce_tw: Tween
 var _panel_host: Control
 var _hint: Label
 var _last_count: int = -1
+var _finish_bar: PanelContainer
 
 
 func _ready() -> void:
@@ -266,7 +267,36 @@ func feed(text: String, color: Color = UiKit.SOFT) -> void:
 
 func show_round_over() -> void:
 	_count.visible = false
+	hide_finished()
 	announce("ROUND OVER", Color.WHITE)
+
+
+## We finished but the round runs on: a small bottom bar ("Finished 2nd - waiting for the
+## others") with a Spectate button (focused, for the pad) when the level can follow a rival.
+func show_finished(place: int, can_spectate: bool, on_spectate: Callable) -> void:
+	hide_finished()
+	_finish_bar = UiKit.panel()
+	_finish_bar.name = "FinishBar"
+	_finish_bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_finish_bar.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_finish_bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	_finish_bar.position.y -= 190.0
+	var row: HBoxContainer = UiKit.hbox(16)
+	_finish_bar.add_child(row)
+	var what: String = "Finished %d%s" % [place, Hud._ordinal(place)] if place > 0 else "Finished"
+	row.add_child(UiKit.label("%s - waiting for the others" % what, 20, UiKit.GOLD))
+	if can_spectate:
+		var b: Button = UiKit.button("Spectate", func() -> void: on_spectate.call(), 180)
+		b.name = "Spectate"
+		row.add_child(b)
+		b.grab_focus.call_deferred()
+	_root.add_child(_finish_bar)
+
+
+func hide_finished() -> void:
+	if _finish_bar != null and is_instance_valid(_finish_bar):
+		_finish_bar.queue_free()
+	_finish_bar = null
 
 
 ## A results panel (centred, dimmed background, takes mouse + pad input).

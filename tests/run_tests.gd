@@ -2583,3 +2583,39 @@ func test_zp_relay_party_tunnel() -> void:
 	Net.party_message.disconnect(cb)
 	if not had:
 		Net.roster.erase(5)
+
+
+func test_zp_party_finish_bar() -> void:
+	Game.party = PartyRules.new("party")
+	var lvl: LevelBase = await load_level(0)
+	await ticks(4)
+	var p: PartyLayer = lvl.party
+	check(p != null and not p.practice, "a Party race level gets the party layer")
+	if p == null:
+		Game.party = null
+		return
+	p.on_local_finish(30.0)
+	await ticks(3)
+	var bar: Node = p.hud.find_child("FinishBar", true, false)
+	check(bar != null and not p.hud.has_panel(), "finishing before the round ends shows a small waiting bar, not a full panel")
+	check((bar != null and bar.find_child("Spectate", true, false) != null) == lvl.has_method("spectate"), "it offers Spectate exactly when the level can spectate")
+	var watched: Array = [0]
+	p.hud.show_finished(2, true, func() -> void: watched[0] += 1)
+	await ticks(3)
+	var f: Control = get_viewport().gui_get_focus_owner()
+	check(f != null and f.name == "Spectate", "the Spectate button takes the pad focus")
+	var a := InputEventJoypadButton.new()
+	a.device = 2
+	a.button_index = JOY_BUTTON_A
+	a.pressed = true
+	Input.parse_input_event(a)
+	await get_tree().process_frame
+	var up: InputEventJoypadButton = a.duplicate()
+	up.pressed = false
+	Input.parse_input_event(up)
+	await ticks(3)
+	check(int(watched[0]) == 1, "A on Spectate starts watching")
+	p.hud.show_round_over()
+	await ticks(2)
+	check(p.hud.find_child("FinishBar", true, false) == null or (p.hud.find_child("FinishBar", true, false) as Node).is_queued_for_deletion(), "the bar goes when the round ends")
+	Game.party = null

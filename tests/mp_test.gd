@@ -263,6 +263,9 @@ func _party_round() -> void:
 		check(int(landed[0]) == other, "the host's Shove connects with the guest's ghost")
 	else:
 		check(await wait_for(func() -> bool: return str(from_host[0]) != "", 8.0), "the host's hit arrives (%s)" % str(from_host[0]))
+		# the handler samples the velocity a physics frame after the hit
+		await get_tree().physics_frame
+		await get_tree().physics_frame
 		check(str(from_host[0]) == "shove" and float(knocked[0]) > 5.0, "the Shove knocks this player away (%.1f m/s)" % float(knocked[0]))
 		# straight back before the flight can carry us off the start lawn (a fall would be a KO)
 		await get_tree().create_timer(0.3).timeout
@@ -306,9 +309,34 @@ func _party_round() -> void:
 	check(int(totals.get(1, -1)) == 13 and int(totals.get(other if role == "host" else Net.my_id(), -1)) == 8, "round scores agree: host 10 + 3 (KO) = 13, guest 8 (%s)" % str(totals))
 	check(int(Game.party.cup.get(1, -1)) == 13, "the cup total matches on this end (%s)" % str(Game.party.cup))
 	check(await wait_for(func() -> bool: return p.results != null and is_instance_valid(p.results) and p.results.is_inside_tree(), 4.0), "the round results panel shows")
+	# -- round 2 straight from the results (the host's Next Round), the cup keeps adding up
 	if role == "host":
 		await get_tree().create_timer(1.0).timeout
+		Net.host_start_race(0, 2.0)
+	var old_level: int = lvl.get_instance_id()   # an id, not the node: the old level is freed meanwhile
+	check(await wait_for(func() -> bool: return Game.party != null and Game.party.round_no == 2 and _level() != null and _level().get_instance_id() != old_level and _level().party != null, 10.0), "Next Round starts round 2 for everyone")
+	lvl = _level()
+	if lvl == null or lvl.party == null:
+		_finish("round 2 never loaded")
+		return
+	p = lvl.party
+	check(int(Game.party.cup.get(1, -1)) == 13, "the cup carries round 1 into round 2")
+	check(await wait_for(func() -> bool: return lvl.player.control_enabled, 8.0), "round 2: GO")
+	lvl.player.use_device_input = false
+	gate = lvl.find_children("*", "FinishGate", true, false)[0] as FinishGate
+	if role == "client":
+		await wait_for(func() -> bool: return float(Net.roster[1]["finished"]) >= 0.0, 10.0)
+		await get_tree().create_timer(0.3).timeout
+	else:
+		await get_tree().create_timer(0.3).timeout
+	lvl.player.teleport(Transform3D(Basis(), gate.global_position + Vector3(0, 0.3, 0)))
+	check(await wait_for(func() -> bool: return p.round_over and not p.last_rows.is_empty(), 10.0), "round 2 ends")
+	var mine: int = Net.my_id()
+	var guest: int = other if role == "host" else mine
+	check(int(Game.party.cup.get(1, -1)) == 23 and int(Game.party.cup.get(guest, -1)) == 16, "cup totals after two rounds agree: 23 - 16 (%s)" % str(Game.party.cup))
+	if role == "host":
+		await get_tree().create_timer(1.5).timeout
 		Net.host_return_to_lobby()
-	check(await wait_for(func() -> bool: return not Game.race_mode and Game.title_screen == "lobby", 8.0), "back to the lobby after the round")
-	check(Game.party != null and int(Game.party.cup.get(1, -1)) == 13 and Net.party_round == 1, "the Party Cup carries on in the lobby (round %d played)" % Net.party_round)
+	check(await wait_for(func() -> bool: return not Game.race_mode and Game.title_screen == "lobby", 8.0), "back to the lobby after the cup")
+	check(Game.party != null and int(Game.party.cup.get(1, -1)) == 23 and Net.party_round == 2, "the Party Cup carries on in the lobby (round %d played)" % Net.party_round)
 	await get_tree().create_timer(0.5).timeout
