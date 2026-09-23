@@ -268,8 +268,8 @@ func _build_fx() -> void:
 		"speed": Vector2(5.0, 11.0), "damping": Vector2(3.0, 5.0), "gravity": Vector3(0, -9, 0),
 		"size": Vector2(0.06, 0.5), "color": Fx.hot(WALL_FX.lerp(Color.WHITE, 0.3), 2.8)}))
 	_kick_ring = _fx(Fx.shockwave(1.6, {"lifetime": 0.35, "color": wall_hot}))
-	_kick_trail = _fx(Fx.trail({"amount": 30, "lifetime": 0.35, "size": 0.3, "color": wall_hot,
-		"shape": "sphere", "radius": 0.2, "offset": Vector3(0, 0.6, 0)}))
+	_kick_trail = _fx(Fx.trail({"amount": 48, "lifetime": 0.35, "size": 0.24, "color": wall_hot,
+		"shape": "sphere", "radius": 0.22, "offset": Vector3(0, 0.6, 0)}))
 	# mantle: dust knocked off the lip, gold sparks where the hands catch, a hop puff on top
 	_mantle_dust = _fx(Fx.smoke({"amount": 14, "lifetime": 0.75, "size": 0.7, "shape": "box",
 		"extents": Vector3(0.45, 0.05, 0.1), "dir": Vector3(0, -0.3, 1), "spread": 50.0,
