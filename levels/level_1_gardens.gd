@@ -811,16 +811,221 @@ func _stage_12_maze() -> Vector3:
 	return end["c"]
 
 
+# ---- stage 13: The Windmill - ride a seed tray up the sails ---------------------------------------
+# Four seed trays hang level on the tips of the windmill's sails (a ferris wheel facing you). Board
+# one as it sweeps past the foot of the mill, ride it up the far side and leap off at the top onto the
+# mill's roof gallery, drop to a flower pad and bounce to the lawn.
+# Shortcut: the vine ladder - five 1 m ledges zig-zagging up the tower's side, reached by crossing
+# the trays' path at the bottom.
+var _trays: Array[MovingPlatform] = []
+
+
 func _stage_13_windmill() -> Vector3:
-	return Vector3.ZERO
+	var lawn: Dictionary = _area(Vector3.ZERO, 3.5, 3.5)
+	var a1: Dictionary = _blk(Vector3(0, 0.5, -9.0), 2.0, 2.0)
+	var deck: Dictionary = _blk(Vector3(0, 1.0, -16.4), 6.0, 3.6, "alt", 1.0)
+	var zc: float = -20.0
+	var hub := Vector3(0, 1.0 + MILL_R, zc)
+	var axis: Vector3 = (_b * Vector3(0, 0, 1)).normalized()
+	_trays.clear()
+	for i: int in 4:
+		_trays.append(kit.orbiter(_w(hub), MILL_R, axis, Vector3(2.4, 0.4, 2.4), MILL_PERIOD, 0.25 * float(i)))
+	# the sails, turned by the clock in step with the trays
+	var sails := GardensSails.new()
+	sails.axis = axis
+	sails.period = MILL_PERIOD
+	sails.position = _w(hub)
+	add_child(sails)
+	var arm0: Vector3 = axis.cross(Vector3.UP).normalized()
+	var wood: StandardMaterial3D = Look.flat(Color(0.55, 0.38, 0.26), 0.85)
+	var cloth: StandardMaterial3D = Look.flat(Color(0.98, 0.94, 0.86), 0.9)
+	for i: int in 4:
+		var d: Vector3 = arm0.rotated(axis, 0.25 * float(i) * TAU)
+		var side: Vector3 = axis.cross(d).normalized()
+		var holder := Node3D.new()
+		holder.basis = Basis(d, side, axis)
+		sails.add_child(holder)
+		holder.add_child(Look.box(Vector3(MILL_R - 1.4, 0.22, 0.18), wood, Vector3((MILL_R - 1.4) * 0.5 + 0.1, 0, 0)))
+		holder.add_child(Look.box(Vector3(MILL_R - 2.2, 1.5, 0.05), cloth, Vector3((MILL_R - 2.2) * 0.5 + 0.9, 0.9, -0.35)))
+		for k: int in 4:
+			holder.add_child(Look.box(Vector3(0.08, 1.6, 0.1), wood, Vector3(1.4 + float(k) * 1.1, 0.85, -0.3)))
+	sails.add_child(Look.sphere(0.75, Look.flat(Look.c("accent"), 0.5, 0.2, 0.6)))
+	# the mill: tower, axle, roof gallery
+	kit.block(_w(Vector3(0, 1.5, -24.8)), Vector3(4.6, 20.0, 4.6), Color(0.96, 0.9, 0.8), true, _yaw)
+	kit.pipe(_w(hub), _w(hub + Vector3(0, 0, -2.6)), 0.3, Color(0.4, 0.32, 0.26))
+	var roof: Dictionary = _blk(Vector3(0, 12.5, -24.8), 6.0, 6.0, "main", 1.0)
+	for sx: float in [-1.0, 1.0]:
+		kit.lamp(_w(Vector3(sx * 2.6, 12.5, -27.4)), 1.6, false)
+		kit.block(_w(Vector3(sx * 2.3, -3.0, -24.8)), Vector3(0.9, 9.0, 5.2), Color(0.86, 0.78, 0.68), false, _yaw)
+	kit.pillar(_w(Vector3(0, -8.5, -24.8)), 2.2, 16.0)
+	kit.pillar(_w(Vector3(0, 0.0, -16.4)), 1.0, 14.0)
+	# down from the roof: a flower pad and the lawn
+	var d1: Dictionary = _disc(Vector3(0, 8.5, -33.6), 1.5, "accent")
+	kit.pad(_w(d1["c"]), 19.0, 0.0, 0.0, 1.2)
+	kit.pillar(_w(Vector3(0, 7.7, -33.6)), 0.7, 12.0)
+	var end: Dictionary = _lawn(Vector3(0, 10.5, -44.6), 7.0, true, 90.0)
+	# shortcut: the vine ladder up the tower's left side
+	var vine: Array[Vector3] = [Vector3(-4.0, 1.0, -23.2), Vector3(-4.6, 2.9, -26.6), Vector3(-4.6, 4.8, -23.2),
+			Vector3(-4.6, 6.7, -26.6), Vector3(-4.6, 8.6, -23.2), Vector3(-4.6, 10.5, -26.6)]
+	for v: Vector3 in vine:
+		_blk(v, 1.0, 1.0, "accent", 0.5)
+		kit.block(_w(v + Vector3(0.1, -1.2, 0)), Vector3(0.25, 2.0, 0.25), HEDGE.lightened(0.15), false, _yaw)
+	# route
+	_hop(lawn, a1)
+	_hop(a1, deck, Vector3(0, 0, 0.8))
+	var board := Vector3(0, 1.0, -17.8)
+	r_walk(_w(board))
+	var bottom: Vector3 = _w(hub + Vector3(0, -MILL_R, 0)) - Vector3(0, 0.2, 0)
+	var top: Vector3 = _w(hub + Vector3(0, MILL_R, 0)) - Vector3(0, 0.2, 0)
+	route.append({"kind": "x_wait", "nodes": _trays, "locals": [Vector3.ZERO], "point": bottom, "radius": 0.6, "lead": 0.8})
+	route.append({"kind": "x_jump", "from": _w(board), "to_local": Vector3(0, 0.2, 0), "picked": true, "hold": true})
+	route.append({"kind": "x_jump", "picked": true, "when_local": Vector3.ZERO, "when_point": top, "when_radius": 0.9, "lead": 0.0,
+			"to": _w(Vector3(0, 12.5, -24.2)), "hold": true})
+	_hop(roof, d1)
+	r_pad(_w(d1["c"]), _w(end["c"] + Vector3(0, 0, 2.0)))
+	r_checkpoint()
+	# effects: petals shed by the sails, a burst on the roof, the lawn fountain
+	_amb(_w(hub + Vector3(0, 0, 0.5)), GardensFx.petals(_ext(Vector3(6, 4, 1.5)), 30))
+	_cue_near(_w(roof["c"] + Vector3(0, 0.3, 0)), 2.5, GardensFx.sparkle_ring(Look.c("accent2")))
+	_cue_near(_w(end["c"] + Vector3(0, 0.2, 0)), 2.4, GardensFx.petal_fountain())
+	return end["c"]
 
 
+# ---- stage 14: Flower Beds - BRANCH -------------------------------------------------------------
+# LEFT (pink lamps): sprint onto three giant flower pads in a row - each bounce keeps your run speed and
+# throws you 8.8 m and 2 m up to the next. RIGHT (cyan lamps): the trellis - wall run the right panel,
+# kick across to the left one, run it and kick out onto the terrace. Both land on the terrace.
 func _stage_14_flowers() -> Vector3:
-	return Vector3.ZERO
+	_blk(Vector3(0, 0, -5.0), 12.0, 3.0, "main", 1.0)
+	_sign(Vector3(-4.5, 0, -4.6), Color(1.0, 0.45, 0.7))
+	_sign(Vector3(4.5, 0, -4.6), WallRunPanel.RUN_COLOR)
+	# LEFT - flower pads
+	var pads: Array[Vector3] = [Vector3(-4.5, 0, -12.5), Vector3(-4.5, 2.0, -21.3), Vector3(-4.5, 4.0, -30.1)]
+	var petal_cols: Array[Color] = [Color(1.0, 0.45, 0.7), Color(1.0, 0.85, 0.3), Color(0.75, 0.55, 1.0)]
+	for i: int in 3:
+		var pc: Vector3 = pads[i]
+		_disc(pc, 1.5, "accent")
+		kit.pad(_w(pc), 19.0, 0.0, 0.0, 1.2)
+		kit.pillar(_w(pc + Vector3(0, -0.8, 0)), 0.6, 12.0, HEDGE)
+		for k: int in 7:
+			var a: float = float(k) / 7.0 * TAU
+			var petal := Look.sphere(0.55, Look.flat(petal_cols[i], 0.7))
+			petal.scale = Vector3(1.0, 0.25, 1.8)
+			petal.position = _w(pc + Vector3(cos(a) * 1.9, -0.45, sin(a) * 1.9))
+			petal.rotation.y = -a + deg_to_rad(_yaw) + PI * 0.5
+			add_child(petal)
+		_cue(_w(pc + Vector3(0, 0.3, 0)), GardensFx.sparkle_ring(petal_cols[i]), 1.6)
+	# RIGHT - the trellis walkway and its two panels
+	_blk(Vector3(5.0, 0, -10.75), 1.6, 8.5, "alt", 0.6)
+	_panel(6.8, 1.2, -18.0, -24.5)
+	_panel(2.2, 6.0, -23.0, -34.0)
+	# the terrace where they meet, and the lawn
+	var merge: Dictionary = _blk(Vector3(0.5, 6.0, -41.25), 17.0, 7.5, "main", 1.0)
+	kit.pillar(_w(Vector3(0.5, 5.0, -41.25)), 1.6, 16.0)
+	var end: Dictionary = _lawn(Vector3(0.5, 7.0, -52.5), 7.0, true, 0.0)
+	# giant decorative flowers round the beds
+	for fp: Vector3 in [Vector3(-10, -2, -16), Vector3(-9, 0, -30), Vector3(11, -1, -12), Vector3(-11, 3, -44), Vector3(11, 4, -46)]:
+		var h: float = kit.rng.randf_range(4.0, 6.0)
+		kit.block(_w(fp + Vector3(0, h * 0.5, 0)), Vector3(0.25, h, 0.25), HEDGE, false, _yaw)
+		var col: Color = petal_cols[kit.rng.randi_range(0, 2)]
+		for k: int in 6:
+			var a: float = float(k) / 6.0 * TAU
+			var petal := Look.sphere(0.7, Look.flat(col, 0.7))
+			petal.scale = Vector3(1.0, 0.3, 1.9)
+			petal.position = _w(fp + Vector3(cos(a) * 1.2, h, sin(a) * 1.2))
+			petal.rotation.y = -a + deg_to_rad(_yaw) + PI * 0.5
+			add_child(petal)
+		var mid := Look.sphere(0.6, Look.flat(Color(1.0, 0.85, 0.25), 0.6, 0.0, 0.4))
+		mid.position = _w(fp + Vector3(0, h + 0.1, 0))
+		add_child(mid)
+	if route_variant == 0:
+		r_jump(_w(Vector3(-4.5, 0, -6.15)), _w(pads[0]))
+		r_pad(_w(pads[0]), _w(pads[1]))
+		r_pad(_w(pads[1]), _w(pads[2]))
+		r_pad(_w(pads[2]), _w(Vector3(-3.5, 6.0, -39.8)))
+	else:
+		r_walk(_w(Vector3(5.0, 0, -8.0)))
+		r_wallrun(_w(Vector3(5.0, 0, -14.6)), _w(Vector3(6.2, 1.4, -19.1)), _w(Vector3(6.2, 1.4, -22.0)), _w(Vector3(2.8, 5.5, -25.9)))
+		r_wallrun(Vector3.ZERO, _w(Vector3(2.8, 5.5, -25.9)), _w(Vector3(2.8, 5.5, -31.9)), _w(Vector3(5.0, 6.0, -40.0)), true, true)
+	_hop(merge, end, Vector3(0, 0, 1.8))
+	r_checkpoint()
+	_amb(_w(Vector3(0, 8.0, -24.0)), GardensFx.petals(_ext(Vector3(10, 3, 16)), 40))
+	_amb(_w(Vector3(0, 4.0, -24.0)), GardensFx.pollen(_ext(Vector3(9, 4, 14)), 36))
+	_cue_near(_w(end["c"] + Vector3(0, 0.2, 0)), 2.4, GardensFx.petal_fountain())
+	return end["c"]
+
+
+# ---- stage 15: The Potting Press - crushers ----------------------------------------------------
+# A walkway under three slamming soil presses (read the rhythm, and there is a gap to hop between
+# them), then a 3.4 m wall whose lip sits UNDER a fourth press - mantle while it is up and get out
+# from under it. The last press is the lift: jump on its back while it rests, ride it up, step off
+# onto the high deck. Shortcut: four 1 m pot tiles up the right side (90 % jumps), landing next to
+# the wall press.
+func _press_clear(c: Crusher, a: float, b: float) -> bool:
+	return c.is_clear_for(Game.course_time + a, b - a)
 
 
 func _stage_15_press() -> Vector3:
-	return Vector3.ZERO
+	_blk(Vector3(0, 0, -7.75), 2.6, 8.5, "alt", 0.8)
+	_blk(Vector3(0, 0, -20.5), 2.6, 11.0, "alt", 0.8)
+	var pr: Array[Crusher] = []
+	var spots: Array[Vector3] = [Vector3(0, 0, -7.5), Vector3(0, 0, -18.0), Vector3(0, 0, -23.0), Vector3(0, 3.4, -28.6)]
+	var phases: Array[float] = [0.0, 0.35, 0.15, 0.6]
+	for i: int in 4:
+		pr.append(kit.crusher(_w(spots[i]), Vector3(2.8, 1.6, 2.8), 3.2, 2.8, phases[i]))
+	_ledge(Vector3(0, 3.4, -29.5), Vector3(3.0, 6.0, 5.0), "alt")
+	_blk(Vector3(0, 3.4, -36.0), 4.0, 8.0, "alt", 1.0)
+	var lift: Crusher = kit.crusher(_w(Vector3(0, 3.4, -36.5)), Vector3(2.6, 1.6, 2.6), 3.2, 3.2, 0.0)
+	kit.plat(_w(Vector3(0, 8.8, -42.3)), Vector3(5.0, 1.0, 5.0), "main", 0.3, _yaw)
+	var high: Dictionary = _area(Vector3(0, 8.8, -42.3), 2.5, 2.5)
+	var end: Dictionary = _lawn(Vector3(0, 9.8, -51.5), 7.0, true, -90.0)
+	kit.pillar(_w(Vector3(0, -0.8, -15.0)), 1.0, 14.0)
+	kit.pillar(_w(Vector3(0, 2.4, -36.0)), 1.4, 16.0)
+	# the pot tiles (shortcut)
+	for v: Vector3 in [Vector3(3.0, 1.0, -8.5), Vector3(3.0, 2.2, -13.8), Vector3(3.0, 3.4, -19.2), Vector3(2.4, 3.4, -24.5)]:
+		_blk(v, 1.0, 1.0, "accent", 0.5)
+		var pot := Look.cylinder(0.45, 0.8, Look.flat(Color(0.78, 0.42, 0.28), 0.8), Vector3.ZERO, 0.32, 10)
+		pot.position = _w(v + Vector3(0, -0.9, 0))
+		add_child(pot)
+	# potting-shed dressing: sacks, pots, a potting bench along the walkway
+	for i: int in 5:
+		var z: float = -5.0 - 5.0 * float(i)
+		var pot2 := Look.cylinder(0.5, 0.9, Look.flat(Color(0.8, 0.45, 0.3), 0.8), Vector3.ZERO, 0.36, 10)
+		pot2.position = _w(Vector3(-2.6, -0.2, z))
+		add_child(pot2)
+		kit.bush(_w(Vector3(-2.6, 0.25, z)), 0.8)
+	# soil bursts when each press slams
+	for c: Crusher in pr + [lift]:
+		var cc: Crusher = c
+		_cue(cc.global_position - Vector3(0, cc.size.y * 0.5 + cc.gap_at(Game.course_time), 0) + Vector3(0, 0.1, 0), GardensFx.soil(),
+				0.0, func() -> bool: return cc.gap_at(Game.course_time) < 0.05, 0.6)
+	# route
+	var p0: Crusher = pr[0]
+	var p1: Crusher = pr[1]
+	var p2: Crusher = pr[2]
+	var p3: Crusher = pr[3]
+	r_walk(_w(Vector3(0, 0, -4.3)))
+	r_until(func() -> bool: return _press_clear(p0, 0.0, 1.0))
+	r_walk(_w(Vector3(0, 0, -11.0)))
+	r_until(func() -> bool: return _press_clear(p1, 0.3, 1.3) and _press_clear(p2, 0.6, 1.8))
+	r_jump(_w(Vector3(0, 0, -11.65)), _w(Vector3(0, 0, -16.0)))
+	r_walk(_w(Vector3(0, 0, -25.4)))
+	r_until(func() -> bool: return _press_clear(p3, 0.0, 1.6))
+	r_mantle(_w(Vector3(0, 0, -25.6)), _w(Vector3(0, 3.4, -28.2)))
+	r_walk(_w(Vector3(0, 3.4, -33.0)))
+	r_until(func() -> bool:
+		var u: float = fposmod(Game.course_time / lift.period + lift.phase, 1.0)
+		return u >= 0.56 and u < 0.64)
+	route.append({"kind": "b_jump", "from": _w(Vector3(0, 3.4, -33.3)), "to": _w(Vector3(0, 5.0, -36.5)), "hold": true})
+	r_until(func() -> bool:
+		var u: float = fposmod(Game.course_time / lift.period + lift.phase, 1.0)
+		return u >= 0.02 and u < 0.3)
+	route.append({"kind": "b_jump", "from": _w(Vector3(0, 8.2, -36.5)), "to": _w(Vector3(0, 8.8, -41.8)), "hold": true})
+	_hop(high, end, Vector3(0, 0, 1.8))
+	r_checkpoint()
+	_amb(_w(Vector3(0, 3.0, -20.0)), GardensFx.pollen(_ext(Vector3(5, 3, 14)), 30))
+	_cue_near(_w(end["c"] + Vector3(0, 0.2, 0)), 2.4, GardensFx.petal_fountain())
+	return end["c"]
 
 
 func _stage_16_chimney() -> Vector3:
