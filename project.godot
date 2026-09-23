@@ -56,3 +56,7 @@ common/physics_interpolation=true
 lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
 anti_aliasing/quality/msaa_3d=2
 environment/defaults/default_clear_color=Color(0.07, 0.09, 0.14, 1)
+
+[network]
+
+relay_url="wss://jump-circuit-relay.jumpcircuit.workers.dev"

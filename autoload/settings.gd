@@ -23,7 +23,7 @@ var vsync: bool = true
 var timer_mode: String = "auto"
 var player_name: String = "Runner"
 var color_index: int = 0
-var last_ip: String = "127.0.0.1"
+var last_room_code: String = ""
 
 var _env: Environment
 var _sun: DirectionalLight3D
@@ -114,7 +114,7 @@ func toggle_fullscreen() -> void:
 
 func _props() -> Array[String]:
 	return ["mouse_sensitivity", "invert_y", "fov", "master_volume", "sfx_volume", "music_volume",
-		"quality", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_ip"]
+		"quality", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_room_code"]
 
 
 func my_color() -> Color:

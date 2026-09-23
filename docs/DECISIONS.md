@@ -17,7 +17,8 @@
 - Kinematic obstacles are pure functions of `Game.course_time` -> repeatable, no reset needed, identical for all racers.
 - Tilt boards: real Jolt RigidBody3D (axis-locked, spring/damper, hard stop) receives rider weight/impact; a kinematic skin mirrors it so footing is stable.
 - Bounce pads are flat and flush (run-on from any side); direction shown by chevrons, arc dots and a launch hoop.
-- Multiplayer: ENet, client-simulated racers, ghost poses at 30 Hz, shared clock for obstacles, no racer collisions.
+- Multiplayer: room-code WebSocket relay for players, client-simulated racers, ghost poses at 30 Hz,
+  shared clock for obstacles, no racer collisions. ENet remains for localhost integration harnesses.
 
 ## Verification
 - `tests/run_tests.tscn` headless: movement metrics, mechanics, level validation, RouteBot playthroughs, checkpoint/respawn/reset, save round trip.

@@ -37,19 +37,20 @@ kept in the file as `legacy_best` but no longer shown (`SaveData.LAYOUT_REV`).
 
 Title -> **Race Friends**.
 
-* One player presses **Host a Race**. The lobby shows the LAN address(es) to share, and tries UPnP to
-  open UDP port **24565** for internet play (the result is shown in the lobby).
-* Everyone else types the host address (`address` or `address:port`) and presses **Join** or Enter.
-  Newcomers are given a colour nobody else in the lobby is wearing.
-* The host picks a course and presses **Start Race**: everyone loads in, gets a synchronized
-  3-2-1-GO, and races. You see the other racers live (name tags, their colours) but never collide,
-  so nobody can block or grief a jump. Standings (checkpoints reached, finish times) are top right.
-* When you finish you keep watching the standings; the host sends everyone back to the lobby for
-  the next course (from the results panel, or any time from the Esc menu).
+* One player presses **Host a Race** and shares the 8-character room code shown in the lobby.
+* Everyone else enters that code and presses **Join** or Enter. No router changes, VPN, or separate
+  networking app is needed.
+* Newcomers are given a colour nobody else in the lobby is wearing.
+* The host picks a course and presses **Start Race**: everyone loads in, gets a synchronized 3-2-1-GO,
+  and races. You see the other racers live (name tags, their colours) but never collide, so nobody can
+  block or grief a jump. Standings (checkpoints reached, finish times) are top right.
+* When you finish you keep watching the standings; the host sends everyone back to the lobby for the
+  next course (from the results panel, or any time from the Esc menu).
 
-Internet play without touching the router: if UPnP is unavailable, either forward UDP 24565 to the
-host PC, or put everyone on a virtual LAN (Tailscale, ZeroTier, Radmin VPN...) and use that address.
-Windows will ask to allow the game through the firewall the first time you host - allow it.
+Online rooms use a Cloudflare Durable Object WebSocket relay. Configure and deploy it using
+[`docs/RELAY.md`](docs/RELAY.md); the game needs its Worker URL in Project Settings under
+`network/relay_url`. The WebSocket carries room, roster, race and racer-pose messages; each player
+still simulates their own movement locally.
 
 How it works: each racer simulates their own character locally (zero input lag); poses are sent
 30 times a second and smoothed; moving/rotating obstacles run off a clock synchronized with the
@@ -100,7 +101,7 @@ reset, collapse/reset), validates every level's required jumps against the measu
 plays every level start-to-finish with the RouteBot, and checks checkpoint/fail/respawn/reset,
 save round-trips and the final win.
 
-Multiplayer (two processes, localhost):
+Multiplayer localhost integration harness (direct ENet, for regression checks):
 
 ```
 start /b tools\Godot_v4.7.1-stable_win64.exe --headless --path . res://tests/mp_test.tscn -- --role=host

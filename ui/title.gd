@@ -14,7 +14,6 @@ var _status: Label
 var _roster_box: VBoxContainer
 var _lobby_level: int = 0
 var _start_button: Button
-var _upnp_label: Label
 ## Control a screen builder wants focused first (keyboard / gamepad start point).
 var _focus_pref: Control
 ## Screen shown before the current one: main re-focuses the button that opened it.
@@ -41,9 +40,6 @@ func _ready() -> void:
 	Net.connection_failed.connect(func(reason: String) -> void:
 		Game.title_message = reason
 		show_screen("race"))
-	Net.upnp_result.connect(func(text: String) -> void:
-		if _upnp_label != null and is_instance_valid(_upnp_label):
-			_upnp_label.text = text)
 	# the host's course picker starts on the last raced course (rematch = one click)
 	if Net.race_level >= 0:
 		_lobby_level = clampi(Net.race_level, 0, Game.LEVELS.size() - 1)
@@ -115,7 +111,6 @@ func show_screen(id: String) -> void:
 	_roster_box = null
 	_status = null
 	_start_button = null
-	_upnp_label = null
 	_focus_pref = null
 	_prev_screen = Game.title_screen
 	Game.title_screen = id
@@ -338,53 +333,35 @@ func _identity_row() -> Control:
 func _race_screen() -> Control:
 	var box: VBoxContainer = UiKit.vbox(12)
 	box.add_child(UiKit.label("RACE FRIENDS", 36, Color.WHITE))
-	box.add_child(UiKit.label("Up to 8 players. Everyone runs the same course at once;\nyou see each other live but never collide.", 17, UiKit.SOFT))
+	box.add_child(UiKit.label("Up to 8 players. Share a room code to race;\nno router setup or VPN needed.", 17, UiKit.SOFT))
 	box.add_child(_identity_row())
 	var host_button: Button = UiKit.button("Host a Race", func() -> void:
-		var err: Error = Net.host()
+		var err: Error = Net.host_room()
 		if err != OK:
-			_set_status("Could not open port %d (is another host running?)." % Net.PORT), 440)
+			_set_status("Could not start the relay connection. Check network/relay_url; see docs/RELAY.md."), 440)
 	box.add_child(host_button)
 	var join_row: HBoxContainer = UiKit.hbox(10)
-	var ip := LineEdit.new()
-	ip.text = Settings.last_ip
-	ip.placeholder_text = "Host address"
-	ip.custom_minimum_size = Vector2(250, 48)
-	# keep what was typed across rebuilds (Back, a failed join); Join saves it to disk
-	ip.text_changed.connect(func(t: String) -> void: Settings.last_ip = t.strip_edges())
-	join_row.add_child(ip)
+	var room_input := LineEdit.new()
+	room_input.text = Settings.last_room_code
+	room_input.placeholder_text = "8-character room code"
+	room_input.custom_minimum_size = Vector2(250, 48)
+	room_input.max_length = 12
+	# Keep what was typed across rebuilds (Back, a failed join).
+	room_input.text_changed.connect(func(t: String) -> void: Settings.last_room_code = t.strip_edges().to_upper())
+	join_row.add_child(room_input)
 	var do_join := func() -> void:
-		var raw: String = ip.text.strip_edges()
-		if raw == "":
-			_set_status("Type the host's address first.")
+		var code: String = Net._clean_room_code(room_input.text)
+		if not Net._valid_room_code(code):
+			_set_status("Enter the 8-character room code from the host.")
 			return
-		# accept "address:port" (and "[ipv6]:port"); a bare IPv6 address has several ':'
-		var host_addr: String = raw
-		var port: int = Net.PORT
-		var port_text: String = ""
-		if raw.begins_with("[") and raw.contains("]:"):
-			host_addr = raw.substr(1, raw.find("]:") - 1)
-			port_text = raw.substr(raw.find("]:") + 2)
-		elif raw.count(":") == 1:
-			host_addr = raw.get_slice(":", 0).strip_edges()
-			port_text = raw.get_slice(":", 1).strip_edges()
-		if port_text != "":
-			if not port_text.is_valid_int() or int(port_text) < 1 or int(port_text) > 65535:
-				_set_status("That port does not look right.")
-				return
-			port = int(port_text)
-		host_addr = host_addr.trim_prefix("[").trim_suffix("]")
-		if host_addr == "":
-			_set_status("Type the host's address first.")
-			return
-		Settings.last_ip = raw
+		Settings.last_room_code = code
 		Settings.save_settings()
-		_set_status("Connecting to %s ...  (Back cancels)" % raw)
-		var err: Error = Net.join(host_addr, port)
+		_set_status("Joining room %s ...  (Back cancels)" % code)
+		var err: Error = Net.join_room(code)
 		if err != OK:
-			_set_status("That address does not look right.")
+			_set_status("Could not start the relay connection. Check network/relay_url; see docs/RELAY.md.")
 	join_row.add_child(UiKit.button("Join", do_join, 180))
-	ip.text_submitted.connect(func(_t: String) -> void: do_join.call())
+	room_input.text_submitted.connect(func(_t: String) -> void: do_join.call())
 	box.add_child(join_row)
 	_status = UiKit.label(Game.title_message, 17, Color(1, 0.7, 0.55))
 	Game.title_message = ""
@@ -407,16 +384,14 @@ func _lobby_screen() -> Control:
 	var box: VBoxContainer = UiKit.vbox(10)
 	box.add_child(UiKit.label("RACE LOBBY", 36, Color.WHITE))
 	if Net.is_host():
-		var addrs: Array[String] = Net.local_addresses()
-		var lan: Label = UiKit.label("Friends on your network join:  %s" % ("  or  ".join(addrs) if not addrs.is_empty() else "(no LAN address found)"), 17, UiKit.TEAL)
-		lan.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART   # several adapters (VPNs, VMs) make a long line
-		lan.custom_minimum_size = Vector2(520, 0)
-		box.add_child(lan)
-		_upnp_label = UiKit.label(Net.upnp_text if Net.upnp_text != "" else "Checking for automatic internet port forwarding (UDP %d)..." % Net.PORT, 15, UiKit.SOFT)
-		_upnp_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		_upnp_label.custom_minimum_size = Vector2(520, 0)
-		box.add_child(_upnp_label)
-		Net.try_upnp()   # once per session; a no-op once the result is cached
+		var code_row: HBoxContainer = UiKit.hbox(10)
+		code_row.add_child(UiKit.label("ROOM CODE   %s" % Net.room_code, 23, UiKit.TEAL))
+		var copy_button: Button = UiKit.button("Copy", func() -> void:
+			DisplayServer.clipboard_set(Net.room_code), 120)
+		copy_button.pressed.connect(func() -> void: copy_button.text = "Copied!")
+		code_row.add_child(copy_button)
+		box.add_child(code_row)
+		box.add_child(UiKit.label("Send this code to your friends. They enter it under Race Friends.", 15, UiKit.SOFT))
 	else:
 		box.add_child(UiKit.label("Connected. The host picks the course and starts the race.", 17, UiKit.TEAL))
 	box.add_child(_identity_row())

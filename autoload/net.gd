@@ -1,5 +1,5 @@
 extends Node
-## Multiplayer racing over ENet (LAN, VPN or a forwarded UDP port).
+## Multiplayer racing over a room-code WebSocket relay, with ENet retained for local/dev tests.
 ## Model: every racer simulates their own character locally - movement stays
 ## lag-free and nobody's jump depends on someone else's physics. Peers exchange
 ## lightweight pose snapshots; kinematic obstacles are driven by a shared clock
@@ -18,8 +18,8 @@ signal upnp_result(text: String)
 
 const PORT: int = 24565
 const MAX_PLAYERS: int = 8
-## A join still unanswered after this many seconds is reported as unreachable
-## (ENet on its own gives up only after ~30 s).
+const ROOM_CODE_ALPHABET: String = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+## A relay join still unanswered after this many seconds is reported as unreachable.
 const CONNECT_TIMEOUT: float = 10.0
 
 var active: bool = false
@@ -29,13 +29,15 @@ var roster: Dictionary = {}
 var race_level: int = -1
 var race_start_time: float = 0.0
 var in_race: bool = false
-## Off in automated tests: never touch the real router.
+## Kept for compatibility with the existing local integration harness; room-code play does not use UPnP.
 var upnp_enabled: bool = true
-## Cached UPnP outcome for the current hosting session ("" = not known yet).
+## Compatibility text for older menu code.
 var upnp_text: String = ""
 ## The player's own colour while the host has them wearing another one (-1 = none).
 ## Settings saves this instead of the session colour, and it returns when the session ends.
 var preferred_color: int = -1
+## Share this short code with friends. The host creates it and the relay routes its sockets.
+var room_code: String = ""
 
 var _clock_offset: float = 0.0
 var _best_rtt: float = 999.0
@@ -44,8 +46,12 @@ var _pings_left: int = 0
 var _connect_left: float = -1.0
 var _join_port: int = PORT
 var _pose_seq: int = 0
-var _upnp_thread: Thread
-var _upnp: UPNP
+var _relay_mode: bool = false
+var _relay_host: bool = false
+var _relay_peer_id: int = 1
+var _relay_ready: bool = false
+var _relay_socket: WebSocketPeer
+var _relay_connect_left: float = -1.0
 
 
 func _ready() -> void:
@@ -61,11 +67,11 @@ func _ready() -> void:
 
 
 func my_id() -> int:
-	return multiplayer.get_unique_id() if active else 1
+	return _relay_peer_id if _relay_mode else (multiplayer.get_unique_id() if active else 1)
 
 
 func is_host() -> bool:
-	return active and multiplayer.is_server()
+	return _relay_host if _relay_mode else (active and multiplayer.is_server())
 
 
 func _local_time() -> float:
@@ -108,15 +114,86 @@ func join(address: String, port: int = PORT) -> Error:
 	return OK
 
 
+## Opens a room through the hosted WebSocket relay. This works without router or VPN setup.
+func host_room() -> Error:
+	leave()
+	var code := _new_room_code()
+	var url := _relay_url(code, "host")
+	if url == "":
+		return FAILED
+	room_code = code
+	return _start_relay(url)
+
+
+## Joins a room created by `host_room()` using its short share code.
+func join_room(code: String) -> Error:
+	leave()
+	var clean := _clean_room_code(code)
+	if not _valid_room_code(clean):
+		return ERR_INVALID_PARAMETER
+	var url := _relay_url(clean, "join")
+	if url == "":
+		return FAILED
+	room_code = clean
+	return _start_relay(url)
+
+
+func _start_relay(url: String) -> Error:
+	_relay_socket = WebSocketPeer.new()
+	var err: Error = _relay_socket.connect_to_url(url)
+	if err != OK:
+		_relay_socket = null
+		return err
+	_relay_mode = true
+	_relay_host = false
+	_relay_peer_id = 1
+	_relay_ready = false
+	_relay_connect_left = CONNECT_TIMEOUT
+	active = true
+	return OK
+
+
+func _relay_url(code: String, role: String) -> String:
+	var base := str(ProjectSettings.get_setting("network/relay_url", "")).strip_edges().trim_suffix("/")
+	if base == "" or base.contains("YOUR_SUBDOMAIN"):
+		return ""
+	return "%s/ws?room=%s&role=%s" % [base, code.uri_encode(), role]
+
+
+func _new_room_code() -> String:
+	var code := ""
+	for _i: int in 8:
+		code += ROOM_CODE_ALPHABET[randi() % ROOM_CODE_ALPHABET.length()]
+	return code
+
+
+func _clean_room_code(raw: String) -> String:
+	return raw.strip_edges().to_upper().replace(" ", "").replace("-", "")
+
+
+func _valid_room_code(code: String) -> bool:
+	if code.length() != 8:
+		return false
+	for i: int in code.length():
+		if not ROOM_CODE_ALPHABET.contains(code.substr(i, 1)):
+			return false
+	return true
+
+
 func leave() -> void:
 	if active:
 		_shutdown()
 
 
 func _shutdown() -> void:
-	if _upnp != null:
-		_upnp.delete_port_mapping(PORT, "UDP")
-		_upnp = null
+	if _relay_socket != null and _relay_socket.get_ready_state() != WebSocketPeer.STATE_CLOSED:
+		_relay_socket.close(1000, "Leaving session")
+	_relay_socket = null
+	_relay_mode = false
+	_relay_host = false
+	_relay_peer_id = 1
+	_relay_ready = false
+	_relay_connect_left = -1.0
 	if multiplayer.multiplayer_peer != null:
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
@@ -128,6 +205,7 @@ func _shutdown() -> void:
 	_connect_left = -1.0
 	_clock_offset = 0.0
 	upnp_text = ""
+	room_code = ""
 	if preferred_color >= 0:
 		Settings.color_index = preferred_color
 		preferred_color = -1
@@ -161,6 +239,9 @@ func _on_peer_disconnected(id: int) -> void:
 
 
 func _process(dt: float) -> void:
+	if _relay_mode:
+		_process_relay(dt)
+		return
 	if _connect_left > 0.0 and active and multiplayer.multiplayer_peer != null \
 			and multiplayer.multiplayer_peer.get_connection_status() == MultiplayerPeer.CONNECTION_CONNECTING:
 		_connect_left -= dt
@@ -178,19 +259,193 @@ func _process(dt: float) -> void:
 				_pings_left = 8   # no pong came back yet: keep trying rather than race on a zero offset
 
 
+func _process_relay(dt: float) -> void:
+	if _relay_socket == null:
+		return
+	_relay_socket.poll()
+	var state := _relay_socket.get_ready_state()
+	if state == WebSocketPeer.STATE_CONNECTING:
+		_relay_connect_left -= dt
+		if _relay_connect_left <= 0.0:
+			_shutdown()
+			connection_failed.emit("Could not reach the Jump Circuit relay. Check your internet connection and relay URL.")
+		return
+	if state == WebSocketPeer.STATE_OPEN:
+		_relay_connect_left = -1.0
+		while _relay_socket.get_available_packet_count() > 0:
+			var message := _relay_socket.get_packet().get_string_from_utf8()
+			_handle_relay_packet(message)
+			if not _relay_mode or _relay_socket == null:
+				return
+		if _relay_ready and not is_host() and _pings_left > 0:
+			_ping_timer -= dt
+			if _ping_timer <= 0.0:
+				_ping_timer = 0.25
+				_pings_left -= 1
+				_relay_send_event("ping", {"client_time": _local_time()}, 1)
+				if _pings_left == 0 and _best_rtt >= 999.0:
+					_pings_left = 8
+		return
+	if state == WebSocketPeer.STATE_CLOSED and _relay_mode:
+		var reason := _relay_socket.get_close_reason()
+		var was_ready := _relay_ready
+		_shutdown()
+		if was_ready:
+			left_session.emit(reason if reason != "" else "The relay connection closed.")
+		else:
+			connection_failed.emit(reason if reason != "" else "Could not connect to the room. Check the code and try again.")
+
+
+func _handle_relay_packet(message: String) -> void:
+	var decoded: Variant = JSON.parse_string(message)
+	if typeof(decoded) != TYPE_DICTIONARY:
+		return
+	var packet: Dictionary = decoded
+	match str(packet.get("type", "")):
+		"welcome":
+			if _relay_ready:
+				return
+			_relay_peer_id = int(packet.get("id", 0))
+			if _relay_peer_id < 1 or _relay_peer_id > MAX_PLAYERS:
+				_shutdown()
+				connection_failed.emit("The relay returned an invalid player id.")
+				return
+			_relay_host = _relay_peer_id == 1
+			_relay_ready = true
+			_relay_connect_left = -1.0
+			room_code = str(packet.get("room", room_code))
+			_clock_offset = 0.0
+			if _relay_host:
+				roster = {1: _my_entry()}
+				roster_changed.emit()
+				joined_lobby.emit()
+			else:
+				_begin_clock_sync()
+				_relay_send_event("register", {"name": Settings.player_name, "color": Settings.color_index}, 1)
+		"error":
+			var error_reason := str(packet.get("reason", "The relay rejected the room connection."))
+			_shutdown()
+			connection_failed.emit(error_reason)
+		"closed":
+			var closed_reason := str(packet.get("reason", "The host closed the session."))
+			_shutdown()
+			left_session.emit(closed_reason)
+		"peer_left":
+			if is_host():
+				var id := int(packet.get("id", 0))
+				if roster.erase(id):
+					roster_changed.emit()
+					_broadcast_roster()
+		"event":
+			_handle_relay_event(int(packet.get("from", 0)), str(packet.get("event", "")), packet.get("data", {}))
+
+
+func _handle_relay_event(from_id: int, event: String, raw_data: Variant) -> void:
+	if typeof(raw_data) != TYPE_DICTIONARY:
+		return
+	var data: Dictionary = raw_data
+	match event:
+		"register":
+			if is_host():
+				_register_player(from_id, str(data.get("name", "Runner")), int(data.get("color", 0)))
+		"roster":
+			if not is_host():
+				_sync_roster(_roster_from_wire(data.get("players", [])))
+		"kick":
+			if from_id == 1 and not is_host():
+				_shutdown()
+				connection_failed.emit(str(data.get("reason", "The host removed you from the race.")))
+		"ping":
+			if is_host():
+				_relay_send_event("pong", {
+					"client_time": float(data.get("client_time", 0.0)),
+					"server_time": _local_time(),
+				}, from_id)
+		"pong":
+			if from_id == 1:
+				_apply_pong(float(data.get("client_time", 0.0)), float(data.get("server_time", 0.0)))
+		"start_race":
+			if from_id == 1:
+				_start_race(int(data.get("level_index", -1)), float(data.get("start_time", 0.0)))
+		"return_lobby":
+			if from_id == 1:
+				_return_to_lobby()
+		"pose":
+			var p: Array = data.get("pos", [])
+			var v: Array = data.get("vel", [])
+			if p.size() == 3 and v.size() == 3:
+				_emit_pose(from_id, Vector3(float(p[0]), float(p[1]), float(p[2])),
+					Vector3(float(v[0]), float(v[1]), float(v[2])), bool(data.get("grounded", false)), int(data.get("seq", 0)))
+		"checkpoint":
+			_apply_checkpoint(from_id, int(data.get("index", 0)), float(data.get("at", 0.0)))
+		"finished":
+			_apply_finished(from_id, float(data.get("time", 0.0)))
+
+
+func _relay_send_event(event: String, data: Dictionary, to_id: int = 0) -> void:
+	if _relay_socket == null or _relay_socket.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	var packet: Dictionary = {"type": "event", "event": event, "data": data}
+	if to_id > 0:
+		packet["to"] = to_id
+	_relay_socket.send_text(JSON.stringify(packet))
+
+
+func _broadcast_roster() -> void:
+	if _relay_mode:
+		_relay_send_event("roster", {"players": _roster_to_wire()})
+	else:
+		_sync_roster.rpc(roster)
+
+
+func _roster_to_wire() -> Array[Dictionary]:
+	var players: Array[Dictionary] = []
+	var ids: Array = roster.keys()
+	ids.sort()
+	for id: int in ids:
+		players.append({"id": id, "entry": roster[id]})
+	return players
+
+
+func _roster_from_wire(raw_players: Variant) -> Dictionary:
+	var result: Dictionary = {}
+	if typeof(raw_players) != TYPE_ARRAY:
+		return result
+	for raw_player: Variant in raw_players:
+		if typeof(raw_player) != TYPE_DICTIONARY:
+			continue
+		var player: Dictionary = raw_player
+		var id := int(player.get("id", 0))
+		var entry: Variant = player.get("entry", {})
+		if id > 0 and typeof(entry) == TYPE_DICTIONARY:
+			result[id] = entry
+	return result
+
+
 # ---- lobby RPCs -----------------------------------------------------------------
 
 @rpc("any_peer", "call_remote", "reliable")
 func _register(player_name: String, color: int) -> void:
+	_register_player(multiplayer.get_remote_sender_id(), player_name, color)
+
+
+func _register_player(id: int, player_name: String, color: int) -> void:
 	if not is_host():
 		return
-	var id: int = multiplayer.get_remote_sender_id()
 	if in_race and not roster.has(id):
-		_kick.rpc_id(id, "A race is in progress - try again in a moment.")
+		var race_reason := "A race is in progress - try again in a moment."
+		if _relay_mode:
+			_relay_send_event("kick", {"reason": race_reason}, id)
+		else:
+			_kick.rpc_id(id, race_reason)
 		return
 	# (existing racers re-register on every name / colour change - only newcomers can be turned away)
 	if not roster.has(id) and roster.size() >= MAX_PLAYERS:
-		_kick.rpc_id(id, "That race is full (%d/%d)." % [roster.size(), MAX_PLAYERS])
+		var full_reason := "That race is full (%d/%d)." % [roster.size(), MAX_PLAYERS]
+		if _relay_mode:
+			_relay_send_event("kick", {"reason": full_reason}, id)
+		else:
+			_kick.rpc_id(id, full_reason)
 		return
 	var joining: bool = not roster.has(id)
 	var entry: Dictionary = roster.get(id, {"cp": 0, "finished": -1.0})
@@ -198,7 +453,7 @@ func _register(player_name: String, color: int) -> void:
 	# a newcomer gets a colour nobody else wears; later explicit picks are honoured
 	entry["color"] = _free_color(id, color) if joining else posmod(color, Settings.RACER_COLORS.size())
 	roster[id] = entry
-	_sync_roster.rpc(roster)
+	_broadcast_roster()
 	roster_changed.emit()
 
 
@@ -261,6 +516,10 @@ func _ping(client_time: float) -> void:
 
 @rpc("authority", "call_remote", "unreliable")
 func _pong(client_time: float, server_time: float) -> void:
+	_apply_pong(client_time, server_time)
+
+
+func _apply_pong(client_time: float, server_time: float) -> void:
 	var rtt: float = _local_time() - client_time
 	if rtt < _best_rtt:
 		_best_rtt = rtt
@@ -268,6 +527,18 @@ func _pong(client_time: float, server_time: float) -> void:
 
 
 func update_identity() -> void:
+	if _relay_mode:
+		if not _relay_ready:
+			return
+		if is_host():
+			if roster.has(1):
+				roster[1]["name"] = Settings.player_name
+				roster[1]["color"] = Settings.color_index
+				_broadcast_roster()
+				roster_changed.emit()
+		else:
+			_relay_send_event("register", {"name": Settings.player_name, "color": Settings.color_index}, 1)
+		return
 	# still connecting: nothing to send yet (_on_connected registers the current identity)
 	if not active or multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
 		return
@@ -283,7 +554,11 @@ func update_identity() -> void:
 # ---- race flow --------------------------------------------------------------------
 
 func host_start_race(level_index: int, countdown: float = 4.0) -> void:
-	if is_host():
+	if _relay_mode and is_host() and _relay_ready:
+		var start_time := now() + countdown
+		_start_race(level_index, start_time)
+		_relay_send_event("start_race", {"level_index": level_index, "start_time": start_time})
+	elif is_host():
 		_start_race.rpc(level_index, now() + countdown)
 
 
@@ -302,7 +577,10 @@ func _start_race(level_index: int, start_time: float) -> void:
 
 
 func host_return_to_lobby() -> void:
-	if is_host():
+	if _relay_mode and is_host() and _relay_ready:
+		_return_to_lobby()
+		_relay_send_event("return_lobby", {})
+	elif is_host():
 		_return_to_lobby.rpc()
 
 
@@ -311,12 +589,23 @@ func _return_to_lobby() -> void:
 	if not is_host() and not roster.has(my_id()):
 		return
 	in_race = false
-	if active and not is_host():
+	if active and not is_host() and not _relay_mode:
 		_begin_clock_sync(0.5)   # re-measure between races (corrects crystal drift) while no course clock runs
+	elif active and not is_host() and _relay_mode:
+		_begin_clock_sync(0.5)
 	lobby_requested.emit()
 
 
 func send_pose(pos: Vector3, vel: Vector3, grounded: bool) -> void:
+	if _relay_mode:
+		if active and roster.size() > 1:
+			_relay_send_event("pose", {
+				"pos": [pos.x, pos.y, pos.z],
+				"vel": [vel.x, vel.y, vel.z],
+				"grounded": grounded,
+				"seq": _pose_seq,
+			})
+		return
 	if active and multiplayer.get_peers().size() > 0:
 		_pose.rpc(pos, vel, grounded, _pose_seq)
 
@@ -329,11 +618,20 @@ func note_teleport() -> void:
 
 @rpc("any_peer", "call_remote", "unreliable_ordered")
 func _pose(pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
-	racer_pose.emit(multiplayer.get_remote_sender_id(), pos, vel, grounded, seq)
+	_emit_pose(multiplayer.get_remote_sender_id(), pos, vel, grounded, seq)
+
+
+func _emit_pose(id: int, pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
+	if roster.has(id):
+		racer_pose.emit(id, pos, vel, grounded, seq)
 
 
 func send_checkpoint(index: int) -> void:
-	if active:
+	if _relay_mode and active:
+		var at := now()
+		_apply_checkpoint(my_id(), index, at)
+		_relay_send_event("checkpoint", {"index": index, "at": at})
+	elif active:
 		_checkpoint.rpc(index, now())
 
 
@@ -341,7 +639,10 @@ func send_checkpoint(index: int) -> void:
 ## let every peer rank itself first in a near-tie.
 @rpc("any_peer", "call_local", "reliable")
 func _checkpoint(index: int, at: float) -> void:
-	var id: int = multiplayer.get_remote_sender_id()
+	_apply_checkpoint(multiplayer.get_remote_sender_id(), index, at)
+
+
+func _apply_checkpoint(id: int, index: int, at: float) -> void:
 	if roster.has(id) and index > int(roster[id]["cp"]):
 		roster[id]["cp"] = index
 		roster[id]["cp_at"] = at
@@ -349,13 +650,19 @@ func _checkpoint(index: int, at: float) -> void:
 
 
 func send_finished(time: float) -> void:
-	if active:
+	if _relay_mode and active:
+		_apply_finished(my_id(), time)
+		_relay_send_event("finished", {"time": time})
+	elif active:
 		_finished.rpc(time)
 
 
 @rpc("any_peer", "call_local", "reliable")
 func _finished(time: float) -> void:
-	var id: int = multiplayer.get_remote_sender_id()
+	_apply_finished(multiplayer.get_remote_sender_id(), time)
+
+
+func _apply_finished(id: int, time: float) -> void:
 	if roster.has(id) and float(roster[id]["finished"]) < 0.0:
 		roster[id]["finished"] = time
 		roster_changed.emit()
@@ -392,65 +699,9 @@ func all_finished() -> bool:
 	return not roster.is_empty()
 
 
-# ---- helpers for the lobby screen ---------------------------------------------------
+# ---- router-free lobby ------------------------------------------------------------
 
-func local_addresses() -> Array[String]:
-	var out: Array[String] = []
-	for addr: String in IP.get_local_addresses():
-		if addr.contains(":") or addr.begins_with("127.") or addr.begins_with("169.254."):
-			continue
-		out.append(addr)
-	return out
-
-
-## Best-effort automatic port forward so friends can join over the internet.
-## Runs once per hosting session; the outcome is cached in upnp_text.
+## Retained as a no-op for older menu code; room-code sessions need no router mapping.
 func try_upnp() -> void:
-	if not upnp_enabled:
-		upnp_result.emit("Automatic port forwarding is off (UDP %d)." % PORT)
-		return
-	if _upnp_thread != null or upnp_text != "":
-		return
-	_upnp_thread = Thread.new()
-	_upnp_thread.start(_upnp_worker)
-
-
-## Worker thread: writes no Net state. Returns [text, UPNP-with-a-mapping or null],
-## which the main thread collects through wait_to_finish().
-func _upnp_worker() -> Array:
-	var u := UPNP.new()
-	var text: String = "No automatic port forwarding: forward UDP %d on the router, or share a LAN/VPN address." % PORT
-	var mapped: UPNP = null
-	if u.discover(2000, 2, "InternetGatewayDevice") == UPNP.UPNP_RESULT_SUCCESS and u.get_device_count() > 0 and u.get_gateway() != null and u.get_gateway().is_valid_gateway():
-		if u.add_port_mapping(PORT, PORT, "Jump Circuit", "UDP", 0) == UPNP.UPNP_RESULT_SUCCESS:
-			text = "Internet address: %s  (UDP %d opened via UPnP)" % [u.query_external_address(), PORT]
-			mapped = u
-	_upnp_done.call_deferred()
-	return [text, mapped]
-
-
-func _upnp_done() -> void:
-	if _upnp_thread == null:
-		return
-	var res: Array = _upnp_thread.wait_to_finish()
-	_upnp_thread = null
-	var u: UPNP = res[1] as UPNP
-	if is_host():
-		upnp_text = str(res[0])
-		if u != null:
-			_upnp = u            # still hosting: keep it, _shutdown removes it on leave
-	elif u != null:
-		u.delete_port_mapping(PORT, "UDP")   # the host left while discovery was running
-	upnp_result.emit(str(res[0]))
-
-
-func _exit_tree() -> void:
-	# never quit with the discovery thread still running, nor leave its mapping behind
-	if _upnp_thread != null:
-		var res: Array = _upnp_thread.wait_to_finish()
-		_upnp_thread = null
-		var u: UPNP = res[1] as UPNP
-		if u != null:
-			u.delete_port_mapping(PORT, "UDP")
-	if _upnp != null:
-		_upnp.delete_port_mapping(PORT, "UDP")
+	upnp_text = "Room-code relay is used; no router setup is needed."
+	upnp_result.emit(upnp_text)
