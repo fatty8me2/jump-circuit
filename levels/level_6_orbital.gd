@@ -164,6 +164,10 @@ func _build() -> void:
 	cp = _stage_13_mast()
 	_frame(_w(cp), _yaw)
 	cp = _stage_14_cargo_line()
+	_frame(_w(cp), _yaw - 90.0)
+	cp = _stage_15_lattice()
+	_frame(_w(cp), _yaw)
+	cp = _stage_16_stacks()
 	_frame(_w(cp), _yaw)
 	_stage_end()
 
@@ -779,7 +783,7 @@ func _stage_13_mast() -> Vector3:
 # press to slip under. Right (cyan): the mass-driver rail - a boost strip flings you at a hull
 # panel, you run it at 18 m/s and kick off onto the dock.
 func _stage_14_cargo_line() -> Vector3:
-	var end: Dictionary = _dock(Vector3(0, 2.0, -36.0), 0.0)
+	var end: Dictionary = _dock(Vector3(0, 2.0, -36.0), -90.0)
 	# -- container stacks (route 0) --
 	kit.ledge(_w(Vector3(-3.0, 3.3, -6.6)), Vector3(3.0, 5.0, 4.0), _yaw, "alt")
 	var k1: Dictionary = _area(Vector3(-3.0, 3.3, -6.6), 1.5, 2.0)
@@ -807,6 +811,80 @@ func _stage_14_cargo_line() -> Vector3:
 		r_walk(_w(Vector3(3.9, 0, -4.0)))
 		r_wallrun(_w(Vector3(3.9, 0, -13.6)), _w(Vector3(4.7, 1.6, -20.0)), _w(Vector3(4.4, 1.6, -23.5)), _w(end["c"] + Vector3(0, 0, 0.5)))
 	r_checkpoint()
+	return end["c"]
+
+
+# Stage 15: the laser lattice - a beam walk through an airlock laser, two blinking plates, then
+# a longer beam where two lasers and a side jet (shoving you off the beam) all keep their own time.
+func _stage_15_lattice() -> Vector3:
+	var dock: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var b1: Dictionary = _deck(Vector3(0, 0, -9.0), 1.2, 8.0, "alt", 0.4)
+	var l1: LaserGate = kit.laser(_w(Vector3(0, 1.6, -9.0)), Vector3(2.6, 3.2, 0.2), 2.4, 0.5, 0.0, _yaw)
+	var p1: BlinkPlatform = kit.blink(_w(Vector3(1.5, 0.8, -16.4)), Vector3(1.8, 0.4, 1.8), 2.8, 0.62, 0.0)
+	var p2: BlinkPlatform = kit.blink(_w(Vector3(-0.5, 1.6, -21.6)), Vector3(1.8, 0.4, 1.8), 2.8, 0.62, 0.62)
+	var b2: Dictionary = _deck(Vector3(0, 1.6, -30.0), 1.2, 10.0, "alt", 0.4)
+	var gates: Array = []
+	var leads: Array = []
+	for i: int in 2:
+		var z: float = [-27.8, -32.2][i]
+		var lead: float = (-25.6 - z) / 9.0 + 0.2
+		gates.append(kit.laser(_w(Vector3(0, 3.2, z)), Vector3(2.6, 3.2, 0.2), 2.6, 0.45, fposmod(0.725 - lead / 2.6, 1.0), _yaw))
+		leads.append(lead)
+	# the jet keeps the same beat, so a runner leaving on the green wave passes all three in their quiet
+	var jl: float = (-25.6 + 30.0) / 9.0 + 0.2
+	var jet: OrbitalThruster = _thruster(Vector3(-4.2, 2.4, -30.0), Vector3.RIGHT, 7.0, 1.8, 2.6, 0.4, fposmod(0.7 - jl / 2.6, 1.0), 110.0, 12.0)
+	gates.append(jet)
+	leads.append(jl)
+	var end: Dictionary = _dock(Vector3(0, 1.6, -42.0), 0.0)
+	# beam 1 under the airlock laser
+	_hop(dock, b1, Vector3(0, 0, 2.4))
+	r_walk(_w(Vector3(0, 0, -6.2)))
+	r_until(func() -> bool: return _clear([l1], [0.45], 0.35))
+	r_walk(_w(Vector3(0, 0, -12.4)))
+	# the blinking plates
+	r_until(func() -> bool: return _blink_ok(p1, 0.4, 1.3) and _blink_ok(p2, 1.4, 2.4))
+	r_jump(_w(Vector3(0, 0, -12.6)), _w(Vector3(1.5, 0.8, -16.4)))
+	r_jump(_w(Vector3(1.2, 0.8, -17.0)), _w(Vector3(-0.5, 1.6, -21.6)))
+	r_jump(_w(Vector3(-0.4, 1.6, -22.2)), _w(Vector3(0, 1.6, -25.8)))
+	r_walk(_w(Vector3(0, 1.6, -25.6)))
+	r_until(func() -> bool: return _clear(gates, leads, 0.35))
+	r_walk(_w(Vector3(0, 1.6, -34.6)))
+	_hop(b2, end, Vector3(0, 0, 1.6))
+	r_checkpoint()
+	return end["c"]
+
+
+# Stage 16: the reactor stacks - three shielding blocks stepping up 3.3 m each (mantle, mantle,
+# mantle), a scanning laser across each top, then a shove-ram catwalk to the dock.
+func _stage_16_stacks() -> Vector3:
+	kit.ledge(_w(Vector3(0, 3.3, -6.6)), Vector3(3.0, 5.0, 4.0), _yaw, "alt")
+	kit.ledge(_w(Vector3(0, 6.6, -12.6)), Vector3(3.0, 8.0, 4.0), _yaw, "main")
+	kit.ledge(_w(Vector3(1.0, 9.9, -18.6)), Vector3(3.0, 11.0, 4.0), _yaw, "alt")
+	var s1: LaserGate = kit.laser(_w(Vector3(0, 3.3 + 1.6, -8.0)), Vector3(3.4, 3.2, 0.2), 2.2, 0.5, 0.0, _yaw)
+	var s2: LaserGate = kit.laser(_w(Vector3(0, 6.6 + 1.6, -14.0)), Vector3(3.4, 3.2, 0.2), 2.0, 0.5, 0.4, _yaw)
+	var top3: Dictionary = _area(Vector3(1.0, 9.9, -18.6), 1.5, 2.0)
+	var cw: Dictionary = _deck(Vector3(1.0, 9.9, -26.55), 2.2, 11.9)
+	var rams: Array = []
+	var leads: Array = []
+	for z: float in [-25.0, -30.0]:
+		var lead: float = (-23.0 - z) / 9.0 + 0.15
+		rams.append(kit.piston(_w(Vector3(3.0, 11.5, z)), Vector3(2.2, 1.6, 1.6), _yaw + 90.0, 2.6, 2.4, fposmod(0.2 - lead / 2.4, 1.0), 13.0))
+		leads.append(lead)
+	var end: Dictionary = _dock(Vector3(0, 9.9, -39.5), 0.0)
+	r_mantle(_w(Vector3(0, 0, -2.7)), _w(Vector3(0, 3.3, -5.4)))
+	r_walk(_w(Vector3(0, 3.3, -7.2)))
+	r_until(func() -> bool: return _clear([s1], [0.25], 0.3))
+	r_mantle(_w(Vector3(0, 3.3, -8.9)), _w(Vector3(0, 6.6, -11.4)))
+	r_walk(_w(Vector3(0, 6.6, -13.2)))
+	r_until(func() -> bool: return _clear([s2], [0.25], 0.3))
+	r_mantle(_w(Vector3(0.5, 6.6, -14.9)), _w(Vector3(1.0, 9.9, -17.4)))
+	r_walk(_w(Vector3(1.0, 9.9, -20.0)))
+	r_walk(_w(Vector3(1.0, 9.9, -23.0)))
+	r_until(func() -> bool: return _clear(rams, leads, 0.35))
+	r_walk(_w(Vector3(1.0, 9.9, -32.2)))
+	_hop(cw, end, Vector3(-1.0, 0, 1.6))
+	r_checkpoint()
+	top3.clear()
 	return end["c"]
 
 
