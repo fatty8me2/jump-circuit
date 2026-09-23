@@ -148,7 +148,13 @@ func _build() -> void:
 	cp = _stage_5_airlock()
 	_frame(_w(cp), _yaw)
 	cp = _stage_6_hydraulics()
-	_frame(_w(cp), 90.0 + _yaw)
+	_frame(_w(cp), _yaw)
+	cp = _stage_7_thrusters()
+	_frame(_w(cp), _yaw - 90.0)
+	cp = _stage_8_compactor()
+	_frame(_w(cp), _yaw)
+	cp = _stage_9_flare()
+	_frame(_w(cp), _yaw)
 	_stage_end()
 
 
@@ -169,7 +175,7 @@ func _stage_1_arrival() -> Vector3:
 	var a1: Dictionary = _deck(Vector3(0, 0, -11.4), 2.4, 2.4)
 	var a2: Dictionary = _deck(Vector3(3.0, 1.0, -17.2), 2.2, 2.2, "alt")
 	var a3: Dictionary = _deck(Vector3(0, 2.0, -22.8), 2.0, 2.0)
-	var a4: Dictionary = _deck(Vector3(-2.6, 2.0, -29.4), 1.8, 1.8, "alt")
+	var a4: Dictionary = _deck(Vector3(-2.4, 2.0, -28.8), 1.8, 1.8, "alt")
 	var tug: MovingPlatform = kit.mover(_w(Vector3(0, 2.0, -36.0)), Vector3(2.6, 0.5, 2.6), [Vector3.ZERO, _d(Vector3(0, 0, -8.0))], 5.0)
 	var end: Dictionary = _dock(Vector3(0, 2.0, -52.0))
 	_hop(start, a1)
@@ -240,7 +246,7 @@ func _stage_4_cargo() -> Vector3:
 	var c2: Dictionary = _deck(Vector3(2.8, 3.3, -26.2), 4.4, 2.2)
 	kit.ledge(_w(Vector3(2.8, 6.8, -33.6)), Vector3(3.0, 7.0, 5.0), _yaw, "main")
 	var c3a: Dictionary = _area(Vector3(2.8, 6.8, -33.6), 1.5, 2.5)
-	var end: Dictionary = _dock(Vector3(2.8, 6.8, -44.4), -90.0)
+	var end: Dictionary = _dock(Vector3(2.8, 6.8, -43.9), -90.0)
 	r_walk(_w(Vector3(0, 0, -6.0)))
 	r_mantle(_w(Vector3(0, 0, -13.7)), _w(Vector3(0, 3.3, -16.2)))
 	r_walk(_w(Vector3(0, 3.3, -19.5)))
@@ -317,6 +323,8 @@ func _clear(gates: Array, leads: Array, m: float) -> bool:
 				return false
 			if g is Crusher and not (g as Crusher).is_clear_for(s, 0.0):
 				return false
+			if g is OrbitalThruster and (g as OrbitalThruster).is_firing_at(s):
+				return false
 			s += 0.04
 	return true
 
@@ -335,7 +343,7 @@ func _stage_6_hydraulics() -> Vector3:
 	var cat: Piston = kit.piston(_w(Vector3(1.8, 2.0, -25.5)), Vector3(3.0, 2.0, 1.6), _yaw + 90.0, 1.8, 3.0, 0.0, 13.0)
 	var ld: Dictionary = _deck(Vector3(-11.0, -3.0, -25.5), 4.0, 4.0)
 	var q: Dictionary = _deck(Vector3(-17.5, -2.5, -25.5), 1.8, 1.8, "alt")
-	var end: Dictionary = _dock(Vector3(-26.0, -2.5, -25.5), 90.0)
+	var end: Dictionary = _dock(Vector3(-26.0, -2.5, -25.5), 0.0)
 	kit.glow_strip(_w(Vector3(0.55, 0.03, -25.5)), Vector3(0.9, 0.05, 0.9), Color(1.0, 0.72, 0.1), _yaw)
 	r_walk(_w(Vector3(0, 0, -3.6)))
 	r_until(func() -> bool: return _clear(rams, leads, 0.35))
@@ -348,6 +356,193 @@ func _stage_6_hydraulics() -> Vector3:
 	walk.clear()
 	pad.clear()
 	cat.set_meta("catapult", true)
+	return end["c"]
+
+
+## RCS thruster at local `p`, blasting along local direction `dir`.
+func _thruster(p: Vector3, dir: Vector3, length: float, width: float, period: float, on_fraction: float, phase: float, push: float = 80.0, max_along: float = 14.0) -> OrbitalThruster:
+	var th := OrbitalThruster.new()
+	th.length = length
+	th.width = width
+	th.period = period
+	th.on_fraction = on_fraction
+	th.phase = phase
+	th.push = push
+	th.max_along = max_along
+	th.nozzle_radius = minf(width * 0.4, 1.0)
+	var y: Vector3 = _d(dir).normalized()
+	var x: Vector3 = Vector3.UP.cross(y)
+	if x.length() < 0.01:
+		x = _d(Vector3.RIGHT)
+	x = x.normalized()
+	th.transform = Transform3D(Basis(x, y, x.cross(y)), _w(p))
+	add_child(th)
+	return th
+
+
+## Launch grate: a slotted deck plate with an upward thruster under it. Standing on it while it
+## burns blasts you up the shaft.
+func _grate(c: Vector3, size: float, length: float, period: float, on_fraction: float, phase: float, max_along: float = 14.0) -> OrbitalThruster:
+	kit.plat(_w(c), Vector3(size, 0.3, size), "alt", 0.0, _yaw)
+	for i: int in 4:
+		var slot := Look.box(Vector3(size * 0.8, 0.02, 0.12), Look.flat(Color(1.0, 0.55, 0.15), 0.4, 0.0, 1.6))
+		slot.position = _w(c + Vector3(0, 0.005, -size * 0.3 + float(i) * size * 0.2))
+		slot.rotation.y = deg_to_rad(_yaw)
+		slot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(slot)
+	# frame ring round the grate (hazard stripes) so it reads as a launch pad
+	kit.glow_strip(_w(c + Vector3(0, 0.02, size * 0.5 - 0.1)), Vector3(size, 0.05, 0.14), Color(1.0, 0.72, 0.1), _yaw)
+	kit.glow_strip(_w(c + Vector3(0, 0.02, -size * 0.5 + 0.1)), Vector3(size, 0.05, 0.14), Color(1.0, 0.72, 0.1), _yaw)
+	return _thruster(c + Vector3(0, -1.3, 0), Vector3.UP, length + 1.3, size * 0.9, period, on_fraction, phase, 80.0, max_along)
+
+
+## Bot: ride a launch grate - wait on it for the burn, hold still over it while it lifts us past
+## `clear_y` (local), then steer onto `to`.
+func _r_lift(th: OrbitalThruster, grate: Vector3, clear_y: float, to: Vector3, lead: float = 0.0) -> void:
+	r_walk(_w(grate))
+	r_until(func() -> bool: return th.time_until_fire(Game.course_time) <= 0.08 + lead)
+	var gy: float = _w(Vector3(0, clear_y, 0)).y
+	route.append({"kind": "a_fly", "to": _w(grate), "until": func() -> bool: return player.global_position.y > gy})
+	route.append({"kind": "a_fly", "to": _w(to)})
+
+
+# Stage 7: the thruster shaft - launch grates blast you up to the next deck when their jets fire;
+# between them a side jet sweeps the gap (jump in its quiet window).
+func _stage_7_thrusters() -> Vector3:
+	var dock: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var g1c: Vector3 = Vector3(0, 0, -8.5)
+	var g1: OrbitalThruster = _grate(g1c, 3.0, 6.0, 3.0, 0.4, 0.0)
+	var u1: Dictionary = _deck(Vector3(0, 7.0, -14.5), 3.0, 3.0)
+	var u2: Dictionary = _deck(Vector3(-1.2, 7.0, -21.2), 2.2, 2.2, "alt")
+	var blast: OrbitalThruster = _thruster(Vector3(4.5, 7.8, -17.9), Vector3.LEFT, 9.0, 2.2, 2.4, 0.45, 0.3, 90.0, 12.0)
+	var g2c: Vector3 = Vector3(0, 7.0, -27.5)
+	var g2: OrbitalThruster = _grate(g2c, 3.0, 6.0, 3.0, 0.4, 0.5)
+	var u3: Dictionary = _deck(Vector3(0, 14.0, -33.5), 3.0, 3.0)
+	var end: Dictionary = _dock(Vector3(0, 14.0, -42.5), -90.0)
+	_hop(dock, _area(g1c, 1.5, 1.5))
+	_r_lift(g1, g1c, 4.0, (u1["c"] as Vector3))
+	r_walk(_w(_edge(u1, u2["c"], 0.6)))
+	r_until(func() -> bool: return _clear([blast], [0.35], 0.3))
+	_hop(u1, u2)
+	_hop(u2, _area(g2c, 1.5, 1.5))
+	_r_lift(g2, g2c, 11.0, (u3["c"] as Vector3))
+	_hop(u3, end, Vector3(0, 0, 1.6))
+	r_checkpoint()
+	return end["c"]
+
+
+## Bot: a crusher leaves at least `head` m of room (and is harmless) from `a` to `b` seconds from now.
+func _under_ok(c: Crusher, a: float, b: float, head: float = 2.3) -> bool:
+	var t: float = Game.course_time
+	var s: float = t + a
+	while s <= t + b:
+		if c.gap_at(s) < head or not c.is_clear_for(s, 0.0):
+			return false
+		s += 0.04
+	return true
+
+
+# Stage 8: the compactor line - a catwalk under three waste presses slamming out of step (dash
+# from gap to gap), then a cargo ledge you must mantle while the last press is up.
+func _stage_8_compactor() -> Vector3:
+	var dock: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var w1: Dictionary = _deck(Vector3(0, 0, -16.0), 2.4, 22.0)
+	var presses: Array[Crusher] = []
+	var zs: Array[float] = [-9.5, -15.5, -21.5]
+	for i: int in zs.size():
+		presses.append(kit.crusher(_w(Vector3(0, 0, zs[i])), Vector3(3.0, 1.6, 3.0), 3.4, 2.8, 0.3 * float(i)))
+	kit.ledge(_w(Vector3(0, 3.3, -30.5)), Vector3(3.0, 5.0, 4.0), _yaw, "alt")
+	var l1: Dictionary = _area(Vector3(0, 3.3, -30.5), 1.5, 2.0)
+	var c4: Crusher = kit.crusher(_w(Vector3(0, 3.3, -30.5)), Vector3(3.4, 1.6, 4.4), 3.2, 3.4, 0.55)
+	var end: Dictionary = _dock(Vector3(0, 3.3, -40.0), 0.0)
+	_hop(dock, w1, Vector3(0, 0, 9.5))
+	# wait in each gap between presses, dash under the next one while it is up
+	var waits: Array[float] = [-6.8, -12.75, -18.5, -24.8]
+	for i: int in presses.size():
+		r_walk(_w(Vector3(0, 0, waits[i])))
+		var c: Crusher = presses[i]
+		r_until(func() -> bool: return _under_ok(c, 0.0, 0.75))
+		r_walk(_w(Vector3(0, 0, waits[i + 1])))
+	r_walk(_w(Vector3(0, 0, -26.4)))
+	r_until(func() -> bool: return _under_ok(c4, 0.15, 1.6))
+	r_mantle(_w(Vector3(0, 0, -26.7)), _w(Vector3(0, 3.3, -29.3)))
+	_hop(l1, end, Vector3(0, 0, 1.6))
+	r_checkpoint()
+	return end["c"]
+
+
+## Shield wall with its sheltered pocket behind it (toward +Z local), registered with the flare.
+## `c` is the pocket's floor centre, `w` its width; the wall stands on the pocket's -Z side.
+func _shelter(f: OrbitalFlare, c: Vector3, w: float = 2.4, depth: float = 2.4) -> void:
+	var wall_c: Vector3 = c + Vector3(0, 1.75, -depth * 0.5 - 0.25)
+	kit.block(_w(wall_c), Vector3(w + 0.2, 3.5, 0.5), Look.c("side"), true, _yaw)
+	# armour ribs and a hazard-striped cap on the gate side
+	for i: int in 3:
+		var rib := Look.box(Vector3(0.12, 3.3, 0.12), Look.flat(Look.c("metal"), 0.4, 0.8))
+		rib.position = _w(wall_c + Vector3(-w * 0.35 + float(i) * w * 0.35, 0, -0.3))
+		rib.rotation.y = deg_to_rad(_yaw)
+		add_child(rib)
+	kit.glow_strip(_w(wall_c + Vector3(0, 1.78, 0)), Vector3(w + 0.2, 0.06, 0.52), OrbitalFlare.FLARE_COLOR, _yaw)
+	# the glowing floor plate that marks the pocket
+	kit.glow_strip(_w(c + Vector3(0, 0.02, 0)), Vector3(w - 0.3, 0.04, depth - 0.3), Color(0.3, 0.85, 1.0), _yaw)
+	var local_c: Vector3 = f.to_local(_w(c + Vector3(0, 1.7, 0)))
+	f.add_shelter(local_c, Vector3(w, 3.6, depth))
+
+
+## Bot: a runner sheltered at flare-local z `lz_from` may leave for `lz_to` (closer to the flare
+## gate) and arrive there `need` s from now: the front has gone past us and will not reach lz_to in time.
+func _flare_go(f: OrbitalFlare, lz_from: float, lz_to: float, need: float) -> bool:
+	var t: float = Game.course_time
+	var fz: float = f.front_z_at(t)
+	if not is_nan(fz) and fz < minf(lz_from, f.length * 0.5) + 1.2:
+		return false
+	return f.time_until_front_at(t, lz_to) > need
+
+
+# Stage 9: the flare deck - a solar flare front sweeps down the exposed deck from the flare gate
+# every few seconds. Shelter behind the shield walls (glowing plates) as it passes, then dash for
+# the next pocket, and out through the gate itself.
+func _stage_9_flare() -> Vector3:
+	var dock: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var f := OrbitalFlare.new()
+	f.width = 12.0
+	f.height = 9.0
+	f.length = 40.0
+	f.period = 5.0
+	f.sweep = 1.6
+	f.phase = 0.0
+	f.position = _w(Vector3(0, 0, -26.0))
+	f.rotation.y = deg_to_rad(_yaw)
+	add_child(f)
+	var d1: Dictionary = _deck(Vector3(0, 0, -8.5), 4.0, 7.0)
+	_shelter(f, Vector3(-0.8, 0, -10.3))
+	var b1: Dictionary = _deck(Vector3(1.2, 0, -16.6), 2.0, 2.0, "alt")
+	var b2: Dictionary = _deck(Vector3(-0.4, 0.8, -21.8), 2.0, 2.0)
+	var d2: Dictionary = _deck(Vector3(0, 0.8, -28.5), 4.0, 6.0)
+	_shelter(f, Vector3(-0.8, 0.8, -29.8))
+	var b3: Dictionary = _deck(Vector3(1.0, 0.8, -36.2), 2.0, 2.0, "alt")
+	var b4: Dictionary = _deck(Vector3(0, 0.8, -42.5), 2.2, 2.2)
+	var end: Dictionary = _dock(Vector3(0, 0.8, -51.0), 0.0)
+	# leg 1: dock -> first pocket
+	r_until(func() -> bool: return _flare_go(f, 26.0, 15.7, 2.2))
+	_hop(dock, d1, Vector3(0, 0, 2.0))
+	r_walk(_w(Vector3(-0.8, 0, -10.2)))
+	# leg 2: pocket 1 -> pocket 2 (three hops)
+	r_until(func() -> bool: return _flare_go(f, 15.7, -3.8, 3.6))
+	r_walk(_w(Vector3(1.2, 0, -10.6)))
+	r_jump(_w(Vector3(1.2, 0, -11.65)), _w(b1["c"]))
+	_hop(b1, b2)
+	_hop(b2, d2, Vector3(0.9, 0, 1.2))
+	r_walk(_w(Vector3(-0.8, 0.8, -29.7)))
+	# leg 3: pocket 2 -> out through the gate
+	r_until(func() -> bool: return _flare_go(f, -3.8, -22.0, 3.4))
+	r_walk(_w(Vector3(1.2, 0.8, -30.0)))
+	r_jump(_w(Vector3(1.2, 0.8, -31.15)), _w(b3["c"]))
+	_hop(b3, b4)
+	_hop(b4, end, Vector3(0, 0, 1.6))
+	r_checkpoint()
+	d1.clear()
+	d2.clear()
 	return end["c"]
 
 
