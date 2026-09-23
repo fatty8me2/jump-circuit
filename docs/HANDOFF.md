@@ -12,9 +12,11 @@ the original pause notes, kept for history. What session 2 added on top:
   unchanged (yaw 0); Orbital Drift and Balance Works still use their own workarounds, which is fine.
 - RouteBot resumes after the checkpoint the level respawns at (a checkpoint touched mid-step no longer sends every
   retry back to the previous stage's steps).
-- Known shared-code follow-ups reported by the level agents (not done): the `kick` step
-  treats a hard landing as a kick; after a pad bounce the bot's bounce flag stays set. Orbital Drift is on the easy
-  side (0 bot respawns) - tighten after playtesting.
+- RouteBot: a landing (or a stale fall speed) no longer counts as a kick; a bounce handed to the next step lasts only
+  that step; w_run aims ahead along the wall after a fast takeoff instead of turning back at its entry.
+- Test runs end without "leaked instances / resources still in use": everything quits through Sfx.quit().
+- Not bugs, still open: Orbital Drift is on the easy side (0 bot respawns) - tighten after playtesting; the party relay
+  path is covered by a message-level test only (no live relay in CI); a few old shortcuts were not re-probed.
 
 Read this first if you are picking this work up (new session / other account).
 
