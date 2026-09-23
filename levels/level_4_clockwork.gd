@@ -1,11 +1,37 @@
 extends LevelBase
-## 4. CLOCKWORK HEIGHTS (hard mode) - a dusk-lit brass clock tower complex in the sky.
-## Eleven stages of timing and momentum: express ferries whose speed you must
-## inherit, a launch lift, crumbling spirals on a blink rhythm, a bladed turntable
-## you sling off, a ferris wheel of tiny gondolas, a hammer gallery that ends with
-## a deliberate hammer launch, an escalator that runs against you, and the set
-## piece: THE GREAT CLOCK - no face, only void; ride the long hand in under the
-## sweeping second hand, then sling off the racing short hand to reach the tower.
+## 4. CLOCKWORK HEIGHTS (hard mode, extended) - a dusk-lit brass clock tower complex in the sky.
+## Twenty stages of timing and momentum in two movements.
+##
+## THE ASCENT (1-11): express ferries whose speed you must inherit, a launch lift, crumbling
+## spirals on a blink rhythm, a bladed turntable you sling off, a ferris wheel of tiny gondolas,
+## a hammer gallery that ends with a deliberate hammer launch, an escalator that runs against you,
+## and THE GREAT CLOCK - no face, only void; ride the long hand in under the sweeping second hand,
+## then sling off the racing short hand to reach the tower and climb to the belfry (checkpoint 11).
+##
+## THE MOVEMENT (12-20), north from the belfry into the works behind the great clock:
+##  12 Chime gantry     - three curtains of light chiming in a travelling wave, first 3.4 m mantle.
+##  13 Pendulum case    - FORK: run the case wall under a curtain of light (route 0) or ride the
+##                        great pendulum's launch (route 1); then an express ferry.
+##  14 Music box        - a comb of pistons firing in the drum's tune, then the key piston punches you over.
+##  15 THE ESCAPEMENT   - the set piece (mechanics/clockwork_escapement.gd): five pallets tick up and
+##                        down in alternating parity; jump on the beat and the clock lifts you 11 m,
+##                        past a curtain that only opens on the beat, into a 3.2 m mantle.
+##  16 Stamping mill    - FORK: pocket-to-pocket under three presses stamping in a wave (route 0) or run
+##                        the mill's case wall above them (route 1); then mantle under a press's rhythm.
+##  17 The longcase     - a clock-case chimney: three wall runs zig-zag up the shaft, the last kick
+##                        throws you at a ledge you can only mantle.
+##  18 The cuckoo       - FORK: two mantles through two curtains of light (route 0) or three 1.1 m perches
+##                        to the cuckoo's door, a warp to the top (route 1).
+##  19 Strike train     - a 16 m wall run is the only way over the gap, two curtains cut across it in a
+##                        travelling wave; mantle the striking tower, jump past the bell hammer.
+##  20 The crown        - the escapement again, meaner (six smaller pallets, two beat curtains), then a
+##                        3.3 m mantle onto the crown and the finish gate.
+## Shortcuts (optional, all additive): A teeth-walk posts (2), B escalator posts (8), C the escapement
+## post that skips a pallet (15), D the mill posts past the presses (16), E the strike-tower post that
+## skips the mantle (19).
+## Effects: brass dust and embers along the whole course (visual/clockwork_fx.gd), gear sparks and steam
+## on every escapement tick, slam dust under the presses, music-box notes, cuckoo feathers, bell sparks,
+## a spark flourish at every checkpoint and a crown of fireworks at the finish.
 
 var K := Vector3.ZERO             # clock centre (long-hand level), set in _stage_9
 var WHEEL := Vector3.ZERO         # ferris wheel axle
@@ -137,6 +163,9 @@ func _build() -> void:
 	_stage_19()
 	_stage_20()
 	_build_surroundings()
+	for cp: Node in find_children("*", "Checkpoint", true, false):
+		_cp_fx((cp as Node3D).position)
+	_ambient_fx()
 
 
 # =================================================================================================
@@ -948,7 +977,6 @@ func _stage_12() -> void:
 	var g4: LaserGate = kit.laser(o + V(-0.1, 7.2, -46.7), V(4.2, 3.6, 0.18), 2.4, 0.4, 0.3)
 	_cp12 = o + V(0, 6.2, -57.4)
 	_cp(_cp12, V(6, 2, 6))
-	_cp_fx(_cp12)
 	r_walk(o + V(1.0, 3.4, -32.7))
 	_hop_to(o + V(1.1, 3.4, -33.3), b1)
 	_hop(b1, b2, 0.5)
@@ -1012,7 +1040,6 @@ func _stage_13() -> void:
 		kit.pipe(V(deck.x + sx * 2.2, deck.y - 0.7, d_end - 1.0), V(deck.x + sx * 2.2, deck.y - 0.7, d_end - 14.0), 0.12)
 	_cp13 = V(deck.x, deck.y, d_end - 2.2 - 21.2)
 	_cp(_cp13, V(5, 2, 5), 0.0, "alt")
-	_cp_fx(_cp13)
 	r_walk(V(deck.x, deck.y, d_end + 0.7))
 	m_wait(ferry, 0.86, 0.95)
 	x_step({"kind": "x_jump", "from": V(deck.x, deck.y, d_end + 0.3), "to_node": ferry, "to_local": V(0, 0.25, 0.9)})
@@ -1065,11 +1092,13 @@ func _stage_14() -> void:
 		ClockworkFx.puff_burst(16, Color(0.95, 0.92, 1.0, 0.55), 5.0, 1.0, 0.9, false, 0.3, 0.3)])
 	_cp14 = plate + V(-16.0, -3.0, 0)
 	_cp(_cp14, V(7, 2, 9), 0.0)
-	_cp_fx(_cp14)
 	t_wait(func() -> bool:
 		var u: float = fposmod(Game.course_time / COMB_PERIOD, 1.0)
 		return u > 0.12 and u < 0.2)
 	x_step({"kind": "kick", "from": plate + V(0.2, 0, 0), "to": _cp14 + V(1.5, 0, 0)})
+	# the key throws you in fast: brake on the deck
+	route.append({"kind": "a_fly", "to": _cp14, "until": func() -> bool:
+		return player.grounded and Vector2(player.velocity.x, player.velocity.z).length() < 3.0})
 	r_walk(_cp14)
 	r_checkpoint()
 
@@ -1142,10 +1171,14 @@ func _stage_15() -> void:
 	kit.checkpoint(_cp15, 0.0)
 	kit.lamp(_cp15 + V(2.5, 0, -3.0), 2.8)
 	kit.lamp(_cp15 + V(-2.5, 0, -3.0), 2.8, false)
-	_cp_fx(_cp15)
 	kit.banner(o + V(-3.0, 0, -4.0), 3.6, Look.c("accent"))
 	kit.banner(o + V(3.0, 0, -4.0), 3.6, Look.c("accent"))
 	_build_escape_wheel(o + V(10.5, ESC_RISE * 2.5 + 1.0, -19.0))
+	# SHORTCUT C: a low 1 m post off the deck's right corner - a 91% rising leap onto pallet 2 while
+	# it is still down skips pallet 1 (one beat)
+	var post: Vector3 = o + V(4.2, 0.2, -8.6)
+	kit.disc(post, 0.5, 0.5, "accent", 4.0)
+	kit.glow_strip(post + V(0, 0.03, 0), V(0.45, 0.05, 0.45), Look.c("accent2"), 45.0)
 	# warm embers rising through the works
 	_fx(ClockworkFx.embers(V(5.0, 6.0, 15.0), 70, Color(1.0, 0.62, 0.25)), o + V(0, 6.0, -19.0))
 
@@ -1200,6 +1233,10 @@ func _stage_16() -> void:
 	kit.glow_strip(o + V(4.55, -2.42, -12.5), V(0.2, 0.1, 13.6), Look.c("accent2"))
 	kit.banner(o + V(2.6, 0, -2.6), 3.2, Look.c("accent2"))
 	kit.banner(o + V(-1.8, 0, -2.6), 3.2, Look.c("accent"))
+	# SHORTCUT D: three 1 m posts left of the presses (88-92% leaps) skip the wave
+	for sp: Vector3 in [o + V(-4.4, 0.4, -8.9), o + V(-4.8, 0.6, -15.3), o + V(-4.2, 0.6, -21.6)]:
+		kit.disc(sp, 0.5, 0.5, "accent", 4.0)
+		kit.glow_strip(sp + V(0, 0.03, 0), V(0.45, 0.05, 0.45), Look.c("accent2"), 45.0)
 	# the deck both routes meet on
 	var deck: Vector3 = o + V(0, 0, -27.0)
 	kit.plat(deck, V(6.0, 1.0, 7.0), "alt", 1.5)
@@ -1214,7 +1251,6 @@ func _stage_16() -> void:
 	kit.checkpoint(_cp16, 0.0)
 	kit.lamp(_cp16 + V(2.5, 0, -2.5), 2.8)
 	kit.lamp(_cp16 + V(-2.5, 0, -2.5), 2.8, false)
-	_cp_fx(_cp16)
 	# mill chimneys venting steam either side
 	for sx: int in [-1, 1]:
 		kit.chimney(o + V(sx * 9.0, -9.0, -14.0), 13.0, 1.3, false)
@@ -1296,7 +1332,6 @@ func _stage_17() -> void:
 	kit.collapse(s2, 1.8, 0.45)
 	_cp17 = o + V(0, 13.5, -45.5)
 	_cp(_cp17, V(6, 2, 6), 0.0, "alt")
-	_cp_fx(_cp17)
 	r_walk(top + V(0.9, 0, -1.2))
 	_hop(top + V(0.9, 0, -1.2), s1, 0.4)
 	_hop(s1, s2, 0.55)
@@ -1343,7 +1378,6 @@ func _stage_18() -> void:
 	kit.checkpoint(_cp18, 0.0)
 	kit.lamp(_cp18 + V(2.5, 0, -2.0), 2.8)
 	kit.lamp(_cp18 + V(-2.5, 0, -2.0), 2.8, false)
-	_cp_fx(_cp18)
 	# blue arrival sparkle where the warp drops you
 	_fx_near(warp.exit_point() + V(0, 0.8, 0), 1.8, [
 		ClockworkFx.puff_burst(24, Color(0.45, 0.75, 1.0, 0.8), 4.0, 0.5, 0.8, true, 0.0, 0.6),
@@ -1418,6 +1452,10 @@ func _stage_19() -> void:
 	kit.plat(perch, V(3.0, 0.8, 3.0), "alt", 0.7)
 	var tower: Vector3 = o + V(-2.4, 3.4, -29.6)
 	kit.ledge(tower, V(3.4, 9.0, 3.0))
+	# SHORTCUT E: a 1 m post right of the tower - skip the mantle with a 93% rising leap past the hammer
+	var sp: Vector3 = o + V(1.6, 1.6, -30.4)
+	kit.disc(sp, 0.5, 0.5, "accent", 4.0)
+	kit.glow_strip(sp + V(0, 0.03, 0), V(0.45, 0.05, 0.45), Look.c("accent2"), 45.0)
 	# the bell and its hammer between the tower and the checkpoint
 	var ham: Pendulum = kit.pendulum(o + V(-1.2, 8.4, -33.4), 7.0, 2.6, 0.0)
 	for sx: int in [-1, 1]:
@@ -1430,7 +1468,6 @@ func _stage_19() -> void:
 		ClockworkFx.puff_burst(10, Color(1.0, 0.9, 0.6, 0.6), 3.0, 0.7, 0.8, true, 0.0, 0.4)])
 	_cp19 = o + V(0, 3.4, -38.0)
 	_cp(_cp19, V(6, 2, 6))
-	_cp_fx(_cp19)
 
 	r_walk(o + V(0.5, 0, 2.0))
 	r_until(func() -> bool: return _lasers_off(wave, 0.3))
@@ -1515,7 +1552,7 @@ func _build_crown(c: Vector3) -> void:
 		var a: float = TAU * float(i) / 12.0
 		var p: Vector3 = c + V(cos(a) * 6.6, 0, sin(a) * 6.6)
 		var tall: float = 5.0 if i % 2 == 0 else 3.2
-		add_child(_at(Look.cylinder(0.05, tall, gold, Vector3.ZERO, 0.55, 6), p + V(0, tall * 0.5 - 0.2, 0)))
+		add_child(_at(Look.cylinder(0.42, tall, gold, Vector3.ZERO, 0.04, 6), p + V(0, tall * 0.5 - 0.2, 0)))
 		add_child(_at(Look.sphere(0.35, Look.flat(Look.c("accent2"), 0.3, 0.0, 2.6)), p + V(0, tall, 0)))
 	kit.ring(c + V(0, 0.2, 0), 6.9, Look.c("accent"), Vector3.ZERO, 30.0)
 	kit.ring(c + V(0, 9.5, -2.0), 4.2, Look.c("accent"), Vector3(90, 0, 0), -12.0)
@@ -1561,6 +1598,9 @@ func _build_surroundings() -> void:
 		[V(52, 8, -215), V(6, 44, 6)], [V(78, 10, -270), V(5, 40, 5)], [V(46, 12, -300), V(4, 34, 4)],
 		[V(78, 12, -350), V(5, 42, 5)], [V(44, 10, -400), V(5, 38, 5)], [V(90, 14, -440), V(6, 46, 6)],
 		[V(30, 12, -470), V(5, 40, 5)], [V(95, 16, -495), V(5, 44, 5)],
+		[V(18, 22, -560), V(5, 40, 5)], [V(84, 24, -600), V(6, 44, 6)], [V(12, 30, -665), V(5, 44, 5)],
+		[V(72, 34, -705), V(5, 46, 5)], [V(2, 42, -782), V(6, 48, 6)], [V(68, 48, -820), V(5, 50, 5)],
+		[V(18, 54, -880), V(5, 50, 5)], [V(62, 60, -905), V(6, 52, 6)],
 	]
 	for t: Array in towers:
 		var c: Vector3 = t[0]
@@ -1584,7 +1624,24 @@ func _build_surroundings() -> void:
 	kit.gear(V(74, 24, -320), 5.0, 14, 0.7, -15.0, Vector3(90, -60, 0), Look.c("decor"))
 	kit.cloud_field(V(35, -28, -250), V(180, 8, 300), 44)
 	kit.cloud_field(V(35, 60, -250), V(200, 10, 320), 14)
-	kit.monolith_ring(V(35, 6, -245), 300.0, 370.0, 20, 30.0)
+	kit.cloud_field(V(40, 5, -760), V(160, 8, 200), 30)
+	kit.cloud_field(V(40, 110, -760), V(180, 10, 220), 10)
+	kit.gear(V(66, 60, -840), 6.0, 16, 0.8, 20.0, Vector3(90, -50, 0), Look.c("decor"))
+	kit.gear(V(12, 40, -720), 5.0, 14, 0.7, -16.0, Vector3(90, 40, 0))
+	kit.monolith_ring(V(40, 20, -440), 500.0, 580.0, 26, 40.0)
+
+
+## Ambient layers along the whole course: drifting brass dust everywhere, warm embers rising
+## out of the works every other stage, and a few steam vents on the towers.
+func _ambient_fx() -> void:
+	var cps: Array[Node] = find_children("*", "Checkpoint", true, false)
+	for i: int in cps.size():
+		var p: Vector3 = (cps[i] as Node3D).position
+		_fx(ClockworkFx.motes(V(12.0, 7.0, 16.0), 36, Color(1.0, 0.86, 0.55), 0.12), p + V(0, 3.0, -10.0))
+		if i % 2 == 1:
+			_fx(ClockworkFx.embers(V(10.0, 3.0, 12.0), 30, Color(1.0, 0.55, 0.2), 0.1), p + V(0, -6.0, -12.0))
+	for v: Vector3 in [V(-13, 9, -30), V(14, 20, -150), V(52, 30, -215), V(46, 29, -300), V(44, 29, -400), V(12, 52, -665), V(68, 73, -820)]:
+		_fx(ClockworkFx.steam(V(0, 1, 0), 12, 2.2, 2.0, Color(0.95, 0.9, 1.0, 0.3), 3.0), v)
 
 
 func _process(_dt: float) -> void:
