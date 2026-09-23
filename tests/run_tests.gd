@@ -84,7 +84,7 @@ func _finish(note: String = "") -> void:
 		print("\nno checks ran")
 	print("\nRESULT: %d passed, %d failed  (render fps cap: %d)%s" % [passed, failed, Engine.max_fps, note])
 	SaveData.delete_files()
-	get_tree().quit(1 if failed > 0 or passed + failed == 0 else 0)
+	Sfx.quit(1 if failed > 0 or passed + failed == 0 else 0)
 
 
 ## Per-test backstop: a test still running after its budget fails the whole run
@@ -100,7 +100,7 @@ func _watchdog(n: String, gen: int) -> void:
 func _usage_error(msg: String) -> void:
 	printerr(msg)
 	SaveData.delete_files()
-	get_tree().quit(2)
+	Sfx.quit(2)
 
 
 # ---- core movement -----------------------------------------------------------------------
@@ -1864,6 +1864,44 @@ func test_w2_route_bot_resumes_at_touched_checkpoint() -> void:
 	check(bot.step_index == marks[1] + 1, "after a respawn the bot resumes after checkpoint 2's mark (step %d, want %d)" % [bot.step_index, marks[1] + 1])
 	lvl.respawn()
 	check(bot.step_index == marks[1] + 1, "and stays there on the next retry")
+	bot.queue_free()
+
+
+## Touching down at the end of a kick step's flight zeroes the fall speed - a jump in vertical
+## speed that is not a kick. It must not make the next kick step start "already kicked".
+func test_w2_route_bot_landing_is_not_a_kick() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var cp: Checkpoint = lvl.checkpoints[0]
+	lvl.player.teleport(cp.respawn_transform())
+	await seconds(0.3)
+	var ground: Vector3 = lvl.player.global_position
+	lvl.route.clear()
+	lvl.route.append({"kind": "kick", "from": ground, "to": ground})
+	lvl.route.append({"kind": "kick", "from": ground + Vector3(0, 0, 2), "to": ground + Vector3(0, 0, 8)})
+	var bot := RouteBot.new()
+	lvl.add_child(bot)
+	bot.attach(lvl)
+	bot.set("_phase", 1)       # flying after the first kick
+	lvl.player.teleport(Transform3D(Basis(), ground + Vector3(0, 6.0, 0)))
+	await wait_until(func() -> bool: return bot.step_index == 1, 3.0, "land and move on")
+	await ticks(2)
+	check(bot.step_index == 1 and int(bot.get("_phase")) == 0 and not bool(bot.get("_fk_pending")),
+		"a hard landing ends the kick's flight without counting as the next kick (phase %d)" % int(bot.get("_phase")))
+	bot.queue_free()
+
+
+## A bounce handed on by a step's flight is for the step right after it only.
+func test_w2_route_bot_bounce_handover_is_one_step() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var p: Vector3 = lvl.player.global_position
+	lvl.route.clear()
+	lvl.route.append({"kind": "walk", "to": p + Vector3(0, 0, -30)})
+	var bot := RouteBot.new()
+	lvl.add_child(bot)
+	bot.attach(lvl)
+	bot.set("_pending_bounce", true)
+	await ticks(3)
+	check(not bool(bot.get("_pending_bounce")), "a walk step does not carry a handed-over bounce on to a later pad or kick")
 	bot.queue_free()
 
 

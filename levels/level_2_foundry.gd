@@ -1263,11 +1263,9 @@ func _stage_19_quench() -> void:
 		r_jump(Vector3(-9.85, l2.y, -173.0), Vector3(-6.0, l2.y, -173.6))
 	else:
 		r_walk(Vector3(-27.5, f.y, -175.3))
-		# chain=true: the run-up crosses the pad, which throws us at the panel mid-air. The pad's
-		# bounce is still flagged when we kick off, so the w_run step hands the flight over at
-		# once - the r_pad step after it steers that flight onto the ledge (mantle) and lands.
+		# chain=true: the run-up crosses the pad, which throws us at the panel mid-air; the kick off
+		# the panel flies onto the ledge (mantle) and lands
 		r_wallrun(Vector3.ZERO, Vector3(-17.5, f.y + 3.8, -180.1), Vector3(-8.5, f.y + 3.8, -180.1), cp_top + Vector3(-3.0, 0, -1.5), true, true)
-		r_pad(sp, cp_top + Vector3(-3.0, 0, -1.5))
 	r_walk(cp19)
 	r_checkpoint()
 	# quench troughs steaming far below, the slag channel they drain into

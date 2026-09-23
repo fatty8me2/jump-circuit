@@ -98,6 +98,8 @@ func _physics_process(dt: float) -> void:
 			stuck = true
 		return
 	var step: Dictionary = level.route[step_index]
+	var first_tick: bool = _step_time == 0.0
+	var index_before: int = step_index
 	_step_time += dt
 	if _step_time > 14.0:
 		log_lines.append("timeout in step %d phase %d at %s grounded=%s floor=%s" % [step_index, _phase, str(player.global_position.snapped(Vector3.ONE * 0.01)), str(player.grounded), str(player.floor_body)])
@@ -137,6 +139,10 @@ func _physics_process(dt: float) -> void:
 		"b_mantle":
 			_do_b_mantle(step, dt)
 		"ascent_stream": _do_ascent_stream(step)
+	# a bounce handed over by the previous step (_air_phase) is for the step that follows it: pad /
+	# x_pad / kick read it on their first tick. Left set, it made some LATER pad or kick skip its run-up.
+	if first_tick and step_index == index_before:
+		_pending_bounce = false
 
 
 func _next() -> void:
@@ -428,6 +434,7 @@ func _x_air(step: Dictionary) -> void:
 #                                     (bumper, hammer, pad), then air-steer to `to`. Chains like pad steps.
 
 var _fk_prev_vy: float = 0.0
+var _fk_prev_grounded: bool = false
 var _fk_pending: bool = false
 var _fk_step: int = -1
 
@@ -442,12 +449,17 @@ func _do_foundry(step: Dictionary) -> void:
 	if _fk_step != step_index or _step_time < 0.02:
 		_fk_step = step_index
 		_fk_prev_vy = player.velocity.y
+		_fk_prev_grounded = player.grounded
 		if not _fk_pending and _pending_bounce:
 			_fk_pending = true
 		_pending_bounce = false
 	var vy: float = player.velocity.y
-	var kicked: bool = vy - _fk_prev_vy > 3.0
+	# a kick throws us up: touching down (fall speed zeroed) or a step that began mid-landing with a stale
+	# fall speed is not one, or the next kick step would start "already kicked" while standing still
+	var landed: bool = player.grounded and not _fk_prev_grounded
+	var kicked: bool = vy - _fk_prev_vy > 3.0 and not landed and (not player.grounded or vy > 1.0)
 	_fk_prev_vy = vy
+	_fk_prev_grounded = player.grounded
 	if _phase == 0:
 		if _fk_pending:
 			_fk_pending = false
@@ -627,6 +639,7 @@ func _do_moves(step: Dictionary, dt: float) -> void:
 					_was_air = true
 				if player.is_wall_running():
 					_phase = 2
+					_bounced = false
 				elif player.grounded and _was_air:
 					log_lines.append("w_run %d: landed without latching at %s" % [step_index, str(player.global_position.snapped(Vector3.ONE * 0.01))])
 					level.respawn()
@@ -634,7 +647,13 @@ func _do_moves(step: Dictionary, dt: float) -> void:
 				else:
 					if player.velocity.y <= 0.0:
 						player.cmd_jump = false
-					_set_wish(_flat(entry - player.global_position).normalized())
+					var aim: Vector3 = entry
+					if _flat(entry - player.global_position).dot(_flat(player.velocity)) < 0.0:
+						# a fast takeoff carried us past the entry: turning back at it would steer away from
+						# the run - aim at the wall line a little ahead of us instead
+						var run_dir: Vector3 = _flat(exit - entry).normalized()
+						aim = entry + run_dir * maxf(_flat(player.global_position - entry).dot(run_dir) + 2.0, 0.0)
+					_set_wish(_flat(aim - player.global_position).normalized())
 					return
 			if _phase == 2:
 				var along: Vector3 = _flat(exit - entry).normalized()
