@@ -112,6 +112,10 @@ func setup(p_level: LevelBase) -> void:
 	_place_when_ready.call_deferred()
 
 
+func _exit_tree() -> void:
+	PartyFx.clear_caches()
+
+
 ## Boxes and dummies need the level's colliders in the physics space: wait two ticks.
 func _place_when_ready() -> void:
 	await get_tree().physics_frame
@@ -523,6 +527,88 @@ func hit(t: Dictionary, kb: Vector3, o: Dictionary = {}) -> void:
 	hit_landed.emit(int(t["id"]), src)
 
 
+## Could `id`'s attacks / hazards hurt us? (Never ourselves, never a teammate.)
+func is_rival(id: int) -> bool:
+	if id == Net.my_id() or id == 0:
+		return false
+	if rules.is_team() and Net.team_of(id) == Net.team_of(Net.my_id()):
+		return false
+	return true
+
+
+## Our own Player can be hurt right now (racing, not finished, round still on).
+func local_vulnerable() -> bool:
+	return player != null and not level.finished and not round_over
+
+
+## Remembers `id` as the last to mess with us (a fall in the next few seconds is their KO).
+func mark_hit(id: int) -> void:
+	last_hit_by = id
+	last_hit_at = clock
+
+
+## A hazard someone else owns (puddle, tornado) caught our own Player: victim-side detection,
+## applied exactly like a hit message from its owner. o: as hit().
+func take_hazard(from_id: int, kb: Vector3, o: Dictionary = {}) -> void:
+	if not local_vulnerable():
+		return
+	_on_hit(from_id, {"kb": PowerUp.arr(kb), "st": float(o.get("st", 0.0)), "ko": bool(o.get("ko", false)),
+		"e": str(o.get("e", "")), "ed": float(o.get("ed", 0.0)), "s": str(o.get("s", "")), "add": bool(o.get("add", false))})
+
+
+## Rivals ahead of us in the race (targets list entries), for Thunder Cloud. In Party Practice
+## every dummy within 80 m counts.
+func targets_ahead() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var order: Array[int] = []
+	if Net.active:
+		order = Net.standings()
+	var mine: int = order.find(Net.my_id())
+	for t: Dictionary in targets():
+		if bool(t.get("dummy", false)):
+			if (t["center"] as Vector3).distance_to(player.global_position) < 80.0:
+				out.append(t)
+			continue
+		var at: int = order.find(int(t["id"]))
+		if at >= 0 and (mine < 0 or at < mine):
+			out.append(t)
+	return out
+
+
+## The racer directly ahead of us in the standings (Swap Warp), as a target entry, or {}.
+## In Party Practice: the nearest dummy.
+func target_ahead() -> Dictionary:
+	var best: Dictionary = {}
+	if practice or not Net.active:
+		var bd: float = INF
+		for t: Dictionary in targets():
+			var dd: float = (t["center"] as Vector3).distance_to(player.global_position)
+			if bool(t.get("dummy", false)) and dd < bd and dd < 90.0:
+				bd = dd
+				best = t
+		return best
+	var order: Array[int] = Net.standings()
+	var mine: int = order.find(Net.my_id())
+	var all: Array[Dictionary] = targets()
+	for i: int in range(mine - 1, -1, -1):
+		for t: Dictionary in all:
+			if int(t["id"]) == order[i]:
+				return t
+	return best
+
+
+## Ground under a point (ray straight down), or the point itself if nothing is below.
+func ground_at(p: Vector3, depth: float = 6.0) -> Dictionary:
+	var q := PhysicsRayQueryParameters3D.create(p + Vector3(0, 0.6, 0), p + Vector3(0, -depth, 0), 1)
+	return get_world_3d().direct_space_state.intersect_ray(q)
+
+
+## First solid surface along a ray, or {}.
+func ray(from: Vector3, to: Vector3) -> Dictionary:
+	var q := PhysicsRayQueryParameters3D.create(from, to, 1)
+	return get_world_3d().direct_space_state.intersect_ray(q)
+
+
 # ---- the Shove --------------------------------------------------------------------------------
 
 ## Everyone's griefing tool: a quick lunge that knocks a rival in front away - stronger from
@@ -779,7 +865,7 @@ func _remote_fx(from_id: int, p: String, a: String, d: Dictionary) -> void:
 		(per[p] as PowerUp).remote(a, d)
 		return
 	var scr: GDScript = PartyItems.script_for(p)
-	if scr != null and scr.has_method("remote_fx"):
+	if scr != null and PartyItems.has_remote_fx(p):
 		scr.call("remote_fx", self, from_id, a, d)
 
 

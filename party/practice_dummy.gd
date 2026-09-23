@@ -67,6 +67,23 @@ func _ready() -> void:
 	global_position = home
 
 
+## Back home, standing, with no effects (tests; also after a KO).
+func reset() -> void:
+	knocked_out = false
+	visible = true
+	global_position = home
+	vel = Vector3.ZERO
+	grounded = true
+	frozen = 0.0
+	floating = 0.0
+	stunned = 0.0
+	shrunk = 0.0
+	_respawn_left = 0.0
+	_show_ice(false)
+	if _model != null:
+		_model.scale = Vector3.ONE
+
+
 func _update_label() -> void:
 	_label.text = "DUMMY" if hits == 0 else "DUMMY  x%d" % hits
 

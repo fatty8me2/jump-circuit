@@ -36,6 +36,11 @@ func _ready() -> void:
 	var modes: Array[String] = ["auto", "on", "off"]
 	_option_row(box, "Run timer", ["After first clear", "Always", "Never"], modes.find(Settings.timer_mode), func(i: int) -> void: Settings.timer_mode = modes[i])
 
+	_section(box, "Party Mode controls")
+	var pc := PartyControls.new()
+	pc.changed.connect(func() -> void: _dirty = true)
+	box.add_child(pc)
+
 	box.add_child(UiKit.button("Done", func() -> void:
 		Settings.save_settings()
 		_dirty = false

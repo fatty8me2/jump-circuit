@@ -127,7 +127,8 @@ func _show_menu(focus_settings: bool = false) -> void:
 				Net.leave()
 				Game.goto_title("main")))
 	else:
-		box.add_child(_risky("Level Select", "leave", func() -> void: Game.goto_title("levels")))
+		# Party Practice goes back to its own course list
+		box.add_child(_risky("Level Select", "leave", func() -> void: Game.goto_title("practice" if Game.party != null else "levels")))
 		box.add_child(_risky("Quit to Title", "quit", func() -> void: Game.goto_title("main")))
 	var p: PanelContainer = UiKit.panel(Vector2(400, 0))
 	p.add_child(box)

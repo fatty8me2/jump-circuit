@@ -121,7 +121,8 @@ func hud_status() -> String:
 
 # ---- Fox Claw -------------------------------------------------------------------------------
 
-func on_attack_press() -> void:
+## A tap (released before the charge begins) is a claw.
+func _claw() -> void:
 	if _claw_cd > 0.0:
 		return
 	_claw_cd = CLAW_COOLDOWN
@@ -168,6 +169,8 @@ func on_attack_hold(held: float) -> void:
 
 func on_attack_release(held: float) -> void:
 	if _charge < 0.0:
+		if held >= 0.0 and held < hold_threshold:
+			_claw()
 		return
 	var power: float = charge_frac()
 	_charge = -1.0

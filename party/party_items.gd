@@ -86,3 +86,20 @@ static func is_transformation(id: String) -> bool:
 
 static func script_for(id: String) -> GDScript:
 	return SCRIPTS.get(id, null) as GDScript
+
+
+static var _remote_fx_cache: Dictionary = {}
+
+
+## Does the item script define a static `remote_fx` (replays its effects with no mirror)?
+static func has_remote_fx(id: String) -> bool:
+	if not _remote_fx_cache.has(id):
+		var found: bool = false
+		var scr: GDScript = script_for(id)
+		if scr != null:
+			for m: Dictionary in scr.get_script_method_list():
+				if str(m.get("name", "")) == "remote_fx":
+					found = true
+					break
+		_remote_fx_cache[id] = found
+	return bool(_remote_fx_cache[id])

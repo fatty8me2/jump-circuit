@@ -13,6 +13,15 @@ static var _spark_tex: GradientTexture2D
 static var _ramps: Dictionary = {}
 
 
+## Drops the cached materials / textures (the party layer calls this when it leaves, so
+## nothing is held after Party Mode ends; the next use rebuilds them).
+static func clear_caches() -> void:
+	_mats.clear()
+	_ramps.clear()
+	_tex = null
+	_spark_tex = null
+
+
 # ---- materials ------------------------------------------------------------------------
 
 ## Soft radial dot, white; tinted per particle by vertex colour.
@@ -157,7 +166,7 @@ static func _grow_curve() -> CurveTexture:
 ##  tangential, orbit, shape ("point" | "sphere" | "shell" | "ring" | "box"), radius,
 ##  inner, axis (ring axis), extents (box), scale_min, scale_max, shrink (bool, default true),
 ##  grow (bool), local (local_coords), aabb (visibility half-size), flat (flatness),
-##  angle (random rotation), fixed_fps.
+##  angle (random rotation), fixed_fps, initial (random per-particle colour ramp).
 static func emitter(o: Dictionary) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
 	p.layers = LAYER
@@ -223,6 +232,9 @@ static func emitter(o: Dictionary) -> GPUParticles3D:
 		pm.color_ramp = ramp(o["colors"])
 	else:
 		pm.color_ramp = ramp([Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
+	if o.has("initial"):
+		# a random colour per particle, picked from this ramp (confetti)
+		pm.color_initial_ramp = ramp(o["initial"])
 	p.process_material = pm
 	var q := QuadMesh.new()
 	var s: float = float(o.get("size", 0.25))
@@ -245,9 +257,8 @@ static func spawn(parent: Node, node: Node3D, pos: Vector3, life: float) -> Node
 static func auto_free(node: Node, after: float) -> void:
 	if not node.is_inside_tree():
 		return
-	node.get_tree().create_timer(after, false).timeout.connect(func() -> void:
-		if is_instance_valid(node):
-			node.queue_free())
+	# a bound method, not a lambda: the connection dies with the node if it goes first
+	node.get_tree().create_timer(after, false).timeout.connect(node.queue_free)
 
 
 ## One-shot emitter fired at `pos`, freed afterwards.
@@ -464,6 +475,81 @@ static func arc(parent: Node, center: Vector3, basis: Basis, radius: float, a0: 
 	var mid: float = (a0 + a1) * 0.5
 	var tip: Vector3 = center + basis * (Vector3(sin(a1), 0, -cos(a1)) * radius)
 	sparks(parent, tip, color.lerp(Color.WHITE, 0.4), 14, 5.0, basis * Vector3(sin(mid), 0.3, -cos(mid)), 50.0)
+
+
+## Particles scattered along a segment (beam trails, rays, chains): a one-shot box emitter
+## stretched from `from` to `to`.
+static func streak(parent: Node, from: Vector3, to: Vector3, color: Color, amount: int = 40, size: float = 0.22, life: float = 0.5, width: float = 0.3, speed: float = 1.5, spark: bool = false) -> void:
+	var d: Vector3 = to - from
+	var length: float = d.length()
+	if length < 0.05:
+		return
+	var xf: Transform3D = beam_transform(from, to, 1.0)
+	var b: Basis = xf.basis.orthonormalized()
+	one_shot(parent, (from + to) * 0.5, {"amount": amount, "lifetime": life, "size": size, "color": color,
+		"shape": "box", "extents": Vector3(width, length * 0.5, width), "basis": b, "vmin": speed * 0.3, "vmax": speed,
+		"spread": 180.0, "damping": speed, "explosiveness": 0.85, "spark": spark, "aabb": length + 4.0,
+		"colors": [Color(1, 1, 1, 1), Color(1, 1, 1, 0.7), Color(1, 1, 1, 0)]})
+
+
+## Little electric crackle: a few short jagged glowing segments around `center` (no light).
+static func crackle(parent: Node, center: Vector3, radius: float, color: Color, segs: int = 4, time: float = 0.1) -> void:
+	var prev: Vector3 = center + Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)).normalized() * radius
+	for i: int in segs:
+		var nxt: Vector3 = prev + Vector3(randf_range(-1, 1), randf_range(-0.6, 1), randf_range(-1, 1)).normalized() * radius * 0.45
+		beam(parent, prev, nxt, color, 0.025, time, 6.0)
+		prev = nxt
+
+
+## Comic call-out ("POW!") that pops up, floats and fades.
+static func popup_text(parent: Node, pos: Vector3, text: String, color: Color, size: int = 120) -> void:
+	var l := Label3D.new()
+	l.text = text
+	l.font_size = size
+	l.outline_size = 28
+	l.modulate = color
+	l.outline_modulate = Color(0.1, 0.05, 0.0)
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.no_depth_test = true
+	l.pixel_size = 0.006
+	l.layers = LAYER
+	parent.add_child(l)
+	l.global_position = pos
+	l.scale = Vector3.ONE * 0.3
+	var tw: Tween = l.create_tween()
+	tw.tween_property(l, "scale", Vector3.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(l, "position:y", l.position.y + 1.2, 0.9)
+	tw.tween_property(l, "modulate:a", 0.0, 0.35)
+	tw.parallel().tween_property(l, "outline_modulate:a", 0.0, 0.35)
+	tw.tween_callback(l.queue_free)
+
+
+## Expanding ring in any plane (rings travelling along a ray, magnet field lines).
+static func ring_pulse(parent: Node, pos: Vector3, normal: Vector3, color: Color, from_r: float, to_r: float, time: float = 0.35, thick: float = 0.12) -> void:
+	var tm := TorusMesh.new()
+	tm.inner_radius = 1.0 - thick
+	tm.outer_radius = 1.0
+	tm.rings = 32
+	tm.ring_segments = 6
+	var mat: StandardMaterial3D = fading_mat(color, 3.0)
+	var mi := MeshInstance3D.new()
+	mi.mesh = tm
+	mi.material_override = mat
+	mi.layers = LAYER
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	var n: Vector3 = normal.normalized() if normal.length() > 0.01 else Vector3.UP
+	var x: Vector3 = n.cross(Vector3.UP if absf(n.y) < 0.95 else Vector3.RIGHT).normalized()
+	var z: Vector3 = x.cross(n).normalized()
+	mi.global_transform = Transform3D(Basis(x, n, z), pos)
+	var b0: Basis = mi.basis
+	mi.scale = Vector3(from_r, from_r, from_r)
+	var tw: Tween = mi.create_tween().set_parallel(true)
+	tw.tween_method(func(r: float) -> void:
+		if is_instance_valid(mi):
+			mi.basis = b0.scaled(Vector3(r, r, r)), maxf(from_r, 0.01), maxf(to_r, 0.01), time).set_ease(Tween.EASE_OUT)
+	tw.tween_property(mat, "albedo_color:a", 0.0, time).set_ease(Tween.EASE_IN)
+	tw.chain().tween_callback(mi.queue_free)
 
 
 ## Camera shake for the local player (if the camera is an OrbitCamera).

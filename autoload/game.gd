@@ -331,7 +331,10 @@ func restart_level() -> void:
 
 func next_level() -> void:
 	if party != null:
-		play_party_practice(level_index + 1 if level_index + 1 < LEVELS.size() else 0)
+		var n: int = level_index + 1
+		if n >= LEVELS.size() or not is_level_unlocked(n):
+			n = 0
+		play_party_practice(n)
 		return
 	if level_index + 1 < LEVELS.size():
 		play_level(level_index + 1)

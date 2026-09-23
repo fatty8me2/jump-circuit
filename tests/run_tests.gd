@@ -2088,8 +2088,15 @@ func _face_dummy(lvl: LevelBase, d: PracticeDummy, dist: float = 1.6) -> void:
 	var fwd: Vector3 = Vector3(0, 0, -1).rotated(Vector3.UP, d.rotation.y)
 	var at: Vector3 = d.home + fwd * dist
 	lvl.player.teleport(Transform3D(Basis.looking_at(d.home - at, Vector3.UP), at + Vector3(0, 0.1, 0)))
-	lvl.player.camera_yaw = atan2(-(d.home - at).x, -(d.home - at).z)
+	_aim(lvl, atan2(-(d.home - at).x, -(d.home - at).z))
 	await ticks(3)
+
+
+## Points the camera (and so the player's aim) at `yaw`: the OrbitCamera writes camera_yaw.
+func _aim(lvl: LevelBase, yaw: float) -> void:
+	lvl.player.camera_yaw = yaw
+	if lvl.camera != null:
+		lvl.camera.yaw = yaw
 
 
 ## Presses the party's Attack for `hold` seconds (0 = a tap).
@@ -2124,6 +2131,9 @@ func test_zp_practice_core_loop() -> void:
 	check(p.item == "fox" and not box.available, "touching a box pops it and fills the slot (practice hands out the Nine-Tailed Fox first: %s)" % p.item)
 	await seconds(PartyLayer.BOX_RESPAWN + 0.3)
 	check(box.available, "the box respawns after %.0f s" % PartyLayer.BOX_RESPAWN)
+	# step off the box row so the next box doesn't refill the slot at once
+	lvl.player.teleport(Transform3D(Basis(), box.global_position + Vector3(0, -1.1, 6.0)))
+	await ticks(2)
 	# transform
 	var pu: PowerUp = p.activate_item()
 	await ticks(2)
@@ -2146,3 +2156,260 @@ func test_zp_practice_core_loop() -> void:
 	await ticks(3)
 	check(p.actives.is_empty() and is_equal_approx(lvl.player.speed_mult, 1.0) and is_equal_approx(lvl.player.jump_mult, 1.0), "when it ends the movement multipliers are restored")
 	Game.party = null
+
+
+
+## Clears powers, statuses, the slot and resets a dummy between power-up checks.
+func _party_fresh(p: PartyLayer, d: PracticeDummy) -> void:
+	p.end_all_powers()
+	p.clear_statuses()
+	p.item = ""
+	p.cmd_attack = false
+	p.cmd_use = false
+	p.cmd_cycle = false
+	await ticks(2)
+	d.reset()
+	await ticks(2)
+
+
+## Gives and uses one item; returns the PowerUp (freed at once for instant items).
+func _use_item(p: PartyLayer, id: String) -> PowerUp:
+	p.give_item(id)
+	var pu: PowerUp = p.activate_item()
+	await ticks(2)
+	return pu
+
+
+func test_zp_every_power_up() -> void:
+	var lvl: LevelBase = await _load_practice(0)
+	var p: PartyLayer = lvl.party
+	if p == null or p.dummies.is_empty():
+		check(false, "practice layer with dummies")
+		return
+	p.use_device_input = false
+	lvl.player.use_device_input = false
+	var pl: Player = lvl.player
+	var d: PracticeDummy = p.dummies[0]
+	var mods := func() -> Vector3: return Vector3(pl.speed_mult, pl.jump_mult, pl.gravity_mult)
+	var restored := func() -> bool: return mods.call() == Vector3.ONE and pl.party_air_jumps == 0
+
+	# Hero's Tunic: blade combo, spin attack, and each tool
+	await _party_fresh(p, d)
+	var tunic: PowerUp = await _use_item(p, "tunic")
+	check(mods.call().is_equal_approx(Vector3(1.15, 1.1, 1.0)), "Hero's Tunic: x1.15 speed, x1.1 jump (%s)" % mods.call())
+	await _face_dummy(lvl, d, 1.8)
+	await _attack(p)
+	check(d.hits == 1 and d.last_src == "blade", "Hero's Tunic: a Legend Blade slash knocks the dummy (%s)" % d.last_src)
+	d.reset()
+	await _face_dummy(lvl, d, 2.2)
+	await _attack(p, 1.0)
+	check(d.last_src == "spin", "Hero's Tunic: holding Attack charges a Spin Attack (%s)" % d.last_src)
+	for tool: int in 3:
+		d.reset()
+		(tunic as Object).set("tool", tool)
+		(tunic as Object).set("_tool_cd", 0.0)
+		await _face_dummy(lvl, d, 6.0)
+		var h0: int = d.hits
+		p.cmd_use = true
+		await ticks(2)
+		p.cmd_use = false
+		await seconds(1.2)
+		var tname: String = ["boomerang", "hookshot", "bombs"][tool]
+		check(d.hits > h0 and d.last_src == tname, "Hero's Tunic: the %s hits the dummy (%s)" % [tname, d.last_src])
+	p.cmd_cycle = true
+	await ticks(2)
+	p.cmd_cycle = false
+	await ticks(2)
+	check(int((tunic as Object).get("tool")) == 0, "Hero's Tunic: Cycle switches to the next tool")
+	tunic.finish()
+	await ticks(3)
+	check(restored.call(), "Hero's Tunic: multipliers restored when it ends")
+
+	# Golden Surge Hair: double jump, dash punch, Energy Wave
+	await _party_fresh(p, d)
+	var surge: PowerUp = await _use_item(p, "surge")
+	check(mods.call().is_equal_approx(Vector3(1.4, 1.2, 1.0)) and pl.party_air_jumps == 1, "Golden Surge Hair: x1.4 speed, x1.2 jump, a double jump (%s, %d)" % [mods.call(), pl.party_air_jumps])
+	await _face_dummy(lvl, d, 3.0)
+	await _attack(p)
+	await ticks(20)
+	check(d.last_src == "dash_punch", "Golden Surge Hair: the Dash Punch connects (%s)" % d.last_src)
+	d.reset()
+	await _face_dummy(lvl, d, 9.0)
+	await _attack(p, 1.6)
+	await ticks(3)
+	check(d.last_src == "wave", "Golden Surge Hair: a charged Energy Wave blasts the dummy (%s)" % d.last_src)
+	surge.finish()
+	await ticks(3)
+	check(restored.call(), "Golden Surge Hair: multipliers and the double jump end with it")
+
+	# instant items aimed at a dummy in front
+	var aimed: Dictionary = {"glove": [4.0, "glove"], "shrink": [8.0, "shrink"], "ice": [8.0, "ice"], "gravity": [7.0, "gravity"]}
+	for id: String in aimed:
+		await _party_fresh(p, d)
+		await _face_dummy(lvl, d, float(aimed[id][0]))
+		await _use_item(p, id)
+		await seconds(1.3)
+		check(d.hits >= 1 and d.last_src == str(aimed[id][1]), "%s hits the dummy (%s)" % [PartyNames.item_name(id), d.last_src])
+		match id:
+			"shrink":
+				check(d.shrunk > 0.0, "Shrink Ray: the dummy is shrunk")
+			"ice":
+				check(d.frozen > 0.0, "Ice Beam: the dummy is frozen solid")
+			"gravity":
+				check(d.floating > 0.0, "Gravity Bomb: the dummy floats helplessly")
+		check(restored.call(), "%s leaves the multipliers at 1" % PartyNames.item_name(id))
+
+	# Thunder Cloud zaps dummies ahead
+	await _party_fresh(p, d)
+	await _face_dummy(lvl, d, 5.0)
+	await _use_item(p, "thunder")
+	check(d.last_src == "thunder" and d.stunned > 0.0, "Thunder Cloud strikes the dummy (%s)" % d.last_src)
+
+	# Slick Puddle: dropped behind us, onto the dummy standing there
+	await _party_fresh(p, d)
+	var fwd: Vector3 = Vector3(0, 0, -1).rotated(Vector3.UP, d.rotation.y)
+	var at: Vector3 = d.home + fwd * 1.8
+	pl.teleport(Transform3D(Basis.looking_at(fwd, Vector3.UP), at + Vector3(0, 0.1, 0)))
+	await ticks(3)
+	await _use_item(p, "slick")
+	await seconds(0.6)
+	check(d.last_src == "slick", "Slick Puddle: the dummy behind us slips in it (%s)" % d.last_src)
+	check(p.hazards.is_empty(), "the puddle is used up by the slip")
+
+	# Mega Magnet drags the dummy closer
+	await _party_fresh(p, d)
+	await _face_dummy(lvl, d, 6.0)
+	var gap0: float = Vector2(d.global_position.x - pl.global_position.x, d.global_position.z - pl.global_position.z).length()
+	var mag: PowerUp = await _use_item(p, "magnet")
+	await seconds(0.8)
+	var gap1: float = Vector2(d.global_position.x - pl.global_position.x, d.global_position.z - pl.global_position.z).length()
+	check(d.last_src == "magnet" and gap1 < gap0 - 1.0, "Mega Magnet drags the dummy in (%.1f -> %.1f m)" % [gap0, gap1])
+	mag.finish()
+	await ticks(3)
+
+	# Swap Warp trades places with the nearest dummy
+	await _party_fresh(p, d)
+	await _face_dummy(lvl, d, 4.0)
+	var mine: Vector3 = pl.global_position
+	var tgt: Dictionary = p.target_ahead()
+	var theirs: Vector3 = (tgt["node"] as PracticeDummy).global_position if not tgt.is_empty() else Vector3.ZERO
+	await _use_item(p, "swap")
+	await ticks(3)
+	check(not tgt.is_empty() and pl.global_position.distance_to(theirs) < 1.0 and (tgt["node"] as PracticeDummy).global_position.distance_to(mine) < 1.5, "Swap Warp: we and the dummy trade places")
+
+	# Balloon Shield soaks a hit
+	await _party_fresh(p, d)
+	var bal: PowerUp = await _use_item(p, "balloon")
+	pl.velocity = Vector3.ZERO
+	var deaths0: int = lvl.deaths
+	p._on_hit(77, {"kb": [0, 20, 0], "st": 1.0, "ko": true, "s": "test"})
+	await ticks(2)
+	check(bal.ended and pl.velocity.y < 5.0 and lvl.deaths == deaths0 and pl.party_stun <= 0.0, "Balloon Shield: the next hit - even a KO - is absorbed")
+
+	# Jetpack: launch, low gravity, thrust while Jump is held
+	await _party_fresh(p, d)
+	await _face_dummy(lvl, d, 6.0)
+	var jet: PowerUp = await _use_item(p, "jetpack")
+	check(pl.velocity.y > 8.0 and is_equal_approx(pl.gravity_mult, 0.5), "Jetpack: a burst up and half gravity (vy %.1f, g x%.2f)" % [pl.velocity.y, pl.gravity_mult])
+	pl.cmd_jump = true
+	await seconds(0.5)
+	pl.cmd_jump = false
+	check(float((jet as Object).get("fuel")) < 2.0, "Jetpack: holding Jump burns fuel for thrust")
+	jet.finish()
+	await ticks(3)
+	check(restored.call(), "Jetpack: gravity restored when it ends")
+	await seconds(1.5)
+
+	# Tornado wanders off and flings a dummy it catches
+	await _party_fresh(p, d)
+	await _face_dummy(lvl, d, 3.0)
+	await _use_item(p, "tornado")
+	var tn: PartyTornado = null
+	for h: Variant in p.hazards.values():
+		if h is PartyTornado:
+			tn = h
+	check(tn != null, "Tornado: a tornado spins up")
+	if tn != null:
+		await seconds(0.5)
+		d.global_position = tn.global_position
+		d.home = d.global_position
+		await ticks(4)
+		check(d.last_src == "tornado" and d.vel.y > 5.0, "Tornado: it flings the dummy it catches (%s)" % d.last_src)
+	check(restored.call(), "no power-up leaves a multiplier behind")
+	Game.party = null
+
+
+func test_zp_main_mode_stays_pure() -> void:
+	Game.party = null
+	var lvl: LevelBase = await load_level(0)
+	await ticks(4)
+	check(lvl.party == null and lvl.find_children("*", "PartyLayer", true, false).is_empty(), "the main mode adds no party layer")
+	check(lvl.find_children("*", "ItemBox", true, false).is_empty() and lvl.find_children("*", "PracticeDummy", true, false).is_empty(), "no item boxes or dummies in the main mode")
+	var pl: Player = lvl.player
+	check(pl.speed_mult == 1.0 and pl.jump_mult == 1.0 and pl.gravity_mult == 1.0 and pl.party_air_jumps == 0 and pl.party_stun == 0.0, "the main mode's movement multipliers stay 1.0")
+	# party buttons do nothing in the main mode
+	Input.action_press("attack")
+	Input.action_press("use_item")
+	await ticks(6)
+	Input.action_release("attack")
+	Input.action_release("use_item")
+	check(pl.speed_mult == 1.0 and lvl.find_children("*", "PowerUp", true, false).is_empty(), "Attack / Use do nothing outside Party Mode")
+
+
+func test_zp_scoring_rules() -> void:
+	check(PartyRules.placement_points(1) == 10 and PartyRules.placement_points(2) == 8 and PartyRules.placement_points(8) == 1 and PartyRules.placement_points(9) == 0 and PartyRules.placement_points(0) == 0, "placement points 10/8/.../1, 0 beyond 8th or unfinished")
+	check(PartyRules.ko_credit(5, 10.0, 13.9) == 5 and PartyRules.ko_credit(5, 10.0, 14.1) == 0 and PartyRules.ko_credit(0, 10.0, 11.0) == 0, "a fall within 4 s of a hit is the hitter's KO")
+	var rows: Array[Dictionary] = PartyRules.score_round([3, 1], [1, 2, 3], {2: 2, 1: 1}, {3: 1})
+	var by: Dictionary = {}
+	for r: Dictionary in rows:
+		by[int(r["id"])] = r
+	check(int(by[3]["total"]) == 12 and int(by[1]["total"]) == 11 and int(by[2]["total"]) == 6, "round totals: place + 3 per KO + 2 per bonus (%d, %d, %d)" % [int(by[3]["total"]), int(by[1]["total"]), int(by[2]["total"])])
+	check(int(by[2]["place"]) == 0 and int(by[2]["place_pts"]) == 0 and int(by[2]["ko_pts"]) == 6, "an unfinished racer keeps KO points but gets no placement points")
+	check(int(rows[0]["id"]) == 3, "rows are sorted best first")
+	check(not PartyRules.round_over([-1.0, -1.0], 100.0), "the round runs until someone finishes")
+	check(not PartyRules.round_over([30.0, -1.0], 74.0) and PartyRules.round_over([30.0, -1.0], 75.0), "the round ends 45 s after the first finisher")
+	check(PartyRules.round_over([30.0, 40.0], 41.0), "the round ends when everyone is home")
+	var teams: Dictionary = PartyRules.balance_teams([4, 1, 3, 2, 5])
+	var sizes: Array[int] = [0, 0]
+	for id: Variant in teams:
+		sizes[int(teams[id])] += 1
+	check(absi(sizes[0] - sizes[1]) <= 1 and teams.size() == 5, "teams are balanced (%d vs %d)" % [sizes[0], sizes[1]])
+	check(PartyRules.smaller_team({1: 0, 2: 0, 3: 1}) == 1 and PartyRules.smaller_team({1: 0, 2: 1}) == 0, "a newcomer joins the smaller team")
+	var pts: Dictionary = {1: 10, 2: 8, 3: 6, 4: 5}
+	var tm: Dictionary = {1: 0, 2: 1, 3: 1, 4: 0}
+	check(PartyRules.team_totals(pts, tm) == [15, 14] and PartyRules.winning_team(pts, tm) == 0, "team score = sum of its members")
+	check(PartyRules.winning_team({1: 5, 2: 5}, {1: 0, 2: 1}) == -1, "equal team totals are a draw")
+	var cup := PartyRules.new("team")
+	cup.names = {1: "A", 2: "B"}
+	cup.teams = {1: 0, 2: 1}
+	cup.add_round(PartyRules.score_round([1, 2], [1, 2], {}, {}))
+	cup.add_round(PartyRules.score_round([2, 1], [1, 2], {1: 1}, {}))
+	check(int(cup.cup[1]) == 21 and int(cup.cup[2]) == 18, "the cup adds rounds up (%s)" % str(cup.cup))
+	var back := PartyRules.new("team")
+	back.cup_from_wire(JSON.parse_string(JSON.stringify(cup.cup_to_wire())))
+	check(int(back.cup[1]) == 21 and str(back.names[2]) == "B" and int(back.teams[2]) == 1, "the cup survives the wire (JSON) intact")
+	var wired: Array[Dictionary] = PartyRules.rows_from_wire(JSON.parse_string(JSON.stringify(rows)))
+	check(wired.size() == 3 and int(wired[0]["total"]) == 12, "round rows survive the wire (JSON) intact")
+
+
+func test_zp_item_roll_weighting() -> void:
+	var lead: Dictionary = {}
+	var last: Dictionary = {}
+	for i: int in 1000:
+		var r: float = (float(i) + 0.5) / 1000.0
+		var a: String = PartyItems.roll(0.0, r)
+		var b: String = PartyItems.roll(1.0, r)
+		lead[a] = int(lead.get(a, 0)) + 1
+		last[b] = int(last.get(b, 0)) + 1
+	var wild := func(t: Dictionary) -> int: return int(t.get("fox", 0)) + int(t.get("tunic", 0)) + int(t.get("surge", 0))
+	check(wild.call(last) > wild.call(lead) * 4, "the back of the pack rolls far more transformations (%d vs %d per 1000)" % [wild.call(last), wild.call(lead)])
+	check(not lead.has("swap") and not lead.has("thunder"), "the leader never rolls Swap Warp or Thunder Cloud")
+	check(int(lead.get("balloon", 0)) > int(last.get("balloon", 0)), "the leader gets more defensive items")
+	var every: bool = true
+	for id: String in PartyItems.PRACTICE_ORDER:
+		if not lead.has(id) and not last.has(id):
+			every = false
+		if PartyItems.script_for(id) == null or PartyNames.item_name(id) == id:
+			every = false
+	check(every and PartyItems.PRACTICE_ORDER.size() >= 13, "every item can roll and has a script and a display name (%d items)" % PartyItems.PRACTICE_ORDER.size())
+	check(PartyItems.place_fraction(1, 4) == 0.0 and PartyItems.place_fraction(4, 4) == 1.0, "race place maps to 0 (leader) .. 1 (last)")

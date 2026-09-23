@@ -4,10 +4,7 @@ const ROOM_CODE = /^[A-HJ-NP-Z2-9]{8}$/;
 const MAX_PLAYERS = 8;
 const MAX_MESSAGE_BYTES = 16 * 1024;
 const HOST_EVENTS = new Set(["roster", "kick", "start_race", "return_lobby", "pong"]);
-// "party" carries Party Mode game packets (hits, pickups, power-ups, round results). The
-// relay forwards them opaquely, broadcast or to one peer; host-only kinds are checked by the
-// receiving game (it knows the sender id from `from`).
-const PLAYER_EVENTS = new Set(["register", "ping", "pose", "checkpoint", "finished", "party"]);
+const PLAYER_EVENTS = new Set(["register", "ping", "pose", "checkpoint", "finished"]);
 
 export default {
 	async fetch(request, env) {
@@ -143,10 +140,6 @@ export class RaceRoom extends DurableObject {
 		}
 		if ((event === "pose" || event === "checkpoint" || event === "finished") && to !== null) {
 			socket.close(1008, "Player event must be broadcast");
-			return;
-		}
-		if (event === "party" && to !== null && (!Number.isInteger(to) || to < 1 || to > MAX_PLAYERS || to === sender.id)) {
-			socket.close(1008, "Event needs a valid target");
 			return;
 		}
 

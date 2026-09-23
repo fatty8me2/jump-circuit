@@ -316,8 +316,6 @@ func _process_relay(dt: float) -> void:
 		var reason := _relay_socket.get_close_reason()
 		var close_code := _relay_socket.get_close_code()
 		var was_ready := _relay_ready
-		if reason == "Unknown event":
-			reason = "this relay predates Party Mode - redeploy relay/ with npm run deploy"
 		_shutdown()
 		if was_ready:
 			var detail := " (close code %d)" % close_code if reason == "" else " (close code %d: %s)" % [close_code, reason]
@@ -406,6 +404,12 @@ func _handle_relay_event(from_id: int, event: String, raw_data: Variant) -> void
 			if from_id == 1:
 				_return_to_lobby()
 		"pose":
+			if data.has("party"):
+				# a Party Mode packet riding the pose event (see send_party)
+				var to: int = int(data.get("to", 0))
+				if roster.has(from_id) and (to == 0 or to == my_id()) and typeof(data["party"]) == TYPE_DICTIONARY:
+					party_message.emit(from_id, data["party"])
+				return
 			var p: Array = data.get("pos", [])
 			var v: Array = data.get("vel", [])
 			if p.size() == 3 and v.size() == 3:
@@ -415,9 +419,6 @@ func _handle_relay_event(from_id: int, event: String, raw_data: Variant) -> void
 			_apply_checkpoint(from_id, int(data.get("index", 0)), float(data.get("at", 0.0)))
 		"finished":
 			_apply_finished(from_id, float(data.get("time", 0.0)))
-		"party":
-			if roster.has(from_id):
-				party_message.emit(from_id, data)
 
 
 func _relay_send_event(event: String, data: Dictionary, to_id: int = 0) -> void:
@@ -750,14 +751,17 @@ func all_finished() -> bool:
 # ---- party mode ------------------------------------------------------------------
 
 ## Sends a Party Mode packet to everyone (to_id 0) or one peer. Kinds only the host may send
-## are enforced by the receiving PartyLayer (from_id == 1); the relay forwards "party" events
-## opaquely, broadcast or targeted.
+## are enforced by the receiving PartyLayer (from_id == 1).
+## Over the room relay the packet rides the existing broadcast "pose" event as
+## {"party": msg, "to": id}: the deployed relay forwards it unchanged (no redeploy needed),
+## receivers drop packets addressed to someone else, and a pose without "pos" is ignored by
+## older game builds.
 func send_party(msg: Dictionary, to_id: int = 0) -> void:
 	if not active or to_id == my_id():
 		return
 	if _relay_mode:
 		if roster.size() > 1:
-			_relay_send_event("party", msg, to_id)
+			_relay_send_event("pose", {"party": msg, "to": to_id})
 		return
 	if multiplayer.multiplayer_peer == null or multiplayer.get_peers().is_empty():
 		return
