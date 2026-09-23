@@ -1,14 +1,31 @@
 extends LevelBase
-## 5. THE FINAL ASCENT - a night climb up a neon spire complex to the beacon. Hard mode:
-## twelve stages, each behind a checkpoint, each pushing one earlier idea to its nastiest
-## and then mixing in two or three more:
+## 7. THE FINAL ASCENT (the finale) - a night climb up a neon spire complex to the beacon. Hard mode:
+## twenty-three stages, each behind a checkpoint, each pushing one earlier idea to its nastiest
+## and then mixing in two or three more. The lower spire (1-12):
 ##   1 neon ladder + head-hitters + kill slalom      2 boost strip -> 15 m leap -> pad at sprint -> small disc
 ##   3 ice slide -> lip leap -> angled pad -> blink   4 lively narrow tilt beams, cross-wind, a hammer
 ##   5 ferry sling into a collapsing-stone curve      6 turntable with sweeper bars, arm-tip sling
 ##   7 neon ladder II (blinks, mover, kill walls)     8 the pinball shaft (bumper to bumper between kill panels)
 ##   9 the updraft chimney through kill rings         10 the belt gauntlet under sweeping hammers
-##   11 the hammer express (get hit on purpose)        12 the victory lap: six momentum pieces, no plain ground
-## Set piece: lighting the beacon.
+##   11 the hammer express (get hit on purpose)        12 the victory lap -> the false summit
+## The upper spire (13-23) brings the wall run, the mantle and the timed machines:
+##   13 signal gap: wall run over the void, mantle, laser fences
+##   14 FORK: piston alley (timing) | the scaffold (two mantles + blink), then the crusher bridge
+##   15 the data stream: hop laser packets pouring down a belt, mantle out at the uplink
+##   16 the chimney: three wall runs zig-zagging up, mantle out of the last kick, kill-ceiling taps
+##   17 FORK: the press row (four crushers on a green wave + fence) | blink + guarded portal skip
+##   18 FORK: hologram alley (three blinking billboard wall runs) | the gantry (blinks, fence, mantle)
+##   19 the press stair: three mantles onto lips a crusher slams, then the ram beam
+##   20 the uplink: a faster packet stream, a wall run over the drop, mantle out of the kick
+##   21 the piston express: stand in front of two rams and let them throw you across the void
+##   22 the billboard chimney: four blinking screens to wall-run up, mantle out of the kick
+##   23 the beacon run: boost through a fence and under a press on one rhythm, mantle, summit pad
+## Set pieces: the holographic billboards (AscentBillboard: wall-run panels that exist only while
+## their ad plays), the data stream (AscentDataStream), and lighting the beacon.
+## Shortcuts: A stage 1 side pad, B stage 4 wind-edge blocks, C stage 17 antenna caps,
+## D stage 20 side warp ring, E stage 19 service pillar (max-height mantle).
+## Particles (visual/ascent_fx.gd): neon motes + data rain along the climb, uplink spark fountains,
+## press slam sparks, ram steam, portal arrival showers, checkpoint blooms, beacon embers + fireworks.
 
 var _beam: MeshInstance3D
 var _beacon_light: OmniLight3D
@@ -52,6 +69,7 @@ func _build() -> void:
 	cp = _stage_22(cp)
 	_stage_23(cp)
 	_surroundings()
+	_ambience()
 
 
 # ---- helpers ------------------------------------------------------------------------------------------
@@ -645,6 +663,7 @@ func _summit(pad_top: Vector3, yaw_deg: float) -> void:
 
 
 var _summit_pos: Vector3 = Vector3.ZERO
+var _fireworks: Array[AscentFx] = []
 
 
 # ==== THE UPPER SPIRE (stages 13-23) ==================================================================
@@ -762,6 +781,7 @@ func _stage_14(o: Vector3) -> Vector3:
 	kit.plat(W(0, 0, -31.5), _sz(Vector3(12, 0.8, 5.0)), "main", 1.0)
 	kit.plat(W(0, 0, -37.75), _sz(Vector3(2.4, 0.6, 7.5)), "alt", 0.0)
 	var cr: Crusher = kit.crusher(W(0, 0, -37.8), Vector3(2.8, 1.6, 2.8), 3.2, 2.6, 0.0)
+	_slam_fx(cr, W(0, 0, -37.8))
 	if route_variant == 0:
 		r_walk(W(-4.0, 0, -6.2))
 		for i: int in 3:
@@ -801,6 +821,7 @@ func _stage_15(o: Vector3) -> Vector3:
 	add_child(stream)
 	# the uplink the packets pour out of, and the ledge you climb out onto
 	kit.arch(W(0, 3.3, -32.9), 5.6, 3.6, _yaw, Look.c("accent2"))
+	_uplink_fx(W(0, 3.3 + 3.6, -32.9))
 	_ledge(Vector3(0, 3.3, -34.5), Vector3(4.4, 7.0, 4.0))
 	_step({"kind": "ascent_stream", "to": W(0, 0, -30.9), "stream": stream})
 	r_mantle(W(0, 0, -31.2), W(0, 3.3, -33.4))
@@ -860,6 +881,7 @@ func _stage_17(o: Vector3) -> Vector3:
 	var ph: Array[float] = [0.0, 0.3, 0.133, 0.0]
 	for i: int in 4:
 		presses.append(kit.crusher(W(0, 0, pz[i]), Vector3(2.8, 1.8, 2.8), 3.2, 2.4, ph[i]))
+		_slam_fx(presses[i], W(0, 0, pz[i]))
 	var fence: LaserGate = _fence(0, 0, -33.3, 2.6, [0.4, 1.3], 2.4, 0.4, 0.4)
 	# the merge deck (checkpoint), wide enough for the portal's exit ring
 	kit.plat(W(3.0, 0, -38.0), _sz(Vector3(11.0, 1.2, 7.0)), "main", 2.0)
@@ -873,9 +895,14 @@ func _stage_17(o: Vector3) -> Vector3:
 	kit.plat(pp, _sz(Vector3(2.4, 0.8, 2.4)), "accent", 0.7)
 	kit.pillar(pp - Vector3(0, 0.8, 0), 0.7, 40.0)
 	var portal: WarpPortal = kit.portal(W(6.0, 3.4, -18.9), _yaw, W(4.5, 0, -35.3), _yaw, 7.0)
+	_arrive_fx(W(4.5, 0, -35.3), WarpPortal.EXIT_COLOR)
 	# the ring's mouth is guarded: a two-beam fence right in front of it
 	var guard: LaserGate = _fence(6.0, 3.4, -18.25, 2.4, [0.5, 1.4], 2.0, 0.5, 0.3)
 	kit.glow_strip(r1 + Vector3(0, 0.03, 0), Vector3(0.5, 0.06, 0.5), WarpPortal.ENTRY_COLOR)
+	# SHORTCUT C: two 1 m antenna caps off the left of the row - 85-90% leaps that skip presses 2 and 3
+	for c: Vector3 in [W(-3.4, 0.5, -15.2), W(-3.4, 0.5, -22.2)]:
+		kit.plat(c, Vector3(1.0, 0.8, 1.0), "accent", 0.5)
+		kit.glow_strip(c + Vector3(0, 0.03, 0), Vector3(0.4, 0.06, 0.4), Look.c("accent2"))
 	if route_variant == 0:
 		r_walk(W(0, 0, -3.2))
 		r_until(func() -> bool: return _press_clear(presses[0], 0.0, 1.0))
@@ -931,6 +958,7 @@ func _stage_18(o: Vector3) -> Vector3:
 		_billboard(xl - 2.3, 6.0, -10.5, -18.5, 3.0, 0.7, -1.0 / 3.0),
 		_billboard(xl + 2.3, 9.0, -16.5, -24.5, 3.0, 0.7, -2.0 / 3.0),
 	]
+	_glitter(W(xl, 6.0, -15.0))
 	# RIGHT: the gantry - blinking steps and a laser fence, slower but on solid-ish ground
 	var g1: Vector3 = W(5.0, 1.4, -6.9)
 	kit.plat(g1, Vector3(1.8, 0.8, 1.8), "alt", 0.7)
@@ -983,12 +1011,18 @@ func _stage_19(o: Vector3) -> Vector3:
 		var zc: float = -8.5 - 6.0 * float(i)
 		_ledge(Vector3(0, top, zc), Vector3(4.4, 9.0 + 3.2 * float(i), 6.0))
 		presses.append(kit.crusher(W(0, top, zc + 1.3), Vector3(3.0, 1.6, 2.8), 3.0, 2.6, 0.35 * float(i)))
+		_slam_fx(presses[i], W(0, top, zc + 1.3))
+	# SHORTCUT E: a 1.4 m service pillar beside the first step - a near max-height running mantle onto it,
+	# then a rising leap onto the corner of step 2 beside its press: skips the first mantle and press
+	_ledge(Vector3(3.6, 4.1, -7.2), Vector3(1.4, 10.0, 1.4), "alt")
 	# the ram beam: a 1 m catwalk over the void, rams punching across it from both sides
 	kit.plat(W(0, 9.6, -29.7), _sz(Vector3(1.0, 0.6, 12.4)), "alt", 0.0)
 	var rams: Array[Piston] = [
 		_ram(Vector3(-1.8, 9.6 + 1.65, -27.0), 1.0, 2.2, 2.6, 2.0, 0.0),
 		_ram(Vector3(1.8, 9.6 + 1.65, -32.0), -1.0, 2.2, 2.6, 2.0, 0.35),
 	]
+	_punch_fx(rams[0], W(0, 9.6 + 0.8, -27.0), D(Vector3.RIGHT))
+	_punch_fx(rams[1], W(0, 9.6 + 0.8, -32.0), D(Vector3.LEFT))
 	r_walk(W(0, 0, -2.6))
 	r_until(func() -> bool: return _press_clear(presses[0], 0.0, 1.8))
 	r_mantle(W(0, 0, -3.2), W(0, 3.2, -6.4))
@@ -1028,6 +1062,7 @@ func _stage_20(o: Vector3) -> Vector3:
 	stream.position = belt_c
 	add_child(stream)
 	kit.arch(W(0, 0, -36.4), 5.6, 3.6, _yaw, Look.c("accent2"))
+	_uplink_fx(W(0, 3.6, -36.4))
 	# the dish deck at the top of the belt, then nothing but a wall-run panel over the drop
 	kit.plat(W(0, 0, -39.0), _sz(Vector3(4.4, 0.8, 5.0)), "main", 1.0)
 	_wall(2.3, 1.2, -44.5, -54.5)
@@ -1039,6 +1074,7 @@ func _stage_20(o: Vector3) -> Vector3:
 	kit.plat(s1, Vector3(1.0, 0.8, 1.0), "accent", 0.5)
 	kit.plat(s2, Vector3(1.2, 0.8, 1.2), "accent", 0.5)
 	kit.portal(s2, _yaw, W(0, 0, -21.0), _yaw, 7.0)
+	_arrive_fx(W(0, 0, -21.0), WarpPortal.EXIT_COLOR)
 	_step({"kind": "ascent_stream", "to": W(0, 0, -36.9), "stream": stream})
 	r_wallrun(W(0.5, 0, -41.1), W(1.7, 1.4, -45.6), W(1.7, 1.4, -51.5), W(-0.75, 3.8, -56.7))
 	var cp: Vector3 = W(-0.75, 3.8, -60.5)
@@ -1073,6 +1109,8 @@ func _stage_21(o: Vector3) -> Vector3:
 	var p2: Vector3 = W(14.4, -0.4, -6.2)
 	kit.plat(p2, Vector3(1.8, 0.8, 1.8), "accent", 0.7)
 	var ram2: Piston = kit.piston(W(14.4, -0.4 + 1.6, -6.2 + 1.9), Vector3(1.8, 1.6, 2.0), _yaw, 2.0, 3.0, 0.5, 9.0)
+	_punch_fx(ram1, p1 + Vector3(0, 0.8, 0), D(Vector3.RIGHT))
+	_punch_fx(ram2, p2 + Vector3(0, 0.8, 0), D(Vector3.FORWARD))
 	var l2: Vector3 = W(14.4, -2.0, -15.5)
 	kit.plat(l2, _sz(Vector3(4.5, 1.0, 6.0)), "main", 1.2)
 	_ledge(Vector3(14.4, 1.4, -22.75), Vector3(5.0, 12.0, 8.5))
@@ -1106,6 +1144,7 @@ func _stage_22(o: Vector3) -> Vector3:
 		_billboard(-2.3, 12.0, -22.5, -30.5, per, 0.72, -3.0 * gap / per),
 	]
 	_ledge(Vector3(1.5, 13.9, -33.5), Vector3(6.0, 17.0, 5.0))
+	_glitter(W(0, 8.0, -18.0))
 	r_walk(W(0.5, 0, -0.4))
 	r_until(func() -> bool:
 		var t: float = Game.course_time
@@ -1136,6 +1175,7 @@ func _stage_23(o: Vector3) -> void:
 	kit.plat(W(0, 0, -30.0), _sz(Vector3(4.4, 1.0, 9.0)), "main", 1.2)
 	# the press runs on the fence's rhythm: leave the strip as the beams die and it is up as you land
 	var press: Crusher = kit.crusher(W(0, 0, -30.5), Vector3(3.4, 1.6, 2.8), 3.0, 2.4, 0.12)
+	_slam_fx(press, W(0, 0, -30.5))
 	_ledge(Vector3(0, 3.6, -38.5), Vector3(4.4, 12.0, 8.0))
 	r_walk(W(0, 0, -1.0))
 	r_until(func() -> bool: return _dark(fence, 0.7, 1.6) and _press_clear(press, 1.5, 2.4))
@@ -1143,6 +1183,69 @@ func _stage_23(o: Vector3) -> void:
 	_speed(20.0)
 	r_mantle(W(0, 0, -32.8), W(0, 3.6, -36.2))
 	_summit(W(0, 3.6, -39.0), _yaw)
+
+
+# ==== particles ============================================================================================
+
+## Sparks and a dust ring every time a press hits its floor.
+func _slam_fx(c: Crusher, floor_top: Vector3) -> void:
+	var fx := AscentFx.burst(floor_top + Vector3(0, 0.15, 0), Color(1.0, 0.62, 0.3), func() -> bool: return c.gap_at(Game.course_time) < 0.05, 40, 7.0)
+	AscentFx.add_puff(fx, Look.c("cloud_light"), 12, Vector3.UP, 2.0)
+	add_child(fx)
+
+
+## Steam and sparks out of the ram as it punches (`at` = in front of its face, `dir` = the punch direction).
+func _punch_fx(p: Piston, at: Vector3, dir: Vector3) -> void:
+	var fx := AscentFx.burst(at, Color(0.55, 0.95, 1.0), func() -> bool: return p.is_punching_at(Game.course_time), 30, 8.0, dir + Vector3(0, 0.25, 0), 0.5)
+	AscentFx.add_puff(fx, Color(0.8, 0.9, 1.0), 10, dir, 3.0)
+	add_child(fx)
+
+
+## A blue shower where a warp ring drops you off.
+func _arrive_fx(at: Vector3, col: Color) -> void:
+	add_child(AscentFx.burst(at + Vector3(0, 1.2, 0), col, func() -> bool:
+		return player != null and player.global_position.distance_to(at + Vector3(0, 0.5, 0)) < 1.8, 50, 6.0, Vector3.ZERO, 0.9, 0.16))
+
+
+## Packet uplinks: a magenta spark fountain over the arch the data pours out of.
+func _uplink_fx(top: Vector3) -> void:
+	add_child(AscentFx.fountain(top + Vector3(0, 0.3, 0), AscentBillboard.AD_COLORS[0], 36, 5.0, 1.2))
+
+
+## Ambient layers along the whole climb: neon motes round every checkpoint (alternating cyan and
+## magenta), big pale glints higher up, data-rain curtains beside the route, a bloom of confetti the
+## first time you reach each upper-spire checkpoint, and the hologram alleys' glitter.
+func _ambience() -> void:
+	var cps: Array[Node] = find_children("*", "Checkpoint", true, false)
+	var pts: Array[Vector3] = [_spawn.origin]
+	var sides: Array[Vector3] = [Vector3.RIGHT]
+	for n: Node in cps:
+		var c := n as Node3D
+		pts.append(c.global_position)
+		sides.append(c.global_basis.x.normalized())
+	for i: int in pts.size():
+		var col: Color = Look.c("accent") if i % 2 == 0 else Look.c("accent2")
+		add_child(AscentFx.motes(pts[i] + Vector3(0, 5.0, 0), Vector3(16, 7, 16), col, 36))
+		if i % 3 == 0:
+			add_child(AscentFx.motes(pts[i] + Vector3(0, 16.0, 0), Vector3(30, 8, 30), Color(0.75, 0.82, 1.0), 20, 0.45))
+		# data rain: curtains well off to both sides (every checkpoint up the spire, every third one below)
+		if i >= 12 or i % 3 == 1:
+			for s: float in [-1.0, 1.0]:
+				var r: GPUParticles3D = AscentFx.rain(pts[i] + sides[i] * s * 13.0 - Vector3(0, 6, 0), Vector3(2.0, 10.0, 12.0), Look.c("accent"), 44)
+				r.rotation.y = (cps[i - 1] as Node3D).global_rotation.y if i > 0 else 0.0
+				add_child(r)
+	for k: int in range(12, cps.size()):
+		var at: Vector3 = (cps[k] as Node3D).global_position
+		var idx: int = k + 1
+		add_child(AscentFx.burst(at + Vector3(0, 0.6, 0), Look.c("accent") if k % 2 == 0 else Look.c("accent2"), func() -> bool:
+			return current_checkpoint >= idx, 44, 7.0, Vector3.UP, 1.2, 0.18))
+
+
+## Hologram-alley glitter: magenta pixel dust hanging between the billboards (stage frame).
+func _glitter(at: Vector3) -> void:
+	var m: GPUParticles3D = AscentFx.motes(at, Vector3(4.5, 6.0, 10.0), AscentBillboard.AD_COLORS[0], 40, 0.12)
+	m.rotation.y = deg_to_rad(_yaw)
+	add_child(m)
 
 
 func _surroundings() -> void:
@@ -1224,6 +1327,15 @@ func _build_beacon(pos: Vector3) -> void:
 	_beacon_light.light_energy = 0.6
 	_beacon_light.omni_range = 60.0
 	_beacon_light.position = pos + Vector3(0, 9, 0)
+	# embers rising round the dark crystal, and the fireworks the finish sets off
+	add_child(AscentFx.fountain(pos + Vector3(0, 1.3, 0), Look.c("accent"), 40, 4.0, 2.2))
+	add_child(AscentFx.motes(pos + Vector3(0, 9.0, 0), Vector3(5, 5, 5), Look.c("accent2"), 30, 0.2))
+	for i: int in 6:
+		var a: float = float(i) / 6.0 * TAU
+		var col: Color = [Look.c("accent"), Look.c("accent2"), LedgeBlock.LIP_COLOR][i % 3]
+		var fw: AscentFx = AscentFx.burst(pos + Vector3(cos(a) * 9.0, 14.0 + 3.0 * float(i % 2), sin(a) * 9.0), col, Callable(), 90, 11.0, Vector3.ZERO, 1.6, 0.3)
+		add_child(fw)
+		_fireworks.append(fw)
 	add_child(_beacon_light)
 	for node: Node in find_children("*", "WorldEnvironment", true, false):
 		_env = (node as WorldEnvironment).environment
@@ -1233,6 +1345,8 @@ func _build_beacon(pos: Vector3) -> void:
 ## and the camera pulls back to take it in.
 func _finish_sequence() -> void:
 	Sfx.play("beacon")
+	for i: int in _fireworks.size():
+		get_tree().create_timer(1.3 + 0.28 * float(i)).timeout.connect(_fireworks[i].fire)
 	var mat := _crystal.material_override as StandardMaterial3D
 	_beam.visible = true
 	if camera != null:
