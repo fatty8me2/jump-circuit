@@ -233,7 +233,7 @@ func _main_screen() -> Control:
 	box.add_child(settings_btn)
 	if Game.dev_mode:
 		box.add_child(UiKit.button("Playground (dev)", func() -> void: Game.play_playground(), 380))
-	box.add_child(UiKit.button("Quit", func() -> void: get_tree().quit(), 380))
+	box.add_child(UiKit.button("Quit", func() -> void: Sfx.quit(), 380))
 	if not Updater.available.is_empty():
 		box.add_child(UiKit.button("Get update  -  v%s" % Updater.available["version"], func() -> void: Updater.open_download(), 380))
 	if Game.title_message != "":

@@ -49,7 +49,7 @@ func _finish(reason: String) -> void:
 	print("[%s] RESULT: %d passed, %d failed" % [role, passed, failed])
 	Net.leave()
 	SaveData.delete_files()
-	get_tree().quit(1)
+	Sfx.quit(1)
 
 
 func check(cond: bool, what: String) -> void:
@@ -170,7 +170,7 @@ func _run() -> void:
 		await get_tree().create_timer(1.0).timeout
 		Net.leave()
 	SaveData.delete_files()
-	get_tree().quit(1 if failed > 0 else 0)
+	Sfx.quit(1 if failed > 0 else 0)
 
 
 # ---- Party Mode round ------------------------------------------------------------------

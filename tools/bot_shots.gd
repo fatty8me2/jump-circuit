@@ -78,4 +78,4 @@ func _process(dt: float) -> void:
 func _quit(code: int) -> void:
 	if SaveData.path_override != "":
 		SaveData.delete_files()   # with its .bak / .tmp siblings
-	get_tree().quit(code)
+	Sfx.quit(code)

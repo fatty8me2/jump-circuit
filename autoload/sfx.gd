@@ -48,6 +48,18 @@ func _ready() -> void:
 	_music = _music_players[0]
 
 
+## Quit with no sound in flight. The audio thread only lets go of a stopped playback on its next
+## mix, so quitting mid-sound (a test run ending on the finish chime) left it held at exit and Godot
+## reported leaked instances / resources still in use. Stops everything, gives the mixer a beat, quits.
+func quit(code: int = 0) -> void:
+	for n: Node in get_tree().root.find_children("*", "AudioStreamPlayer", true, false):
+		(n as AudioStreamPlayer).stop()
+	for n: Node in get_tree().root.find_children("*", "AudioStreamPlayer3D", true, false):
+		(n as AudioStreamPlayer3D).stop()
+	await get_tree().create_timer(0.15, true, false, true).timeout
+	get_tree().quit(code)
+
+
 func play(clip: String, pitch_var: float = 0.0, volume: float = 1.0, pitch: float = 1.0) -> void:
 	if not _streams.has(clip):
 		return

@@ -78,4 +78,4 @@ func _ready() -> void:
 func _quit(code: int) -> void:
 	if SaveData.path_override == SHOT_SAVE:   # _quit(2) can run before the override is set
 		SaveData.delete_files()   # with its .bak / .tmp siblings
-	get_tree().quit(code)
+	Sfx.quit(code)
