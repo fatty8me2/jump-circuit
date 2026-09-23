@@ -156,6 +156,33 @@ func _cp(c: Vector3, size: float = 6.0) -> Dictionary:
 	return d
 
 
+func _vent(floor_c: Vector3, height: float, period: float, phase: float, on_fraction: float = 0.5, push: float = 80.0, max_rise: float = 12.0, width: float = 2.4) -> ReefVent:
+	var v := ReefVent.new()
+	v.size = Vector3(width, height, width)
+	v.push = push
+	v.max_rise = max_rise
+	v.period = period
+	v.phase = phase
+	v.on_fraction = on_fraction
+	v.position = _w(floor_c)
+	add_child(v)
+	return v
+
+
+## Position-hold flight (bot): steer toward `to` until `until` is true (or, without it, until landing).
+func _fly(to: Vector3, until: Variant = null) -> void:
+	var s: Dictionary = {"kind": "a_fly", "to": to}
+	if until != null:
+		s["until"] = until
+	route.append(s)
+
+
+## Vent `v` has just started erupting and will keep going for at least `need` s.
+static func _erupting(v: ReefVent, need: float) -> bool:
+	var t: float = Game.course_time
+	return v.is_erupting_at(t) and v.eruption_left(t) > need
+
+
 # ---- bot helpers (all deterministic, from the course clock) --------------------------------------
 
 func _wait(test: Callable, hold: Variant = null) -> void:
@@ -199,7 +226,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 4), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, 0.0, -90.0, -90.0, -90.0, -90.0, 0.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7]
 	_frame(Vector3.ZERO, yaws[0])
 	for i: int in stages.size():
 		_next_yaw = yaws[i + 1]
@@ -212,6 +239,7 @@ func _build() -> void:
 	r_walk(_w(Vector3(0, 0, -10)))
 	_surroundings()
 	_reef_materials()
+	_dev_skip()
 
 
 # ---- stage 1: Reef Crest - warm-up hops over coral heads, the first jellyfish ---------------------
@@ -349,6 +377,15 @@ func _stage_6() -> Vector3:
 		var p: Piston = kit.piston(_w(Vector3(3.3, 1.3, zs[i])), Vector3(2.0, 1.3, 1.6), _yaw + 90.0, 3.4, 3.0, 0.62 - 0.26 * float(i), 8.0)
 		rams.append(p)
 	var cp: Dictionary = _cp(Vector3(0, 0, -38.0))
+	# the alternative, on the port side: a cargo stack (mantle), the torn mainsail hanging along the
+	# wreck (wall run over the drop), and the crow's nest of the fallen mast
+	_ledge(Vector3(-4.0, 3.3, -9.0), Vector3(3.0, 6.0, 3.5), "alt")
+	kit.wallrun(_w(Vector3(-6.3, 4.4, -18.5)), Vector3(15.0, 7.0, 0.6), _yaw + 90.0)
+	var nest: Dictionary = _disc(Vector3(-2.2, 3.3, -29.0), 1.5, "accent", 0.8, false)
+	kit.pipe(_w(Vector3(-2.6, 2.4, -28.6)), _w(Vector3(-9.0, -14.0, -19.0)), 0.45, Color(0.42, 0.3, 0.22))
+	# signposts at the fork: gold for the climb, red for the rams
+	kit.lamp(_w(Vector3(-3.6, 0, -2.4)), 2.6, true, LedgeBlock.LIP_COLOR)
+	kit.lamp(_w(Vector3(1.9, 0, -3.2)), 2.6, true, Color(1.0, 0.35, 0.25))
 	if route_variant == 0:
 		# main: run the gangway, slipping past each ram between shots, hop the two broken planks
 		for i: int in rams.size():
@@ -365,8 +402,76 @@ func _stage_6() -> Vector3:
 			_wait(func() -> bool: return _piston_clear(p, 0.0, 0.75))
 		_hop(seg_c, cp, Vector3(0, 0, 1.5))
 	else:
-		# alt: mantle the cargo stack, run the fallen mast, drop from the crow's nest to the bow
-		pass
+		# alt: mantle the cargo stack, run the torn sail, drop from the crow's nest to the bow
+		r_walk(_w(Vector3(-3.4, 0, -4.2)))
+		r_mantle(_w(Vector3(-3.6, 0, -5.4)), _w(Vector3(-3.8, 3.3, -8.6)))
+		r_wallrun(_w(Vector3(-3.8, 3.3, -10.3)), _w(Vector3(-5.65, 4.7, -14.2)), _w(Vector3(-5.65, 4.7, -21.0)), _w(nest["c"]))
+		_hop(nest, cp, Vector3(0, 0, 1.5))
+	r_checkpoint()
+	return cp["c"]
+
+
+## DEV ONLY (remove before shipping): REEF_FROM=k starts the run (spawn + bot route) at the checkpoint
+## that opens stage k; REEF_DEBUG=1 prints every checkpoint's world position.
+func _dev_skip() -> void:
+	if OS.get_environment("REEF_DEBUG") != "":
+		for i: int in _cp_world.size():
+			print("reef cp %d at %s" % [i + 1, str(_cp_world[i])])
+		player_respawned.connect(func() -> void:
+			var why: String = ""
+			for b: Node in get_children():
+				if b is RouteBot and not (b as RouteBot).log_lines.is_empty():
+					why = (b as RouteBot).log_lines[-1]
+			print("  t=%.1f respawn, cp %d  at %s  %s" % [Game.course_time, current_checkpoint, str(player.global_position.snapped(Vector3.ONE * 0.1)), why]))
+		for c: Node in find_children("*", "Checkpoint", true, false):
+			(c as Checkpoint).reached.connect(func(w: Checkpoint) -> void:
+				print("  t=%.1f reached cp %d" % [Game.course_time, w.index]))
+	var k: int = int(OS.get_environment("REEF_FROM"))
+	if k <= 1:
+		return
+	var seen: int = 0
+	for i: int in route.size():
+		if str(route[i]["kind"]) == "checkpoint":
+			seen += 1
+			if seen == k - 1:
+				var rest: Array[Dictionary] = []
+				for j: int in range(i + 1, route.size()):
+					rest.append(route[j])
+				route = rest
+				var cps: Array[Node] = find_children("*", "Checkpoint", true, false)
+				var c: Checkpoint = cps[k - 2] as Checkpoint
+				_spawn = c.respawn_transform()
+				return
+
+
+# ---- stage 7: Thermal Vents - ride an erupting vent up to a shelf, hop, ride the next one into a mantle ----
+
+func _stage_7() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var v1f: Dictionary = _blk(Vector3(0, 0, -9.5), 4.0, 6.0, "alt")
+	var v1: ReefVent = _vent(Vector3(0, 0, -10.6), 8.0, 4.0, 0.0)
+	var s1: Dictionary = _blk(Vector3(0, 7.5, -17.2), 3.0, 3.0)
+	var b1: Dictionary = _blk(Vector3(2.2, 8.5, -23.2), 1.8, 1.8, "alt")
+	var b2: Dictionary = _blk(Vector3(-0.8, 9.5, -28.6), 1.8, 1.8)
+	var v2f: Dictionary = _blk(Vector3(-0.8, 6.5, -34.9), 3.6, 5.0, "alt")
+	var v2: ReefVent = _vent(Vector3(-0.8, 6.5, -36.1), 4.5, 3.6, 0.5)
+	var top: Dictionary = _ledge(Vector3(-0.8, 13.5, -39.4), Vector3(4.0, 9.0, 3.6))
+	var cp: Dictionary = _cp(Vector3(-0.2, 13.5, -49.0))
+	_urchin_behind(s1, b1)
+	_urchin_behind(b1, b2)
+	_hop(cp0, v1f, Vector3(0, 0, 1.8))
+	r_walk(_w(Vector3(0, 0, -8.2)))
+	_wait(func() -> bool: return _erupting(v1, 1.3))
+	var s1y: float = _w(s1["c"]).y
+	_fly(_w(Vector3(0, 0, -10.6)), func() -> bool: return player.global_position.y > s1y + 1.2)
+	_fly(_w(s1["c"]))
+	_hop(s1, b1)
+	_hop(b1, b2)
+	_hop(b2, v2f, Vector3(0, 0, 1.4))
+	r_walk(_w(Vector3(-0.8, 6.5, -33.4)))
+	_wait(func() -> bool: return _erupting(v2, 1.1))
+	_fly(_w((top["c"] as Vector3) + Vector3(0, 0, 0.4)))
+	_hop(top, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	return cp["c"]
 
