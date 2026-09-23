@@ -183,6 +183,150 @@ static func _erupting(v: ReefVent, need: float) -> bool:
 	return v.is_erupting_at(t) and v.eruption_left(t) > need
 
 
+## Tidal surge zone in the stage frame (centre, local size, local peak push).
+func _surge(c: Vector3, size: Vector3, push: Vector3, period: float, phase: float, fraction: float = 0.42) -> ReefSurge:
+	var sg := ReefSurge.new()
+	sg.size = size
+	sg.push = push
+	sg.period = period
+	sg.phase = phase
+	sg.surge_fraction = fraction
+	sg.kelp = int(maxf(size.x, size.z) / 2.5) * 2
+	sg.rotation_degrees.y = _yaw
+	sg.position = _w(c)
+	add_child(sg)
+	return sg
+
+
+## The surge stays at least `level` strong over the window [now + a, now + b].
+static func _surging(sg: ReefSurge, a: float, b: float, level: float = 0.85) -> bool:
+	var s: float = a
+	while s <= b:
+		if sg.strength_at(Game.course_time + s) < level:
+			return false
+		s += 0.05
+	return true
+
+
+## An "electric eel" fence across the path: stacked laser beams between two moray heads
+## poking out of coral posts. `c` = floor centre (local), beams at `heights` above it.
+func _eel_fence(c: Vector3, width: float, heights: Array, period: float, on: float, phase: float) -> LaserGate:
+	var first: LaserGate = null
+	for h: float in heights:
+		var g: LaserGate = kit.laser(_w(c + Vector3(0, h, 0)), Vector3(width, 0.22, 0.22), period, on, phase, _yaw)
+		if first == null:
+			first = g
+	var top: float = float(heights[heights.size() - 1])
+	for sx: float in [-1.0, 1.0]:
+		var post: Vector3 = c + Vector3(sx * (width * 0.5 + 0.5), 0, 0)
+		deco.boulder(_w(post + Vector3(0, -0.4, 0)), 1.1)
+		# the moray: a thick glowing-spotted neck curling out of the post toward the beam
+		var eel := Node3D.new()
+		var skin: StandardMaterial3D = Look.flat(Color(0.25, 0.42, 0.18), 0.6)
+		var spot: StandardMaterial3D = Look.flat(Color(0.75, 1.0, 0.4), 0.4, 0.0, 1.6)
+		for k: int in 4:
+			var f: float = float(k) / 3.0
+			var seg := Look.sphere(0.34 - 0.04 * f, skin, Vector3(-sx * f * 0.5, top + 0.35 - f * 0.25, sin(f * 3.0) * 0.18))
+			seg.scale = Vector3(1.0, 0.85, 0.85)
+			eel.add_child(seg)
+			eel.add_child(Look.sphere(0.07, spot, Vector3(-sx * f * 0.5, top + 0.62 - f * 0.25, sin(f * 3.0) * 0.18)))
+		var head := Look.sphere(0.3, skin, Vector3(-sx * 0.72, top + 0.05, 0.1))
+		head.scale = Vector3(1.5, 0.8, 0.9)
+		eel.add_child(head)
+		eel.add_child(Look.sphere(0.06, Look.flat(Color(1.0, 0.9, 0.3), 0.3, 0.0, 3.0), Vector3(-sx * 0.86, top + 0.18, 0.3)))
+		eel.add_child(Look.sphere(0.06, Look.flat(Color(1.0, 0.9, 0.3), 0.3, 0.0, 3.0), Vector3(-sx * 0.86, top + 0.18, -0.1)))
+		eel.position = _w(post)
+		eel.rotation_degrees.y = _yaw
+		add_child(eel)
+		# crackle: electric sparks dancing around the jaws
+		var sp: GPUParticles3D = _sparks(Color(0.55, 0.9, 1.0), 14)
+		sp.position = _w(post + Vector3(-sx * 0.7, top * 0.5, 0))
+		add_child(sp)
+	return first
+
+
+## Little electric motes that flick about a point (additive).
+func _sparks(color: Color, amount: int, extent: Vector3 = Vector3(0.6, 1.4, 0.6)) -> GPUParticles3D:
+	var p := GPUParticles3D.new()
+	p.amount = amount
+	p.lifetime = 0.5
+	p.preprocess = 0.5
+	p.visibility_aabb = AABB(Vector3(-3, -3, -3), Vector3(6, 6, 6))
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var pm := ParticleProcessMaterial.new()
+	pm.emission_shape = ParticleProcessMaterial.EMISSION_SHAPE_BOX
+	pm.emission_box_extents = extent
+	pm.direction = Vector3(0, 1, 0)
+	pm.spread = 180.0
+	pm.initial_velocity_min = 1.5
+	pm.initial_velocity_max = 4.0
+	pm.gravity = Vector3.ZERO
+	pm.damping_min = 6.0
+	pm.damping_max = 9.0
+	pm.scale_min = 0.4
+	pm.scale_max = 1.0
+	pm.color_ramp = ReefFx.fade_ramp(color, 1.0)
+	p.process_material = pm
+	p.draw_pass_1 = ReefFx.dot_quad(0.14, true)
+	return p
+
+
+## The beam stays dark over the whole window [now + a, now + b].
+static func _dark(g: LaserGate, a: float, b: float) -> bool:
+	var s: float = a
+	while s <= b:
+		if g.is_on_at(Game.course_time + s):
+			return false
+		s += 0.04
+	return true
+
+
+## A giant clam: a crusher whose press is the upper shell (ridged, pearly lip) slamming down on the
+## lower shell around the floor. `c` = floor top centre (local).
+func _clam(c: Vector3, size: Vector3, lift: float, period: float, phase: float) -> Crusher:
+	var cr: Crusher = kit.crusher(_w(c), _sz(size), lift, period, phase)
+	var shell: StandardMaterial3D = Look.flat(Color(0.62, 0.42, 0.72), 0.7)
+	var ridge: StandardMaterial3D = Look.flat(Color(0.85, 0.6, 0.95), 0.5, 0.0, 0.4)
+	var lip: StandardMaterial3D = Look.flat(Color(0.5, 1.0, 0.9), 0.3, 0.0, 2.2)
+	var sz: Vector3 = _sz(size)
+	var dome := Look.sphere(1.0, shell, Vector3(0, sz.y * 0.5 - 0.1, 0))
+	dome.scale = Vector3(sz.x * 0.62, 0.9, sz.z * 0.62)
+	cr.add_child(dome)
+	for i: int in 5:
+		var f: float = (float(i) - 2.0) / 2.0
+		var r := Look.box(Vector3(0.14, 0.2, 1.0), ridge, Vector3(0, sz.y * 0.5 + 0.55 - absf(f) * 0.25, 0))
+		r.scale = Vector3(1.0, 1.0, maxf(sz.x, sz.z) * 0.9)
+		r.position.x = f * sz.x * 0.3
+		r.rotation.y = -f * 0.35
+		cr.add_child(r)
+	cr.add_child(Look.box(Vector3(sz.x + 0.3, 0.1, sz.z + 0.3), lip, Vector3(0, -sz.y * 0.5 + 0.3, 0)))
+	# the lower shell: a scalloped rim around the floor under it, and a glowing pearl on the side
+	var low := Node3D.new()
+	for i: int in 10:
+		var a: float = TAU * float(i) / 10.0
+		var sc := Look.sphere(0.45, shell, Vector3(cos(a) * sz.x * 0.62, -0.25, sin(a) * sz.z * 0.62))
+		sc.scale = Vector3(1.0, 0.5, 1.0)
+		low.add_child(sc)
+	low.position = _w(c)
+	add_child(low)
+	var pearl := Look.sphere(0.32, Look.flat(Color(1.0, 0.95, 0.9), 0.15, 0.2, 1.4), _w(c + Vector3(size.x * 0.5 + 0.45, -0.1, 0)))
+	add_child(pearl)
+	var b: GPUParticles3D = ReefFx.bubble_stream(8.0, 6, 0.3, 0.18)
+	b.position = _w(c + Vector3(size.x * 0.5 + 0.45, 0.2, 0))
+	add_child(b)
+	return cr
+
+
+## The press is up (gap >= `head` m) over the whole window [now + a, now + b].
+static func _open(cr: Crusher, a: float, b: float, head: float = 2.3) -> bool:
+	var s: float = a
+	while s <= b:
+		if cr.gap_at(Game.course_time + s) < head:
+			return false
+		s += 0.04
+	return true
+
+
 # ---- bot helpers (all deterministic, from the course clock) --------------------------------------
 
 func _wait(test: Callable, hold: Variant = null) -> void:
@@ -226,7 +370,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 4), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, 0.0, -90.0, -90.0, -90.0, -90.0, 0.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10]
 	_frame(Vector3.ZERO, yaws[0])
 	for i: int in stages.size():
 		_next_yaw = yaws[i + 1]
@@ -472,6 +616,116 @@ func _stage_7() -> Vector3:
 	_wait(func() -> bool: return _erupting(v2, 1.1))
 	_fly(_w((top["c"] as Vector3) + Vector3(0, 0, 0.4)))
 	_hop(top, cp, Vector3(0, 0, 1.5))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 8: Tidal Channel - hop across the channel between surges, then ride a surge over a gap ------
+
+func _stage_8() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var c1: Dictionary = _blk(Vector3(0.4, 0, -8.6), 1.8, 1.8, "alt")
+	var c2: Dictionary = _blk(Vector3(-0.6, 0.8, -14.4), 1.6, 1.6)
+	var c3: Dictionary = _blk(Vector3(0.4, 1.6, -20.2), 1.8, 1.8, "alt")
+	var bank: Dictionary = _blk(Vector3(0, 1.6, -27.0), 5.0, 4.0)
+	var far: Dictionary = _blk(Vector3(0, 1.6, -40.5), 5.0, 5.0)
+	var cp: Dictionary = _cp(Vector3(0, 1.6, -50.0))
+	# the cross-channel surge rushes toward +X; the long surge races down the channel (-Z)
+	var cross: ReefSurge = _surge(Vector3(0, 2.0, -14.0), Vector3(16, 10, 21), Vector3(26, 0, 0), 4.5, 0.0)
+	var along: ReefSurge = _surge(Vector3(0, 2.5, -33.5), Vector3(7, 8, 12), Vector3(0, 0, -16), 3.6, 0.3, 0.5)
+	var prev: Dictionary = cp0
+	for b: Dictionary in [c1, c2, c3]:
+		r_walk(_w(_edge(prev, b["c"], 0.9)))
+		_wait(func() -> bool: return cross.is_calm_for(Game.course_time, 1.05))
+		_hop(prev, b)
+		prev = b
+	_hop(c3, bank, Vector3(0, 0, 0.6))
+	r_walk(_w(Vector3(0, 1.6, -26.4)))
+	_wait(func() -> bool: return _surging(along, 0.3, 1.2))
+	route.append({"kind": "b_jump", "from": _w(Vector3(0, 1.6, -28.65)), "to": _w((far["c"] as Vector3) + Vector3(0, 0, 0.5)), "hold": true})
+	_hop(far, cp, Vector3(0, 0, 1.5))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 9: Eel Gallery (BRANCH) - slip the electric-eel fences on the low beam, or climb the cliffs ----
+
+func _stage_9() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var fork: Dictionary = _blk(Vector3(0, 0, -8.0), 12.0, 4.0, "main", 1.0, false)
+	deco.pinnacle(_w(Vector3(-3.5, -1.0, -8.0)), 1.2, 34.0)
+	deco.pinnacle(_w(Vector3(3.5, -1.0, -8.0)), 1.2, 30.0)
+	# LEFT: the eel alley - a 1.2 m beam in three pieces, a fence of eel-lightning across each
+	_blk(Vector3(-4.0, 0, -14.25), 1.2, 8.5, "accent", 0.6, false)
+	_blk(Vector3(-4.0, 0, -24.35), 1.2, 7.3, "accent", 0.6, false)
+	_blk(Vector3(-4.0, 0, -33.1), 1.2, 5.8, "accent", 0.6, false)
+	for z: float in [-14.25, -24.35, -33.1]:
+		deco.pinnacle(_w(Vector3(-4.0, -0.6, z)), 0.5, 30.0)
+	var fences: Array[LaserGate] = []
+	var fz: Array[float] = [-14.0, -24.2, -32.6]
+	for i: int in 3:
+		fences.append(_eel_fence(Vector3(-4.0, 0, fz[i]), 2.4, [0.5, 1.4, 2.3], 2.2, 0.55, 0.3 * float(i)))
+	# RIGHT: the coral cliffs - two mantle walls, a knife-edge ridge, a leap down to the merge
+	var l1: Dictionary = _ledge(Vector3(4.0, 3.3, -14.0), Vector3(3.0, 6.0, 3.2), "alt")
+	var l2: Dictionary = _ledge(Vector3(4.0, 6.6, -20.0), Vector3(3.0, 9.3, 3.2), "alt")
+	var ridge: Dictionary = _blk(Vector3(4.0, 6.6, -26.8), 0.9, 6.0, "accent", 0.6)
+	var merge: Dictionary = _blk(Vector3(0, 0, -38.0), 12.0, 4.0, "main", 1.0, false)
+	deco.pinnacle(_w(Vector3(0, -1.0, -38.0)), 1.6, 36.0)
+	var cp: Dictionary = _cp(Vector3(0, 0, -47.0))
+	# signposts at the fork: red lamps and strips for the eels, gold for the climb
+	kit.lamp(_w(Vector3(-5.5, 0, -6.6)), 2.8, true, Color(1.0, 0.35, 0.25))
+	kit.lamp(_w(Vector3(5.5, 0, -6.6)), 2.8, true, LedgeBlock.LIP_COLOR)
+	kit.glow_strip(_w(Vector3(-4.0, 0.03, -9.0)), _sz(Vector3(1.0, 0.06, 1.4)), Color(1.0, 0.35, 0.25))
+	kit.glow_strip(_w(Vector3(4.0, 0.03, -9.0)), _sz(Vector3(1.4, 0.06, 1.4)), LedgeBlock.LIP_COLOR)
+	_hop(cp0, fork, Vector3(0, 0, 0.5))
+	if route_variant == 0:
+		r_walk(_w(Vector3(-4.0, 0, -9.4)))
+		r_walk(_w(Vector3(-4.0, 0, -11.8)))
+		r_until(func() -> bool: return _dark(fences[0], 0.05, 0.75))
+		r_walk(_w(Vector3(-4.0, 0, -16.6)))
+		r_jump(_w(Vector3(-4.0, 0, -18.15)), _w(Vector3(-4.0, 0, -21.6)))
+		r_until(func() -> bool: return _dark(fences[1], 0.05, 0.7))
+		r_walk(_w(Vector3(-4.0, 0, -26.6)))
+		r_jump(_w(Vector3(-4.0, 0, -27.65)), _w(Vector3(-4.0, 0, -30.7)))
+		r_until(func() -> bool: return _dark(fences[2], 0.05, 0.7))
+		r_walk(_w(Vector3(-4.0, 0, -35.2)))
+		r_walk(_w(Vector3(-2.0, 0, -37.5)))
+	else:
+		r_walk(_w(Vector3(4.0, 0, -8.6)))
+		r_mantle(_w(Vector3(4.0, 0, -9.65)), _w(Vector3(4.0, 3.3, -13.4)))
+		r_mantle(_w(Vector3(4.0, 3.3, -15.25)), _w(Vector3(4.0, 6.6, -19.4)))
+		r_jump(_w(Vector3(4.0, 6.6, -21.25)), _w(Vector3(4.0, 6.6, -25.0)))
+		r_walk(_w(Vector3(4.0, 6.6, -28.6)))
+		r_jump(_w(Vector3(4.0, 6.6, -29.45)), _w(Vector3(2.5, 0, -37.4)))
+	_hop(merge, cp, Vector3(0, 0, 1.5))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 10: Clam Beds - run under a clam, mantle up under another, hop two snapping clams ------------
+
+func _stage_10() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var w1: Dictionary = _blk(Vector3(0, 0, -8.5), 2.6, 7.0, "alt", 1.0, false)
+	deco.pinnacle(_w(Vector3(0, -1.0, -8.5)), 0.9, 34.0)
+	var c1: Crusher = _clam(Vector3(0, 0, -8.8), Vector3(3.0, 1.6, 3.0), 3.2, 2.6, 0.0)
+	var ledge: Dictionary = _ledge(Vector3(0, 3.2, -16.5), Vector3(3.4, 7.0, 5.0))
+	var c2: Crusher = _clam(Vector3(0, 3.2, -15.2), Vector3(3.2, 1.6, 2.2), 3.0, 2.6, 0.5)
+	var p1: Dictionary = _blk(Vector3(0, 3.2, -23.5), 2.4, 2.4, "alt")
+	var c3: Crusher = _clam(Vector3(0, 3.2, -23.5), Vector3(2.8, 1.6, 2.8), 3.0, 2.6, 0.0)
+	var p2: Dictionary = _blk(Vector3(1.2, 3.2, -29.0), 2.4, 2.4, "alt")
+	var c4: Crusher = _clam(Vector3(1.2, 3.2, -29.0), Vector3(2.8, 1.6, 2.8), 3.0, 2.6, 0.72)
+	var cp: Dictionary = _cp(Vector3(0.6, 3.2, -37.2))
+	_hop(cp0, w1, Vector3(0, 0, 2.6))
+	r_until(func() -> bool: return _open(c1, 0.0, 0.9))
+	r_walk(_w(Vector3(0, 0, -11.4)))
+	r_until(func() -> bool: return _open(c2, 0.15, 1.3))
+	r_mantle(_w(Vector3(0, 0, -11.65)), _w(Vector3(0, 3.2, -14.4)))
+	r_walk(_w(Vector3(0, 3.2, -17.8)))
+	r_until(func() -> bool: return _open(c3, 0.2, 1.2) and _open(c4, 0.8, 1.9))
+	_hop(_area(Vector3(0, 3.2, -16.5), 1.7, 2.5), p1)
+	_hop(p1, p2)
+	_hop(p2, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	return cp["c"]
 
