@@ -1,6 +1,6 @@
 extends LevelBase
 ## 1. LAUNCH GARDENS - sunny terrace gardens in the sky, and the first level of a hard obby.
-## Nine stages, each ending on a checkpoint lawn. One new idea per stage, then combined:
+## Eighteen stages, each ending on a checkpoint lawn. One new idea per stage, then combined:
 ##   1 Garden Gate      warm-up hops (already 70-80 % jumps)
 ##   2 Stepping Stones  small-block parkour: rising, diagonal, a narrow beam, a 2 m ladder step
 ##   3 Spring Beds      bounce pads - vertical pads keep your run speed, so SPRINT onto them
@@ -9,8 +9,22 @@ extends LevelBase
 ##   6 The Mower        a sweeper you must hop while circling against its spin
 ##   7 Frost Chute      an ice slide that fires you across a ravine
 ##   8 The Great Leap   a 2 m-per-rung ladder up to the ring-gate launch pad (set piece), hard exit
-##   9 Grand Circuit    hop + boost -> leap -> pad -> pad -> small landing -> finish
+##   9 Grand Circuit    hop + boost -> leap -> pad -> pad -> small landing -> the old finish plaza
+## The extension (the gardens climb on round a loop to the summit):
+##  10 Topiary Runs     the first wall run (a 19 m gap only the panel crosses), the first mantle, hedge hops
+##  11 The Greenhouse   BRANCH: a planter walkway swept by three sprinkler pistons, or mantle up to the rafters
+##  12 The Hedge Maze   SET PIECE - THE TRIMMER, a laser curtain sweeping a hedge alley (hide in the side
+##                      pockets), then two laser gates and a mantle; BRANCH: mantle onto the hedge tops instead
+##  13 The Windmill     ride a seed tray on the sails up and leap off the top; shortcut: the vine ladder
+##  14 Flower Beds      BRANCH: a sprint-bounce chain over three flower pads, or a zig-zag of two trellis wall runs
+##  15 The Potting Press run a line of slamming presses, mantle up under a press, ride a press up like a lift;
+##                      shortcut: three 1 m pot tiles past the press line
+##  16 Topiary Chimney  three alternating wall runs climbing a chimney, the last kick ends in a mantle
+##  17 The Orchard      BRANCH: boost leap + a laser bridge, or an 87 % hop to the warp ring on the apple terrace
+##  18 Summit Garden    hop + boost leap, a wall run over the void, a bounce-pad mantle up the summit wall,
+##                      a piston and a laser, finish (fireworks)
 ## The course is built stage by stage in a local frame (heading = local -Z) so it can turn.
+## Route variants: 0 = main lines; 1 = every alternative branch (rafters, hedge tops, trellis, portal).
 
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
@@ -18,11 +32,16 @@ var _yaw: float = 0.0
 var _mower: Sweeper
 var _fan: Sweeper
 
+const HEDGE: Color = Color(0.2, 0.48, 0.26)
+const MILL_R: float = 6.0
+const MILL_PERIOD: float = 8.0
+
 
 func _configure() -> void:
 	theme_id = "gardens"
 	music_track = "a"
 	kill_y = -40.0
+	route_variants = 2
 
 
 # ---- local-frame helpers --------------------------------------------------------------------
@@ -146,8 +165,28 @@ func _build() -> void:
 	_frame(_w(cp7), 0.0)
 	var cp8: Vector3 = _stage_8_great_leap()
 	_frame(_w(cp8), -90.0)
-	_stage_9_circuit()
+	var cp9: Vector3 = _stage_9_circuit()
+	_frame(_w(cp9), -90.0)
+	var cp10: Vector3 = _stage_10_topiary()
+	_frame(_w(cp10), 180.0)
+	var cp11: Vector3 = _stage_11_greenhouse()
+	_frame(_w(cp11), 180.0)
+	var cp12: Vector3 = _stage_12_maze()
+	_frame(_w(cp12), 90.0)
+	var cp13: Vector3 = _stage_13_windmill()
+	_frame(_w(cp13), 90.0)
+	var cp14: Vector3 = _stage_14_flowers()
+	_frame(_w(cp14), 0.0)
+	var cp15: Vector3 = _stage_15_press()
+	_frame(_w(cp15), -90.0)
+	var cp16: Vector3 = _stage_16_chimney()
+	_frame(_w(cp16), -90.0)
+	var cp17: Vector3 = _stage_17_orchard()
+	_frame(_w(cp17), 180.0)
+	_stage_18_summit()
 	_surroundings()
+	_ambience()
+	_debug_start()
 
 
 # Stage 1: warm-up. Big start terrace, then shrinking blocks, a diagonal and rises.
@@ -405,8 +444,9 @@ func _stage_8_great_leap() -> Vector3:
 
 
 # Stage 9: Grand Circuit. Two hard hops, hop a trimmer on the runway, boost to 20 m/s, leap 12 m onto a pad,
-# carry the speed pad -> pad -> a 3.2 m disc, last jump to the finish lawn.
-func _stage_9_circuit() -> void:
+# carry the speed pad -> pad -> a 3.2 m disc, last jump to the old finish plaza - now checkpoint 9, and the
+# old finish arch is the gate to the extension.
+func _stage_9_circuit() -> Vector3:
 	var lawn: Dictionary = _area(Vector3.ZERO, 3.5, 3.5)
 	var f1: Dictionary = _blk(Vector3(0, 1.5, -8.0), 1.8, 1.8)
 	var f2: Dictionary = _blk(Vector3(-3.6, 1.5, -13.8), 1.6, 1.6, "alt")
@@ -419,7 +459,12 @@ func _stage_9_circuit() -> void:
 	kit.pad(_w(p2["c"]), 17.0, 0.0, 0.0, 1.4)
 	var fl: Dictionary = _disc(Vector3(0, 2.5, -77.8), 1.6, "alt")
 	var fin: Dictionary = _blk(Vector3(0, 2.5, -91.2), 12.0, 14.0, "main", 2.0)
-	kit.finish(_w(Vector3(0, 2.5, -94.5)), _yaw)
+	var cp := Vector3(0, 2.5, -88.6)
+	kit.checkpoint(_w(cp), _yaw)
+	kit.arch(_w(Vector3(0, 2.5, -94.5)), 5.0, 4.6, _yaw)
+	kit.banner(_w(Vector3(-2.9, 2.5, -94.9)), 5.0)
+	kit.banner(_w(Vector3(2.9, 2.5, -94.9)), 5.0, Look.c("accent2"))
+	_cue_near(_w(cp + Vector3(0, 0.2, 0)), 2.4, GardensFx.petal_fountain())
 	for p: Vector3 in [Vector3(-4.8, 2.5, -88), Vector3(4.8, 2.5, -87.6), Vector3(-5, 2.5, -98.5), Vector3(5, 2.5, -98)]:
 		kit.tree(_w(p), kit.rng.randf_range(1.1, 1.6))
 	kit.bush(_w(Vector3(-4.6, 2.5, -93)))
@@ -435,7 +480,9 @@ func _stage_9_circuit() -> void:
 	r_pad(_w(p1["c"]), _w((p2["c"] as Vector3) + Vector3(0, 0, -0.9)))
 	r_pad(_w(p2["c"]), _w(fl["c"]))
 	_hop(fl, fin, Vector3(0, 0, 5.0))
-	r_walk(_w(Vector3(0, 2.5, -94.5)))
+	r_walk(_w(cp))
+	r_checkpoint()
+	return cp
 
 
 func _surroundings() -> void:
