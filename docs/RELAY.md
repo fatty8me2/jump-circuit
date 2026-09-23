@@ -29,6 +29,8 @@ The Worker responds to `http://127.0.0.1:8787/health` with a small health status
 
 The game appends `/ws` and the room code to that base URL. `/health` can be used to check the
 deployed Worker in a browser. Do not include `/ws` in the setting itself.
+The game and relay exchange a small application-level keepalive every 20 seconds so idle lobbies
+and results screens do not lose their WebSocket connection to Cloudflare's idle timeout.
 
 The room code is eight characters and uses letters/numbers that are easy to distinguish. Anyone
 with the code can join while the host is in the lobby, so share it with your group. A room closes

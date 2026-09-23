@@ -101,6 +101,14 @@ export class RaceRoom extends DurableObject {
 			socket.close(1003, "Expected a JSON message");
 			return;
 		}
+		if (packet?.type === "keepalive") {
+			try {
+				socket.send(JSON.stringify({ type: "keepalive_ack" }));
+			} catch {
+				socket.close(1011, "Could not acknowledge keepalive");
+			}
+			return;
+		}
 		if (packet?.type !== "event" || typeof packet.event !== "string" ||
 			packet.data == null || typeof packet.data !== "object" || Array.isArray(packet.data)) {
 			socket.close(1003, "Invalid message");

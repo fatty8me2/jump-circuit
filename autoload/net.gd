@@ -21,6 +21,8 @@ const MAX_PLAYERS: int = 8
 const ROOM_CODE_ALPHABET: String = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 ## A relay join still unanswered after this many seconds is reported as unreachable.
 const CONNECT_TIMEOUT: float = 10.0
+## Keep even idle lobby/result sockets active through Cloudflare's WebSocket idle timeout.
+const RELAY_KEEPALIVE_INTERVAL: float = 20.0
 
 var active: bool = false
 ## peer id -> {"name": String, "color": int, "cp": int, "finished": float (-1 = still racing),
@@ -52,6 +54,7 @@ var _relay_peer_id: int = 1
 var _relay_ready: bool = false
 var _relay_socket: WebSocketPeer
 var _relay_connect_left: float = -1.0
+var _relay_keepalive_left: float = 0.0
 
 
 func _ready() -> void:
@@ -149,6 +152,7 @@ func _start_relay(url: String) -> Error:
 	_relay_peer_id = 1
 	_relay_ready = false
 	_relay_connect_left = CONNECT_TIMEOUT
+	_relay_keepalive_left = 0.0
 	active = true
 	return OK
 
@@ -194,6 +198,7 @@ func _shutdown() -> void:
 	_relay_peer_id = 1
 	_relay_ready = false
 	_relay_connect_left = -1.0
+	_relay_keepalive_left = 0.0
 	if multiplayer.multiplayer_peer != null:
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
@@ -277,6 +282,11 @@ func _process_relay(dt: float) -> void:
 			_handle_relay_packet(message)
 			if not _relay_mode or _relay_socket == null:
 				return
+		if _relay_ready:
+			_relay_keepalive_left -= dt
+			if _relay_keepalive_left <= 0.0:
+				_relay_keepalive_left = RELAY_KEEPALIVE_INTERVAL
+				_relay_socket.send_text("{\"type\":\"keepalive\"}")
 		if _relay_ready and not is_host() and _pings_left > 0:
 			_ping_timer -= dt
 			if _ping_timer <= 0.0:
@@ -288,12 +298,15 @@ func _process_relay(dt: float) -> void:
 		return
 	if state == WebSocketPeer.STATE_CLOSED and _relay_mode:
 		var reason := _relay_socket.get_close_reason()
+		var close_code := _relay_socket.get_close_code()
 		var was_ready := _relay_ready
 		_shutdown()
 		if was_ready:
-			left_session.emit(reason if reason != "" else "The relay connection closed.")
+			var detail := " (close code %d)" % close_code if reason == "" else " (close code %d: %s)" % [close_code, reason]
+			left_session.emit("The relay connection closed%s." % detail)
 		else:
-			connection_failed.emit(reason if reason != "" else "Could not connect to the room. Check the code and try again.")
+			var detail := " (close code %d: %s)" % [close_code, reason] if reason != "" else ""
+			connection_failed.emit("Could not connect to the room%s. Check the code and try again." % detail)
 
 
 func _handle_relay_packet(message: String) -> void:
@@ -330,6 +343,8 @@ func _handle_relay_packet(message: String) -> void:
 			var closed_reason := str(packet.get("reason", "The host closed the session."))
 			_shutdown()
 			left_session.emit(closed_reason)
+		"keepalive_ack":
+			pass
 		"peer_left":
 			if is_host():
 				var id := int(packet.get("id", 0))
