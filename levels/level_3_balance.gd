@@ -1,11 +1,32 @@
 extends LevelBase
-## 3. BALANCE WORKS (hard mode) - a teal-and-white crane yard in the sky.
+## 3. BALANCE WORKS (hard mode, extended) - a teal-and-white crane yard in the sky.
 ## Everything answers to your weight: narrow lively beams you must run without
 ## stopping, heavy seesaws used as catapults, cable-hung dishes over kill water,
 ## platforms that sink into red, cross-winds, hammers and a sweeper on a big
-## tilting dish. Ten stages, each ending on static ground.
-## Set piece: the Great Scale - boost run-up, pad slam onto a heavy crane beam,
-## then a gauntlet of scale beams with kill bricks waiting under their far ends.
+## tilting dish. Twenty stages, each ending on static ground.
+##   1 slipway (pitch / roll beams)      2 catapult yard              3 dish chain
+##   4 sinkers                           5 crosswind                  6 hammer alley
+##   7 slip launch                       8 the turntable              9 sprint pad
+##  10-11 THE GREAT SCALE (to the crane gallery, then the jib to the halfway yard)
+## New half - the container yard, where the cranes themselves are the obstacles (HUD stage numbers;
+## the _stage_N functions below count the Great Scale as one, so _stage_11 is stage 12 and so on):
+##  12 container stacks: rolling beam, first mantles (a 3.4 m container, one off a sinking pan)
+##  13 hook ride: mantle onto crane-hook cargo and ride it over the water
+##  14 scanner yard FORK: lively beams under a sweeping laser scanner + laser gates, or mantle up the stacks
+##  15 counterweight climb: stand on one cage to raise the other, mantle across before it sinks
+##  16 jib run: the first wall run - 15 m along a counterweight slab with nothing below
+##  17 press shed FORK: a travelling wave of crushers and a mantle under a fourth press, or wall-run the shed wall
+##  18 container chimney: two crane-hung containers with wall-run sides, shuttling; run one, kick across
+##     to the other, kick again and mantle onto the stack tower
+##  19 ram line FORK: pistons punching across roll beams + a mantle out of a jump, or two posts to a warp ring
+##  20 the master crane: ram across a roll beam, wall run, mantle out of the kick, pitching jib under the scanner, finish
+## Set pieces: the Great Scale (old half); the crane-yard machines of the new half - counterweight
+## lift (BalanceCounterweight), hook cargo / run containers on trolleys (BalanceTrolley), the sweeping
+## laser scanner (BalanceScanner). Particles: sea spray over all kill water, yard glints and gusts at
+## every checkpoint, welder / trolley / pulley sparks, press slam dust, ram steam, portal and finish bursts.
+## Shortcuts: stage 2 posts over the brick seesaw, stage 6 hammer ride, stage 13 post line (no hook wait),
+## stage 15 hidden warp ring (skips the second counterweight). route_variant 1 = the fork branches,
+## 2 = the fork branches plus these shortcuts (bot-proven).
 ##
 ## Every stage is written in a local frame: x = right, y = up, d = metres forward
 ## of the stage's checkpoint. Stages only turn in 90 degree steps because tilt
@@ -25,7 +46,8 @@ func _configure() -> void:
 	theme_id = "balance"
 	music_track = "a"
 	kill_y = -45.0
-	route_variants = 2
+	# 0 = main line, 1 = every fork's other branch, 2 = the other branches plus the shortcuts
+	route_variants = 3
 
 
 func _build() -> void:
@@ -219,8 +241,13 @@ func _stage_2_catapult() -> void:
 	J(0, 0, 2.2, 0, 0, 6.9)
 	_wait(func() -> bool: return absf(heavy.tilt_degrees().x) + absf(heavy.tilt_degrees().y) >= 8.5, L(0, 0, 6.9))
 	route.append({"kind": "b_jump", "from": L(0, 0, 17.0), "to": L(0, 2.8, 20.4), "hold": true})
-	J(0, 2.8, 22.2, 0, 1.6, 27.0)
-	J(0, 1.6, 34.3, 0, 0.4, 41.4)
+	if route_variant == 2:
+		J(-1.4, 2.8, 22.3, -2.6, 2.4, 29.2)
+		J(-2.6, 2.4, 29.5, -2.6, 1.8, 35.9)
+		J(-2.6, 1.8, 36.2, -0.5, 0.4, 41.4)
+	else:
+		J(0, 2.8, 22.2, 0, 1.6, 27.0)
+		J(0, 1.6, 34.3, 0, 0.4, 41.4)
 
 	# SHORTCUT: two 1 m posts straight from the ledge - skips the brick seesaw
 	kit.disc(L(-2.6, 2.4, 29.2), 0.5, 0.5, "alt", 2.0)
@@ -650,13 +677,25 @@ func _stage_12_hook_ride() -> void:
 		kit.block(L(0, 10.8, dd), _sz(7.4, 0.5, 0.5), TEAL, false)
 	P(0, 2.0, 49.5, 5.0, 3.0, "alt")
 	_beam(0, 2.0, 59.0, 1.2, 8.0, false, true, {"edge_tilt_deg": 22.0, "max_tilt_deg": 28.0})
+	# SHORTCUT: no waiting for a hook - four 90% leaps along 1.1 m posts beside the trolley line
+	var posts: Array[Vector3] = [Vector3(4.2, 0.2, 28.6), Vector3(4.2, 0.4, 34.6), Vector3(4.2, 0.6, 40.6), Vector3(4.2, 1.2, 46.4)]
+	for pp: Vector3 in posts:
+		kit.disc(L(pp.x, pp.y, pp.z), 0.55, 0.6, "alt", 2.0)
+	kit.glow_strip(L(2.1, 0.03, 22.2), _sz(0.2, 0.06, 1.2), YELLOW)
 
 	J(0, 0, 2.2, 0, 0, 7.1)
 	J(0, 0, 15.2, 0, 0, 19.6)
-	# (the bot always takes hook A; a human hops on whichever one is waiting)
-	_wait(func() -> bool: return _hook_a.offset_at(Game.course_time).length() < 0.02 and _hook_a.offset_at(Game.course_time + 1.0).length() < 0.02, L(-1.2, 0, 20.4))
-	MANTLE(-1.35, 0, 22.4, -1.35, 3.2, 25.1)
-	r_jump_from_ride(_hook_a, L(-1.35, 1.9, 43.6), 0.04, L(-1.0, 2.0, 49.0), true, Vector3(1.0, 1.3, 0))
+	if route_variant == 2:
+		var from := Vector3(2.0, 0, 22.8)
+		for pp: Vector3 in posts:
+			J(from.x, from.y, from.z, pp.x, pp.y, pp.z)
+			from = pp + Vector3(0, 0, 0.3)
+		J(from.x, from.y, from.z, 2.0, 2.0, 49.2)
+	else:
+		# (the bot always takes hook A; a human hops on whichever one is waiting)
+		_wait(func() -> bool: return _hook_a.offset_at(Game.course_time).length() < 0.02 and _hook_a.offset_at(Game.course_time + 1.0).length() < 0.02, L(-1.2, 0, 20.4))
+		MANTLE(-1.35, 0, 22.4, -1.35, 3.2, 25.1)
+		r_jump_from_ride(_hook_a, L(-1.35, 1.9, 43.6), 0.04, L(-1.0, 2.0, 49.0), true, Vector3(1.0, 1.3, 0))
 	J(0, 2.0, 50.7, 0, 2.0, 55.4)
 	J(0, 2.0, 62.7, 0, 2.4, 67.0)
 	_cp(0, 2.4, 69.0, 0.0)
@@ -718,6 +757,11 @@ func _stage_14_counterweights() -> void:
 	_cw2 = _counterweight(0, 4.0, 27.2, 5.5, 2.4, 2.4, 2.0, 1.0)
 	LG(0, 8.3, 39.0, 5.0, 7.0, 5.0)
 	kit.banner(L(-2.4, 8.3, 41.0), 4.0, YELLOW, _yaw)
+	# SHORTCUT (hidden portal): a 90% side leap off the first ledge to a post carrying a warp ring
+	# that drops you on the top ledge - skips the second counterweight
+	kit.disc(L(7.9, 4.2, 20.0), 1.0, 0.8, "alt", 2.0)
+	var warp: WarpPortal = kit.portal(L(8.4, 4.2, 20.0), _yaw - 90.0, L(0, 8.3, 37.5), _yaw, 5.0)
+	_portal_fx(L(0, 8.3, 37.5))
 	# steam venting off the gantry legs
 	for dd: float in [7.5, 13.5, 27.2, 32.7]:
 		var st: GPUParticles3D = BalanceFx.steam(Color(0.9, 1.0, 1.0), 8, 1.4, 2.2, 20.0)
@@ -728,10 +772,14 @@ func _stage_14_counterweights() -> void:
 	_wait(func() -> bool: return _cw1.balance() >= 0.97, L(0, 0, 7.9))
 	MANTLE(0, -1.8, 8.7, 0, 1.8, 13.0)
 	MANTLE(0, 1.8, 14.7, 0, 4.0, 17.8)
-	J(0, 4.0, 22.7, 0, 4.0, 26.8)
-	_wait(func() -> bool: return _cw2.balance() >= 0.85, L(0, 4.0, 27.3))
-	MANTLE(0, 2.3, 28.1, 0, 5.7, 32.1)
-	MANTLE(0, 5.7, 33.6, 0, 8.3, 37.2)
+	if route_variant == 2:
+		J(1.2, 4.0, 20.0, 7.3, 4.2, 20.0)
+		r_portal(L(8.4, 4.2, 20.0), warp.exit_point())
+	else:
+		J(0, 4.0, 22.7, 0, 4.0, 26.8)
+		_wait(func() -> bool: return _cw2.balance() >= 0.85, L(0, 4.0, 27.3))
+		MANTLE(0, 2.3, 28.1, 0, 5.7, 32.1)
+		MANTLE(0, 5.7, 33.6, 0, 8.3, 37.2)
 	_cp_mark(L(0, 8.3, 39.0), -90.0)
 
 
@@ -811,10 +859,13 @@ func _stage_16_press_shed() -> void:
 	presses.append(top_press)
 	for i: int in presses.size():
 		_press_fx(presses[i], L(-3.0, 3.2 if i == 3 else 0.0, 30.0 if i == 3 else 10.0 + 5.0 * i))
-	# the shed: back wall and roof beams (visual only)
-	kit.block(L(-6.4, 3.0, 17.0), _sz(0.4, 9.0, 30.0), DEEP, false)
+	# the shed: roof trusses on posts, container stacks for its back wall (visual only)
 	for dd: float in [6.0, 12.5, 17.5, 22.5, 28.0]:
 		kit.block(L(-3.6, 7.6, dd), _sz(6.4, 0.4, 0.5), TEAL, false)
+		kit.block(L(-6.7, -1.4, dd), Vector3(0.3, 18.0, 0.3), WHITE, false)
+	kit.block(L(-6.7, 7.9, 17.0), _sz(0.5, 0.4, 23.0), TEAL, false)
+	_containers(L(-10.0, -6.0, 11.0), 4, _yaw + 90.0)
+	_containers(L(-10.5, -6.0, 23.0), 3, _yaw + 90.0)
 
 	# RIGHT: deck, 15 m of shed wall to run, landing past the presses
 	P(3.0, 0, 7.5, 2.4, 5.0, "alt")
