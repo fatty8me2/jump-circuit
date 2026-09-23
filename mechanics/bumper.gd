@@ -11,6 +11,10 @@ extends Area3D
 var _cool: float = 0.0
 var _vis: Node3D
 var _pulse: float = 0.0
+# effects (visual only): a bright shell that flashes on a hit and a spray of sparks
+var _flash_mat: StandardMaterial3D
+var _flash_shell: MeshInstance3D
+var _hit_sparks: GPUParticles3D
 
 
 func _ready() -> void:
@@ -30,6 +34,32 @@ func _ready() -> void:
 	_vis.add_child(Look.cylinder(radius, height, Look.flat(Color(0.95, 0.3, 0.75), 0.35, 0.2, 1.2), Vector3(0, height * 0.5, 0), radius * 0.85, 20))
 	_vis.add_child(Look.cylinder(radius * 1.15, 0.2, cap, Vector3(0, height + 0.1, 0), -1.0, 20))
 	_vis.add_child(Look.cylinder(radius * 1.15, 0.2, cap, Vector3(0, 0.1, 0), -1.0, 20))
+	_flash_mat = StandardMaterial3D.new()
+	_flash_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_flash_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_flash_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	_flash_mat.albedo_color = Color(1.0, 0.55, 0.9, 0.0)
+	_flash_shell = Look.cylinder(radius * 1.04, height * 0.96, _flash_mat, Vector3(0, height * 0.5, 0), radius * 0.9, 20)
+	_flash_shell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_flash_shell.visible = false
+	_vis.add_child(_flash_shell)
+	_hit_sparks = Fx.sparks({"amount": 30, "lifetime": 0.45, "dir": Vector3.UP, "spread": 60.0,
+		"speed": Vector2(4.0, 10.0), "damping": Vector2(2.0, 4.0), "gravity": Vector3(0, -10, 0),
+		"color": Color(3.0, 1.2, 2.4), "aabb": AABB(Vector3(-5, -3, -5), Vector3(10, 8, 10))})
+	_hit_sparks.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	add_child(_hit_sparks)
+
+
+## A hit: the post flashes and sparks spray off the side that was struck.
+func _hit_fx(away: Vector3, at_y: float) -> void:
+	var dir: Vector3 = away.normalized()
+	var y: float = clampf(at_y - global_position.y, 0.3, height - 0.2)
+	Fx.fire(_hit_sparks, global_position + dir * (radius + 0.1) + Vector3(0, y, 0), Fx.basis_up(dir))
+	_flash_shell.visible = true
+	_flash_mat.albedo_color.a = 0.9
+	var tw: Tween = create_tween()
+	tw.tween_property(_flash_mat, "albedo_color:a", 0.0, 0.3).set_ease(Tween.EASE_OUT)
+	tw.tween_callback(_flash_shell.hide)
 
 
 func _physics_process(dt: float) -> void:
@@ -49,3 +79,4 @@ func _physics_process(dt: float) -> void:
 			_cool = 0.25
 			_pulse = 1.0
 			Sfx.play_at("bounce", global_position, 0.05, 0.9)
+			_hit_fx(away, p.global_position.y + 0.6)

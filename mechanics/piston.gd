@@ -22,6 +22,13 @@ const RETRACT_START: float = 0.8
 var _origin: Vector3
 var _face: Area3D
 var _cool: float = 0.0
+# effects (visual only): steam venting from the housing on the slow retract, a spark
+# fan, dust and a ring off the striped face when the punch lands
+var _steam: GPUParticles3D
+var _fan: GPUParticles3D
+var _puff: GPUParticles3D
+var _ring: GPUParticles3D
+var _fx_phase: int = -1
 
 
 func _ready() -> void:
@@ -61,6 +68,61 @@ func _ready() -> void:
 	position = _origin + offset_at(Game.course_time)
 	reset_physics_interpolation()
 	add_to_group("course_clock")
+	_build_fx()
+
+
+func _build_fx() -> void:
+	var face_z: float = -size.z * 0.5 - 0.08
+	var vis := AABB(Vector3(-size.x - 3.0, -size.y - 2.0, -size.z - 6.0), Vector3(size.x * 2.0 + 6.0, size.y * 2.0 + 6.0, size.z * 2.0 + stroke * 2.0 + 10.0))
+	_steam = Fx.smoke({"amount": 16, "lifetime": 1.1, "one_shot": false, "emitting": false,
+		"explosiveness": 0.0, "randomness": 0.3, "shape": "box",
+		"extents": Vector3(size.x * 0.3, size.y * 0.25, 0.1), "dir": Vector3.UP, "spread": 65.0,
+		"speed": Vector2(1.5, 3.2), "gravity": Vector3(0, 1.6, 0), "damping": Vector2(1.5, 2.5),
+		"size": 0.8, "color": Color(0.95, 0.97, 1.0, 0.55), "aabb": vis})
+	add_child(_steam)
+	# the punch: a fan of sparks spraying sideways off the face, a dust puff and a ring
+	var face_basis := Fx.basis_up(Vector3.FORWARD)
+	_fan = Fx.sparks({"amount": 34, "lifetime": 0.45, "shape": "box",
+		"extents": Vector3(size.y * 0.4, 0.05, size.x * 0.5), "dir": Vector3.UP, "spread": 80.0,
+		"speed": Vector2(4.0, 10.0), "gravity": Vector3(0, -14, 0), "aabb": vis})
+	_fan.transform = Transform3D(face_basis, Vector3(0, 0, face_z))
+	add_child(_fan)
+	_puff = Fx.smoke({"amount": 10, "lifetime": 0.7, "shape": "box",
+		"extents": Vector3(size.y * 0.4, 0.05, size.x * 0.5), "dir": Vector3.UP, "spread": 70.0,
+		"speed": Vector2(1.0, 3.0), "size": 0.7, "color": Color(0.9, 0.86, 0.8, 0.6), "aabb": vis})
+	_puff.transform = _fan.transform
+	add_child(_puff)
+	_ring = Fx.shockwave(maxf(size.x, size.y) * 0.9, {"lifetime": 0.3, "color": Color(2.2, 1.6, 0.5)})
+	_ring.transform = Transform3D(face_basis, Vector3(0, 0, face_z - 0.05))
+	add_child(_ring)
+
+
+## 0 retracted, 1 punching, 2 held out, 3 retracting.
+func _phase_at(time: float) -> int:
+	var u: float = fposmod(time / period + phase, 1.0)
+	if u < PUNCH_START:
+		return 0
+	if u < PUNCH_END:
+		return 1
+	return 2 if u < RETRACT_START else 3
+
+
+## Visual state only: the shove in _physics_process never reads any of this.
+func _process(_dt: float) -> void:
+	var t: float = Game.course_time
+	var ph: int = _phase_at(t)
+	if ph == 3:
+		# vent where the rod enters the (static) housing behind the moving ram
+		_steam.position = Vector3(0, 0, size.z * 0.5 + stroke * (1.0 + extension_at(t)) + 0.05)
+	if ph == _fx_phase:
+		return
+	var was: int = _fx_phase
+	_fx_phase = ph
+	_steam.emitting = ph == 3
+	if ph == 2 and (was == 0 or was == 1):
+		_fan.restart()
+		_puff.restart()
+		_ring.restart()
 
 
 func snap_to_clock() -> void:

@@ -16,6 +16,13 @@ var _lamp: OmniLight3D
 var _veil_mat: StandardMaterial3D
 var _glow: StandardMaterial3D
 var _confetti: GPUParticles3D
+# fireworks: rockets (world-space trails on moving emitters) that burst into spheres of
+# sparks and glitter over the arch, one after another (visual only, all built up front)
+var _rockets: Array[GPUParticles3D] = []
+var _shells: Array[GPUParticles3D] = []
+var _crackles: Array[GPUParticles3D] = []
+var _shell_at: Array[Vector3] = []
+var _shell_col: Array[Color] = []
 
 
 func _ready() -> void:
@@ -72,6 +79,55 @@ func _ready() -> void:
 	_lamp = lamp
 	_confetti = _make_confetti()
 	add_child(_confetti)
+	_build_fireworks()
+
+
+func _build_fireworks() -> void:
+	var cols: Array[Color] = [Look.c("accent"), Look.c("accent2"), Color(1.0, 0.45, 0.65), Color(0.55, 0.9, 1.0)]
+	var vis := AABB(Vector3(-width * 2.0 - 8.0, -2.0, -10.0), Vector3(width * 4.0 + 16.0, gate_height + 20.0, 20.0))
+	for i: int in 4:
+		var sx: float = -1.0 if i % 2 == 0 else 1.0
+		_shell_at.append(Vector3(sx * (width * 0.35 + float(i) * 0.9), gate_height + 4.5 + float(i % 3) * 1.4, -1.5 + float(i) * 0.9))
+		var hot: Color = Fx.hot(cols[i].lerp(Color.WHITE, 0.2), 2.6)
+		_shell_col.append(cols[i])
+		var rocket: GPUParticles3D = Fx.trail({"amount": 30, "lifetime": 0.45, "size": 0.22, "color": hot,
+			"speed": Vector2(0.2, 0.8), "dir": Vector3.DOWN, "spread": 20.0, "aabb": vis})
+		rocket.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		add_child(rocket)
+		_rockets.append(rocket)
+		var shell: GPUParticles3D = Fx.sparks({"amount": 70, "lifetime": 1.4, "explosiveness": 1.0,
+			"spread": 180.0, "speed": Vector2(5.0, 8.0), "damping": Vector2(2.5, 3.0), "gravity": Vector3(0, -3.5, 0),
+			"color": hot, "size": Vector2(0.08, 0.5), "curve": "flat",
+			"fade": PackedFloat32Array([1.0, 1.0, 0.0]), "aabb": vis})
+		shell.position = _shell_at[i]
+		add_child(shell)
+		_shells.append(shell)
+		var crackle: GPUParticles3D = Fx.burst({"amount": 40, "lifetime": 1.2, "explosiveness": 0.5,
+			"shape": "sphere", "radius": 3.2, "speed": Vector2(0.0, 0.5), "gravity": Vector3(0, -1.5, 0),
+			"tex": Fx.Tex.STAR, "size": 0.3, "curve": "pop", "color": Fx.hot(cols[i].lerp(Color.WHITE, 0.6), 2.2),
+			"aabb": vis})
+		crackle.position = _shell_at[i]
+		add_child(crackle)
+		_crackles.append(crackle)
+
+
+## Four rockets from the pillar tops, launched one after another.
+func _fireworks() -> void:
+	for i: int in _rockets.size():
+		var sx: float = -1.0 if i % 2 == 0 else 1.0
+		var r: GPUParticles3D = _rockets[i]
+		var from := Vector3(sx * (width * 0.5 + 0.35), gate_height + 0.9, 0.0)
+		var tw: Tween = create_tween()
+		tw.tween_interval(0.12 + float(i) * 0.32)
+		tw.tween_callback(func() -> void:
+			r.position = from
+			r.emitting = true)
+		tw.tween_property(r, "position", _shell_at[i], 0.55).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		tw.tween_callback(func() -> void:
+			r.emitting = false
+			_shells[i].restart()
+			_crackles[i].restart()
+			Fx.flash(self, global_transform * _shell_at[i], _shell_col[i], 3.0, 12.0, 0.5))
 
 
 ## Confetti popped under the lintel: the chase camera's frame ends about at the lintel,
@@ -134,6 +190,7 @@ func _make_confetti() -> GPUParticles3D:
 ## briefly (the veil stays sheer enough to keep Volt visible through it).
 func _celebrate() -> void:
 	_confetti.restart()
+	_fireworks()
 	var tw: Tween = create_tween().set_parallel(true)
 	tw.tween_property(_lamp, "light_energy", 7.0, 0.1)    # (brighter blows Volt out to a white blob)
 	tw.tween_property(_lamp, "light_energy", 2.5, 0.9).set_delay(0.1).set_ease(Tween.EASE_OUT)

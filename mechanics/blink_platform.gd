@@ -18,6 +18,11 @@ var _vis: MeshInstance3D
 var _ghost: MeshInstance3D
 var _ghost_mat: StandardMaterial3D
 var _solid: bool = true
+# effects (visual only): the slab dissolves into rising motes as it goes, and motes
+# gather in to it as it returns
+var _dissolve: GPUParticles3D
+var _gather: GPUParticles3D
+var _fx_on: bool = true
 
 
 func _ready() -> void:
@@ -40,6 +45,32 @@ func _ready() -> void:
 	_ghost = Look.box(size, gm)
 	_ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_ghost)
+	_build_fx()
+
+
+func _build_fx() -> void:
+	var ac: Color = Look.c("accent2")
+	var hot: Color = Fx.hot(ac.lerp(Color.WHITE, 0.3), 2.2)
+	var n: int = clampi(int(size.x * size.z * 5.0), 16, 50)
+	var vis := AABB(-size * 0.5 - Vector3(2, 2, 2), size + Vector3(4, 6, 4))
+	_dissolve = Fx.burst({"amount": n, "lifetime": 0.8, "explosiveness": 0.7, "shape": "box",
+		"extents": size * 0.5, "dir": Vector3.UP, "spread": 50.0, "speed": Vector2(0.4, 1.8),
+		"gravity": Vector3(0, 1.2, 0), "damping": Vector2(0.5, 1.5), "size": 0.2, "tex": Fx.Tex.STAR,
+		"color": hot, "turbulence": 0.5, "aabb": vis})
+	add_child(_dissolve)
+	_gather = Fx.burst({"amount": n, "lifetime": 0.4, "explosiveness": 0.9, "shape": "box",
+		"extents": size * 0.5 + Vector3(0.9, 0.6, 0.9), "speed": Vector2.ZERO, "radial": Vector2(-14.0, -9.0),
+		"size": 0.18, "tex": Fx.Tex.STAR, "curve": "pop", "color": hot, "aabb": vis})
+	add_child(_gather)
+	_fx_on = is_on_at(Game.course_time)
+
+
+func _process(_dt: float) -> void:
+	var on: bool = is_on_at(Game.course_time)
+	if on == _fx_on:
+		return
+	_fx_on = on
+	(_dissolve if not on else _gather).restart()
 
 
 func is_on_at(time: float) -> bool:
