@@ -20,25 +20,26 @@ func setup_round(p: PartyLayer, rows: Array[Dictionary]) -> void:
 	add_child(box)
 	var rules: PartyRules = p.rules
 	box.add_child(UiKit.label("%s  -  ROUND %d" % [PartyNames.CUP.to_upper(), rules.round_no], 20, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER))
-	box.add_child(UiKit.label("Round Results", 40, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(UiKit.label("Round Results", 36, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER))
 	box.add_child(UiKit.label(str(Game.level_info()["name"]), 18, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER))
 	var grid := GridContainer.new()
 	grid.columns = 6
 	grid.add_theme_constant_override("h_separation", 22)
 	grid.add_theme_constant_override("v_separation", 4)
-	for h: String in ["", "Racer", "Finish", "KOs", "Bonus", "Round"]:
+	for h: String in ["Place", "Racer", "Finish", "KOs", "Bonus", "Round"]:
 		grid.add_child(UiKit.label(h, 15, UiKit.SOFT))
+	var fs: int = 20 if rows.size() <= 4 else 18
 	for r: Dictionary in rows:
 		var id: int = int(r["id"])
 		var col: Color = p.team_color_of(id).lerp(Color.WHITE, 0.3)
 		var place: int = int(r["place"])
-		grid.add_child(UiKit.label("%d%s" % [place, Hud._ordinal(place)] if place > 0 else "DNF", 20, UiKit.GOLD if place == 1 else Color.WHITE))
+		grid.add_child(UiKit.label("%d%s" % [place, Hud._ordinal(place)] if place > 0 else "DNF", fs, UiKit.GOLD if place == 1 else Color.WHITE))
 		var nm: String = p.racer_name(id) + ("  (you)" if id == Net.my_id() else "")
-		grid.add_child(UiKit.label(nm, 20, col))
-		grid.add_child(UiKit.label("+%d" % int(r["place_pts"]), 20))
-		grid.add_child(UiKit.label("%d  (+%d)" % [int(r["kos"]), int(r["ko_pts"])], 20))
-		grid.add_child(UiKit.label("%d  (+%d)" % [int(r["bonus"]), int(r["bonus_pts"])], 20))
-		grid.add_child(UiKit.label("%d" % int(r["total"]), 22, UiKit.GOLD))
+		grid.add_child(UiKit.label(nm, fs, col))
+		grid.add_child(UiKit.label("+%d" % int(r["place_pts"]), fs))
+		grid.add_child(UiKit.label("%d  (+%d)" % [int(r["kos"]), int(r["ko_pts"])], fs))
+		grid.add_child(UiKit.label("%d  (+%d)" % [int(r["bonus"]), int(r["bonus_pts"])], fs))
+		grid.add_child(UiKit.label("%d" % int(r["total"]), fs + 2, UiKit.GOLD))
 	var gc := CenterContainer.new()
 	gc.add_child(grid)
 	box.add_child(gc)
@@ -55,12 +56,20 @@ func setup_round(p: PartyLayer, rows: Array[Dictionary]) -> void:
 	if rules.is_team():
 		box.add_child(_team_line(PartyRules.team_totals(rules.cup, team_of), 30))
 	var stand: Array = rules.cup_standings()
+	# two columns once there are more than four racers, so a full lobby of 8 still fits
+	var sgrid := GridContainer.new()
+	sgrid.columns = 2 if stand.size() > 4 else 1
+	sgrid.add_theme_constant_override("h_separation", 48)
+	sgrid.add_theme_constant_override("v_separation", 2)
 	var n: int = 0
 	for e: Variant in stand:
 		n += 1
 		var sid: int = int((e as Array)[0])
 		var line: String = "%d.  %s   %d" % [n, p.racer_name(sid), int((e as Array)[1])]
-		box.add_child(UiKit.label(line, 20, p.team_color_of(sid).lerp(Color.WHITE, 0.35), HORIZONTAL_ALIGNMENT_CENTER))
+		sgrid.add_child(UiKit.label(line, 19, p.team_color_of(sid).lerp(Color.WHITE, 0.35), HORIZONTAL_ALIGNMENT_CENTER))
+	var sc := CenterContainer.new()
+	sc.add_child(sgrid)
+	box.add_child(sc)
 	# controls
 	if Net.is_host():
 		_level_pick = OptionButton.new()
@@ -69,13 +78,21 @@ func setup_round(p: PartyLayer, rows: Array[Dictionary]) -> void:
 			_level_pick.add_item("Next course:  %s" % str(info["name"]))
 		_level_pick.selected = (Game.level_index + 1) % Game.LEVELS.size()
 		var next: Button = UiKit.button("Next Round  (Round %d)" % (rules.round_no + 1), func() -> void:
-			Net.host_start_race(_level_pick.selected), 520)
-		box.add_child(next)
-		box.add_child(_level_pick)
-		box.add_child(UiKit.button("End Cup  -  Back to Lobby", func() -> void: Net.host_return_to_lobby(), 520))
-		box.add_child(UiKit.confirm_button("Close Session (disconnects all)", "Press again to disconnect all", func() -> void:
+			Net.host_start_race(_level_pick.selected), 330)
+		# two rows of two, so a full lobby's results still fit on screen
+		var row1: HBoxContainer = UiKit.hbox(12)
+		row1.alignment = BoxContainer.ALIGNMENT_CENTER
+		row1.add_child(next)
+		_level_pick.custom_minimum_size.x = 360
+		row1.add_child(_level_pick)
+		box.add_child(row1)
+		var row2: HBoxContainer = UiKit.hbox(12)
+		row2.alignment = BoxContainer.ALIGNMENT_CENTER
+		row2.add_child(UiKit.button("End Cup - Back to Lobby", func() -> void: Net.host_return_to_lobby(), 330))
+		row2.add_child(UiKit.confirm_button("Close Session", "Press again to disconnect all", func() -> void:
 			Net.leave()
-			Game.goto_title("main"), 520))
+			Game.goto_title("main"), 360))
+		box.add_child(row2)
 		first = next
 	else:
 		box.add_child(UiKit.label("Waiting for the host to pick the next round...", 18, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER))

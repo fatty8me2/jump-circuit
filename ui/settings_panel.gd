@@ -8,12 +8,22 @@ signal closed
 ## (pause menu Esc, scene change) or when the window is closed.
 var _dirty: bool = false
 var _fullscreen_check: CheckButton
+var _scroll: ScrollContainer
 
 
 func _ready() -> void:
 	custom_minimum_size = Vector2(620, 0)
+	# scrolls when the rows outgrow the screen (focus follows the pad, the wheel scrolls)
+	_scroll = ScrollContainer.new()
+	_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_scroll.follow_focus = true
+	add_child(_scroll)
+	var gutter := MarginContainer.new()   # room for the scrollbar
+	gutter.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	gutter.add_theme_constant_override("margin_right", 16)
+	_scroll.add_child(gutter)
 	var box: VBoxContainer = UiKit.vbox(10)
-	add_child(box)
+	gutter.add_child(box)
 	box.add_child(UiKit.label("SETTINGS", 30, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER))
 
 	_section(box, "Camera")
@@ -47,6 +57,19 @@ func _ready() -> void:
 		closed.emit()))
 	Settings.changed.connect(_sync_from_settings)
 	UiKit.focus_first(self)
+	_fit.call_deferred()
+	get_viewport().size_changed.connect(_fit)
+
+
+## Tall as its rows, but never taller than the screen (minus a margin): then it scrolls.
+func _fit() -> void:
+	if not is_inside_tree() or _scroll.get_child_count() == 0:
+		return
+	var want: float = (_scroll.get_child(0) as Control).get_combined_minimum_size().y
+	var room: float = get_viewport_rect().size.y - 90.0
+	_scroll.custom_minimum_size = Vector2(0, clampf(want, 200.0, maxf(room, 200.0)))
+	# start at the top (focus-follow may have scrolled the not-yet-sized container)
+	_scroll.set_deferred("scroll_vertical", 0)
 
 
 func _notification(what: int) -> void:

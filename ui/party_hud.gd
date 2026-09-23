@@ -39,10 +39,10 @@ func _ready() -> void:
 	_root.theme = UiKit.theme()
 	add_child(_root)
 
-	# item slot, bottom left
+	# item slot, top left under the stage / falls line (the bottom left belongs to the level intro)
 	var slot: PanelContainer = UiKit.panel()
-	slot.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	slot.position = Vector2(24, -134)
+	slot.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	slot.position = Vector2(24, 86)
 	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var row: HBoxContainer = UiKit.hbox(12)
 	slot.add_child(row)
@@ -85,7 +85,7 @@ func _ready() -> void:
 	_root.add_child(_round)
 	_count = UiKit.shadowed(UiKit.label("", 30, Color(1.0, 0.55, 0.45), HORIZONTAL_ALIGNMENT_CENTER), 7)
 	_count.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	_count.position = Vector2(-300, 84)
+	_count.position = Vector2(-300, 48)
 	_count.custom_minimum_size = Vector2(600, 0)
 	_root.add_child(_count)
 
@@ -205,6 +205,7 @@ func _process(_dt: float) -> void:
 			var n: int = int(ceil(left))
 			_count.text = "Round ends in %d" % n
 			_count.visible = true
+			_round.visible = false   # the countdown takes the round banner's place
 			if n != _last_count and n <= 10:
 				Sfx.play("tick", 0.0, 0.6)
 			_last_count = n
