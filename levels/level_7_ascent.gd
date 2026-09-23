@@ -560,10 +560,12 @@ func _stage_11(o: Vector3) -> Vector3:
 	# gantry straddles the lane, out of the swing and throw plane
 	kit.arch(plate + D(Vector3(0, -12.0, 0)), 9.0, 23.0, _yaw, Look.c("side").lightened(0.2))
 	# step on right after the head has swept back over the plate; it returns 1.6 s later and hurls us forward
+	# (the stage heading is captured now: the frame helpers hold the LAST stage's frame by the time this runs)
+	var fwd: Vector3 = D(Vector3.FORWARD)
 	_wait(func() -> bool:
 		var t: float = Game.course_time + 0.75
 		var w: float = ham.angle_at(t + 0.02) - ham.angle_at(t)
-		var along: float = (ham.global_basis * Vector3.RIGHT).dot(D(Vector3.FORWARD))
+		var along: float = (ham.global_basis * Vector3.RIGHT).dot(fwd)
 		return w * along < 0.0 and ham.angle_at(t) * along < -0.3)
 	r_jump(_edge(a, 0.8, plate), plate)
 	var land: Vector3 = W(0, -0.9, -27.0)
