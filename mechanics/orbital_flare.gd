@@ -32,6 +32,7 @@ var _gate_mat: StandardMaterial3D
 var _gate_light: OmniLight3D
 var _embers: GPUParticles3D
 var _prev_rel: float = 0.0
+var _prev_p: Vector3 = Vector3.ZERO
 var _prev_sweep: int = -1
 
 
@@ -96,9 +97,11 @@ func _physics_process(_dt: float) -> void:
 	var sweep_id: int = int(floor(t / period + phase))
 	var p: Vector3 = to_local(player.global_position + Vector3(0, 0.9, 0))
 	var rel: float = p.z - z
-	var crossed: bool = _prev_sweep == sweep_id and signf(rel) != signf(_prev_rel)
+	# a crossing only counts for a body that moved there (not a respawn / warp teleport)
+	var crossed: bool = _prev_sweep == sweep_id and signf(rel) != signf(_prev_rel) and p.distance_to(_prev_p) < 2.5
 	_prev_sweep = sweep_id
 	_prev_rel = rel
+	_prev_p = p
 	if absf(p.x) > width * 0.5 or p.y < -depth or p.y > height:
 		return
 	if (absf(rel) < thickness * 0.5 + 0.35 or crossed) and not _sheltered(p):

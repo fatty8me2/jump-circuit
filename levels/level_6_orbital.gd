@@ -13,7 +13,7 @@ func _configure() -> void:
 	theme_id = "orbital"
 	music_track = "b"
 	kill_y = -80.0
-	route_variants = 1
+	route_variants = 2
 
 
 # ---- local-frame helpers --------------------------------------------------------------------
@@ -154,6 +154,10 @@ func _build() -> void:
 	cp = _stage_8_compactor()
 	_frame(_w(cp), _yaw)
 	cp = _stage_9_flare()
+	_frame(_w(cp), _yaw)
+	cp = _stage_10_junction()
+	_frame(_w(cp), _yaw - 90.0)
+	cp = _stage_11_carousel()
 	_frame(_w(cp), _yaw)
 	_stage_end()
 
@@ -543,6 +547,129 @@ func _stage_9_flare() -> Vector3:
 	r_checkpoint()
 	d1.clear()
 	d2.clear()
+	return end["c"]
+
+
+## Bot: blink platform `b` is solid for the whole window [a, b2] s from now.
+func _blink_ok(b: BlinkPlatform, a: float, b2: float) -> bool:
+	var t: float = Game.course_time
+	var s: float = t + a
+	while s <= t + b2:
+		if not b.is_on_at(s):
+			return false
+		s += 0.05
+	return true
+
+
+## Fork signpost: a banner and a floor arrow strip in the route's colour.
+func _sign(p: Vector3, col: Color) -> void:
+	kit.banner(_w(p), 3.6, col, _yaw)
+	kit.glow_strip(_w(p + Vector3(0, 0.03, -0.3)), Vector3(1.4, 0.05, 0.2), col, _yaw)
+
+
+# Stage 10: the teleporter junction - FORK. Left (red): the maintenance gauntlet, two blinking
+# plates then a catwalk swept by rams. Right (gold): run the hull panel, mantle the relay
+# container and dive through the teleporter that puts you past the rams.
+func _stage_10_junction() -> Vector3:
+	var end: Dictionary = _dock(Vector3(0, 0, -44.0), -90.0, 8.0)
+	# -- gauntlet (route 0) --
+	var a1: BlinkPlatform = kit.blink(_w(Vector3(-3.0, 0, -8.0)), Vector3(2.2, 0.4, 2.2), 3.2, 0.65, 0.0)
+	var a2: BlinkPlatform = kit.blink(_w(Vector3(-3.0, 0.6, -13.8)), Vector3(2.2, 0.4, 2.2), 3.2, 0.65, 0.7)
+	var cw: Dictionary = _deck(Vector3(-3.0, 0.6, -24.0), 2.2, 14.0)
+	var a3: Dictionary = _deck(Vector3(-2.5, 0.6, -35.6), 2.0, 2.0, "alt")
+	var rams: Array = []
+	var leads: Array = []
+	for z: float in [-21.0, -27.0]:
+		var lead: float = (-17.6 - z) / 9.0 + 0.15
+		rams.append(kit.piston(_w(Vector3(-5.0, 2.2, z)), Vector3(2.2, 1.6, 1.6), _yaw - 90.0, 2.6, 2.6, fposmod(0.25 - lead / 2.6, 1.0), 13.0))
+		leads.append(lead)
+	# -- teleporter (route 1) --
+	kit.wallrun(_w(Vector3(5.0, 1.2, -13.0)), Vector3(16.0, 6.0, 0.5), _yaw + 90.0)
+	var p1: Dictionary = _deck(Vector3(2.8, 0, -26.2), 3.0, 4.0, "alt")
+	kit.ledge(_w(Vector3(2.8, 3.3, -31.5)), Vector3(3.0, 5.0, 4.0), _yaw, "main")
+	kit.portal(_w(Vector3(2.8, 3.3, -32.6)), _yaw, _w(Vector3(-3.0, 0.6, -29.4)), _yaw, 7.0)
+	_sign(Vector3(-2.2, 0, -2.4), Color(1.0, 0.3, 0.2))
+	_sign(Vector3(2.2, 0, -2.4), WarpPortal.ENTRY_COLOR)
+	if route_variant == 0:
+		r_until(func() -> bool: return _blink_ok(a1, 0.3, 1.1) and _blink_ok(a2, 1.3, 2.3))
+		r_jump(_w(Vector3(-2.6, 0, -2.65)), _w(Vector3(-3.0, 0, -8.0)))
+		r_jump(_w(Vector3(-3.0, 0, -8.8)), _w(Vector3(-3.0, 0.6, -13.8)))
+		r_jump(_w(Vector3(-3.0, 0.6, -14.6)), _w(Vector3(-3.0, 0.6, -18.2)))
+		r_walk(_w(Vector3(-3.0, 0.6, -17.6)))
+		r_until(func() -> bool: return _clear(rams, leads, 0.35))
+		r_walk(_w(Vector3(-3.0, 0.6, -30.0)))
+		_hop(cw, a3)
+		_hop(a3, end, Vector3(-1.0, 0, 2.0))
+	else:
+		r_wallrun(_w(Vector3(2.0, 0, -2.6)), _w(Vector3(4.4, 1.2, -7.5)), _w(Vector3(4.4, 1.2, -17.5)), _w(p1["c"]))
+		r_mantle(_w(Vector3(2.8, 0, -27.9)), _w(Vector3(2.8, 3.3, -30.3)))
+		r_portal(_w(Vector3(2.8, 3.3, -33.2)), _w(Vector3(-3.0, 0.6, -30.3)))
+		_hop(cw, a3)
+		_hop(a3, end, Vector3(-1.0, 0, 2.0))
+	r_checkpoint()
+	return end["c"]
+
+
+## Habitat carousel: a spinning four-arm hub (arms 3.5-8.5 m out) dressed as habitat modules.
+func _carousel(hub: Vector3, period: float, phase: float) -> RotatingPlatform:
+	var arms: Array[Dictionary] = [
+		{"pos": Vector3(6.0, 0, 0), "size": Vector3(5.0, 0.5, 2.6)}, {"pos": Vector3(-6.0, 0, 0), "size": Vector3(5.0, 0.5, 2.6)},
+		{"pos": Vector3(0, 0, 6.0), "size": Vector3(2.6, 0.5, 5.0)}, {"pos": Vector3(0, 0, -6.0), "size": Vector3(2.6, 0.5, 5.0)},
+	]
+	var table: RotatingPlatform = kit.spinner(_w(hub), period, arms, 2.2, phase, 0.5)
+	var hull: StandardMaterial3D = Look.flat(Look.c("top"), 0.45, 0.35)
+	var win: StandardMaterial3D = Look.flat(Color(1.0, 0.85, 0.55), 0.3, 0.0, 3.0)
+	for a: Dictionary in arms:
+		var ap: Vector3 = a["pos"]
+		var radial: Vector3 = ap.normalized()
+		# the habitat module slung under each arm, with a lit window band
+		var mod := Look.cylinder(1.1, 4.4, hull, ap + Vector3(0, -1.5, 0), -1.0, 14)
+		mod.rotation = Vector3(0, 0, PI * 0.5) if absf(radial.x) > 0.5 else Vector3(PI * 0.5, 0, 0)
+		table.add_child(mod)
+		var band := Look.box(Vector3(4.2, 0.18, 2.3) if absf(radial.x) > 0.5 else Vector3(2.3, 0.18, 4.2), win, ap + Vector3(0, -1.45, 0))
+		band.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		table.add_child(band)
+		# tip beacon
+		var tip := Look.sphere(0.14, Look.flat(Color(0.3, 1.0, 0.5), 0.3, 0.0, 4.0), radial * 8.3 + Vector3(0, 0.4, 0))
+		table.add_child(tip)
+	# the spindle it turns on, down into the station
+	add_child(Look.cylinder(0.9, 30.0, Look.flat(Look.c("decor"), 0.5, 0.6), _w(hub + Vector3(0, -15.5, 0)), 0.9, 12))
+	var core := Look.sphere(1.3, Look.flat(Color(0.4, 0.8, 1.0), 0.3, 0.0, 3.0), _w(hub + Vector3(0, -2.2, 0)))
+	add_child(core)
+	return table
+
+
+## Bot: board carousel `c` from `from` onto an arm tip passing `board`, ride it round and jump off
+## toward `to` once our bearing from the hub is `lo`..`hi` degrees short of the exit line.
+func _r_carousel(c: RotatingPlatform, hub: Vector3, from: Vector3, board: Vector3, to: Vector3, lo: float, hi: float) -> void:
+	var tips: Array = [Vector3(7.0, 0.25, 0), Vector3(-7.0, 0.25, 0), Vector3(0, 0.25, 7.0), Vector3(0, 0.25, -7.0)]
+	r_walk(_w(from))
+	route.append({"kind": "x_wait", "nodes": [c], "locals": tips, "point": _w(board), "radius": 0.9, "lead": 0.55})
+	route.append({"kind": "x_jump", "from": _w(from), "picked": true, "to_local": Vector3(6.6, 0.25, 0)})
+	var hw: Vector3 = _w(hub)
+	var ex: Vector3 = _w(to) - hw
+	ex = Vector3(ex.x, 0, ex.z).normalized()
+	var sgn: float = signf(c.period)
+	route.append({"kind": "h_jump", "to": _w(to), "test": func() -> bool:
+		var rel: Vector3 = player.global_position - hw
+		rel = Vector3(rel.x, 0, rel.z).normalized()
+		var a: float = rad_to_deg(atan2(rel.cross(ex).y, rel.dot(ex))) * sgn
+		return a >= lo and a <= hi})
+
+
+# Stage 11: the habitat carousels - two spinning habitat hubs. Board an arm as it swings past,
+# ride it round and leap off at the far side (mind the sideways fling), twice, the second one
+# turning the other way.
+func _stage_11_carousel() -> Vector3:
+	var c1h: Vector3 = Vector3(0, 0, -13.0)
+	var c1: RotatingPlatform = _carousel(c1h, 7.0, 0.0)
+	var m: Dictionary = _deck(Vector3(0, 0.5, -26.0), 2.6, 2.6, "alt")
+	var c2h: Vector3 = Vector3(0, 0.5, -38.5)
+	var c2: RotatingPlatform = _carousel(c2h, -6.0, 0.1)
+	var end: Dictionary = _dock(Vector3(0, 0.5, -52.5), 0.0)
+	_r_carousel(c1, c1h, Vector3(0, 0, -2.7), Vector3(0, 0, -6.0), m["c"], 8.0, 22.0)
+	_r_carousel(c2, c2h, Vector3(0, 0.5, -27.0), Vector3(0, 0.5, -32.0), end["c"] + Vector3(0, 0, 1.6), 8.0, 22.0)
+	r_checkpoint()
 	return end["c"]
 
 
