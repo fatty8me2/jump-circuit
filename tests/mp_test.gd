@@ -4,7 +4,9 @@ extends Node
 ##   godot --headless --path . res://tests/mp_test.tscn -- --role=client
 ## Optional: --port=<n> (default 24577; both processes must use the same one).
 ## Covers: connect, roster sync, clock sync, synchronized race start, ghost pose
-## replication, checkpoint + finish reporting, standings, return to lobby.
+## replication, checkpoint + finish reporting, standings, return to lobby; then a Party Mode
+## round: mode sync, item boxes decided by the host (a box is consumed once), a Shove and a
+## Fox Claw KO crossing the wire, the KO credited on both ends, and identical round scores.
 ## A watchdog ends the process (exit 1) if the run stalls, so a missing peer never hangs it.
 
 var role: String = "host"
@@ -32,8 +34,8 @@ func _ready() -> void:
 	SaveData.path_override = "user://test_progress_%s.json" % role
 	Settings.player_name = "Host" if role == "host" else "Guest"
 	Settings.color_index = 1 if role == "host" else 2
-	get_tree().create_timer(90.0, true, false, true).timeout.connect(func() -> void:
-		_finish("watchdog: test did not complete in 90 s"))
+	get_tree().create_timer(170.0, true, false, true).timeout.connect(func() -> void:
+		_finish("watchdog: test did not complete in 170 s"))
 	_run.call_deferred()
 
 
@@ -157,6 +159,7 @@ func _run() -> void:
 	check(await wait_for(func() -> bool: return not Game.race_mode and Game.title_screen == "lobby", 8.0), "everyone returns to the lobby together")
 	await get_tree().create_timer(0.5).timeout
 	check(Net.active and Net.roster.size() == 2, "session stays connected for the next race")
+	await _party_round()
 	_done = true   # the watchdog must not fire during the orderly shutdown below
 	check(_trap.count() == 0, ("no engine/script errors during the session %s" % _trap.since(0)).strip_edges())
 	OS.remove_logger(_trap)
@@ -168,3 +171,144 @@ func _run() -> void:
 		Net.leave()
 	SaveData.delete_files()
 	get_tree().quit(1 if failed > 0 else 0)
+
+
+# ---- Party Mode round ------------------------------------------------------------------
+
+var _party_seen: Dictionary = {}
+
+
+func _on_party_msg(from_id: int, m: Dictionary) -> void:
+	var k: String = str(m.get("k", ""))
+	if k == "test":
+		_party_seen[str(m.get("t", ""))] = true
+	elif k == "box":
+		_party_seen["box%d" % int(m.get("b", -1))] = int(_party_seen.get("box%d" % int(m.get("b", -1)), 0)) + 1
+
+
+func _other_id() -> int:
+	for id: int in Net.roster:
+		if id != Net.my_id():
+			return id
+	return 0
+
+
+## Stands `lvl`'s player just behind/beside the other racer's ghost, facing it.
+func _face_ghost(lvl: LevelBase, dist: float) -> void:
+	var g: RemoteRacer = lvl._ghosts.values()[0]
+	var gp: Vector3 = g.global_position
+	var from: Vector3 = gp + Vector3(0, 0, dist)
+	var dir: Vector3 = (gp - from).normalized()
+	lvl.player.teleport(Transform3D(Basis.looking_at(dir, Vector3.UP), from + Vector3(0, 0.05, 0)))
+	lvl.player.facing_dir = dir
+	lvl.camera.yaw = atan2(-dir.x, -dir.z)
+	lvl.player.camera_yaw = lvl.camera.yaw
+
+
+func _party_round() -> void:
+	Net.party_message.connect(_on_party_msg)
+	if role == "host":
+		Net.host_set_mode("party")
+	check(await wait_for(func() -> bool: return Net.game_mode == "party", 5.0), "the host's Party mode reaches this peer")
+	if role == "host":
+		await get_tree().create_timer(0.5).timeout
+		Net.host_start_race(0, 2.0)
+	check(await wait_for(func() -> bool: return Game.race_mode and _level() != null and _level().player != null and _level().party != null, 10.0), "a party round loads the level with the party layer")
+	var lvl: LevelBase = _level()
+	if lvl == null or lvl.party == null:
+		_finish("the party round never loaded")
+		return
+	var p: PartyLayer = lvl.party
+	check(Game.party != null and Game.party.mode == "party" and Game.party.round_no == 1, "this is round 1 of the Party Cup")
+	check(await wait_for(func() -> bool: return lvl.player.control_enabled and not p.boxes.is_empty(), 8.0), "GO, and item boxes are placed (%d)" % p.boxes.size())
+	lvl.player.use_device_input = false
+	p.use_device_input = false
+	var spawn: Transform3D = lvl._spawn
+	var other: int = _other_id()
+	var box_at := func(i: int) -> Transform3D: return Transform3D(Basis(), p.boxes[i].global_position - Vector3(0, 1.1, 0))
+	# -- pickups: the host takes box 0; the guest then touches the same (gone) box, then box 1
+	if role == "host":
+		await get_tree().create_timer(0.3).timeout
+		lvl.player.teleport(box_at.call(0))
+		check(await wait_for(func() -> bool: return p.item != "", 2.0), "host picks up box 0 (%s)" % p.item)
+		check(not p.boxes[0].available, "box 0 is taken")
+	else:
+		check(await wait_for(func() -> bool: return not p.boxes[0].available, 5.0), "the host's pickup pops box 0 on this screen too")
+		lvl.player.teleport(box_at.call(0))
+		await get_tree().create_timer(0.8).timeout
+		check(p.item == "" and int(_party_seen.get("box0", 0)) == 1, "a box is consumed once: touching the taken box gives nothing (msgs %d)" % int(_party_seen.get("box0", 0)))
+		lvl.player.teleport(box_at.call(1))
+		check(await wait_for(func() -> bool: return p.item != "", 3.0), "the host grants the guest box 1 (%s)" % p.item)
+		p.item = ""
+		lvl.player.teleport(spawn)
+		await get_tree().create_timer(0.6).timeout
+		Net.send_party({"k": "test", "t": "ready1"})
+	# -- a Shove crosses the wire
+	var knocked: Array = [0.0]
+	var from_host: Array = [""]
+	p.hit_taken.connect(func(from_id: int, src: String) -> void:
+		from_host[0] = src if from_id == 1 else "other"
+		await get_tree().physics_frame
+		knocked[0] = maxf(float(knocked[0]), Vector2(lvl.player.velocity.x, lvl.player.velocity.z).length()))
+	if role == "host":
+		check(await wait_for(func() -> bool: return bool(_party_seen.get("ready1", false)), 8.0), "the guest is back at the start")
+		await get_tree().create_timer(0.4).timeout
+		var landed: Array = [0]
+		p.hit_landed.connect(func(id: int, _src: String) -> void: landed[0] = id)
+		_face_ghost(lvl, 1.4)
+		await get_tree().create_timer(0.1).timeout
+		p.cmd_shove = true
+		await get_tree().create_timer(0.1).timeout
+		p.cmd_shove = false
+		check(int(landed[0]) == other, "the host's Shove connects with the guest's ghost")
+	else:
+		check(await wait_for(func() -> bool: return str(from_host[0]) != "", 8.0), "the host's hit arrives (%s)" % str(from_host[0]))
+		check(str(from_host[0]) == "shove" and float(knocked[0]) > 5.0, "the Shove knocks this player away (%.1f m/s)" % float(knocked[0]))
+		# straight back before the flight can carry us off the start lawn (a fall would be a KO)
+		await get_tree().create_timer(0.3).timeout
+		lvl.player.teleport(spawn)
+		await get_tree().create_timer(0.6).timeout
+		from_host[0] = ""
+		Net.send_party({"k": "test", "t": "ready2"})
+	# -- a transformation is mirrored, and a Fox Claw KO is credited on both ends
+	if role == "host":
+		check(await wait_for(func() -> bool: return bool(_party_seen.get("ready2", false)), 8.0), "the guest is back again")
+		p.give_item("fox")
+		var fox: PowerUp = p.activate_item()
+		await get_tree().create_timer(0.5).timeout
+		_face_ghost(lvl, 1.6)
+		await get_tree().create_timer(0.1).timeout
+		p.cmd_attack = true
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		p.cmd_attack = false
+		await get_tree().create_timer(0.2).timeout
+		if fox != null and is_instance_valid(fox):
+			fox.finish()
+	else:
+		check(await wait_for(func() -> bool: return (p.remote_powers.get(1, {}) as Dictionary).has("fox"), 6.0), "the host's Nine-Tailed Fox appears on its ghost here")
+	check(await wait_for(func() -> bool: return int(p.kos.get(1, 0)) == 1, 6.0), "the Fox Claw KO is credited to the host on this end (kos %s)" % str(p.kos))
+	if role == "client":
+		check(lvl.deaths >= 1, "the KO sent the guest back to its checkpoint")
+	# -- finish: host first, guest second; the host scores the round and everyone shows it
+	var gates: Array[Node] = lvl.find_children("*", "FinishGate", true, false)
+	var gate: FinishGate = gates[0] as FinishGate
+	if role == "client":
+		await wait_for(func() -> bool: return float(Net.roster[1]["finished"]) >= 0.0, 10.0)
+		await get_tree().create_timer(0.5).timeout
+	else:
+		await get_tree().create_timer(0.5).timeout
+	lvl.player.teleport(Transform3D(Basis(), gate.global_position + Vector3(0, 0.3, 0)))
+	check(await wait_for(func() -> bool: return p.round_over and not p.last_rows.is_empty(), 10.0), "the round ends once everyone is home")
+	var totals: Dictionary = {}
+	for r: Dictionary in p.last_rows:
+		totals[int(r["id"])] = int(r["total"])
+	check(int(totals.get(1, -1)) == 13 and int(totals.get(other if role == "host" else Net.my_id(), -1)) == 8, "round scores agree: host 10 + 3 (KO) = 13, guest 8 (%s)" % str(totals))
+	check(int(Game.party.cup.get(1, -1)) == 13, "the cup total matches on this end (%s)" % str(Game.party.cup))
+	check(await wait_for(func() -> bool: return p.results != null and is_instance_valid(p.results) and p.results.is_inside_tree(), 4.0), "the round results panel shows")
+	if role == "host":
+		await get_tree().create_timer(1.0).timeout
+		Net.host_return_to_lobby()
+	check(await wait_for(func() -> bool: return not Game.race_mode and Game.title_screen == "lobby", 8.0), "back to the lobby after the round")
+	check(Game.party != null and int(Game.party.cup.get(1, -1)) == 13 and Net.party_round == 1, "the Party Cup carries on in the lobby (round %d played)" % Net.party_round)
+	await get_tree().create_timer(0.5).timeout
