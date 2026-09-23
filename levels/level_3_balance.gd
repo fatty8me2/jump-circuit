@@ -25,6 +25,7 @@ func _configure() -> void:
 	theme_id = "balance"
 	music_track = "a"
 	kill_y = -45.0
+	route_variants = 2
 
 
 func _build() -> void:
@@ -40,6 +41,11 @@ func _build() -> void:
 	_stage_8_sweeper_dish()
 	_stage_9_pad_sprint()
 	_stage_10_great_scale()
+	_stage_11_container_stacks()
+	_stage_12_hook_ride()
+	_stage_13_scanner_yard()
+	_stage_14_counterweights()
+	kit.finish(L(0, 0, 3.0), _yaw)
 	_build_surroundings()
 
 
@@ -82,6 +88,10 @@ func _dish(x: float, y: float, d: float, diameter: float = 2.4, edge: float = 18
 
 func _water(x: float, y: float, d: float, w: float, ln: float) -> void:
 	kit.hazard(L(x, y, d), _sz(w, 0.5, ln))
+	# sea spray drifting up off the red water
+	var spray: GPUParticles3D = BalanceFx.mist(_sz(w, 1.0, ln), Color(1.0, 0.86, 0.84), clampi(int(w * ln / 40.0), 6, 20))
+	spray.position = L(x, y + 0.5, d)
+	add_child(spray)
 
 
 func J(x1: float, y1: float, d1: float, x2: float, y2: float, d2: float, speed: float = 0.0, hold: bool = true) -> void:
@@ -98,12 +108,35 @@ func _aim(x: float, y: float, d: float) -> void:
 func _cp(x: float, y: float, d: float, next_yaw: float, w: float = 5.0, ln: float = 5.0) -> void:
 	var c: Vector3 = L(x, y, d)
 	kit.plat(c, _sz(w, 1.5, ln), "main", 2.4)
+	_cp_mark(c, next_yaw)
+
+
+## Checkpoint on ground that already exists at `c` (a ledge top, the halfway yard).
+func _cp_mark(c: Vector3, next_yaw: float) -> void:
 	_frame(c, next_yaw)
 	kit.checkpoint(c, next_yaw)
 	kit.lamp(c + _b * Vector3(-2.1, 0, 2.1), 2.8, false)
 	kit.glow_strip(c + _b * Vector3(0, 0.03, -1.9), Vector3(1.6, 0.06, 0.22), YELLOW, next_yaw)
+	_cp_fx(c)
 	r_walk(c)
 	r_checkpoint()
+
+
+## Stage-clear confetti when you arrive, yard glints hanging round the pad, and the
+## prevailing cross-wind streaking over the gap ahead.
+func _cp_fx(c: Vector3) -> void:
+	var clear := BalanceFx.ProximityBurst.new()
+	clear.radius = 2.4
+	clear.position = c + Vector3(0, 0.6, 0)
+	clear.add_child(BalanceFx.burst(YELLOW, 36, 7.5, 1.4, 0.0, -7.0, 0.2))
+	clear.add_child(BalanceFx.burst(Color(0.35, 0.95, 0.9), 30, 6.0, 1.2, 0.0, -6.0, 0.16))
+	add_child(clear)
+	var glints: GPUParticles3D = BalanceFx.motes(Vector3(9, 4, 9), Color(1.0, 0.9, 0.55), 12)
+	glints.position = c + Vector3(0, 2.2, 0)
+	add_child(glints)
+	var gust: GPUParticles3D = BalanceFx.streaks(Vector3(26, 7, 22), Vector3(1, 0, 0), Color(1, 1, 1, 0.22), 14, 11.0)
+	gust.position = c + _b * Vector3(0, 2.5, -20.0)
+	add_child(gust)
 
 
 func _wait(test: Callable, hold: Variant = null) -> void:
@@ -380,16 +413,321 @@ func _stage_10_great_scale() -> void:
 	kit.disc(L(0, -0.2, 25.0), 1.0, 0.6, "alt", 3.0)
 	# beam 3: narrow and lively
 	_beam(0, -0.2, 34.3, 1.2, 9.0, false, true, {"edge_tilt_deg": 22.0, "max_tilt_deg": 28.0})
-	kit.plat(L(0, 0.4, 48.3), Vector3(10, 2, 10))
-	kit.finish(L(0, 0.4, 50.3), _yaw)
+	# the old finish yard is now the halfway yard: checkpoint 10, the new half heads off toward -Z
+	var yard: Vector3 = L(0, 0.4, 48.3)
+	kit.plat(yard, Vector3(10, 2, 10))
 
 	_wait(_hammers_clear.bind([[h, 1.85]]))
 	J(0, 0, 2.7, 0, -0.6, 7.6)
 	J(0, -0.6, 19.2, 0, -0.2, 24.9)
 	J(0, -0.2, 25.7, 0, -0.2, 30.7)
 	J(0, -0.2, 38.4, 0, 0.4, 44.5)
-	r_walk(L(0, 0.4, 50.3))
-	_dress_master(L(0, 0.4, 48.3))
+	_dress_master(yard)
+	_cp_mark(yard, 0.0)
+
+
+# ---- new-half helpers (all in the local frame; sizes are (across, height, along)) ------------------
+
+## Walkable block, top centre at (x, y, d).
+func P(x: float, y: float, d: float, w: float, ln: float, style: String = "main", thick: float = 1.0, keel: float = -1.0) -> StaticBody3D:
+	return kit.plat(L(x, y, d), Vector3(w, thick, ln), style, keel, _yaw)
+
+
+## Mantle block (gold lip), top centre at (x, y, d).
+func LG(x: float, y: float, d: float, w: float, h: float, ln: float, style: String = "main") -> LedgeBlock:
+	return kit.ledge(L(x, y, d), Vector3(w, h, ln), _yaw, style)
+
+
+## Wall-run panel running along the travel direction, centred at (x, yc, dc).
+func WR(x: float, yc: float, dc: float, ln: float, h: float, th: float = 0.5) -> WallRunPanel:
+	return kit.wallrun(L(x, yc, dc), Vector3(ln, h, th), _yaw + 90.0)
+
+
+func MANTLE(fx: float, fy: float, fd: float, tx: float, ty: float, td: float) -> void:
+	r_mantle(L(fx, fy, fd), L(tx, ty, td))
+
+
+## Crane-hook cargo (mantle onto it) riding `travel` metres forward. Top centre at (x, y, d).
+func _hook_cargo(x: float, y: float, d: float, along: float, h: float, across: float, travel: float, period: float, phase: float, dwell: float, col: Color) -> BalanceHookCargo:
+	var c := BalanceHookCargo.new()
+	c.size = Vector3(along, h, across)
+	var pts: Array[Vector3] = [Vector3.ZERO, _b * Vector3(0, 0, -travel)]
+	c.points = pts
+	c.period = period
+	c.phase = phase
+	c.dwell = dwell
+	c.crate_color = col
+	c.cable_height = 6.5
+	c.rotation_degrees.y = _yaw + 90.0
+	c.position = L(x, y - h * 0.5, d)
+	add_child(c)
+	return c
+
+
+## Crane-hung container with wall-run sides, sliding `travel` metres forward and back.
+func _run_container(x: float, yc: float, d: float, along: float, h: float, across: float, travel: float, period: float, phase: float, dwell: float) -> BalanceRunContainer:
+	var c := BalanceRunContainer.new()
+	c.size = Vector3(along, h, across)
+	var pts: Array[Vector3] = [Vector3.ZERO, _b * Vector3(0, 0, -travel)]
+	c.points = pts
+	c.period = period
+	c.phase = phase
+	c.dwell = dwell
+	c.crate_color = DEEP
+	c.cable_height = 5.0
+	c.rotation_degrees.y = _yaw + 90.0
+	c.position = L(x, yc, d)
+	add_child(c)
+	return c
+
+
+## Counterweight lift: cage A's top at (x, y, d), cage B `gap_d` further along.
+func _counterweight(x: float, y: float, d: float, gap_d: float, car_w: float, car_ln: float, travel: float, rate: float) -> BalanceCounterweight:
+	var cw := BalanceCounterweight.new()
+	cw.car_size = _sz(car_w, 1.0, car_ln)
+	cw.b_offset = _b * Vector3(0, 0, -gap_d)
+	cw.travel = travel
+	cw.rate = rate
+	cw.position = L(x, y, d)
+	add_child(cw)
+	return cw
+
+
+## Sweeping laser scanner over the floor point (x, y, d), running `sweep` metres forward and back.
+func _scanner(x: float, y: float, d: float, sweep: float, width: float, period: float, phase: float) -> BalanceScanner:
+	var s := BalanceScanner.new()
+	s.width = width
+	s.beam_height = 1.1
+	var pts: Array[Vector3] = [Vector3.ZERO, _b * Vector3(0, 0, -sweep)]
+	s.points = pts
+	s.period = period
+	s.phase = phase
+	s.rotation_degrees.y = _yaw
+	s.position = L(x, y, d)
+	add_child(s)
+	# the rails it runs on
+	for sx: float in [-1.0, 1.0]:
+		kit.block(L(x + sx * (width * 0.5 + 0.5), y + s.rail_height + 0.35, d + sweep * 0.5), _sz(0.25, 0.25, sweep + 3.0), TEAL, false)
+	for dd: float in [d - 1.5, d + sweep + 1.5]:
+		kit.block(L(x, y + s.rail_height + 0.55, dd), _sz(width + 1.6, 0.3, 0.3), WHITE, false)
+		for sx2: float in [-1.0, 1.0]:
+			kit.block(L(x + sx2 * (width * 0.5 + 0.8), y + s.rail_height - 6.0, dd), Vector3(0.22, 13.0, 0.22), DEEP, false)
+	return s
+
+
+## Scanner's distance travelled from its start point at `time`.
+func _scan_d(s: BalanceScanner, time: float) -> float:
+	return s.offset_at(time).length()
+
+
+## A run from `d0` (standing, local d) to a takeoff at `d_take` stays behind a scanner that
+## starts at `d_start`, and at takeoff it is parked at the far end (so the leap clears it).
+func _chase_ok(s: BalanceScanner, d_start: float, sweep: float, d0: float, d_take: float) -> bool:
+	var now: float = Game.course_time
+	var t_take: float = 0.12 + (d_take - d0) / 8.3
+	var tau: float = 0.0
+	while tau <= t_take:
+		var dp: float = d0 + 8.3 * maxf(tau - 0.12, 0.0)
+		if d_start + _scan_d(s, now + tau) < dp + 1.1:
+			return false
+		tau += 0.04
+	return _scan_d(s, now + t_take) > sweep - 0.25 and _scan_d(s, now + t_take + 0.3) > sweep - 0.4
+
+
+## Every laser gate in `list` ([gate, from, to] seconds from now) stays off over its window.
+func _gates_off(list: Array) -> bool:
+	var now: float = Game.course_time
+	for g: Array in list:
+		var gate: LaserGate = g[0]
+		var tau: float = float(g[1])
+		while tau <= float(g[2]):
+			if gate.is_on_at(now + tau):
+				return false
+			tau += 0.04
+	return true
+
+
+## Every piston in `list` ([piston, from, to]) stays retracted over its window.
+func _rams_in(list: Array) -> bool:
+	var now: float = Game.course_time
+	for g: Array in list:
+		var p: Piston = g[0]
+		var tau: float = float(g[1])
+		while tau <= float(g[2]):
+			if p.extension_at(now + tau) > 0.03:
+				return false
+			tau += 0.04
+	return true
+
+
+## Every crusher in `list` ([crusher, from, to]) is safe to be under over its window.
+func _presses_clear(list: Array) -> bool:
+	var now: float = Game.course_time
+	for g: Array in list:
+		var c: Crusher = g[0]
+		if not c.is_clear_for(now + float(g[1]), float(g[2]) - float(g[1])):
+			return false
+		if c.gap_at(now + float(g[1])) < 2.0:
+			return false
+	return true
+
+
+## Container-yard scenery: a stack of non-colliding shipping containers at world `pos`.
+func _containers(pos: Vector3, count: int, yaw: float) -> void:
+	var cols: Array[Color] = [TEAL, WHITE, YELLOW.darkened(0.1), DEEP, Color(0.85, 0.35, 0.25)]
+	for i: int in count:
+		var c: Color = cols[(i * 3 + int(absf(pos.x + pos.z))) % cols.size()]
+		var off := Vector3(kit.rng.randf_range(-0.3, 0.3), 0.0, kit.rng.randf_range(-0.3, 0.3))
+		var body: Node3D = kit.block(pos + off + Vector3(0, 1.3 + 2.6 * i, 0), Vector3(6.0, 2.6, 2.4), c, false, yaw + kit.rng.randf_range(-4, 4))
+		for k: int in 9:
+			body.add_child(Look.box(Vector3(0.12, 2.3, 2.5), Look.flat(c.darkened(0.25), 0.8), Vector3(-2.6 + k * 0.65, 0, 0)))
+
+
+## Welding sparks spitting off a crane or container (decor, pointed away from the route).
+func _welder(pos: Vector3, dir: Vector3) -> void:
+	var sp: GPUParticles3D = BalanceFx.sparks(Color(1.0, 0.85, 0.5), 22, 4.5, 0.8, dir, 25.0)
+	sp.position = pos
+	add_child(sp)
+	var glow: GPUParticles3D = BalanceFx.motes(Vector3(0.4, 0.4, 0.4), Color(0.6, 0.85, 1.0), 6, 0.5)
+	glow.position = pos
+	add_child(glow)
+
+
+# ---- 11. CONTAINER STACKS: the first mantles - up a container, and up again off a sinking pan -----
+
+func _stage_11_container_stacks() -> void:
+	_water(0, -5.5, 30.0, 14.0, 50.0)
+	# rolling beam warm-up off the halfway yard
+	_beam(0, 0, 13.0, 1.2, 8.0, false, true, {"edge_tilt_deg": 22.0, "max_tilt_deg": 28.0})
+	P(0, -0.4, 22.0, 3.0, 3.0, "alt")
+	# container C1: 3.4 m over the deck - too tall to jump, grab the gold lip and climb
+	LG(0, 3.0, 27.0, 3.2, 4.4, 5.0)
+	# sinking pan in front of container C2: the longer you stand, the taller C2 gets
+	var sink := {"tilt_about_x": false, "tilt_about_z": false, "sink_depth": 1.5, "board_mass": 500.0, "support": "cables"}
+	kit.tilt(L(0, 2.6, 36.0), Vector3(3, 0.4, 3), sink)
+	kit.hazard(L(0, 2.6 - 1.0 - 0.3, 36.0), Vector3(4.6, 0.6, 4.6))
+	LG(0, 5.4, 42.5, 3.2, 5.0, 5.0)
+	# scenery: container stacks either side, a welder at work on the far one
+	_containers(L(-6.5, -6.0, 27.0), 3, _yaw + 90.0)
+	_containers(L(6.8, -6.0, 36.0), 4, _yaw + 90.0)
+	_containers(L(-7.0, -6.0, 45.0), 2, _yaw + 90.0)
+	_welder(L(5.4, 4.2, 36.0), _b * Vector3(1, 0.3, 0))
+	kit.banner(L(-1.9, 3.0, 25.0), 3.6, YELLOW, _yaw)
+
+	J(0, 0, 4.7, 0, 0, 9.6)
+	J(0, 0, 16.6, 0, -0.4, 21.0)
+	MANTLE(0, -0.4, 23.0, 0, 3.0, 26.2)
+	J(0, 3.0, 29.2, 0, 2.6, 35.2)
+	MANTLE(0, 2.6, 37.1, 0, 5.4, 41.2)
+	J(0, 5.4, 44.7, 0, 5.4, 50.3)
+	_cp(0, 5.4, 52.0, 90.0)
+
+
+# ---- 12. HOOK RIDE: mantle onto cargo hanging from a crane trolley and ride it over the water ----
+
+var _hook_a: BalanceHookCargo
+var _hook_b: BalanceHookCargo
+
+func _stage_12_hook_ride() -> void:
+	_water(0, -6.0, 32.0, 16.0, 60.0)
+	_beam(0, 0, 11.0, 1.4, 9.0, true, false, {"edge_tilt_deg": 16.0, "max_tilt_deg": 20.0})
+	P(0, 0, 21.0, 4.6, 4.0, "main", 1.2)
+	kit.glow_strip(L(0, 0.03, 22.8), _sz(4.2, 0.06, 0.2), YELLOW)
+	# two hooks on parallel trolley lines, half a cycle apart: one is always on its way
+	_hook_a = _hook_cargo(-1.35, 3.2, 25.6, 3.2, 2.6, 2.4, 18.0, 10.0, 0.0, 0.2, TEAL)
+	_hook_b = _hook_cargo(1.35, 3.2, 25.6, 3.2, 2.6, 2.4, 18.0, 10.0, 0.5, 0.2, Color(0.85, 0.35, 0.25))
+	# the jib the trolleys run along
+	for sx: float in [-1.35, 1.35]:
+		kit.block(L(sx, 3.2 + 6.5 + 0.8, 34.6), _sz(0.7, 0.6, 24.0), TEAL, false)
+	kit.block(L(0, 3.2 + 7.4, 34.6), _sz(4.2, 0.4, 0.8), WHITE, false)
+	for dd: float in [22.0, 47.0]:
+		for sx: float in [-3.4, 3.4]:
+			kit.block(L(sx, -3.0, dd), Vector3(0.5, 27.0, 0.5), WHITE, false)
+		kit.block(L(0, 10.8, dd), _sz(7.4, 0.5, 0.5), TEAL, false)
+	P(0, 2.0, 49.5, 5.0, 3.0, "alt")
+	_beam(0, 2.0, 59.0, 1.2, 8.0, false, true, {"edge_tilt_deg": 22.0, "max_tilt_deg": 28.0})
+
+	J(0, 0, 2.2, 0, 0, 7.1)
+	J(0, 0, 15.2, 0, 0, 19.6)
+	# (the bot always takes hook A; a human hops on whichever one is waiting)
+	_wait(func() -> bool: return _hook_a.offset_at(Game.course_time).length() < 0.02 and _hook_a.offset_at(Game.course_time + 1.0).length() < 0.02, L(-1.2, 0, 20.4))
+	MANTLE(-1.35, 0, 22.4, -1.35, 3.2, 25.1)
+	r_jump_from_ride(_hook_a, L(-1.35, 1.9, 43.6), 0.04, L(-1.0, 2.0, 49.0), true, Vector3(1.0, 1.3, 0))
+	J(0, 2.0, 50.7, 0, 2.0, 55.4)
+	J(0, 2.0, 62.7, 0, 2.4, 67.0)
+	_cp(0, 2.4, 69.0, 0.0)
+
+
+# ---- 13. SCANNER YARD: fork - lasers on lively beams (left) or climb the containers (right) --------
+
+var _scan_a: BalanceScanner
+
+func _stage_13_scanner_yard() -> void:
+	_water(0, -5.0, 24.0, 22.0, 44.0)
+	# fork signs: red for the laser lane, gold for the climb
+	kit.glow_strip(L(-1.6, 0.03, 2.0), _sz(0.2, 0.06, 1.6), Color(1.0, 0.3, 0.2))
+	kit.glow_strip(L(1.6, 0.03, 2.0), _sz(0.2, 0.06, 1.6), YELLOW)
+	kit.lamp(L(-2.3, 0, 2.3), 3.0, false, Color(1.0, 0.3, 0.2))
+	kit.lamp(L(2.3, 0, 2.3), 3.0, false, YELLOW)
+
+	# LEFT: pitching beam under a sweeping scanner, deck, rolling beam through two laser curtains
+	_beam(-3.0, 0, 11.8, 1.2, 9.6, true, false, {"edge_tilt_deg": 14.0, "max_tilt_deg": 18.0})
+	_scan_a = _scanner(-3.0, 0, 9.0, 6.5, 2.6, 3.2, 0.0)
+	P(-3.0, 0, 21.0, 2.2, 3.0, "alt")
+	_beam(-3.0, 0, 31.2, 1.2, 10.4, false, true, {"edge_tilt_deg": 18.0, "max_tilt_deg": 24.0})
+	var g1: LaserGate = kit.laser(L(-3.0, 1.45, 28.8), Vector3(2.4, 2.9, 0.25), 2.4, 0.45, 0.0, _yaw)
+	var g2: LaserGate = kit.laser(L(-3.0, 1.45, 33.6), Vector3(2.4, 2.9, 0.25), 2.4, 0.45, -0.23, _yaw)
+	# RIGHT: two container mantles, then a lively beam 7 m up and a drop to the pad
+	P(3.5, 0, 7.5, 2.4, 3.0, "alt")
+	LG(3.5, 3.4, 13.5, 3.0, 5.0, 8.0)
+	LG(3.5, 6.8, 23.25, 3.0, 8.0, 7.5)
+	_beam(3.5, 6.8, 34.5, 1.2, 7.0, false, true, {"edge_tilt_deg": 20.0, "max_tilt_deg": 26.0})
+	_containers(L(9.0, -6.0, 14.0), 3, _yaw)
+	_containers(L(9.5, -6.0, 30.0), 4, _yaw + 90.0)
+
+	if route_variant == 0:
+		J(-1.5, 0, 2.2, -3.0, 0, 7.6)
+		_wait(_chase_ok.bind(_scan_a, 9.0, 6.5, 7.9, 14.0), L(-3.0, 0, 7.9))
+		J(-3.0, 0, 14.0, -3.0, 0, 20.0)
+		_wait(_gates_off.bind([[g1, 0.15, 0.75], [g2, 0.65, 1.3]]), L(-3.0, 0, 26.7))
+		r_walk(L(-3.0, 0, 35.6))
+		J(-3.0, 0, 36.1, -3.0, 0, 41.9)
+	else:
+		J(1.5, 0, 2.2, 3.5, 0, 6.6)
+		MANTLE(3.5, 0, 8.6, 3.5, 3.4, 11.0)
+		MANTLE(3.5, 3.4, 17.2, 3.5, 6.8, 20.8)
+		J(3.5, 6.8, 26.7, 3.5, 6.8, 31.4)
+		J(3.5, 6.8, 37.7, 3.0, 0, 42.4)
+	_cp(0, 0, 44.0, -90.0, 10.0, 5.0)
+
+
+# ---- 14. COUNTERWEIGHT CLIMB: stand on one cage to raise the other, mantle across, get off fast ----
+
+var _cw1: BalanceCounterweight
+var _cw2: BalanceCounterweight
+
+func _stage_14_counterweights() -> void:
+	_water(0, -7.0, 24.0, 14.0, 40.0)
+	_cw1 = _counterweight(0, 0, 7.5, 6.0, 3.0, 3.0, 1.8, 0.85)
+	LG(0, 4.0, 20.0, 3.2, 6.0, 6.0)
+	_cw2 = _counterweight(0, 4.0, 27.2, 5.5, 2.4, 2.4, 2.0, 1.0)
+	LG(0, 8.3, 39.0, 5.0, 7.0, 5.0)
+	kit.banner(L(-2.4, 8.3, 41.0), 4.0, YELLOW, _yaw)
+	# steam venting off the gantry legs
+	for dd: float in [7.5, 13.5, 27.2, 32.7]:
+		var st: GPUParticles3D = BalanceFx.steam(Color(0.9, 1.0, 1.0), 8, 1.4, 2.2, 20.0)
+		st.position = L(3.3, 2.0 + (4.0 if dd > 20.0 else 0.0), dd)
+		add_child(st)
+
+	J(0, 0, 2.2, 0, 0, 6.8)
+	_wait(func() -> bool: return _cw1.balance() >= 0.97, L(0, 0, 7.9))
+	MANTLE(0, -1.8, 8.7, 0, 1.8, 13.0)
+	MANTLE(0, 1.8, 14.7, 0, 4.0, 17.8)
+	J(0, 4.0, 22.7, 0, 4.0, 26.8)
+	_wait(func() -> bool: return _cw2.balance() >= 0.85, L(0, 4.0, 27.3))
+	MANTLE(0, 2.3, 28.1, 0, 5.7, 32.1)
+	MANTLE(0, 5.7, 33.6, 0, 8.3, 37.2)
+	_cp_mark(L(0, 8.3, 39.0), 0.0)
 
 
 func _build_crane_tower(g: Vector3) -> void:
@@ -409,16 +747,19 @@ func _build_crane_tower(g: Vector3) -> void:
 
 
 func _dress_master(c: Vector3) -> void:
-	# mast and crates stand clear of the finish arch (gate at c + (-2, 0, 0), yaw 90)
-	var mast: Vector3 = c + Vector3(-3.8, 0, -3.6)
+	# halfway yard: the mast stands behind-left of the new half's heading (-Z), clear of the takeoff
+	var mast: Vector3 = c + Vector3(-3.8, 0, 3.6)
 	_lattice(mast + Vector3(0, 12.0, 0), 12.0, 2.0, true)
 	kit.glow_strip(mast + Vector3(0, 26.0, 0), Vector3(0.7, 26.0, 0.7), YELLOW)
 	kit.ring(mast + Vector3(0, 32.0, 0), 4.5, YELLOW, Vector3(0, 0, 0), 12.0)
 	kit.ring(mast + Vector3(0, 24.0, 0), 3.0, Color(0, 0, 0, 0), Vector3(0, 0, 0), 8.0)
-	kit.banner(c + Vector3(3.6, 0, -4.4), 5.0, YELLOW, 90.0)
-	kit.banner(c + Vector3(3.6, 0, 4.4), 5.0, YELLOW, 90.0)
-	_crate_stack(c + Vector3(-2.0, 0, 4.0))
-	kit.lamp(c + Vector3(-4.4, 0, 4.4), 3.4, false)
+	kit.banner(c + Vector3(4.4, 0, -4.4), 5.0, YELLOW, 0.0)
+	kit.banner(c + Vector3(-4.4, 0, -4.4), 5.0, YELLOW, 0.0)
+	_crate_stack(c + Vector3(2.0, 0, 3.4))
+	kit.lamp(c + Vector3(4.4, 0, 4.4), 3.4, false)
+	var halo: GPUParticles3D = BalanceFx.motes(Vector3(6, 20, 6), Color(1.0, 0.85, 0.35), 40, 0.16)
+	halo.position = mast + Vector3(0, 22.0, 0)
+	add_child(halo)
 
 
 # ---- surroundings -------------------------------------------------------------------------------------
