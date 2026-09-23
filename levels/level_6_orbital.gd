@@ -159,6 +159,10 @@ func _build() -> void:
 	_frame(_w(cp), _yaw - 90.0)
 	cp = _stage_11_carousel()
 	_frame(_w(cp), _yaw)
+	cp = _stage_12_pulse()
+	_frame(_w(cp), _yaw)
+	cp = _stage_13_mast()
+	_frame(_w(cp), _yaw)
 	_stage_end()
 
 
@@ -669,6 +673,85 @@ func _stage_11_carousel() -> Vector3:
 	var end: Dictionary = _dock(Vector3(0, 0.5, -52.5), 0.0)
 	_r_carousel(c1, c1h, Vector3(0, 0, -2.7), Vector3(0, 0, -6.0), m["c"], 8.0, 22.0)
 	_r_carousel(c2, c2h, Vector3(0, 0.5, -27.0), Vector3(0, 0.5, -32.0), end["c"] + Vector3(0, 0, 1.6), 8.0, 22.0)
+	r_checkpoint()
+	return end["c"]
+
+
+## Bot: the bay's field stays on for the next `dur` s.
+func _bay_ok(b: OrbitalGravityBay, dur: float) -> bool:
+	return b.time_until_off(Game.course_time) > dur
+
+
+# Stage 12: the pulse bay - the gravity plating here cycles: while the field hums violet a jump
+# floats 10 m and more, when it flickers and dies you drop like a stone. One leap per pulse,
+# each longer than the last, the final one rising to the exit.
+func _stage_12_pulse() -> Vector3:
+	var dock: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var bay: OrbitalGravityBay = _bay(Vector3(0, 4.0, -24.5), Vector3(14.0, 20.0, 41.0), 3.2, 0.62, 0.0)
+	var p1: Dictionary = _deck(Vector3(0, 0, -13.2), 2.4, 2.4)
+	var p2: Dictionary = _deck(Vector3(2.6, 1.0, -24.2), 2.2, 2.2, "alt")
+	var p3: Dictionary = _deck(Vector3(-1.0, 1.0, -35.0), 2.0, 2.0)
+	var end: Dictionary = _dock(Vector3(0, 3.5, -48.0), 0.0)
+	# drifting debris low in each gap: only a full floating arc clears it
+	_haz(Vector3(0, 0.6, -8.5), Vector3(1.6, 1.2, 1.2), 25.0)
+	_haz(Vector3(1.4, 1.4, -19.0), Vector3(1.4, 1.0, 1.4), -30.0)
+	_haz(Vector3(0.6, 1.8, -29.8), Vector3(1.8, 0.9, 1.2), 10.0)
+	_haz(Vector3(-0.5, 3.0, -41.2), Vector3(1.6, 1.0, 1.4), 40.0)
+	for pair: Array in [[dock, p1, Vector3.ZERO], [p1, p2, Vector3.ZERO], [p2, p3, Vector3.ZERO], [p3, end, Vector3(0, 0, 1.6)]]:
+		var a: Dictionary = pair[0]
+		var b: Dictionary = pair[1]
+		r_walk(_w(_edge(a, (b["c"] as Vector3) + (pair[2] as Vector3), 0.9)))
+		r_until(func() -> bool: return _bay_ok(bay, 1.7))
+		_float(a, b, pair[2])
+	r_checkpoint()
+	return end["c"]
+
+
+## Solar-array wall-run panel along the stage heading: centre line `x`, from z0 to z1 (z0 > z1).
+## Dressed as a solar wing: blue cell grid on the outer face, a truss boom below.
+func _solar_wall(x: float, y: float, z0: float, z1: float, height: float = 7.0) -> WallRunPanel:
+	var len: float = absf(z0 - z1)
+	var mid: float = (z0 + z1) * 0.5
+	var w: WallRunPanel = kit.wallrun(_w(Vector3(x, y, mid)), Vector3(len, height, 0.5), _yaw + 90.0)
+	var side: float = signf(x)
+	var cells: StandardMaterial3D = Look.flat(Color(0.10, 0.18, 0.42), 0.15, 0.6)
+	var grid: StandardMaterial3D = Look.flat(Color(0.55, 0.62, 0.75), 0.4, 0.8)
+	var back := Look.box(Vector3(0.08, height - 0.4, len - 0.4), cells)
+	back.position = _w(Vector3(x + side * 0.3, y, mid))
+	back.rotation.y = deg_to_rad(_yaw)
+	add_child(back)
+	var rows: int = int(height / 1.2)
+	for i: int in rows:
+		var bar := Look.box(Vector3(0.1, 0.05, len - 0.4), grid)
+		bar.position = _w(Vector3(x + side * 0.35, y - height * 0.5 + 0.6 + float(i) * 1.2, mid))
+		bar.rotation.y = deg_to_rad(_yaw)
+		add_child(bar)
+	_truss_v(Vector3(x + side * 0.6, y - height * 0.5, mid), 20.0, 0.7)
+	return w
+
+
+# Stage 13: the solar mast - two strut hops, then a chimney of three solar wings: run, kick across,
+# run, kick, run, and mantle out of the last kick onto the mast cap.
+func _stage_13_mast() -> Vector3:
+	var dock: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var s1: Dictionary = _deck(Vector3(0.8, 0, -8.6), 1.8, 1.8, "alt")
+	var s2: Dictionary = _deck(Vector3(-0.4, 0.8, -14.4), 1.8, 1.8)
+	var st: Dictionary = _deck(Vector3(0, 0.8, -19.5), 3.0, 3.0)
+	var z: float = -21.0
+	_solar_wall(2.4, 2.0, z - 1.0, z - 10.5)
+	_solar_wall(-2.4, 6.8, z - 8.5, z - 16.5)
+	_solar_wall(2.4, 9.8, z - 14.5, z - 22.5)
+	kit.ledge(_w(Vector3(-0.75, 12.7, z - 26.0)), Vector3(4.5, 6.0, 4.0), _yaw, "alt")
+	var cap: Dictionary = _area(Vector3(-0.75, 12.7, z - 26.0), 2.25, 2.0)
+	var end: Dictionary = _dock(Vector3(0, 12.7, z - 36.0), 0.0)
+	_hop(dock, s1)
+	_hop(s1, s2)
+	_hop(s2, st)
+	r_wallrun(_w(Vector3(0.6, 0.8, z - 0.1)), _w(Vector3(1.8, 2.2, z - 4.6)), _w(Vector3(1.8, 2.2, z - 7.5)), _w(Vector3(-1.8, 6.3, z - 11.4)))
+	r_wallrun(Vector3.ZERO, _w(Vector3(-1.8, 6.3, z - 11.4)), _w(Vector3(-1.8, 6.3, z - 14.4)), _w(Vector3(1.8, 9.3, z - 18.0)), true, true)
+	r_wallrun(Vector3.ZERO, _w(Vector3(1.8, 9.3, z - 18.0)), _w(Vector3(1.8, 9.3, z - 19.4)), _w(Vector3(-0.75, 12.7, z - 24.6)), true, true)
+	r_walk(_w(Vector3(-0.75, 12.7, z - 26.5)))
+	_hop(cap, end, Vector3(0, 0, 1.6))
 	r_checkpoint()
 	return end["c"]
 
