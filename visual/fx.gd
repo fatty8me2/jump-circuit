@@ -257,6 +257,7 @@ static func chunk_mesh(size: float) -> Mesh:
 ##   amount:int (scaled by density; "exact_amount": true keeps it)   lifetime:float
 ##   one_shot:bool   explosiveness:float   randomness:float   preprocess:float
 ##   local:bool (particles follow the node)   emitting:bool (continuous ones start on)
+##   fixed_fps:int (simulation rate; 0 = every frame, smooth world-space trails)
 ##   tex:Tex   additive:bool   size:float|Vector2   facing:"billboard"|"velocity"|"flat"|"mesh"
 ##   mesh:Mesh (for facing "mesh")   color:Color (HDR ok)   fade:PackedFloat32Array alpha-over-life
 ##   colors:PackedColorArray colour-over-life   pick:PackedColorArray (each particle picks one)
@@ -276,6 +277,7 @@ static func emitter(o: Dictionary) -> GPUParticles3D:
 	p.randomness = float(o.get("randomness", 0.0))
 	p.preprocess = float(o.get("preprocess", 0.0))
 	p.local_coords = bool(o.get("local", false))
+	p.fixed_fps = int(o.get("fixed_fps", 30))
 	p.emitting = bool(o.get("emitting", not p.one_shot))
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	p.layers = int(o.get("layers", 1))
@@ -459,10 +461,11 @@ static func debris(o: Dictionary = {}) -> GPUParticles3D:
 	return emitter(d)
 
 
-## A world-space trail: stationary dots left behind a moving emitter.
+## A world-space trail: stationary dots left behind a moving emitter. Simulated every
+## frame (at the default 30 steps a fast emitter leaves a string of separate beads).
 static func trail(o: Dictionary = {}) -> GPUParticles3D:
 	var d: Dictionary = {
-		"amount": 30, "lifetime": 0.4, "emitting": false, "speed": Vector2(0.0, 0.2),
+		"amount": 30, "lifetime": 0.4, "emitting": false, "speed": Vector2(0.0, 0.2), "fixed_fps": 0,
 		"spread": 180.0, "curve": "shrink", "size": 0.3, "color": Color(1.2, 1.2, 1.2),
 	}
 	d.merge(o, true)

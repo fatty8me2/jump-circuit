@@ -58,7 +58,7 @@ func _build_fx() -> void:
 	var vis := AABB(Vector3(-size.x - 2.0, -12.0, -size.z - 2.0), Vector3(size.x * 2.0 + 4.0, 16.0, size.z * 2.0 + 4.0))
 	_grit = Fx.emitter({"amount": clampi(int(size.x * size.z * 3.0), 8, 24), "lifetime": 0.8, "emitting": false,
 		"shape": "box", "extents": ext, "dir": Vector3.DOWN, "spread": 15.0, "speed": Vector2(0.3, 1.2),
-		"gravity": Vector3(0, -14, 0), "additive": false, "size": 0.08, "scale": Vector2(0.5, 1.2),
+		"gravity": Vector3(0, -14, 0), "additive": false, "size": 0.12, "scale": Vector2(0.5, 1.2),
 		"color": Color(0.42, 0.3, 0.26, 0.95), "fade": PackedFloat32Array([1.0, 1.0, 0.0]), "aabb": vis})
 	_grit.position = Vector3(0, -size.y * 0.5 - 0.02, 0)
 	add_child(_grit)

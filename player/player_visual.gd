@@ -271,12 +271,12 @@ func _build_fx() -> void:
 	_kick_trail = _fx(Fx.trail({"amount": 30, "lifetime": 0.35, "size": 0.3, "color": wall_hot,
 		"shape": "sphere", "radius": 0.2, "offset": Vector3(0, 0.6, 0)}))
 	# mantle: dust knocked off the lip, gold sparks where the hands catch, a hop puff on top
-	_mantle_dust = _fx(Fx.smoke({"amount": 10, "lifetime": 0.7, "size": 0.55, "shape": "box",
+	_mantle_dust = _fx(Fx.smoke({"amount": 14, "lifetime": 0.75, "size": 0.7, "shape": "box",
 		"extents": Vector3(0.45, 0.05, 0.1), "dir": Vector3(0, -0.3, 1), "spread": 50.0,
-		"speed": Vector2(0.6, 1.6), "gravity": Vector3(0, -1.5, 0), "color": Color(0.92, 0.88, 0.8, 0.7)}))
-	_mantle_sparks = _fx(Fx.sparks({"amount": 22, "lifetime": 0.4, "shape": "box",
+		"speed": Vector2(0.6, 1.6), "gravity": Vector3(0, -1.5, 0), "color": Color(0.92, 0.88, 0.8, 0.85)}))
+	_mantle_sparks = _fx(Fx.sparks({"amount": 30, "lifetime": 0.45, "shape": "box",
 		"extents": Vector3(0.45, 0.02, 0.05), "dir": Vector3(0, 1, 0.4), "spread": 55.0,
-		"speed": Vector2(2.5, 6.0), "color": Fx.hot(LIP_FX, 2.6), "size": Vector2(0.05, 0.32)}))
+		"speed": Vector2(2.5, 6.5), "color": Color(2.4, 1.4, 0.25), "size": Vector2(0.06, 0.38)}))
 	_hop_puff = _fx(Fx.smoke({"amount": 10, "lifetime": 0.55, "size": 0.45, "shape": "ring",
 		"ring_radius": 0.35, "ring_inner": 0.25, "dir": Vector3.UP, "spread": 80.0, "flatness": 0.9,
 		"speed": Vector2(1.2, 2.2), "color": Color(1, 1, 1, 0.65)}))

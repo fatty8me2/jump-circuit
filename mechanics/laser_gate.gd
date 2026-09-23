@@ -120,7 +120,7 @@ func _build_fx() -> void:
 	_beam_sparks = Fx.sparks({"amount": clampi(int(size.x * 4.0), 8, 36), "lifetime": 0.45, "one_shot": false,
 		"emitting": false, "explosiveness": 0.0, "randomness": 0.5, "shape": "box", "extents": beam_box,
 		"dir": Vector3(0, 1, 0), "spread": 75.0, "speed": Vector2(1.0, 3.5), "gravity": Vector3(0, -12, 0),
-		"size": Vector2(0.035, 0.2), "color": Color(3.2, 1.0, 0.45), "aabb": vis})
+		"size": Vector2(0.06, 0.36), "color": Color(3.2, 1.0, 0.45), "aabb": vis})
 	add_child(_beam_sparks)
 	_snap = Fx.sparks({"amount": clampi(int(size.x * 7.0), 14, 60), "lifetime": 0.4, "shape": "box",
 		"extents": beam_box, "spread": 180.0, "speed": Vector2(3.0, 8.0), "gravity": Vector3(0, -8, 0),

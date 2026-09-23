@@ -88,15 +88,15 @@ func _build_fireworks() -> void:
 	for i: int in 4:
 		var sx: float = -1.0 if i % 2 == 0 else 1.0
 		_shell_at.append(Vector3(sx * (width * 0.35 + float(i) * 0.9), gate_height + 4.5 + float(i % 3) * 1.4, -1.5 + float(i) * 0.9))
-		var hot: Color = Fx.hot(cols[i].lerp(Color.WHITE, 0.2), 2.6)
+		var hot: Color = Fx.hot(cols[i], 1.7)
 		_shell_col.append(cols[i])
 		var rocket: GPUParticles3D = Fx.trail({"amount": 30, "lifetime": 0.45, "size": 0.22, "color": hot,
 			"speed": Vector2(0.2, 0.8), "dir": Vector3.DOWN, "spread": 20.0, "aabb": vis})
 		rocket.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 		add_child(rocket)
 		_rockets.append(rocket)
-		var shell: GPUParticles3D = Fx.sparks({"amount": 70, "lifetime": 1.4, "explosiveness": 1.0,
-			"spread": 180.0, "speed": Vector2(5.0, 8.0), "damping": Vector2(2.5, 3.0), "gravity": Vector3(0, -3.5, 0),
+		var shell: GPUParticles3D = Fx.sparks({"amount": 90, "lifetime": 1.5, "explosiveness": 1.0,
+			"spread": 180.0, "speed": Vector2(6.5, 9.5), "damping": Vector2(2.5, 3.0), "gravity": Vector3(0, -3.5, 0),
 			"color": hot, "size": Vector2(0.08, 0.5), "curve": "flat",
 			"fade": PackedFloat32Array([1.0, 1.0, 0.0]), "aabb": vis})
 		shell.position = _shell_at[i]
@@ -104,7 +104,7 @@ func _build_fireworks() -> void:
 		_shells.append(shell)
 		var crackle: GPUParticles3D = Fx.burst({"amount": 40, "lifetime": 1.2, "explosiveness": 0.5,
 			"shape": "sphere", "radius": 3.2, "speed": Vector2(0.0, 0.5), "gravity": Vector3(0, -1.5, 0),
-			"tex": Fx.Tex.STAR, "size": 0.3, "curve": "pop", "color": Fx.hot(cols[i].lerp(Color.WHITE, 0.6), 2.2),
+			"tex": Fx.Tex.STAR, "size": 0.34, "curve": "pop", "color": Fx.hot(cols[i].lerp(Color.WHITE, 0.35), 1.8),
 			"aabb": vis})
 		crackle.position = _shell_at[i]
 		add_child(crackle)

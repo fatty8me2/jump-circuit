@@ -74,11 +74,11 @@ func _ready() -> void:
 func _build_fx() -> void:
 	var face_z: float = -size.z * 0.5 - 0.08
 	var vis := AABB(Vector3(-size.x - 3.0, -size.y - 2.0, -size.z - 6.0), Vector3(size.x * 2.0 + 6.0, size.y * 2.0 + 6.0, size.z * 2.0 + stroke * 2.0 + 10.0))
-	_steam = Fx.smoke({"amount": 16, "lifetime": 1.1, "one_shot": false, "emitting": false,
+	_steam = Fx.smoke({"amount": 26, "lifetime": 1.0, "one_shot": false, "emitting": false,
 		"explosiveness": 0.0, "randomness": 0.3, "shape": "box",
 		"extents": Vector3(size.x * 0.3, size.y * 0.25, 0.1), "dir": Vector3.UP, "spread": 65.0,
 		"speed": Vector2(1.5, 3.2), "gravity": Vector3(0, 1.6, 0), "damping": Vector2(1.5, 2.5),
-		"size": 0.8, "color": Color(0.95, 0.97, 1.0, 0.55), "aabb": vis})
+		"size": 0.95, "color": Color(0.95, 0.97, 1.0, 0.65), "aabb": vis})
 	add_child(_steam)
 	# the punch: a fan of sparks spraying sideways off the face, a dust puff and a ring
 	var face_basis := Fx.basis_up(Vector3.FORWARD)
