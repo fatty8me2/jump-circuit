@@ -21,6 +21,7 @@ func _configure() -> void:
 	theme_id = "clockwork"
 	music_track = "b"
 	kill_y = -60.0
+	route_variants = 2
 
 
 func V(x: float, y: float, z: float) -> Vector3:
@@ -126,6 +127,9 @@ func _build() -> void:
 	_stage_9()
 	_stage_10()
 	_stage_11()
+	_stage_12()
+	_stage_13()
+	_stage_14()
 	_build_surroundings()
 
 
@@ -779,9 +783,12 @@ func _stage_11() -> void:
 	var land: Vector3 = belfry + _flat_dir(belfry, curl[2]) * 3.9
 	r_jump(curl[2] + _flat_dir(curl[2], land) * 0.55, land)
 	r_walk(belfry)
+	r_checkpoint()
 	kit.disc(belfry, 5.2, 1.0, "accent", 4.0)
-	kit.finish(belfry, 0.0)
+	# (the old finish: now checkpoint 11, facing the gantry north into the new half)
+	kit.checkpoint(belfry, 0.0)
 	_build_belfry(belfry)
+	_belfry = belfry
 
 
 func _build_belfry(belfry: Vector3) -> void:
@@ -815,6 +822,247 @@ func _snap_to_clock() -> void:
 	if _second_b != null:
 		_second_b.rotation.y = _second_b_angle(Game.course_time)
 		_second_b.reset_physics_interpolation()
+
+
+# #################################################################################################
+#   THE MOVEMENT - stages 12-21: north from the belfry into the works behind the great clock
+# #################################################################################################
+
+var _belfry := Vector3.ZERO
+var _cp12 := Vector3.ZERO
+var _cp13 := Vector3.ZERO
+var _cp14 := Vector3.ZERO
+
+
+## Adds an effect node (particles or a ClockworkFx trigger) at pos.
+func _fx(n: Node3D, pos: Vector3) -> Node3D:
+	n.position = pos
+	add_child(n)
+	return n
+
+
+## A trigger that restarts `bursts` (built at its origin) as the course clock passes fire_at of each cycle.
+func _fx_clock(pos: Vector3, period: float, phase: float, fire_at: Array[float], bursts: Array) -> ClockworkFx:
+	var f := ClockworkFx.new()
+	f.mode = ClockworkFx.Mode.CLOCK
+	f.period = period
+	f.phase = phase
+	f.fire_at = fire_at
+	for b: GPUParticles3D in bursts:
+		f.add_child(b)
+		f.bursts.append(b)
+	_fx(f, pos)
+	return f
+
+
+## A trigger that restarts `bursts` when the player comes within radius.
+func _fx_near(pos: Vector3, radius: float, bursts: Array) -> ClockworkFx:
+	var f := ClockworkFx.new()
+	f.mode = ClockworkFx.Mode.NEAR
+	f.radius = radius
+	for b: GPUParticles3D in bursts:
+		f.add_child(b)
+		f.bursts.append(b)
+	_fx(f, pos)
+	return f
+
+
+## Stage gate flourish: a ring of brass sparks and a gold puff when you arrive at a new checkpoint.
+func _cp_fx(pos: Vector3) -> void:
+	_fx_near(pos + V(0, 0.4, 0), 2.4, [
+		ClockworkFx.spark_burst(26, Color(1.0, 0.78, 0.3), 7.5, Vector3.UP, 38.0, 0.9),
+		ClockworkFx.puff_burst(12, Color(1.0, 0.85, 0.5, 0.55), 3.0, 0.9, 0.8, true, 0.9, 0.2)])
+
+
+## Takeoff-to-landing hop between static pieces (lands just short of the target centre).
+func _hop_to(from: Vector3, b: Vector3, hold: bool = true) -> void:
+	r_jump(from, b - _flat_dir(from, b) * 0.15, hold)
+
+
+## True when every laser in list ([gate, tau]) stays off from tau - w to tau + w seconds from now.
+func _lasers_off(list: Array, w: float) -> bool:
+	var t: float = Game.course_time
+	for e: Array in list:
+		var g: LaserGate = e[0]
+		var s: float = float(e[1]) - w
+		while s <= float(e[1]) + w:
+			if g.is_on_at(t + s):
+				return false
+			s += 0.04
+	return true
+
+
+## True when the piston stays retracted (and is not about to punch) for the whole window.
+func _piston_clear(p: Piston, t0: float, t1: float) -> bool:
+	var s: float = t0
+	while s <= t1:
+		if p.extension_at(s) > 0.02 or p.is_punching_at(s):
+			return false
+		s += 0.04
+	return true
+
+
+func _crusher_clear(c: Crusher, t0: float, t1: float) -> bool:
+	return c.is_clear_for(t0, t1 - t0)
+
+
+# =================================================================================================
+# 12. THE CHIME GANTRY: out of the belfry along a 1.4 m gantry through three curtains of light that
+#     chime in a travelling wave, a first mantle wall, then a rising hop chain through one more chime.
+# =================================================================================================
+
+func _stage_12() -> void:
+	var o: Vector3 = _belfry
+	kit.plat(o + V(0, 0, -13.3), V(1.4, 0.6, 16.6), "main", 1.0)
+	for sx: int in [-1, 1]:
+		kit.glow_strip(o + V(sx * 0.64, 0.03, -13.3), V(0.07, 0.06, 16.0), Look.c("accent2"))
+	var chimes: Array = []
+	var lz: Array[float] = [-9.0, -13.5, -18.0]
+	for i: int in 3:
+		var g: LaserGate = kit.laser(o + V(0, 1.3, lz[i]), V(2.8, 2.6, 0.18), 2.4, 0.45, -0.5 * float(i) / 2.4)
+		chimes.append([g, 0.45 + 0.5 * float(i)])
+		# a little bell over every chime gate
+		kit.block(o + V(0, 3.2, lz[i]), V(3.6, 0.3, 0.5), Look.c("decor"), false)
+		add_child(_at(Look.cylinder(0.45, 0.6, Look.flat(Look.c("accent"), 0.35, 0.6, 0.6), Vector3.ZERO, 0.2, 14), o + V(0, 3.75, lz[i])))
+	var land: Vector3 = o + V(0, 0, -23.6)
+	kit.plat(land, V(4, 1, 4), "alt", 1.5)
+	var ledge_top: Vector3 = o + V(0, 3.4, -29.6)
+	kit.ledge(ledge_top, V(4.4, 5.0, 8.0))
+	r_walk(o + V(0, 0, -5.6))
+	r_until(func() -> bool: return _lasers_off(chimes, 0.26))
+	r_walk(o + V(0, 0, -23.0))
+	r_mantle(o + V(0, 0, -24.0), o + V(0, 3.4, -27.6))
+
+	# the hop chain, the last hop through a fourth chime
+	var b1: Vector3 = o + V(1.4, 4.2, -38.8)
+	var b2: Vector3 = o + V(-1.2, 5.0, -44.0)
+	var b3: Vector3 = o + V(1.0, 5.8, -49.4)
+	for b: Vector3 in [b1, b2, b3]:
+		kit.plat(b, V(1.6, 0.8, 1.6), "main", 2.5)
+	var g4: LaserGate = kit.laser(o + V(-0.1, 7.2, -46.7), V(4.2, 3.6, 0.18), 2.4, 0.4, 0.3)
+	_cp12 = o + V(0, 6.2, -57.4)
+	_cp(_cp12, V(6, 2, 6))
+	_cp_fx(_cp12)
+	r_walk(o + V(1.0, 3.4, -32.7))
+	_hop_to(o + V(1.1, 3.4, -33.3), b1)
+	_hop(b1, b2, 0.5)
+	r_until(func() -> bool: return _lasers_off([[g4, 0.35]], 0.25))
+	_hop(b2, b3, 0.5)
+	r_jump(b3 + V(0, 0, -0.5), _cp12 + V(0, 0, 2.3))
+	r_walk(_cp12)
+	r_checkpoint()
+
+
+# =================================================================================================
+# 13. THE PENDULUM CASE (fork): RIGHT - run the case wall across a 19 m drop, timing the curtain
+#     of light across the panel; LEFT - stand on the anvil and let the great pendulum hurl you.
+#     Both land on the counterweight deck; then an express ferry to sprint off.
+# =================================================================================================
+
+func _stage_13() -> void:
+	var o: Vector3 = _cp12
+	# RIGHT: the case wall
+	kit.plat(o + V(1.8, 0, -6.5), V(1.6, 0.6, 7.0), "main", 1.0)
+	kit.wallrun(o + V(3.5, 1.2, -20.2), V(14, 6, 0.5), 90.0)
+	var curtain: LaserGate = kit.laser(o + V(1.7, 3.4, -19.5), V(2.6, 3.6, 0.18), 2.0, 0.4, 0.0)
+	kit.banner(o + V(2.7, 0, -3.4), 3.6, Look.c("accent2"))
+	# LEFT: the anvil under the great pendulum
+	var a: Vector3 = o + V(-5.0, 0, -13.0)
+	kit.plat(o + V(-4.9, 0, -2.0), V(3.8, 0.8, 6.0), "alt", 1.2)
+	kit.plat(o + V(-5.0, 0, -8.45), V(0.9, 0.8, 6.9), "main", 1.0)
+	kit.disc(a, 1.1, 0.8, "accent", 3.0)
+	var big: Pendulum = kit.pendulum(a + V(0, 10.2, 0), 9.0, 3.6, 0.0, 90.0, 60.0)
+	for sx: int in [-1, 1]:
+		kit.pillar(a + V(sx * 3.0, 10.6, 0), 0.4, 22.0, Look.c("metal"))
+	kit.block(a + V(0, 10.4, 0), V(6.6, 0.6, 0.8), Look.c("decor"), false)
+	kit.banner(o + V(-3.4, 0, -3.8), 3.6, Look.c("accent"))
+	# the counterweight deck both routes land on
+	var deck: Vector3 = a + V(0, -8.0, -21.0)
+	kit.plat(deck, V(9, 2, 12), "alt")
+	kit.glow_strip(deck + V(0, 0.03, 0), V(0.3, 0.05, 11.0), Look.c("accent"))
+	if route_variant == 0:
+		r_walk(o + V(1.8, 0, -4.0))
+		r_until(func() -> bool: return _lasers_off([[curtain, 1.8]], 0.32))
+		r_wallrun(o + V(1.8, 0, -9.6), o + V(3.1, 1.2, -14.2), o + V(3.1, 1.2, -24.2), deck + V(2.5, 0, -1.0))
+	else:
+		r_walk(o + V(-4.9, 0, -2.0))
+		r_walk(a + V(0, 0, 7.6))
+		t_wait(func() -> bool:
+			var t: float = Game.course_time
+			for k: int in 6:
+				if rad_to_deg(big.angle_at(t + 0.35 + 0.1 * float(k))) > -35.0:
+					return false
+			return rad_to_deg(big.angle_at(t + 1.0)) < -20.0)
+		x_step({"kind": "kick", "from": a, "to": deck + V(0, 0, 3.0)})
+
+	# express ferry off the deck
+	var d_end: float = deck.z - 6.0
+	var f_pts: Array[Vector3] = [Vector3.ZERO, V(0, 0, -9)]
+	var ferry: MovingPlatform = kit.mover(V(deck.x, deck.y, d_end - 2.2), V(3.2, 0.5, 3.2), f_pts, 4.0, 0.0)
+	for sx: int in [-1, 1]:
+		kit.pipe(V(deck.x + sx * 2.2, deck.y - 0.7, d_end - 1.0), V(deck.x + sx * 2.2, deck.y - 0.7, d_end - 14.0), 0.12)
+	_cp13 = V(deck.x, deck.y, d_end - 2.2 - 21.2)
+	_cp(_cp13, V(5, 2, 5), 0.0, "alt")
+	_cp_fx(_cp13)
+	r_walk(V(deck.x, deck.y, d_end + 0.7))
+	m_wait(ferry, 0.86, 0.95)
+	x_step({"kind": "x_jump", "from": V(deck.x, deck.y, d_end + 0.3), "to_node": ferry, "to_local": V(0, 0.25, 0.9)})
+	x_walk_on(V(0, 0.25, 1.15), ferry, 0.25)
+	t_wait(func() -> bool:
+		var t: float = Game.course_time + 0.3
+		return _mvel(ferry, t).z < -7.3 and ferry.offset_at(t).z < -5.0)
+	x_step({"kind": "h_jump", "sprint": true, "from_node": ferry, "from_local": V(0, 0.25, -1.35), "to": _cp13 + V(0, 0, 0.9)})
+	r_walk(_cp13)
+	r_checkpoint()
+
+
+# =================================================================================================
+# 14. THE MUSIC BOX: a comb of five pistons fires from both sides in the drum's tune - wait in the
+#     pockets between teeth, move on the rests - then step in front of the great key piston ON
+#     PURPOSE and let it punch you across the gap.
+# =================================================================================================
+
+const COMB_PERIOD: float = 2.4
+
+
+func _stage_14() -> void:
+	var o: Vector3 = _cp13
+	kit.plat(o + V(0, 0, -14.75), V(2.0, 0.6, 24.5), "main", 1.2)
+	var tune: Array[float] = [0.0, 0.5, 0.2, 0.7, 0.35]
+	var pz: Array[float] = [-6.0, -10.5, -15.0, -19.5, -24.0]
+	var comb: Array = []
+	for i: int in 5:
+		var side: float = 1.0 if i % 2 == 0 else -1.0
+		var pst: Piston = kit.piston(o + V(side * 1.8, 1.5, pz[i]), V(2.2, 1.4, 1.6), 90.0 * side, 2.4, COMB_PERIOD, tune[i], 12.0)
+		comb.append(pst)
+		# music-box notes when the tooth is struck
+		_fx_clock(o + V(side * 1.2, 2.0, pz[i]), COMB_PERIOD, tune[i], [0.45], [
+			ClockworkFx.puff_burst(10, Color(1.0, 0.85, 0.4, 0.9), 3.2, 0.35, 1.1, true, 0.0, 1.0),
+			ClockworkFx.spark_burst(8, Color(0.6, 0.9, 1.0), 5.0, Vector3(-side, 1.2, 0), 30.0, 0.5)])
+	var pockets: Array[float] = [-3.7, -8.25, -12.75, -17.25, -21.75, -26.2]
+	r_walk(o + V(0, 0, pockets[0]))
+	for i: int in 5:
+		var pst: Piston = comb[i]
+		r_until(func() -> bool:
+			var t: float = Game.course_time
+			return _piston_clear(pst, t, t + 0.95))
+		r_walk(o + V(0, 0, pockets[i + 1]))
+
+	# the key: a launch plate in front of a big piston that punches toward -X
+	var plate: Vector3 = o + V(0, 0, -29.2)
+	kit.plat(plate, V(3.0, 0.6, 4.4), "accent", 1.2)
+	var key: Piston = kit.piston(plate + V(2.3, 1.7, 0), V(2.6, 1.6, 1.6), 90.0, 2.0, COMB_PERIOD, 0.0, 14.0)
+	_fx_clock(plate + V(1.2, 1.0, 0), COMB_PERIOD, 0.0, [0.45], [
+		ClockworkFx.puff_burst(16, Color(0.95, 0.92, 1.0, 0.55), 5.0, 1.0, 0.9, false, 0.3, 0.3)])
+	_cp14 = plate + V(-16.0, -3.0, 0)
+	_cp(_cp14, V(7, 2, 9), 0.0)
+	_cp_fx(_cp14)
+	t_wait(func() -> bool:
+		var u: float = fposmod(Game.course_time / COMB_PERIOD, 1.0)
+		return u > 0.12 and u < 0.2)
+	x_step({"kind": "kick", "from": plate + V(0.2, 0, 0), "to": _cp14 + V(1.5, 0, 0)})
+	r_walk(_cp14)
+	r_checkpoint()
 
 
 # =================================================================================================
