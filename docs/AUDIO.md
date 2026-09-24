@@ -99,7 +99,9 @@ python tools/gen_music.py --verify
 ```
 
 Requires numpy and `soundfile` (for Ogg Vorbis). It is deterministic: every piece seeds its RNG
-from its name. A piece takes 25-90 s to render. Pieces are independent, so they can be rendered
+from its name. (The audio is identical run to run, but the Ogg container gets a random stream serial,
+so a re-render changes the file bytes: after regenerating only some pieces, `git checkout` the
+unchanged ones.) A piece takes 25-90 s to render. Pieces are independent, so they can be rendered
 as parallel processes.
 
 ### Engine
@@ -177,6 +179,8 @@ fanfares go straight to `Music`; ambience has its own `Ambience` bus and slider.
 | `music_clockwork` | E minor, 3/4 waltz, 168 | 80 bars, 1:26 | Clockwork Heights: the clock ticks every beat (tick / tock, with an escapement clunk each bar). Pizzicato and harpsichord oom-pah-pah; a music-box waltz; a warmer G major strain on clarinet and bassoon; the JUMP theme as a waltz on celesta; church bells strike the hour before the reprise. **hi:** a string waltz (cello, violas and violins), horns, triangle, tubular-bell chimes, timpani. |
 | `music_reef` | F lydian, 4/4, 80 | 32 bars, 1:36 | Coral Depths, two full arrangements. **Shallows:** chorused e-piano, harp ripples, vibraphone tune, marimba, bubbles, glass pad, flute, the JUMP theme in augmentation. **Deep:** "oo" choir, low cellos, a dark filtered pulse, kalimba, celesta, whale-song glides, a church bell in a 5.5 s abyss reverb. |
 | `music_orbital` | C lydian, 4/4, 100 | 48 bars, 1:55 | Orbital Drift: a delayed square-wave arpeggio, glass pads, strings and harp. A horn "station" theme climbs straight into the JUMP theme; an A minor "flare"; the B phrase on strings. **hi:** a space opera, with trumpets and trombones, snare march with triplet rolls, timpani, cymbals, choir, and driving spiccato cellos. |
+| `music_xeno` | E lydian, 4/4, 92 | 48 bars, 2:05 | Xeno Wilds: an alien jungle. Glass pads, a hushed "oo" choir, a kalimba ostinato and a sub drone under a gliding **theremin**; FM creature chirps and bubbling acid as percussion; chromatic-mediant shifts (E - C - Ab) for wonder; the JUMP theme on celesta and theremin; a slow, vast "leviathan" passage with whale-like glides and gongs. **hi:** strings and a violin counter-line, horns and choir on the theme, a tribal groove (nagado, ka, shaker, tom fills), a bright synth arp. |
+| `music_volcano` | C minor, **7/8** (2+2+3), 160 | 64 bars, 1:24 | Cinder Peak: the mountain erupting. A lopsided marcato ostinato and a growling, overdriven lava bass, orchestral kick, odaiko and toms; a trombone and horn theme climbing through the Neapolitan Db; the JUMP theme bursts into C major as the eruption; a chanting breakdown over a timpani roll and riser; booms, gongs and crashes. **hi:** choir, trumpets, nagado / shime / snare, tremolo strings, tom fills. |
 | `music_ascent` | B minor to D major, 4/4, 128 | 56 bars, 1:45 | The Final Ascent: synthwave. Side-chained supersaws, octave bass, arps and gated snare under a climbing saw lead. A **medley** quotes every map in turn: the gardens run-up on flute, the foundry march with anvils, the clockwork music box, the reef vibes, the orbital horn. Then the JUMP theme at full height in D major, and a breakdown with a riser. **hi:** strings, choir, trombones, tom fills, trumpets and horns on the theme, booms and timpani. |
 | `music_results` | C major, 4/4 swung, 92 | 16 bars, 0:42 | Course clear: piano sings the B phrase and then the A phrase over soft strings, pizzicato and brushes. |
 | `music_victory` | C major, 4/4, 88 | 24 bars, 1:05 | Every course beaten: the whole JUMP theme for orchestra and choir. A on horns and violins, B on choir and strings, then A tutti with trumpets, snare, timpani, crashes and tubular bells. |
@@ -191,6 +195,8 @@ fanfares go straight to `Music`; ambience has its own `Ambience` bus and slider.
 | `fanfare_clockwork` | Music | Music box turns E minor into E major; three bell strokes, celesta, ticking. |
 | `fanfare_reef` | Music | Harp glissando, vibraphone chord, "oo" choir, rising bubbles (F). |
 | `fanfare_orbital` | Music | Trumpet run-up and leap, brass chord, timpani, crash, FM-bell sparkle (C). |
+| `fanfare_xeno` | Music | A theremin run-up and leap, an E major "ah" choir, a cascade of FM bells and kalimba, a gong. |
+| `fanfare_volcano` | Music | A trumpet run-up in 7/8 into a C major brass-and-choir eruption: taiko, boom, gong, crash. |
 | `fanfare_ascent` | Music | Scored to the beacon: a 2.7 s riser, a timpani roll and choir crescendo land as the crystal ignites on a D major tutti (brass, supersaws, strings, boom, crash) with the JUMP leap on top. It replaces the old `beacon` riser. |
 | `checkpoint_<map>` | SFX | A two- or three-note tonic figure in each map's own timbre: glockenspiel and harp, anvil and trombone, marimba and whistle, music box, tick and bell, vibraphone and bubbles, FM bells, synth plucks. |
 | `new_best` | SFX | A rising glockenspiel and harp arpeggio over a string chord. |
