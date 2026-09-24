@@ -63,6 +63,7 @@ func _ready() -> void:
 	Sfx.set_theme(theme_id)
 	if not headless_mode:
 		Sfx.music(music_track)
+		add_child(Soundscape.make(theme_id))
 		# Party Mode is chaos from the first second: the full score throughout
 		Sfx.music_progress(1.0 if Game.party != null else 0.0)
 	if Game.race_mode:
