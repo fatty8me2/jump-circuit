@@ -1,5 +1,5 @@
 extends LevelBase
-## 9. THE FINAL ASCENT (the finale) - a night climb up a neon spire complex to the beacon. Hard mode:
+## 11. THE FINAL ASCENT (the finale) - a night climb up a neon spire complex to the beacon. Hard mode:
 ## twenty-three stages, each behind a checkpoint, each pushing one earlier idea to its nastiest
 ## and then mixing in two or three more. The lower spire (1-12):
 ##   1 neon ladder + head-hitters + kill slalom      2 boost strip -> 15 m leap -> pad at sprint -> small disc

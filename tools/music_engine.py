@@ -442,6 +442,21 @@ def accordion(r, freq, dur, vel=0.8, musette=True, low_reed=False, pan=0.0, att=
     return tail_fade(stereo(x * e, pan))
 
 
+def theremin(r, freq, dur, vel=0.8, legato_from=None, pan=0.0, att=0.09, rel=0.35, vib=0.012, glide_s=0.14):
+    """Theremin-like lead: an almost pure tone with a wide, slightly irregular vibrato and a slow
+    portamento into every note it is slurred to (the alien voice of Xeno Wilds)."""
+    n = int((dur + rel + 0.05) * MSR)
+    t = secs(n)
+    rate = r.uniform(5.6, 6.4) * (1.0 + 0.08 * np.sin(TAU * 0.35 * t + r.uniform(0, TAU)))
+    depth = vib * np.clip((t - 0.12) / 0.3, 0.25, 1.0)
+    fcurve = freq * (1.0 + depth * np.sin(TAU * np.cumsum(rate) / MSR)) * drift(r, n, 3.0)         * glide(n, legato_from, freq, glide_s)
+    ph = TAU * np.cumsum(fcurve) / MSR
+    x = np.sin(ph) + 0.22 * np.sin(2 * ph + 0.4) + 0.08 * np.sin(3 * ph + 1.1)
+    x = _level(x, 0.3)
+    e = env_asr(n, dur, att, rel, 1.2) * (0.35 + 0.65 * vel)
+    return tail_fade(stereo(x * e, pan))
+
+
 def organ(r, freq, dur, vel=0.8, stops=(1.0, 0.6, 0.35, 0.0, 0.2), pan=0.0, att=0.02, rel=0.12, leslie=True):
     """Drawbar-ish tonewheel organ (8', 4', 2 2/3', 2', 1 3/5' ...)."""
     n = int((dur + rel + 0.05) * MSR)

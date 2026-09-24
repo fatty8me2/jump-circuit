@@ -6,7 +6,7 @@ const PATH: String = "user://progress.json"
 ## rebuilt: bests set on an older layout move to "legacy_best" on load, because
 ## they can no longer be beaten or compared (unlocks and run counts are kept).
 ## Ids not listed here (the playground) are rev 1.
-const LAYOUT_REV: Dictionary = {"gardens": 3, "foundry": 3, "balance": 3, "clockwork": 3, "reef": 1, "orbital": 1, "xeno": 1, "volcano": 1, "ascent": 3}
+const LAYOUT_REV: Dictionary = {"gardens": 3, "foundry": 3, "balance": 3, "clockwork": 3, "reef": 1, "orbital": 1, "xeno": 1, "volcano": 1, "glacier": 1, "desert": 1, "ascent": 3}
 
 var data: Dictionary = {"levels": {}, "game_completed": false}
 ## Tests point this somewhere else so they never touch a real save.

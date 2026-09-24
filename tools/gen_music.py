@@ -1226,6 +1226,273 @@ def piece_ascent():
 
 
 # --------------------------------------------------------------------------
+# XENO WILDS - E lydian, 92 bpm, 48 bars. An alien jungle under a ringed giant: glass pads,
+# a kalimba ostinato, alien chirps and bubbling percussion under a gliding theremin; chromatic
+# mediant shifts (E - C - Ab) for the sense of wonder; the JUMP theme on kalimba and choir; a slow,
+# huge "leviathan" passage. Hi layer: strings, horns, a tribal groove (taiko, frame drums,
+# toms), a bright synth arp and a full choir.
+# --------------------------------------------------------------------------
+XENO_INTRO_CH = "| Emaj7 | F#/E | Emaj7 | F#/E | Cmaj7 | D | Emaj7 | F#/E |"
+XENO_A_CH = ("| Emaj7 | F#/E | D#m7 | G#m7 | Cmaj7 | D | Bsus4 | B | "
+             "Emaj7 | F#/E | C#m7 | Amaj7 | Cmaj7 | Ab | Bsus4 | B |")
+XENO_A = ("B4h E5q F#5q | A#5w | G#5h F#5q D#5q | B5w | E5h G5q B5q | A5h F#5h | E5h. F#5q | D#5w | "
+          "B4h E5q F#5q | A#5h C#6h | B5h. G#5q | C#6w | B5h G5q E5q | C6h Eb6h | E6h F#6h | D#6w |")
+XENO_LEV_CH = "| C#m | A | E/G# | F# | C#m | A | C | B |"
+XENO_LEV = "C#4w | E4h A3h | B3h. G#3q | F#3w | C#4w | E4h A4h | G4h E4h | F#4h D#4h |"
+XENO_OUT_CH = "| Emaj7 | F#/E | Cmaj7 | D | Emaj7 | F#/E | Cmaj7 | Bsus4 B |"
+
+
+def alien_chirp(r, vel=1.0):
+    """A little FM creature call: a gliding carrier, a trilling amplitude, a quick fall-off."""
+    dur = r.uniform(0.12, 0.35)
+    n = int(dur * me.MSR)
+    t = me.secs(n)
+    f0 = r.uniform(1400.0, 3800.0)
+    bend = r.uniform(-0.9, 0.9)
+    f = f0 * 2.0 ** (bend * np.sin(np.pi * t / dur))
+    ph = me.TAU * np.cumsum(f) / me.MSR
+    idx = r.uniform(0.5, 2.5) * np.exp(-t / (dur * 0.5))
+    x = np.sin(ph + idx * np.sin(ph * r.choice([0.5, 1.5, 2.01])))
+    x *= 0.6 + 0.4 * np.sin(me.TAU * r.uniform(22.0, 45.0) * t)
+    x *= np.sin(np.pi * np.clip(t / dur, 0, 1)) ** 0.7
+    return me._pk(x, vel)
+
+
+def piece_xeno():
+    T = me.Track("xeno", 92, 48, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("jungle", me.make_ir(r, rt60=3.2, predelay=0.04, damp=4200, er=0.35))
+    T.reverb("canyon", me.make_ir(r, rt60=5.0, predelay=0.08, damp=2600, er=0.2, tone=lambda f: me.lp(f, 5000, 1)))
+    T.delay("echo", beats=0.75, fb=0.42, damp=3800, ret=0.5)
+    T.bus("pad", eq=std_eq(70, 11000), chorus=(4.0, 0.22, 14.0, 0.5))
+    T.bus("keys", eq=std_eq(120, 12000))
+    T.bus("lead", eq=std_eq(180, 11000))
+    T.bus("perc", eq=std_eq(120))
+    T.bus("bass", eq=std_eq(28, 2500))
+    T.bus("choir", eq=std_eq(100, 8000))
+    T.bus("strings", eq=std_eq(50, 12000))
+    T.bus("brass", eq=std_eq(60, 9000))
+    T.bus("drums", eq=std_eq(30), drive=1.2)
+    J = {"jungle": 0.4}
+    intro = prog(XENO_INTRO_CH, 4, 0)
+    a = prog(XENO_A_CH, 4, 8)
+    jmp = prog(tx_chords(JUMP_A_CHORDS, 4), 4, 24)
+    lev = prog(XENO_LEV_CH, 4, 32)
+    out = prog(XENO_OUT_CH, 4, 40)
+    allp = intro + a + jmp + lev + out
+    # base: glass pads, a hushed "oo" choir, the kalimba ostinato, sub drone
+    pad(T, "base", "pad", allp, I(me.pad_glass, att=1.4, rel=2.4), center=66, count=4, gain=0.07, sends=J, vel=0.5)
+    pad(T, "base", "choir", allp, I(me.choir, vowel="u", att=1.0, rel=1.8), center=57, count=3, gain=0.1,
+        sends={"canyon": 0.5}, vel=0.45)
+    arp(T, "base", "keys", intro + a + jmp + out, [0, 2, 4, 1, 3, 5, 2, 4], 0.5, M_KALIMBA, lo=59, hi=86, gain=0.16,
+        sends={"jungle": 0.35, "echo": 0.3}, vels=(0.8, 0.5, 0.6, 0.5), pan_fn=lambda k: 0.45 * np.sin(k * 0.8))
+    bass(T, "base", "bass", allp, [(0, 0, 3.6, 0.8)], M_SUB, lo=28, hi=40, gain=0.34, drive=1.1)
+    # alien wildlife: chirps and trills scattered through every bar, bubbling acid pops
+    chirps = [alien_chirp(me.rng_for("chirp%d" % i)) for i in range(10)]
+    bubbles = [me.bubble(me.rng_for("xbub%d" % i), 1.0, f) for i, f in enumerate((380, 520, 700, 900, 1150))]
+    for bar in range(48):
+        for _ in range(2 if bar < 32 or bar >= 40 else 1):
+            T.hit("base", "perc", bar * 4 + int(r.integers(0, 16)) * 0.25, chirps[int(r.integers(0, 10))],
+                  0.05 * r.uniform(0.4, 1.0), r.uniform(-0.9, 0.9), {"jungle": 0.6, "echo": 0.3})
+        for _ in range(2):
+            T.hit("base", "perc", bar * 4 + int(r.integers(0, 8)) * 0.5, bubbles[int(r.integers(0, 5))],
+                  0.05 * r.uniform(0.5, 1.0), r.uniform(-0.7, 0.7), {"jungle": 0.4})
+    frame = bank("frame", lambda r: me.frame_drum(r, 1.0, True), 3)
+    frame_hi = bank("frame_hi", lambda r: me.frame_drum(r, 1.0, False), 3)
+    kit(T, "base", "perc", range(8, 32), {"fr": (frame, "x.....x...x.....", 0.3),
+                                          "frh": (frame_hi, "...g.......g..g.", 0.18)}, sends=J)
+    # the theremin sings the Xeno theme; fm bells shimmer on its long notes
+    line(T, "base", "lead", "r w | r w | r w | B4h. E5q | A#5w | G#5h. r q | r w | r w |", 0, I(me.theremin), 0.36,
+         {"jungle": 0.45, "echo": 0.25})
+    line(T, "base", "lead", XENO_A, 8, I(me.theremin), 0.4, {"jungle": 0.4, "echo": 0.2})
+    for bar in (9, 11, 15, 19, 23):
+        T.add("base", "keys", bar * 4, me.fm_bell(r, float(mtof(88 if bar % 2 else 83)), 3.0, 0.5), 0.12,
+              r.uniform(-0.5, 0.5), {"canyon": 0.6, "echo": 0.4}, 0.0)
+    # the JUMP theme: kalimba and celesta (base), horns + choir (hi)
+    line(T, "base", "keys", JUMP_PICKUP + " | " + JUMP_A, 24, M_CELESTA, 0.32, {"jungle": 0.4, "echo": 0.3},
+         legato=False, pickup=1.0, transpose=4)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_A, 24, I(me.theremin, vib=0.008), 0.24, J, pickup=1.0, transpose=-8)
+    line(T, "hi", "brass", JUMP_PICKUP + " | " + JUMP_A, 24, HORNS, 0.34, {"jungle": 0.45}, pickup=1.0, transpose=-8)
+    pad(T, "hi", "choir", jmp, CHOIR_A, center=62, count=4, gain=0.16, sends={"canyon": 0.5}, vel=0.7)
+    # the leviathan: vast and slow - low strings / choir melody, a deep whale-like glide
+    line(T, "base", "strings", XENO_LEV, 32, I(me.strings, att=0.6, rel=1.0, bright=0.3, voices=5, body="cello"), 0.3,
+         {"canyon": 0.6})
+    line(T, "base", "choir", XENO_LEV, 32, CHOIR_O, 0.2, {"canyon": 0.6}, transpose=12)
+    for bar, f0, f1 in ((33, 40, 47), (35, 45, 38), (37, 40, 49), (39, 47, 42)):
+        n = int(3.4 * T.spb * me.MSR)
+        tt = me.secs(n)
+        u = np.clip(tt / (3.2 * T.spb), 0, 1)
+        fcurve = float(mtof(f0)) * (float(mtof(f1)) / float(mtof(f0))) ** (u * u * (3 - 2 * u))
+        wh = np.sin(me.TAU * np.cumsum(fcurve * (1 + 0.006 * np.sin(me.TAU * 3.5 * tt))) / me.MSR)
+        wh += 0.4 * np.sin(2 * me.TAU * np.cumsum(fcurve) / me.MSR) + 0.2 * np.sin(3 * me.TAU * np.cumsum(fcurve) / me.MSR)
+        wh *= me.env_asr(n, 2.8 * T.spb, 0.8, 0.8) * 0.3
+        T.add("base", "lead", bar * 4 + 0.5, wh, 0.2, -0.3 if bar % 4 == 1 else 0.3, {"canyon": 0.8, "echo": 0.3}, 0.0)
+    for bar in (32, 36):
+        ring(T, "base", "perc", bar * 4, me.gong(me.rng_for("xgong"), 1.0, 5.0, 62.0), 0.16, 0.0, {"canyon": 0.5})
+        ring(T, "base", "bass", bar * 4, me.boom(me.rng_for("xboom"), 1.0, 31.0, 3.0), 0.2, 0.0, {"canyon": 0.3})
+    # hi: strings, a counter-line, a tribal groove, a bright arp
+    pad(T, "hi", "strings", a + jmp + lev, I(me.strings, att=0.3, rel=0.7, bright=0.5), center=64, count=4, gain=0.13,
+        sends=J, vel=0.65)
+    line(T, "hi", "strings", "E5w | F#5w | D#5w | D#5w | E5w | F#5w | F#5w | F#5w | G#5w | A#5w | G#5w | A5w | "
+         "G5w | Ab5w | F#5w | F#5w |", 8, VIOLINS, 0.18, J, pan=-0.3)
+    line(T, "hi", "brass", XENO_LEV, 32, TROMBONES, 0.24, {"canyon": 0.5})
+    nagado = bank("nagado", lambda r: me.taiko(r, "nagado"), 3)
+    ka = bank("ka", lambda r: me.taiko(r, "ka"), 4)
+    toms = [me.tom(me.rng_for("xtom%d" % i), f, 1.0) for i, f in enumerate((90.0, 120.0, 160.0))]
+    for bar0, nb in ((8, 16), (24, 8), (32, 8)):
+        kit(T, "hi", "drums", range(bar0, bar0 + nb), {
+            "na": (nagado, "x.....x.x.....x." if bar0 != 32 else "x...............", 0.5),
+            "ka": (ka, "..g.g...g.x.g.g." if bar0 != 32 else "................", 0.2),
+            "shk": (SHK, "g.g.g.g.g.g.g.g.", 0.14),
+        }, sends=J)
+        for bar in range(bar0, bar0 + nb):
+            if bar % 4 == 3:
+                for k, o in enumerate((2.5, 3.0, 3.5)):
+                    T.hit("hi", "drums", bar * 4 + o, toms[2 - k], 0.26, (k - 1) * 0.4, J)
+    arp(T, "hi", "keys", a + jmp, [0, 1, 2, 3, 4, 3, 2, 1], 0.25, M_SPLUCK, lo=64, hi=91, gain=0.07,
+        sends={"echo": 0.35, "jungle": 0.3}, vels=(0.8, 0.5, 0.6, 0.5))
+    for bar in (8, 24, 32):
+        swell_into(T, "hi", "drums", bar, 4, 0.16, J)
+    T.render(rms_db=-14.5, hi_gain=0.62)
+
+
+# --------------------------------------------------------------------------
+# CINDER PEAK - C minor in 7/8 (2+2+3), 160 bpm, 64 bars. The mountain is erupting: a lopsided
+# low-string ostinato and a growling lava bass, war drums, a brass theme climbing through the
+# Neapolitan Db; the JUMP theme bursts into C major as the eruption; a chanting breakdown.
+# Hi layer: the full storm - choir chants, trumpets, taiko and toms, timpani, tremolo strings,
+# gongs and crashes.
+# --------------------------------------------------------------------------
+VOL_INTRO_CH = "| Cm | Cm | Db | Cm | Cm | Cm | Ab | G |"
+VOL_A_CH = "| Cm | Cm | Ab | Ab | Fm | Fm | G | G | Cm | Cm | Db | Db | Bbm | Bbm | G | G7 |"
+VOL_A = ("C4q Eb4q G4q. | C5q Bb4q G4q. | Ab4q G4q Eb4q. | C5q. Bb4q Ab4q | F4q Ab4q C5q. | F5q Eb5q C5q. | "
+         "D5q B4q G4q. | B4q. C5q D5q | Eb5q D5q C5q. | G5q F5q Eb5q. | F5q Eb5q Db5q. | Ab5q. G5q F5q | "
+         "Db5q F5q Bb5q. | Ab5q F5q Db5q. | B4q D5q G5q. | F5q. D5q B4q |")
+VOL_J_CH = "| C | F | Dm | G | C | Ab | Bb | C |"
+VOL_J = ("G4e A4e B4e | C5q. G5h | A5q G5e E5e C5q. | D5q E5e F5e A5q. | G5h G4e A4e B4e | C5q. G5h | "
+         "C6q Bb5e Ab5e C6q. | D6q C6e Bb5e D6q. | E6h. r e |")
+VOL_BRK_CH = "| Cm | Cm | Cm | Cm | Db | Db | G | G |"
+
+
+def piece_volcano():
+    T = me.Track("volcano", 160, 64, 3.5, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("caldera", me.make_ir(r, rt60=2.6, predelay=0.03, damp=3200, er=0.7, er_span=0.1))
+    T.reverb("sky", me.make_ir(r, rt60=4.0, predelay=0.05, damp=2400, er=0.2))
+    T.bus("low", eq=lambda f: me.hp(f, 30) * me.lp(f, 5000) * me.bump(f, 280, -2, 0.8))
+    T.bus("lava", eq=lambda f: me.hp(f, 28) * me.lp(f, 1800), drive=1.6)
+    T.bus("brass", eq=std_eq(60, 9500), drive=1.1)
+    T.bus("choir", eq=std_eq(100, 8500))
+    T.bus("strings", eq=std_eq(60, 12000))
+    T.bus("drums", eq=std_eq(28), drive=1.35)
+    T.bus("fx", eq=std_eq(40))
+    C = {"caldera": 0.3}
+    sections = [("intro", 0, VOL_INTRO_CH), ("A", 8, VOL_A_CH), ("J", 24, VOL_J_CH), ("brk", 32, VOL_BRK_CH),
+                ("A2", 40, VOL_A_CH), ("out", 56, VOL_INTRO_CH)]
+    kick = bank("kick_orch", lambda r: me.kick(r, "orch"), 2)
+    odaiko = bank("odaiko", lambda r: me.taiko(r, "odaiko"), 3)
+    nagado = bank("nagado", lambda r: me.taiko(r, "nagado"), 3)
+    shime = bank("shime", lambda r: me.taiko(r, "shime"), 4)
+    snr = bank("snare_march", lambda r: me.snare(r, "march"), 4)
+    toms = [me.tom(me.rng_for("vtom%d" % i), f, 1.0) for i, f in enumerate((70.0, 95.0, 130.0))]
+    osti = [(0.0, 0, 0.5, 1.0), (0.5, 0, 0.5, 0.55), (1.0, 12, 0.5, 0.95), (1.5, 0, 0.5, 0.55), (2.0, 0, 0.5, 1.0),
+            (2.5, 7, 0.5, 0.6), (3.0, 12, 0.5, 0.75)]
+    for name, bar0, ch in sections:
+        P = prog(ch, 3.5, bar0)
+        nb = len(P)
+        calm = name in ("intro", "out")
+        # the 7/8 ostinato: marcato low strings (2+2+3), the lava bass on each group
+        if name != "brk":
+            bass(T, "base", "low", P, osti, M_CELLO_STAC, lo=36, hi=48, gain=0.36 if not calm else 0.28, sends={"caldera": 0.15},
+                 period=3.5)
+            bass(T, "base", "lava", P, [(0.0, 0, 0.95, 0.9), (1.0, 0, 0.95, 0.7), (2.0, 0, 1.45, 0.85)], M_SBASS, lo=24, hi=36,
+                 gain=0.3, period=3.5, cutoff=420.0, decay=0.14, drive=2.2)
+        else:
+            bass(T, "base", "lava", P, [(0.0, 0, 3.4, 0.8)], M_SUB, lo=24, hi=36, gain=0.3, period=3.5, drive=1.8)
+        kit(T, "base", "drums", range(bar0, bar0 + nb), {
+            "kick": (kick, "x.x.x.." if not calm else "x......", 0.55),
+            "od": (odaiko, "x...x.." if name not in ("intro",) else "x......", 0.4),
+            "tom": ([toms[0]], "......x" if name != "out" else ".......", 0.25),
+        }, step=0.5, sends={"caldera": 0.25})
+        pad(T, "base", "choir", P, I(me.choir, vowel="o", att=0.8, rel=1.2), center=55, count=3, gain=0.1 if calm else 0.08,
+            sends={"sky": 0.5}, vel=0.5)
+        # hi: the storm
+        if not calm:
+            kit(T, "hi", "drums", range(bar0, bar0 + nb), {
+                "na": (nagado, "x.xgx.g" if name != "brk" else "x.x.x..", 0.5),
+                "snare": (snr, "..x...x" if name in ("A", "A2", "J") else ".......", 0.3),
+            }, step=0.5, sends={"caldera": 0.3})
+            kit(T, "hi", "drums", range(bar0, bar0 + nb), {
+                "shime": (shime, "xgxgxgxgxgxgxx" if name != "brk" else "x.x.x.x.x.x.x.", 0.16),
+            }, step=0.25, sends={"caldera": 0.3})
+            pad(T, "hi", "strings", P, I(me.strings, att=0.08, rel=0.3, bright=0.55, tremolo=0.6), center=67, count=3,
+                gain=0.12, sends=C, vel=0.75)
+            for bar in range(bar0, bar0 + nb):
+                if bar % 4 == 3:
+                    for k, o in enumerate((2.0, 2.5, 3.0)):
+                        T.hit("hi", "drums", bar * 3.5 + o, toms[2 - k], 0.3, (k - 1) * 0.4, C)
+    # the theme: trombones + horns (base), trumpets an octave up the second time (hi)
+    line(T, "base", "brass", VOL_A, 8, TROMBONES, 0.4, {"caldera": 0.35})
+    line(T, "base", "brass", VOL_A, 8, HORNS, 0.22, {"caldera": 0.4}, transpose=12)
+    line(T, "base", "brass", VOL_A, 40, TROMBONES, 0.38, {"caldera": 0.35})
+    line(T, "hi", "brass", VOL_A, 40, TRUMPETS, 0.26, {"caldera": 0.4}, transpose=12)
+    line(T, "hi", "choir", VOL_A, 8, CHOIR_A, 0.22, {"sky": 0.5})
+    # the eruption: the JUMP theme in C major, horns and trumpets, the choir wide open
+    line(T, "base", "brass", VOL_J, 24, HORNS, 0.42, {"caldera": 0.4}, pickup=1.5)
+    line(T, "hi", "brass", VOL_J, 24, TRUMPETS, 0.3, {"caldera": 0.4}, pickup=1.5)
+    pad(T, "hi", "choir", prog(VOL_J_CH, 3.5, 24), CHOIR_A, center=62, count=4, gain=0.2, sends={"sky": 0.5}, vel=0.85)
+    pad(T, "base", "strings", prog(VOL_J_CH, 3.5, 24), I(me.strings, att=0.1, rel=0.4, bright=0.6, tremolo=0.4),
+        center=67, count=4, gain=0.14, sends=C, vel=0.8)
+    # breakdown: the choir chants on the 2+2+3 accents, a timpani roll and a riser build back
+    for bar in range(32, 40):
+        m = 48 if bar < 36 else (49 if bar < 38 else 43)
+        for o in (0.0, 1.0, 2.0):
+            T.add("hi", "choir", bar * 3.5 + o, me.choir(r, float(mtof(m)), 0.3 * T.spb, 0.85, "a", voices=5, att=0.02,
+                  rel=0.25, male=True), 0.22, 0.0, {"sky": 0.4})
+            T.add("base", "choir", bar * 3.5 + o, me.choir(r, float(mtof(m + 12)), 0.25 * T.spb, 0.6, "o", voices=4, att=0.02,
+                  rel=0.2), 0.12, 0.0, {"sky": 0.4})
+    ring(T, "base", "drums", 36 * 3.5, me.timpani_roll(r, float(mtof(43)), 14.0, T.spb, 0.15, 1.0), 0.34, 0.0, C)
+    ring(T, "hi", "fx", 36 * 3.5, me.riser(r, 14.0, T.spb, 0.8, 150.0, 6000.0), 0.18, 0.0, C)
+    # eruptions: gong + boom + crash at the big downbeats, distant rumbles in the intro
+    gong = me.gong(me.rng_for("vgong"), 1.0, 6.0, 55.0)
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    for bar in (0, 8, 24, 40, 56):
+        ring(T, "base", "fx", bar * 3.5, me.boom(me.rng_for("vboom%d" % bar), 1.0, 30.0, 3.0), 0.3, 0.0, {"sky": 0.3})
+        ring(T, "hi", "fx", bar * 3.5, gong, 0.2, 0.0, {"sky": 0.4})
+        if bar in (8, 24, 40):
+            ring(T, "hi", "drums", bar * 3.5, crash[bar % 2], 0.2, 0.3, C)
+            swell_into(T, "hi", "fx", bar, 3.5, 0.14, C)
+    for bar in (2, 5, 58, 61):
+        ring(T, "base", "fx", bar * 3.5 + 1.0, me.boom(me.rng_for("vrumble%d" % bar), 0.7, 26.0, 2.5), 0.16, 0.0, {"sky": 0.5})
+    T.render(rms_db=-14.5, hi_gain=1.1)
+
+
+def _ff_xeno(B, r, k):
+    B.notes(mel("B4e C#5e D#5e E5q B5q E6h", 4, 0, 0), I(me.theremin), r, 0.4, sends={"hall": 0.5}, legato=True)
+    for m in (52, 59, 63, 66, 70):
+        B.add(1.5, me.choir(r, float(mtof(m)), 2.6, 0.8, "a", att=0.3, rel=1.2), 0.16, sends={"hall": 0.5})
+    for i, m in enumerate((76, 80, 83, 87, 90, 94)):
+        B.add(1.5 + 0.09 * i, me.fm_bell(r, float(mtof(m)), 1.6, 0.6), 0.12, (i / 5 - 0.5), {"hall": 0.5})
+    for i, m in enumerate((64, 68, 71, 75, 76)):
+        B.add(1.5 + 0.06 * i, me.mallet(r, float(mtof(m)), 1.0, 0.7, "kalimba"), 0.18, 0.3, {"hall": 0.4})
+    B.add(1.5, me.gong(r, 0.8, 4.0, 82.0), 0.18, sends={"hall": 0.4})
+    B.add(1.5, me.taiko(r, "nagado"), 0.35, sends={"hall": 0.3})
+
+
+def _ff_volcano(B, r, k):
+    B.notes(mel("G4e A4e B4e C5q. G5q C6h", 3.5, 0, 0), I(me.brass, kind="trumpet", voices=2), r, 0.42, sends={"hall": 0.4})
+    for m in (48, 55, 60, 64, 67, 72):
+        B.add(3.0, me.brass(r, float(mtof(m)), 2.6, 0.95, "horn" if m < 62 else "trumpet", voices=2), 0.15, sends={"hall": 0.4})
+    for m in (48, 55, 60, 64):
+        B.add(3.0, me.choir(r, float(mtof(m)), 2.6, 0.9, "a", att=0.1, rel=1.0), 0.16, sends={"hall": 0.5})
+    for t0 in (0.0, 1.0, 2.0, 3.0):
+        B.add(t0, me.taiko(r, "odaiko"), 0.45, sends={"hall": 0.3})
+    B.add(3.0, me.boom(r, 1.0, 32.0, 3.0), 0.45)
+    B.add(3.0, me.gong(r, 1.0, 4.0, 55.0), 0.3, sends={"hall": 0.3})
+    B.add(3.0, me.cymbal(r, "crash"), 0.22, 0.3, {"hall": 0.3})
+
+
+# --------------------------------------------------------------------------
 # stingers: course fanfares (Music bus, then the results music), checkpoint chimes (SFX bus,
 # pitched up the map's scale per checkpoint by Sfx.checkpoint_chime) and the new-best sparkle.
 # --------------------------------------------------------------------------
@@ -1343,6 +1610,8 @@ def stingers():
     fanfare("clockwork", 64, _ff_clockwork, 6.5)
     fanfare("reef", 65, _ff_reef, 5.0)
     fanfare("orbital", 60, _ff_orbital, 4.8, bpm=100.0)
+    fanfare("xeno", 64, _ff_xeno, 5.2, bpm=92.0)
+    fanfare("volcano", 60, _ff_volcano, 5.2, bpm=160.0)
     fanfare("ascent", 62, _ff_ascent, 7.0, bpm=128.0, rms=-12.0)
     # checkpoint chimes (tonic of each map's key; the game steps them up its scale)
     chime("gardens", lambda B, r: (B.add(0, me.mallet(r, float(mtof(79)), 0.8, 0.8, "glockenspiel"), 0.4, 0.2, {"small": 0.3}),
@@ -1366,6 +1635,15 @@ def stingers():
     chime("orbital", lambda B, r: (B.add(0, me.fm_bell(r, float(mtof(72)), 1.0, 0.8), 0.4, 0.2, {"hall": 0.4}),
                                    B.add(0.2, me.fm_bell(r, float(mtof(79)), 1.0, 0.7), 0.35, -0.2, {"hall": 0.4}),
                                    B.add(0.0, me.synth_pluck(r, float(mtof(84)), 0.4, 0.6), 0.2, 0.0, {"hall": 0.4})))
+    chime("xeno", lambda B, r: (B.add(0, me.mallet(r, float(mtof(76)), 0.8, 0.8, "kalimba"), 0.4, 0.2, {"hall": 0.4}),
+                                B.add(0.16, me.mallet(r, float(mtof(83)), 0.8, 0.8, "kalimba"), 0.35, -0.2, {"hall": 0.4}),
+                                B.add(0.3, me.fm_bell(r, float(mtof(94)), 1.0, 0.5), 0.14, 0.0, {"hall": 0.5}),
+                                B.add(0.0, alien_chirp(me.rng_for("chime_chirp"), 0.6), 0.08, 0.5, {"hall": 0.4})))
+    chime("volcano", lambda B, r: (B.add(0, me.timpani(r, float(mtof(48)), 0.9), 0.35, 0.0, {"small": 0.3}),
+                                   B.add(0.0, me.brass(r, float(mtof(60)), 0.45, 0.9, "horn", voices=2, fp=True), 0.3, 0.2,
+                                         {"hall": 0.3}),
+                                   B.add(0.2, me.brass(r, float(mtof(67)), 0.5, 0.9, "trumpet", voices=2, fp=True), 0.26, -0.2,
+                                         {"hall": 0.3})))
     chime("ascent", lambda B, r: (B.add(0, me.synth_pluck(r, float(mtof(71)), 0.4, 0.9), 0.4, 0.2, {"hall": 0.3}),
                                   B.add(0.18, me.synth_pluck(r, float(mtof(78)), 0.4, 0.9), 0.4, -0.2, {"hall": 0.3}),
                                   B.add(0.36, me.synth_pluck(r, float(mtof(83)), 0.5, 0.8), 0.35, 0.0, {"hall": 0.4}),
@@ -1388,6 +1666,8 @@ PIECES = {
     "clockwork": piece_clockwork,
     "reef": piece_reef,
     "orbital": piece_orbital,
+    "xeno": piece_xeno,
+    "volcano": piece_volcano,
     "ascent": piece_ascent,
     "title": piece_title,
     "lobby": piece_lobby,
@@ -1395,7 +1675,7 @@ PIECES = {
     "victory": piece_victory,
     "stingers": stingers,
 }
-LAYERED = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent")
+LAYERED = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "ascent")
 
 
 def verify():
