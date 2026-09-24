@@ -1056,6 +1056,69 @@ func test_x_update_check_and_prompt() -> void:
 	await ticks(2)
 
 
+## The in-game installer, end to end on paths with spaces (the save folder is "...\Jump Circuit\..."):
+## 1.2.2 - 1.3.0 quoted the installer's arguments themselves, OS.create_process quoted them again,
+## PowerShell got a split path, never ran, and the game quit into nothing. This runs the real
+## installer script (with -NoLaunch: no game start, no window) exactly as the game launches it.
+func test_x_update_installer_runs() -> void:
+	# the handshake: the game only quits once the installer's "started" marker exists
+	var root: String = ProjectSettings.globalize_path("user://updater test run")
+	for sub: String in ["", "/install dir", "/updates dir", "/stale"]:
+		DirAccess.make_dir_recursive_absolute(root + sub)
+	var marker: String = root + "/updates dir/probe.zip.started"
+	FileAccess.open(marker, FileAccess.WRITE).store_string("1")
+	check(await Updater._installer_started(marker, 1.0), "a running installer's marker lets the game hand over")
+	DirAccess.remove_absolute(marker)
+	check(not await Updater._installer_started(marker, 0.3), "no marker: the game stays open instead of quitting into nothing")
+	# stale downloads from an install that never ran are cleared at launch
+	for f: String in ["JumpCircuit-v1.3.0-1.zip", "JumpCircuit-v1.3.0-2.zip", "JumpCircuit-v1.3.0-2.zip.started"]:
+		FileAccess.open(root + "/stale/" + f, FileAccess.WRITE).store_string("x")
+	FileAccess.open(root + "/stale/keep.txt", FileAccess.WRITE).store_string("x")
+	check(Updater.clean_stale_downloads(root + "/stale") == 3 and FileAccess.file_exists(root + "/stale/keep.txt"),
+		"leftover update downloads are removed, nothing else")
+	# arguments go to create_process unquoted (it quotes paths with spaces itself)
+	var install_dir: String = root + "/install dir"
+	var zip_path: String = root + "/updates dir/JumpCircuit-v9.9.9-1.zip"
+	var script_path: String = root + "/updates dir/install_update.ps1"
+	var args: PackedStringArray = Updater.installer_arguments(script_path, 0, zip_path, install_dir,
+		install_dir + "/JumpCircuit.exe", "9.9.9", true)
+	var prequoted: bool = false
+	for a: String in args:
+		prequoted = prequoted or a.begins_with("\"")
+	check(not prequoted and args.has(script_path) and args.has(zip_path), "installer arguments are passed unquoted")
+	if OS.get_name() != "Windows":
+		return
+	# a fake installed game and a fake update archive, then the real installer script
+	for f: String in Updater.REQUIRED_UPDATE_FILES:
+		FileAccess.open(install_dir + "/" + f, FileAccess.WRITE).store_string("old " + f)
+	var zip := ZIPPacker.new()
+	zip.open(zip_path)
+	for f: String in Updater.REQUIRED_UPDATE_FILES:
+		zip.start_file(f)
+		zip.write_file(("new " + f).to_utf8_buffer())
+		zip.close_file()
+	zip.close()
+	FileAccess.open(script_path, FileAccess.WRITE).store_string(Updater.WINDOWS_INSTALLER_SCRIPT)
+	var pid: int = OS.create_process(Updater.powershell_path(), args, false)
+	check(pid > 0, "the installer process starts")
+	var waited: float = 0.0
+	while waited < 30.0 and FileAccess.file_exists(zip_path):
+		await seconds(0.25)
+		waited += 0.25
+	var replaced: bool = true
+	for f: String in Updater.REQUIRED_UPDATE_FILES:
+		replaced = replaced and FileAccess.get_file_as_string(install_dir + "/" + f) == "new " + f
+	check(replaced and not FileAccess.file_exists(zip_path) and not FileAccess.file_exists(zip_path + ".started"),
+		"the installer ran from a path with spaces: game files replaced, download and marker cleaned up (%.1f s)" % waited)
+	# tidy up the scratch folders
+	for sub: String in ["/install dir", "/updates dir", "/stale", ""]:
+		var d: DirAccess = DirAccess.open(root + sub)
+		if d != null:
+			for f: String in d.get_files():
+				d.remove(f)
+		DirAccess.remove_absolute(root + sub)
+
+
 # ---- menus, pad bindings, settings, camera (polish pass B2) ----------------------------------
 
 func _key(code: Key, pressed: bool = true) -> InputEventKey:
