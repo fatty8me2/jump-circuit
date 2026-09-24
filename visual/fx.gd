@@ -47,10 +47,6 @@ static func density() -> float:
 	return 1.0
 
 
-## True on Ultra: the few extras that only the top tier pays for (extra layers, lights).
-static func ultra() -> bool:
-	return density() > 1.2
-
 
 ## `n` particles scaled by density (never below 1).
 static func count(n: int) -> int:

@@ -145,11 +145,6 @@ func particle_scale() -> float:
 	return PARTICLE_SCALE[clampi(quality, 0, PARTICLE_SCALE.size() - 1)]
 
 
-## Light flashes, heat haze and other screen-reading extras: off on Low only.
-func fancy_effects() -> bool:
-	return quality >= 1
-
-
 func my_color() -> Color:
 	return RACER_COLORS[color_index % RACER_COLORS.size()]
 
