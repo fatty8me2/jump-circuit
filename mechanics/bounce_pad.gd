@@ -106,6 +106,14 @@ func _build_fx(col: Color) -> void:
 		"aabb": vis, "preprocess": 1.3})
 	shimmer.position = Vector3(0, LIP + 0.05, 0)
 	add_child(shimmer)
+	# idle: soft rings breathing out of the cushion, "this throws you"
+	var ripple: GPUParticles3D = Fx.emitter({"amount": 2, "exact_amount": true, "lifetime": 1.5, "local": true,
+		"facing": "flat", "tex": Fx.Tex.RING, "size": 1.0, "speed": Vector2(0.25, 0.25), "dir": Vector3.UP,
+		"spread": 0.0, "scale": Vector2(radius * 1.5, radius * 1.5), "curve": "grow",
+		"fade": PackedFloat32Array([0.0, 0.55, 0.0]), "color": Fx.hot(col.lerp(Color.WHITE, 0.2), 1.4),
+		"aabb": vis, "preprocess": 1.5})
+	ripple.position = Vector3(0, LIP + 0.04, 0)
+	add_child(ripple)
 	var up: Vector3 = _local_launch().normalized() if pitch_deg >= 1.0 else Vector3.UP
 	_launch_fx = Fx.sparks({"amount": 26, "lifetime": 0.55, "shape": "ring", "ring_radius": radius * 0.7,
 		"ring_inner": radius * 0.3, "dir": Vector3.UP, "spread": 10.0, "speed": Vector2(6.0, 14.0),

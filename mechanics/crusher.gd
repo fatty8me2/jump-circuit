@@ -78,10 +78,10 @@ func _build_fx() -> void:
 		"fade": PackedFloat32Array([1.0, 1.0, 0.0]), "aabb": vis})
 	_grit.position = Vector3(0, under, 0)
 	add_child(_grit)
-	_dust = Fx.smoke({"amount": 26, "lifetime": 1.0, "shape": "ring", "ring_radius": reach * 0.5,
+	_dust = Fx.smoke({"amount": 34, "lifetime": 1.1, "shape": "ring", "ring_radius": reach * 0.5,
 		"ring_inner": reach * 0.35, "dir": Vector3(0, 0.15, 0), "spread": 180.0, "flatness": 0.9,
 		"radial_vel": Vector2(4.0, 8.0), "speed": Vector2(0.0, 0.4), "damping": Vector2(5.0, 8.0),
-		"gravity": Vector3(0, 0.6, 0), "size": 1.1, "color": Color(0.85, 0.8, 0.72, 0.75), "aabb": vis})
+		"gravity": Vector3(0, 0.6, 0), "size": 1.4, "color": Color(0.78, 0.72, 0.64, 0.85), "aabb": vis})
 	add_child(_dust)
 	_debris = Fx.debris({"amount": 18, "shape": "ring", "ring_radius": reach * 0.5, "ring_inner": reach * 0.3,
 		"dir": Vector3.UP, "spread": 50.0, "radial_vel": Vector2(2.0, 5.0), "speed": Vector2(3.0, 7.0),

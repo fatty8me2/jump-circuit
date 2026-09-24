@@ -23,6 +23,8 @@ var _burst: GPUParticles3D
 var _fountain: GPUParticles3D
 var _glitter: GPUParticles3D
 var _motes: GPUParticles3D
+var _halo: MeshInstance3D          # soft glow around the orb: a faint beacon, bright once live
+var _halo_mat: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -88,6 +90,10 @@ func _build_fx() -> void:
 		"curve": "pop", "color": hot, "turbulence": 0.3, "emitting": false, "aabb": vis})
 	_motes.position = Vector3(0, 0.1, 0)
 	add_child(_motes)
+	_halo = Fx.sprite(Look.c("accent").lerp(Color.WHITE, 0.3), 1.6, Fx.Tex.DOT, true)
+	_halo_mat = _halo.material_override as StandardMaterial3D
+	_halo.position = Vector3(0, 2.75, 0)
+	add_child(_halo)
 
 
 func _octa() -> Mesh:
@@ -190,3 +196,8 @@ func _process(dt: float) -> void:
 	_t += dt
 	_orb.rotation.y = _t * (2.2 if active else 0.5)
 	_orb.position.y = 2.75 + sin(_t * 2.0) * 0.08
+	if _halo != null:
+		_halo.position.y = _orb.position.y
+		var beat: float = 0.5 + 0.5 * sin(_t * (4.0 if active else 1.6))
+		_halo_mat.albedo_color.a = (0.55 + 0.3 * beat) if active else (0.14 + 0.12 * beat)
+		_halo.scale = Vector3.ONE * ((1.3 + 0.25 * beat) if active else (0.9 + 0.15 * beat))

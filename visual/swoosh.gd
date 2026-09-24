@@ -18,14 +18,18 @@ var _pts: PackedVector3Array = PackedVector3Array()
 var _ages: PackedFloat32Array = PackedFloat32Array()
 var _im: ImmediateMesh
 
-static var _mat: StandardMaterial3D
+static var _mats: Dictionary = {}
 
 
-static func make(c: Color, half_width: float = 0.1, seconds: float = 0.2) -> Swoosh:
+## `additive` glows (best on dark scenes and for the player's own streaks); false = a
+## plain translucent colour that stays readable against bright skies and grass.
+static func make(c: Color, half_width: float = 0.1, seconds: float = 0.2, additive: bool = true) -> Swoosh:
 	var s := Swoosh.new()
 	s.color = c
 	s.width = half_width
 	s.life = seconds
+	if not additive:
+		s.material_override = _material(false)
 	return s
 
 
@@ -36,16 +40,16 @@ func _init() -> void:
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_im = ImmediateMesh.new()
 	mesh = _im
-	material_override = _material()
+	material_override = _material(true)
 	visible = false
 
 
-static func _material() -> StandardMaterial3D:
-	if _mat != null:
-		return _mat
+static func _material(additive: bool) -> StandardMaterial3D:
+	if _mats.has(additive):
+		return _mats[additive]
 	var g := Gradient.new()
-	g.offsets = PackedFloat32Array([0.0, 0.35, 0.5, 0.65, 1.0])
-	g.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 0.55), Color(1, 1, 1, 1), Color(1, 1, 1, 0.55), Color(1, 1, 1, 0)])
+	g.offsets = PackedFloat32Array([0.0, 0.18, 0.5, 0.82, 1.0])
+	g.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 0.8), Color(1, 1, 1, 1), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)])
 	var tex := GradientTexture2D.new()
 	tex.gradient = g
 	tex.fill_from = Vector2(0, 0)
@@ -55,12 +59,12 @@ static func _material() -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD if additive else BaseMaterial3D.BLEND_MODE_MIX
 	m.vertex_color_use_as_albedo = true
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	m.albedo_texture = tex
 	m.disable_receive_shadows = true
-	_mat = m
+	_mats[additive] = m
 	return m
 
 
@@ -85,8 +89,10 @@ func feed(p: Vector3, on: bool, dt: float) -> void:
 			visible = false
 		return
 	if on:
+		# the newest point is a live head that follows `p`; it is left behind as a fixed
+		# point once it is `spacing` past the one before it
 		var n: int = _pts.size()
-		if n == 0 or _pts[n - 1].distance_to(p) > spacing:
+		if n < 2 or _pts[n - 2].distance_to(_pts[n - 1]) > spacing:
 			_pts.append(p)
 			_ages.append(0.0)
 		else:
@@ -119,7 +125,7 @@ func _rebuild() -> void:
 		var k: float = clampf(1.0 - _ages[i] / life, 0.0, 1.0)
 		# taper to a point at the old end and ease in over the newest few centimetres
 		var w: float = width * k * clampf(float(n - 1 - i + 1) / 2.0, 0.35, 1.0)
-		var c := Color(color.r, color.g, color.b, color.a * k * k)
+		var c := Color(color.r, color.g, color.b, color.a * k * (0.4 + 0.6 * k))
 		_im.surface_set_color(c)
 		_im.surface_set_uv(Vector2(k, 0.0))
 		_im.surface_add_vertex(p + side * w)

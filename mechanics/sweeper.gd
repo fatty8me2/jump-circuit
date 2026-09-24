@@ -12,6 +12,8 @@ extends Node3D
 @export var bar_thickness: float = 0.5
 
 var _pivot: Node3D
+var _tips: Array[Node3D] = []
+var _swooshes: Array[Swoosh] = []
 
 
 func _ready() -> void:
@@ -35,6 +37,15 @@ func _ready() -> void:
 			"aabb": AABB(Vector3(-arm_length - 2.0, -2.0, -arm_length - 2.0), Vector3(arm_length * 2.0 + 4.0, 4.0, arm_length * 2.0 + 4.0))})
 		wake.position = kz.position
 		holder.add_child(wake)
+		# a hot ribbon traced by the bar's tip (the fastest, most dangerous point)
+		var tip := Node3D.new()
+		tip.position = Vector3(arm_length + 0.25, bar_height, 0)
+		holder.add_child(tip)
+		_tips.append(tip)
+		var sw: Swoosh = Swoosh.make(Color(1.0, 0.2, 0.05, 0.9), bar_thickness * 0.6, 0.3, false)
+		sw.spacing = 0.1
+		add_child(sw)
+		_swooshes.append(sw)
 	_apply()
 	add_to_group("course_clock")
 
@@ -43,6 +54,13 @@ func _ready() -> void:
 func snap_to_clock() -> void:
 	_apply()
 	reset_physics_interpolation()
+	for s: Swoosh in _swooshes:
+		s.clear()
+
+
+func _process(dt: float) -> void:
+	for i: int in _tips.size():
+		_swooshes[i].feed(_tips[i].global_position, true, dt)
 
 
 func angle_at(time: float) -> float:

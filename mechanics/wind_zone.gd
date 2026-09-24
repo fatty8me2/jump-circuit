@@ -54,7 +54,7 @@ func _ready() -> void:
 	qm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	qm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	qm.vertex_color_use_as_albedo = true  # needed for the fade ramp to reach the pixels
-	qm.albedo_color = Color(1, 1, 1, 0.35)
+	qm.albedo_color = Color(0.92, 0.97, 1.0, 0.5)
 	m.material = qm  # no billboard: a thin box reads along the wind from any angle
 	p.draw_pass_1 = m
 	add_child(p)

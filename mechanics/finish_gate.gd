@@ -80,6 +80,25 @@ func _ready() -> void:
 	_confetti = _make_confetti()
 	add_child(_confetti)
 	_build_fireworks()
+	_build_idle_fx(ac)
+
+
+## Idle: a slow updraft of glints through the curtain and sparks sifting off the lintel,
+## so the goal reads as alive from far away (two small local emitters, visual only).
+func _build_idle_fx(ac: Color) -> void:
+	var vis := AABB(Vector3(-width, -1.0, -3.0), Vector3(width * 2.0, gate_height + 6.0, 6.0))
+	var rise: GPUParticles3D = Fx.embers({"amount": 22, "lifetime": 2.6, "local": true,
+		"extents": Vector3(width * 0.45, 0.05, 0.15), "speed": Vector2(1.2, 2.2), "tex": Fx.Tex.STAR,
+		"size": 0.26, "curve": "pop", "color": Fx.hot(ac.lerp(Color.WHITE, 0.3), 2.0), "turbulence": 0.4,
+		"preprocess": 2.6, "aabb": vis})
+	rise.position = Vector3(0, 0.1, 0)
+	add_child(rise)
+	var sift: GPUParticles3D = Fx.emitter({"amount": 14, "lifetime": 1.6, "local": true, "shape": "box",
+		"extents": Vector3(width * 0.5, 0.02, 0.4), "dir": Vector3.DOWN, "spread": 12.0,
+		"speed": Vector2(0.4, 1.0), "gravity": Vector3(0, -1.2, 0), "size": 0.12,
+		"fade": PackedFloat32Array([0.0, 1.0, 0.0]), "color": Fx.hot(ac, 2.4), "preprocess": 1.6, "aabb": vis})
+	sift.position = Vector3(0, gate_height - 0.05, 0)
+	add_child(sift)
 
 
 func _build_fireworks() -> void:
