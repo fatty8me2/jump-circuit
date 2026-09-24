@@ -45,6 +45,9 @@ static func em(o: Dictionary) -> GPUParticles3D:
 		d["aabb"] = AABB(Vector3.ONE * -h, Vector3.ONE * h * 2.0)
 	var p: GPUParticles3D = Fx.emitter(d)
 	var pm := p.process_material as ParticleProcessMaterial
+	if bool(d.get("align", false)):
+		pm.particle_flag_align_y = true
+		p.transform_align = GPUParticles3D.TRANSFORM_ALIGN_Z_BILLBOARD_Y_TO_VELOCITY
 	if d.has("orbit"):
 		pm.orbit_velocity_min = float(d["orbit"]) * 0.8
 		pm.orbit_velocity_max = float(d["orbit"])
@@ -52,6 +55,56 @@ static func em(o: Dictionary) -> GPUParticles3D:
 		pm.tangential_accel_min = float(d["tangential"]) * 0.8
 		pm.tangential_accel_max = float(d["tangential"])
 	return p
+
+
+## A teardrop flame (round at the bottom, pointed at the top), white; tinted per particle.
+## Use with "facing": "velocity" so the tip trails along the motion.
+static func flame_texture() -> Texture2D:
+	if _mats.has("flame_tex"):
+		return _mats["flame_tex"]
+	var w: int = 32
+	var h: int = 64
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for y: int in h:
+		for x: int in w:
+			var u: float = (float(x) + 0.5) / float(w) * 2.0 - 1.0
+			var v: float = 1.0 - (float(y) + 0.5) / float(h)   # 0 bottom .. 1 top
+			# half-width: a round base swelling to v ~ 0.25, then tapering to a point
+			var hw: float = sqrt(clampf(v / 0.25, 0.0, 1.0)) if v < 0.25 else pow(clampf((1.0 - v) / 0.75, 0.0, 1.0), 1.3)
+			hw *= 0.9
+			var d: float = absf(u) / maxf(hw, 0.001)
+			var a: float = clampf(1.0 - d, 0.0, 1.0)
+			a = a * a * (3.0 - 2.0 * a)
+			a *= smoothstep(0.0, 0.08, v)
+			img.set_pixel(x, y, Color(1, 1, 1, a))
+	var t := ImageTexture.create_from_image(img)
+	_mats["flame_tex"] = t
+	return t
+
+
+## A velocity-aligned quad with the flame texture (flame tongues). Cached per blend and size.
+static func flame_quad(additive: bool, size: Vector2) -> QuadMesh:
+	var key: String = "flameq|%s|%s" % [additive, size]
+	if _mats.has(key):
+		return _mats[key]
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.blend_mode = BaseMaterial3D.BLEND_MODE_ADD if additive else BaseMaterial3D.BLEND_MODE_MIX
+	m.vertex_color_use_as_albedo = true
+	m.albedo_texture = flame_texture()
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.disable_receive_shadows = true
+	var q := QuadMesh.new()
+	q.size = size
+	q.material = m
+	_mats[key] = q
+	return q
+
+
+## Flame-tongue emitter options: velocity-aligned teardrops (merge into an `em` dictionary).
+static func tongues(size: Vector2, additive: bool = false) -> Dictionary:
+	return {"facing": "mesh", "mesh": flame_quad(additive, size), "align": true}
 
 
 ## A particle quad whose material fades where it meets geometry (big puffs of smoke and
@@ -255,13 +308,14 @@ void fragment() {
 ## bands and a soft fresnel edge (the Energy Wave).
 const BEAM: String = """
 shader_type spatial;
-render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
+render_mode unshaded, BLEND, depth_draw_never, cull_disabled, shadows_disabled;
 uniform vec4 core : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform vec4 glow : source_color = vec4(0.35, 0.7, 1.0, 1.0);
 uniform float energy = 2.5;
 uniform float alpha = 1.0;
 uniform float scroll = 18.0;
 uniform float length_m = 10.0;
+uniform float edge_alpha = 0.25;
 varying vec3 lpos;
 NOISE
 void vertex() {
@@ -278,7 +332,7 @@ void fragment() {
 	vec3 c = mix(glow.rgb, core.rgb, clamp(coref * 1.1 + n * 0.2, 0.0, 1.0));
 	ALBEDO = c * energy * (0.75 + 0.45 * bands);
 	float tip = smoothstep(0.5, 0.47, lpos.y) * smoothstep(-0.5, -0.49, lpos.y);
-	ALPHA = clamp((0.25 + facing * 0.9) * alpha * tip, 0.0, 1.0);
+	ALPHA = clamp((edge_alpha + pow(facing, 1.3) * 0.9) * alpha * tip, 0.0, 1.0);
 }
 """
 
@@ -295,7 +349,9 @@ static func shader(key: String) -> Shader:
 		"energy":
 			code = ENERGY_BODY
 		"beam":
-			code = BEAM
+			code = BEAM.replace("BLEND", "blend_add")
+		"beam_mix":
+			code = BEAM.replace("BLEND", "blend_mix")
 	var sh := Shader.new()
 	sh.code = code.replace("NOISE", NOISE_GLSL)
 	_shaders[key] = sh
@@ -326,9 +382,9 @@ static func energy_mat(base: Color, hot: Color, energy: float = 1.3, flow: float
 	return m
 
 
-static func beam_mat(core: Color, glow: Color, energy: float = 2.5) -> ShaderMaterial:
+static func beam_mat(core: Color, glow: Color, energy: float = 2.5, mix: bool = false) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
-	m.shader = shader("beam")
+	m.shader = shader("beam_mix" if mix else "beam")
 	m.set_shader_parameter("core", core)
 	m.set_shader_parameter("glow", glow)
 	m.set_shader_parameter("energy", energy)
@@ -486,23 +542,44 @@ static func slash(parent: Node, center: Vector3, basis: Basis, radius: float, a0
 		var head: float = clampf(k, 0.0, 1.0)
 		if head <= 0.01:
 			return
-		im.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+		# a soft stroke: three rows (inner edge, bright spine, outer edge), pointed at both ends
+		var rows: Array = []
 		for i: int in steps + 1:
 			var u: float = float(i) / float(steps) * head
 			var a: float = lerpf(a0, a1, u)
 			var dir := Vector3(sin(a), 0, -cos(a))
-			# fat near the head, tapering back to the tail
 			var rel: float = u / head
-			var w: float = width * pow(rel, 1.4) * (1.0 - pow(rel, 12.0) * 0.6) + 0.01
-			var fa: float = pow(rel, 1.2) * (1.0 - fade_k)
-			var col: Color = color.lerp(core, pow(rel, 3.0) * 0.8)
-			col.a = fa
-			var cin: Color = col
-			cin.a = fa * 0.25
-			im.surface_set_color(cin)
-			im.surface_add_vertex(dir * (radius - w))
-			im.surface_set_color(col)
-			im.surface_add_vertex(dir * (radius + w * 0.35))
+			var w: float = width * pow(sin(PI * clampf(rel * 0.92 + 0.04, 0.0, 1.0)), 0.6) + 0.01
+			var fa: float = smoothstep(0.0, 0.3, rel) * (1.0 - fade_k)
+			var spine: Color = color.lerp(core, 0.35 + 0.65 * pow(rel, 2.0))
+			spine.a = fa
+			var edge_c: Color = color
+			edge_c.a = fa * 0.12
+			rows.append([dir * (radius - w), dir * radius, dir * (radius + w * 0.6), edge_c, spine])
+		im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+		for i: int in steps:
+			var r0: Array = rows[i]
+			var r1: Array = rows[i + 1]
+			for band: int in 2:
+				# quad between row band and band+1 of both steps
+				var e0: int = band
+				var e1: int = band + 1
+				var c00: Color = r0[4] if e0 == 1 else r0[3]
+				var c01: Color = r0[4] if e1 == 1 else r0[3]
+				var c10: Color = r1[4] if e0 == 1 else r1[3]
+				var c11: Color = r1[4] if e1 == 1 else r1[3]
+				im.surface_set_color(c00)
+				im.surface_add_vertex(r0[e0])
+				im.surface_set_color(c01)
+				im.surface_add_vertex(r0[e1])
+				im.surface_set_color(c11)
+				im.surface_add_vertex(r1[e1])
+				im.surface_set_color(c00)
+				im.surface_add_vertex(r0[e0])
+				im.surface_set_color(c11)
+				im.surface_add_vertex(r1[e1])
+				im.surface_set_color(c10)
+				im.surface_add_vertex(r1[e0])
 		im.surface_end()
 	draw.call(0.02, 0.0)
 	var tw: Tween = mi.create_tween()

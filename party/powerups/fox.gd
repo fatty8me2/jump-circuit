@@ -361,13 +361,18 @@ func _claw() -> void:
 ## the ghost of a huge paw behind them, slash sparks and a ring where they meet.
 static func _claw_fx(parent: Node, o: Vector3, dir: Vector3) -> void:
 	var b := PartyFx.facing(dir)
-	var tilt := Basis(dir, deg_to_rad(-55.0)) * b
-	var c: Vector3 = o + dir * 0.15
+	# the rake is drawn across the view in front of the fox (a plane facing the attack, leaned
+	# forward a little), so it reads from behind - the player's own camera - and from the side
+	var right: Vector3 = b.x
+	var up: Vector3 = b.y
+	var y: Vector3 = -dir
+	var plane := Basis(right, y, right.cross(y)).rotated(right, deg_to_rad(-35.0))
+	var c: Vector3 = o + dir * 1.1 + right * 0.55 - up * 0.7
 	# the huge faint paw smear behind the claws
-	HeroFx.slash(parent, c, tilt, 1.45, -1.25, 1.15, Color(1.0, 0.25, 0.02, 0.4), 0.55, 0.1, 0.3, Color(1.1, 0.5, 0.08, 0.55))
+	HeroFx.slash(parent, c, plane, 1.25, 0.5, -1.5, Color(1.0, 0.25, 0.02, 0.45), 0.6, 0.1, 0.3, Color(1.1, 0.45, 0.06, 0.6))
 	# three raking talons: concentric, bright-cored, drawn one after another
 	for i: int in 3:
-		HeroFx.slash(parent, c, tilt, 1.15 + 0.2 * float(i), -1.05 - 0.05 * float(i), 1.0, Color(1.2, 0.32 + 0.1 * float(i), 0.02), 0.11, 0.06 + 0.02 * float(i), 0.26, Color(1.4, 1.25, 1.0))
+		HeroFx.slash(parent, c, plane, 0.95 + 0.26 * float(i), 0.45, -1.4 - 0.05 * float(i), Color(1.2, 0.3 + 0.08 * float(i), 0.02), 0.13, 0.06 + 0.02 * float(i), 0.28, Color(1.5, 1.35, 1.1))
 	var hit: Vector3 = o + dir * 1.5
 	HeroFx.sparks(parent, hit, Color(2.0, 1.0, 0.3), 26, 12.0, (dir + (b * Vector3(1, 0, 0)) * 0.6).normalized(), 40.0, 0.55)
 	HeroFx.pop(parent, {"amount": 22, "lifetime": 0.4, "spread": 45.0, "dir": dir, "speed": Vector2(4.0, 9.0),
@@ -621,7 +626,7 @@ static func _boom_fx(layer_ref: PartyLayer, pos: Vector3, radius: float) -> void
 	# 1. the flash: a white-hot violet core
 	HeroFx.orb(layer_ref, pos, Color(1.0, 0.85, 1.0, 1.0), 0.4, radius * 0.42, 0.14)
 	# 2. a dark sphere with a hot violet rim swallows the blast radius
-	HeroFx.dome(layer_ref, pos, Color(0.08, 0.0, 0.16), Color(0.95, 0.4, 1.3), radius * 0.62, 0.22, 0.5, true, 1.25, 0.55)
+	HeroFx.dome(layer_ref, pos, Color(0.08, 0.0, 0.16), Color(0.95, 0.4, 1.3), radius * 0.62, 0.22, 0.5, true, 1.25, 0.7)
 	# 3. a fireball boils out of it, glowing chakra shards and sparks fly
 	HeroFx.fireball(layer_ref, pos, radius * 0.55, 30, Color(1.4, 1.2, 0.8), Color(1.2, 0.45, 0.05), Color(0.35, 0.2, 0.4, 0.55))
 	HeroFx.burst(layer_ref, pos, Color(1.2, 0.45, 1.5), 36, radius * 2.4, 0.45, 0.5)
