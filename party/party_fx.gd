@@ -861,8 +861,9 @@ static func _starburst_mesh() -> ArrayMesh:
 static func ko_burst(parent: Node, pos: Vector3, color: Color = Color(1.0, 0.45, 0.25)) -> void:
 	if parent == null or not parent.is_inside_tree():
 		return
-	orb_pulse(parent, pos, Color(1, 1, 1, 0.7), 0.2, 0.9, 0.12, 2.5)
-	orb_pulse(parent, pos, Color(color.r, color.g, color.b, 0.45), 0.4, 2.2, 0.4, 1.4)
+	# kept soft: a camera right next to the KO (a claw on a practice dummy) sits inside these orbs
+	orb_pulse(parent, pos, Color(1, 1, 1, 0.3), 0.2, 0.8, 0.12, 1.1)
+	orb_pulse(parent, pos, Color(color.r, color.g, color.b, 0.28), 0.4, 2.0, 0.4, 0.8)
 	star_ring(parent, pos, Color(1.0, 0.88, 0.35), 14, 9.0, 0.65)
 	star_ring(parent, pos + Vector3(0, 0.2, 0), Color(1.0, 1.0, 0.9), 8, 5.0, 0.4, Vector3(0.3, 0.2, 1.0))
 	one_shot(parent, pos, {"amount": 44, "lifetime": 0.55, "size": Vector2(0.1, 0.8), "color": color.lerp(Color(1.4, 1.2, 0.8), 0.5),
@@ -872,10 +873,10 @@ static func ko_burst(parent: Node, pos: Vector3, color: Color = Color(1.0, 0.45,
 	ring_pulse(parent, pos, Vector3.UP, color, 0.3, 3.6, 0.42, 0.14)
 	ring_pulse(parent, pos, Vector3.UP, Color(1, 1, 1), 0.2, 2.4, 0.3, 0.08)
 	beam(parent, pos - Vector3(0, 0.9, 0), pos + Vector3(0, 7.5, 0), Color(color.r, color.g, color.b, 0.35), 0.5, 0.5, 1.8)
-	beam(parent, pos - Vector3(0, 0.9, 0), pos + Vector3(0, 7.5, 0), Color(1, 0.95, 0.85, 0.8), 0.12, 0.35, 3.0)
+	beam(parent, pos - Vector3(0, 0.9, 0), pos + Vector3(0, 7.5, 0), Color(1, 0.95, 0.85, 0.5), 0.12, 0.35, 1.8)
 	smoke(parent, pos, Color(0.3, 0.26, 0.3, 0.55), 12, 0.8, 1.2)
 	comic_burst(parent, pos + Vector3(0, 1.4, 0), "KO!", Color(1.0, 0.3, 0.2), 1.25)
-	flash(parent, pos, color.lerp(Color.WHITE, 0.4), 10.0, 12.0, 0.5)
+	flash(parent, pos, color.lerp(Color.WHITE, 0.25), 4.5, 10.0, 0.4)
 
 
 ## A scorched ring left on the ground: a dark soft disc with a glowing rim that cools, and
