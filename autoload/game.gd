@@ -9,7 +9,9 @@ const LEVELS: Array[Dictionary] = [
 	{"id": "clockwork", "name": "Clockwork Heights", "scene": "res://levels/level_4_clockwork.tscn", "blurb": "Watch the rhythm, commit, never stop."},
 	{"id": "reef", "name": "Coral Depths", "scene": "res://levels/level_5_reef.tscn", "blurb": "A sunken reef. Ride the currents, mind the eels."},
 	{"id": "orbital", "name": "Orbital Drift", "scene": "res://levels/level_6_orbital.tscn", "blurb": "A station in low orbit. Run the walls, don't drift."},
-	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_7_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon."},
+	{"id": "xeno", "name": "Xeno Wilds", "scene": "res://levels/level_7_xeno.tscn", "blurb": "A glowing alien jungle under a ringed giant. Mind what bites."},
+	{"id": "volcano", "name": "Cinder Peak", "scene": "res://levels/level_8_volcano.tscn", "blurb": "The mountain is erupting. Outclimb the lava, dodge the bombs."},
+	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_9_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon."},
 ]
 const TITLE_SCENE: String = "res://ui/title.tscn"
 ## Party Mode actions and their default bindings (Settings can rebind the key / mouse and pad

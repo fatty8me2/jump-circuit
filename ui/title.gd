@@ -345,6 +345,16 @@ func _levels_screen() -> Control:
 	box.add_child(UiKit.shadowed(UiKit.label("LEVEL SELECT", 40, Color.WHITE), 8))
 	var first_open: Button = null
 	var last_unlocked: Button = null
+	# nine courses outgrow a 720p screen: the list scrolls, following the pad / keyboard focus
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.follow_focus = true
+	var list: VBoxContainer = UiKit.vbox(10)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	var rows_h: float = float(Game.LEVELS.size()) * 58.0
+	scroll.custom_minimum_size = Vector2(532, clampf(rows_h, 180.0, get_viewport().get_visible_rect().size.y - 250.0))
+	box.add_child(scroll)
 	for i: int in Game.LEVELS.size():
 		var info: Dictionary = Game.LEVELS[i]
 		var unlocked: bool = Game.is_level_unlocked(i)
@@ -361,7 +371,7 @@ func _levels_screen() -> Control:
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.disabled = not unlocked
 		b.tooltip_text = info["blurb"]
-		box.add_child(b)
+		list.add_child(b)
 		if unlocked:
 			last_unlocked = b
 			if first_open == null and not SaveData.is_completed(info["id"]):

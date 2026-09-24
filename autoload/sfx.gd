@@ -23,7 +23,7 @@ const LAYER_RULES: Dictionary = {
 ## chime always lands in the key of the score it plays over. Wraps after an octave.
 const CHIME_MAJOR: Array[int] = [0, 2, 4, 7, 9, 12, 14, 16]
 const CHIME_MINOR: Array[int] = [0, 3, 5, 7, 10, 12, 15, 17]
-const MINOR_THEMES: Array[String] = ["foundry", "clockwork", "ascent"]
+const MINOR_THEMES: Array[String] = ["foundry", "clockwork", "volcano", "ascent"]
 ## Variant files are clip_1 .. clip_N; one of them is picked at random (never twice running).
 const MAX_VARIANTS: int = 8
 
