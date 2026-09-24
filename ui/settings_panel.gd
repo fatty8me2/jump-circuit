@@ -38,6 +38,7 @@ func _ready() -> void:
 	_slider_row(box, "Master volume", 0.0, 1.0, Settings.master_volume, func(v: float) -> void: Settings.master_volume = v, pct)
 	_slider_row(box, "Effects", 0.0, 1.0, Settings.sfx_volume, func(v: float) -> void: Settings.sfx_volume = v, pct)
 	_slider_row(box, "Music", 0.0, 1.0, Settings.music_volume, func(v: float) -> void: Settings.music_volume = v, pct)
+	_slider_row(box, "Ambience", 0.0, 1.0, Settings.ambience_volume, func(v: float) -> void: Settings.ambience_volume = v, pct)
 
 	_section(box, "Graphics & HUD")
 	_option_row(box, "Quality", Settings.QUALITY_NAMES, Settings.quality, func(i: int) -> void: Settings.quality = i)

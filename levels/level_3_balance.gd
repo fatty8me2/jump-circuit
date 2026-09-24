@@ -44,7 +44,7 @@ var _b: Basis = Basis.IDENTITY
 
 func _configure() -> void:
 	theme_id = "balance"
-	music_track = "a"
+	music_track = "balance"
 	kill_y = -45.0
 	# 0 = main line, 1 = every fork's other branch, 2 = the other branches plus the shortcuts
 	route_variants = 3

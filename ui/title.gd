@@ -37,7 +37,6 @@ func _ready() -> void:
 	_ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	_ui.theme = UiKit.theme()
 	layer.add_child(_ui)
-	Sfx.music("title")
 	Game.input_device_changed.connect(_update_controls_hint)
 	Net.roster_changed.connect(_refresh_lobby)
 	Net.joined_lobby.connect(func() -> void:
@@ -151,6 +150,18 @@ func show_screen(id: String) -> void:
 			_screen = _main_screen()
 	_ui.add_child(_screen)
 	UiKit.focus_first(_screen, _focus_pref)
+	Sfx.music(screen_music(id))
+
+
+## The score behind each title screen: the main theme on the menus, the lobby groove while
+## getting a race or party together, the grand reprise once every course is beaten.
+static func screen_music(id: String) -> String:
+	match id:
+		"race", "lobby", "practice":
+			return "lobby"
+		"victory":
+			return "victory"
+	return "title"
 
 
 ## Esc / pad B backs out of a sub-screen exactly like its Back / Done / Leave button.

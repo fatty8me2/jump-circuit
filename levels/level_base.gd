@@ -15,7 +15,9 @@ const PLAYER_SCENE: PackedScene = preload("res://player/player.tscn")
 
 var level_id: String = "playground"
 var theme_id: String = "gardens"
-var music_track: String = "a"
+## Score: res://audio/music_<track>.ogg (+ _hi layer). Every map has its own; the playground
+## borrows the lobby groove.
+var music_track: String = "lobby"
 ## Absolute floor of the world.
 var kill_y: float = -60.0
 ## Falling this far below the last footing (with nothing underneath) is a fail.
@@ -58,8 +60,11 @@ func _ready() -> void:
 	_build()
 	_collect_checkpoints()
 	_spawn_player()
+	Sfx.set_theme(theme_id)
 	if not headless_mode:
 		Sfx.music(music_track)
+		# Party Mode is chaos from the first second: the full score throughout
+		Sfx.music_progress(1.0 if Game.party != null else 0.0)
 	if Game.race_mode:
 		_setup_race()
 	else:
@@ -403,6 +408,8 @@ func restart_run() -> void:
 	splits.fill(-1.0)
 	for cp: Checkpoint in checkpoints:
 		cp.set_active(false, false)
+	if Game.party == null:
+		Sfx.music_progress(0.0)
 	hud.clear_banner()
 	respawn()
 
@@ -429,8 +436,10 @@ func _on_checkpoint(cp: Checkpoint) -> void:
 	splits[cp.index - 1] = run_time
 	for other: Checkpoint in checkpoints:
 		other.set_active(other.index == cp.index)
-	# the chime climbs a little with every stage banked
-	Sfx.play("checkpoint", 0.0, 1.0, minf(1.0 + 0.03 * float(cp.index - 1), 1.3))
+	# the chime climbs the map's scale with every stage banked, and the score builds
+	Sfx.checkpoint_chime(cp.index)
+	if Game.party == null:
+		Sfx.music_progress(float(cp.index) / float(maxi(checkpoints.size(), 1)))
 	hud.checkpoint_reached(cp.index, run_time)
 	player.visual.on_checkpoint()
 	if Game.race_mode:
@@ -447,7 +456,9 @@ func _on_finish() -> void:
 	if _pause != null and _pause.open:
 		_pause.set_open(false)
 	var time: float = run_time
-	Sfx.play("finish")
+	# the map's own fanfare over the ducked score, which then hands over to the results music
+	if headless_mode or not Sfx.fanfare("fanfare_" + music_track, "results"):
+		Sfx.play("finish")
 	player.visual.on_cheer()
 	level_finished.emit(time)
 	if party != null:
@@ -470,6 +481,8 @@ func _on_finish() -> void:
 		is_best = SaveData.record_finish(level_id, time, deaths, splits)
 	await _finish_sequence()
 	hud.show_results(time, prev_best, is_best, deaths, prev_ff)
+	if is_best and prev_best >= 0.0:
+		Sfx.play("new_best")
 
 
 ## Override for a bespoke ending (level 5's beacon).

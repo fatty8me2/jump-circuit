@@ -31,6 +31,11 @@ func _ready() -> void:
 	_root.add_child(dim)
 
 
+## Leaving the level from the menu (restart, title) must not leave the score muffled.
+func _exit_tree() -> void:
+	Sfx.muffle(false)
+
+
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT:
 		# solo only: a race clock is shared and can't pause
@@ -82,6 +87,7 @@ func set_open(on: bool) -> void:
 		_click_guard_until = 0
 	if not Game.race_mode:
 		get_tree().paused = on
+		Sfx.muffle(on)
 	level.player.control_enabled = (not on) and (not level.finished) and (not Game.race_mode or Game.course_time >= 0.0)
 	level.camera.mouse_enabled = not on
 	# a finished run keeps the cursor for its results panel

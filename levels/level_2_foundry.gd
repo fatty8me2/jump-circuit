@@ -57,7 +57,7 @@ var _tuning: MovementTuning
 
 func _configure() -> void:
 	theme_id = "foundry"
-	music_track = "b"
+	music_track = "foundry"
 	kill_y = -45.0
 	# 0 = main line at every split; 1 = the alternative at every split (see the stage notes)
 	route_variants = 2

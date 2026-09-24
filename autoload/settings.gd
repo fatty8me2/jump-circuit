@@ -15,6 +15,8 @@ var fov: float = 72.0
 var master_volume: float = 0.8
 var sfx_volume: float = 0.9
 var music_volume: float = 0.4
+## Map soundscapes (wind, birds, surf, furnace roar...), on their own bus.
+var ambience_volume: float = 0.7
 ## 0 low, 1 medium, 2 high, 3 ultra (saves from before Ultra only ever hold 0-2)
 var quality: int = 2
 const QUALITY_NAMES: Array[String] = ["Low", "Medium", "High", "Ultra"]
@@ -43,7 +45,7 @@ func _ready() -> void:
 
 
 func _ensure_buses() -> void:
-	for bus_name: String in ["SFX", "Music"]:
+	for bus_name: String in ["SFX", "Music", "Ambience"]:
 		if AudioServer.get_bus_index(bus_name) < 0:
 			AudioServer.add_bus()
 			var idx: int = AudioServer.bus_count - 1
@@ -78,6 +80,7 @@ func _sanitize() -> void:
 	master_volume = _finite_clamp(master_volume, 0.0, 1.0, 0.8)
 	sfx_volume = _finite_clamp(sfx_volume, 0.0, 1.0, 0.9)
 	music_volume = _finite_clamp(music_volume, 0.0, 1.0, 0.4)
+	ambience_volume = _finite_clamp(ambience_volume, 0.0, 1.0, 0.7)
 	quality = clampi(quality, 0, QUALITY_NAMES.size() - 1)
 	color_index = posmod(color_index, RACER_COLORS.size())
 	if timer_mode not in ["auto", "on", "off"]:
@@ -134,7 +137,7 @@ func toggle_fullscreen() -> void:
 
 
 func _props() -> Array[String]:
-	return ["mouse_sensitivity", "invert_y", "fov", "master_volume", "sfx_volume", "music_volume",
+	return ["mouse_sensitivity", "invert_y", "fov", "master_volume", "sfx_volume", "music_volume", "ambience_volume",
 		"quality", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_room_code", "party_binds"]
 
 
@@ -153,6 +156,7 @@ func apply() -> void:
 	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(master_volume, 0.0001)))
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("SFX"), linear_to_db(maxf(sfx_volume, 0.0001)))
 	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Music"), linear_to_db(maxf(music_volume, 0.0001)))
+	AudioServer.set_bus_volume_db(AudioServer.get_bus_index("Ambience"), linear_to_db(maxf(ambience_volume, 0.0001)))
 	if DisplayServer.get_name() != "headless":
 		var want: int = DisplayServer.WINDOW_MODE_FULLSCREEN if fullscreen else DisplayServer.WINDOW_MODE_WINDOWED
 		if DisplayServer.window_get_mode() != want and not (not fullscreen and DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MAXIMIZED):

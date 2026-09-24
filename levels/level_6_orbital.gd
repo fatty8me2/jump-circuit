@@ -49,7 +49,7 @@ var _arrivals: Array[Dictionary] = []
 
 func _configure() -> void:
 	theme_id = "orbital"
-	music_track = "b"
+	music_track = "orbital"
 	kill_y = -80.0
 	route_variants = 3
 

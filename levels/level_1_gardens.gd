@@ -50,7 +50,7 @@ const MILL_PERIOD: float = 8.0
 
 func _configure() -> void:
 	theme_id = "gardens"
-	music_track = "a"
+	music_track = "gardens"
 	kill_y = -40.0
 	route_variants = 2
 

@@ -45,7 +45,7 @@ var _second_b: Node3D
 
 func _configure() -> void:
 	theme_id = "clockwork"
-	music_track = "b"
+	music_track = "clockwork"
 	kill_y = -60.0
 	route_variants = 2
 

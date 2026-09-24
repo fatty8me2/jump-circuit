@@ -144,6 +144,25 @@ def write_wav(name, data, sr, loop=False):
     return path
 
 
+def write_ogg(name, data, sr, quality=0.55):
+    """Ogg Vorbis writer (needs the soundfile package).  `quality` is libsndfile's
+    compression level: 0 = best / biggest, 1 = smallest.  Written in blocks: one big
+    write crashes libsndfile's Vorbis encoder on Windows.  Loops are set at runtime
+    (AudioStreamOggVorbis.loop), so no loop metadata is stored."""
+    import soundfile as sf  # only the music / ambience generators need it
+    data = np.asarray(data, dtype=np.float64)
+    if not np.all(np.isfinite(data)):
+        raise ValueError(name + ": non-finite samples")
+    data = np.clip(data, -1.0, 1.0)
+    ch = 1 if data.ndim == 1 else data.shape[1]
+    os.makedirs(OUT, exist_ok=True)
+    path = os.path.join(OUT, name + ".ogg")
+    with sf.SoundFile(path, "w", sr, ch, format="OGG", subtype="VORBIS", compression_level=quality) as fh:
+        for i in range(0, len(data), 16384):
+            fh.write(data[i:i + 16384])
+    return path
+
+
 def finish_sfx(name, x, fin=0.002, fout=0.008):
     x = norm_peak(fade(x, SR, fin, fout))
     write_wav(name, x, SR)

@@ -37,7 +37,7 @@ var _env: Environment
 
 func _configure() -> void:
 	theme_id = "ascent"
-	music_track = "b"
+	music_track = "ascent"
 	kill_y = -30.0
 	route_variants = 2
 
@@ -1349,7 +1349,9 @@ func _build_beacon(pos: Vector3) -> void:
 ## The ending: the crystal ignites, a beam splits the sky, the night warms up,
 ## and the camera pulls back to take it in.
 func _finish_sequence() -> void:
-	Sfx.play("beacon")
+	# fanfare_ascent is scored to the beacon lighting; the old riser only without it
+	if not Sfx.has_clip("fanfare_ascent"):
+		Sfx.play("beacon")
 	for i: int in _fireworks.size():
 		get_tree().create_timer(1.3 + 0.28 * float(i)).timeout.connect(_fireworks[i].fire)
 	var mat := _crystal.material_override as StandardMaterial3D

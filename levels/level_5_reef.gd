@@ -47,7 +47,7 @@ var _finish_pos: Vector3 = Vector3.ZERO
 
 func _configure() -> void:
 	theme_id = "reef"
-	music_track = "a"
+	music_track = "reef"
 	kill_y = -90.0
 	# 0 = main line, 1 = every alternative branch, 2 = main line taking every optional shortcut
 	route_variants = 3
