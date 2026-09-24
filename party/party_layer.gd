@@ -651,6 +651,7 @@ func do_shove() -> void:
 	PartyFx.arc(self, origin + dir * 0.5, basis, 1.1, -0.9, 0.9, Color(1.0, 0.9, 0.6), 0.25, 0.18)
 	PartyFx.one_shot(self, origin + dir * 0.6, {"amount": 14, "lifetime": 0.3, "size": 0.3, "color": Color(1, 1, 1, 0.8),
 		"dir": dir, "spread": 25.0, "vmin": 6.0, "vmax": 10.0, "damping": 20.0})
+	_shove_dust(self, origin, dir)
 	sfx.play("whoosh", 0.7, 1.1)
 	send_fx("shove", "swing", {"o": PowerUp.arr(origin), "d": PowerUp.arr(dir)})
 	for t: Dictionary in targets_in_cone(origin, dir, 2.3, 0.35):
@@ -671,7 +672,17 @@ static func remote_fx_shove(layer_ref: PartyLayer, _from_id: int, _a: String, d:
 	if dir.length() < 0.1:
 		return
 	PartyFx.arc(layer_ref, o + dir * 0.5, PartyFx.facing(dir), 1.1, -0.9, 0.9, Color(1.0, 0.9, 0.6), 0.25, 0.18)
+	_shove_dust(layer_ref, o, dir)
 	layer_ref.sfx.play_at("whoosh", o, 0.7, 1.1)
+
+
+## The lunge kicks up a puff of dust at the feet and leaves a few speed lines.
+static func _shove_dust(parent: Node, o: Vector3, dir: Vector3) -> void:
+	PartyFx.one_shot(parent, o - Vector3(0, 0.7, 0) - dir * 0.2, {"amount": 10, "lifetime": 0.5, "size": 0.45,
+		"color": Color(0.85, 0.82, 0.75, 0.5), "additive": false, "tex": "smoke", "dir": -dir + Vector3(0, 0.4, 0),
+		"spread": 40.0, "vmin": 1.0, "vmax": 3.0, "damping": 4.0, "grow": true, "angle": true,
+		"colors": [Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)]})
+	PartyFx.speed_lines(parent, o - dir * 0.6, o + dir * 1.4, Color(1.3, 1.3, 1.3, 0.5), 8, 0.4)
 
 
 # ---- being hit (victim side) ----------------------------------------------------------------

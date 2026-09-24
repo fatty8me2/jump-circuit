@@ -935,8 +935,8 @@ static func forked_bolt(parent: Node, from: Vector3, to: Vector3, color: Color, 
 	var core := Color(1.0, 1.0, 1.0, 1.0).lerp(color, 0.25)
 	for i: int in n:
 		var w: float = lerpf(1.0, 0.6, float(i) / float(n))
-		beam(parent, pts[i], pts[i + 1], core, 0.06 * w, time, 6.0)
-		beam(parent, pts[i], pts[i + 1], Color(color.r, color.g, color.b, 0.3), 0.26 * w, time * 0.8, 2.5)
+		beam(parent, pts[i], pts[i + 1], core, 0.055 * w, time, 4.0)
+		beam(parent, pts[i], pts[i + 1], Color(color.r, color.g, color.b, 0.25), 0.18 * w, time * 0.8, 1.6)
 	for b: int in branches:
 		var at: int = rng.randi_range(2, n - 3)
 		var p: Vector3 = pts[at]
@@ -960,15 +960,15 @@ static func storm_cloud(parent: Node, pos: Vector3, radius: float = 1.8, life: f
 	var root := Node3D.new()
 	parent.add_child(root)
 	root.global_position = pos
-	var ext := Vector3(radius, radius * 0.35, radius)
+	var ext := Vector3(radius, radius * 0.25, radius)
 	# the body: a quick billow that builds it, then a steady churn
-	var billow: GPUParticles3D = emitter({"amount": 16, "lifetime": 0.9, "size": radius * 1.3, "color": Color(0.24, 0.25, 0.34, 0.95),
+	var billow: GPUParticles3D = emitter({"amount": 22, "lifetime": 0.9, "size": radius * 1.8, "color": Color(0.3, 0.31, 0.4, 0.95),
 		"additive": false, "tex": "smoke", "shape": "box", "extents": ext * 0.7, "vmin": 0.3, "vmax": 1.2,
 		"spread": 180.0, "damping": 1.5, "grow": true, "angle": true, "spin": 25.0, "one_shot": true, "explosiveness": 0.9,
 		"colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 0.95), Color(1, 1, 1, 0.9), Color(1, 1, 1, 0)], "aabb": radius * 3.0})
 	root.add_child(billow)
 	billow.emitting = true
-	var churn: GPUParticles3D = emitter({"amount": 14, "lifetime": 1.2, "size": radius * 1.1, "color": Color(0.2, 0.21, 0.3, 0.9),
+	var churn: GPUParticles3D = emitter({"amount": 16, "lifetime": 1.2, "size": radius * 1.5, "color": Color(0.26, 0.27, 0.36, 0.9),
 		"additive": false, "tex": "smoke", "shape": "box", "extents": ext, "vmin": 0.1, "vmax": 0.5, "spread": 180.0,
 		"grow": true, "angle": true, "spin": 30.0, "preprocess": 0.4, "aabb": radius * 3.0,
 		"colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 0.85), Color(1, 1, 1, 0)]})

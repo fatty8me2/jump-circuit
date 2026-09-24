@@ -65,7 +65,7 @@ static func _strikes(layer_ref: PartyLayer, pts: Array, seed_value: int) -> void
 		var s2: int = seed_value + i + 7
 		layer_ref.get_tree().create_timer(0.11, false).timeout.connect(func() -> void:
 			if is_instance_valid(layer_ref) and layer_ref.is_inside_tree():
-				PartyFx.forked_bolt(layer_ref, sky + Vector3(0.5, 0, -0.4), c, Color(0.9, 0.95, 1.0), s2, 0.18, 2))
+				PartyFx.forked_bolt(layer_ref, sky + Vector3(0.5, 0, -0.4), c, Color(0.9, 0.95, 1.0), s2, 0.18, 1))
 		i += 1
 
 
