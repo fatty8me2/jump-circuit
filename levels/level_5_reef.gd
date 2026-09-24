@@ -463,6 +463,8 @@ static func _blink_on(bp: BlinkPlatform, t0: float, t1: float) -> bool:
 # ---- the course ---------------------------------------------------------------------------------
 
 func _build() -> void:
+	# themed air at three depths around the camera (visual only)
+	add_child(Ambience.make(theme_id))
 	deco = ReefDecor.new(self, kit.rng)
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 4), 0.0)

@@ -141,6 +141,8 @@ func _at(n: Node3D, pos: Vector3) -> Node3D:
 
 
 func _build() -> void:
+	# themed air at three depths around the camera (visual only)
+	add_child(Ambience.make(theme_id))
 	set_spawn(Vector3(0, 0.1, 3), 0.0)
 	_stage_1()
 	_stage_2()

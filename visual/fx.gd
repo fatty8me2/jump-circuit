@@ -18,7 +18,7 @@ extends RefCounted
 ## or, for a rare one-off that cleans up after itself:
 ##   Fx.spawn(self, Fx.burst({...}), global_position)
 
-enum Tex { DOT, RING, STAR, SMOKE, SPARK }
+enum Tex { DOT, RING, STAR, SMOKE, SPARK, PETAL, BUBBLE }
 
 ## Render layer used for effects that should stay out of the player's blob-shadow
 ## decal (it culls layer 1 only) - same as the character layer.
@@ -70,6 +70,10 @@ static func texture(kind: Tex) -> Texture2D:
 			t = _smoke(64)
 		Tex.SPARK:
 			t = _spark(16, 64)
+		Tex.PETAL:
+			t = _petal(48)
+		Tex.BUBBLE:
+			t = _bubble(64)
 	_textures[kind] = t
 	return t
 
@@ -125,6 +129,39 @@ static func _smoke(px: int) -> ImageTexture:
 			fall = fall * fall * (3.0 - 2.0 * fall)
 			var n: float = noise.get_noise_2d(float(x), float(y)) * 0.5 + 0.5
 			img.set_pixel(x, y, Color(1, 1, 1, clampf(fall * (0.45 + 0.8 * n), 0.0, 1.0)))
+	return ImageTexture.create_from_image(img)
+
+
+## A solid little teardrop leaf / petal (tinted per particle; spin it).
+static func _petal(px: int) -> ImageTexture:
+	var img := Image.create(px, px, false, Image.FORMAT_RGBA8)
+	var h: float = float(px - 1) * 0.5
+	for y: int in px:
+		for x: int in px:
+			var u: float = (float(x) - h) / h
+			var v: float = (float(y) - h) / h
+			# ellipse, pinched toward one end
+			var w: float = 0.42 * (1.0 - 0.45 * v)
+			var d: float = sqrt(pow(u / maxf(w, 0.05), 2.0) + v * v)
+			var a: float = clampf((1.0 - d) * 6.0, 0.0, 1.0)
+			var shade: float = 0.82 + 0.18 * clampf(1.0 - absf(u) * 3.0, 0.0, 1.0)
+			img.set_pixel(x, y, Color(shade, shade, shade, a))
+	return ImageTexture.create_from_image(img)
+
+
+## A bubble: thin bright rim, faint body and a highlight glint.
+static func _bubble(px: int) -> ImageTexture:
+	var img := Image.create(px, px, false, Image.FORMAT_RGBA8)
+	var h: float = float(px - 1) * 0.5
+	for y: int in px:
+		for x: int in px:
+			var u: float = (float(x) - h) / h
+			var v: float = (float(y) - h) / h
+			var r: float = sqrt(u * u + v * v)
+			var rim: float = clampf(1.0 - absf(r - 0.86) * 9.0, 0.0, 1.0)
+			var body: float = 0.12 * clampf(1.0 - r, 0.0, 1.0) if r < 0.9 else 0.0
+			var gl: float = clampf(1.0 - Vector2(u + 0.35, v + 0.35).length() * 5.0, 0.0, 1.0)
+			img.set_pixel(x, y, Color(1, 1, 1, clampf(rim * 0.9 + body + gl, 0.0, 1.0)))
 	return ImageTexture.create_from_image(img)
 
 

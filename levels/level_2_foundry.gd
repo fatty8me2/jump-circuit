@@ -157,6 +157,8 @@ func _edge(c: Vector3, toward: Vector3, s: float = 1.6) -> Vector3:
 # ---- build -----------------------------------------------------------------------------
 
 func _build() -> void:
+	# themed air at three depths around the camera (visual only)
+	add_child(Ambience.make(theme_id))
 	_tuning = load("res://resources/default_tuning.tres") as MovementTuning
 	set_spawn(Vector3(5, 0.1, 5.5), 0.0)
 	_build_tower()

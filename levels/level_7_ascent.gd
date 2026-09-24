@@ -43,6 +43,8 @@ func _configure() -> void:
 
 
 func _build() -> void:
+	# themed air at three depths around the camera (visual only)
+	add_child(Ambience.make(theme_id))
 	_stars()
 	_tuning = load("res://resources/default_tuning.tres") as MovementTuning
 	var cp: Vector3 = _stage_1()
