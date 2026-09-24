@@ -2902,7 +2902,8 @@ func test_zp_party_finish_bar() -> void:
 
 ## Every map's ambience (sound/soundscape.gd): its bed (and second layer) load as looping Ogg and
 ## play on the Ambience bus through the pause, every scheduled one-shot has clips and plays in 3D
-## on the Ambience bus, and the reef's deep bed takes over as the course runs out.
+## on the Ambience bus, and every second layer (the reef's deep, the xeno jungle's depths, the
+## volcano's crater, the Ascent's summit wind) takes over as the course runs out.
 func test_zs_soundscapes() -> void:
 	await new_world()
 	var cam := Camera3D.new()
@@ -2930,13 +2931,13 @@ func test_zs_soundscapes() -> void:
 				on_bus += 1
 		check(on_bus == mini(events.size(), Soundscape.POOL_SIZE) and s.active_one_shots() == on_bus, "%s: the one-shots sound in 3D on the Ambience bus (%d)" % [theme, on_bus])
 		check(s.process_mode == Node.PROCESS_MODE_INHERIT, "%s: the one-shot schedule pauses with the game" % theme)
-		if theme == "reef":
+		if spec.has("layer"):
 			s.set("_fade", 1.0)
 			s.progress = 1.0
 			s.progress_override = 1.0
 			await get_tree().process_frame   # (the mix follows in _process)
 			await get_tree().process_frame
-			check(s.layer_player().volume_db > -1.0 and s.bed_player().volume_db <= Soundscape.SILENT_DB + 0.1, "reef: at the end of the course the deep bed has taken over (%.1f / %.1f dB)" % [s.bed_player().volume_db, s.layer_player().volume_db])
+			check(s.layer_player().volume_db > -1.0 and s.bed_player().volume_db <= Soundscape.SILENT_DB + 0.1, "%s: at the end of the course the %s bed has taken over (%.1f / %.1f dB)" % [theme, spec["layer"], s.bed_player().volume_db, s.layer_player().volume_db])
 		s.queue_free()
 		await ticks(1)
 	var none: Soundscape = Soundscape.make("no_such_theme")
@@ -2965,16 +2966,19 @@ const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_l
 	"warp_whoosh", "prop_bonk", "platform_reform", "ladle_tip", "ladle_splash", "ladle_hiss", "jelly_bounce",
 	"vent_rumble", "vent_burst", "thruster_ignite", "thruster_cough", "thruster_cutoff", "flare_alarm",
 	"flare_launch", "gravity_on", "gravity_off", "escape_tick", "escape_tock", "trolley_clunk",
-	"counterweight_thud", "billboard_on", "billboard_off", "billboard_glitch", "data_chirp", "data_zip"]
+	"counterweight_thud", "billboard_on", "billboard_off", "billboard_glitch", "data_chirp", "data_zip",
+	"spore_boing", "snapjaw_snap", "snapjaw_open", "geyser_erupt", "leviathan_call",
+	"bomb_launch", "bomb_whistle", "bomb_impact", "basalt_sink", "crust_crack", "crust_break", "eruption_boom"]
 const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
 	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
-	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz"]
+	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz",
+	"drift_hum", "lava_rise", "fumarole_loop", "lavafall_loop"]
 
 
 func test_z_world_sounds() -> void:
 	# every map has its own footsteps and landings; anything else falls back to the plain ones
 	var old_theme: String = Sfx.get("_theme")
-	for th: String in ["gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent"]:
+	for th: String in ["gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "ascent"]:
 		Sfx.set_theme(th)
 		check(Sfx.themed("step") == "step_" + th and Sfx.themed("land") == "land_" + th,
 			"%s has its own footsteps and landings" % th)
