@@ -1188,7 +1188,7 @@ func test_z_b2_settings_panel_and_sanitize() -> void:
 	Settings.fov = 80.0
 	Settings.load_settings(path)
 	check(is_equal_approx(Settings.fov, 80.0), "a non-numeric fov in settings.cfg is ignored")
-	check(Settings.quality == 2 and is_equal_approx(Settings.mouse_sensitivity, 3.0), "out-of-range quality / sensitivity are clamped")
+	check(Settings.quality == Settings.QUALITY_NAMES.size() - 1 and is_equal_approx(Settings.mouse_sensitivity, 3.0), "out-of-range quality / sensitivity are clamped")
 	check(is_equal_approx(Settings.music_volume, 0.4) and is_equal_approx(Settings.master_volume, 1.0), "inf volume falls back to default, an int volume is accepted")
 	check(Settings.color_index == 5 and Settings.timer_mode == "auto" and Settings.player_name == "Runner", "colour wraps, unknown timer mode and blank name fall back")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))

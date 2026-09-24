@@ -257,7 +257,7 @@ func _make_burst(color: Color) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
 	p.emitting = false
 	p.one_shot = true
-	p.amount = 14
+	p.amount = Fx.count(14)
 	p.lifetime = 0.45
 	p.explosiveness = 0.95
 	p.layers = 2
@@ -285,7 +285,7 @@ func _make_burst(color: Color) -> GPUParticles3D:
 func _make_trail() -> GPUParticles3D:
 	var p := GPUParticles3D.new()
 	p.emitting = false
-	p.amount = 44
+	p.amount = Fx.count(44)
 	p.lifetime = 0.45
 	p.layers = 2
 	p.local_coords = false

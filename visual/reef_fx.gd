@@ -82,7 +82,7 @@ static func bubble_quad(size: float) -> QuadMesh:
 
 static func _emitter(amount: int, lifetime: float, aabb: AABB, local: bool = false) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = amount
+	p.amount = Fx.count(amount)
 	p.lifetime = lifetime
 	p.preprocess = lifetime
 	p.local_coords = local

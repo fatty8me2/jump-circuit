@@ -135,7 +135,7 @@ func _make_burst() -> GPUParticles3D:
 	var p := GPUParticles3D.new()
 	p.emitting = false
 	p.one_shot = true
-	p.amount = 40
+	p.amount = Fx.count(40)
 	p.lifetime = 0.9
 	p.explosiveness = 0.9
 	p.layers = 2               # (keeps the player's blob-shadow decal off the sparks)

@@ -155,7 +155,7 @@ func _make_confetti() -> GPUParticles3D:
 	var p := GPUParticles3D.new()
 	p.emitting = false
 	p.one_shot = true
-	p.amount = 90
+	p.amount = Fx.count(90)
 	p.lifetime = 2.6
 	p.explosiveness = 0.85
 	p.position = Vector3(0, gate_height - 0.7, 0)

@@ -153,7 +153,7 @@ static func _grow_curve() -> CurveTexture:
 ## Slow drifting motes filling a box (ambient brass dust, glints). Continuous.
 static func motes(extent: Vector3, amount: int, color: Color, size: float = 0.14, glow: bool = true, lifetime: float = 7.0, rise: float = 0.15) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = amount
+	p.amount = Fx.count(amount)
 	p.lifetime = lifetime
 	p.preprocess = lifetime
 	p.randomness = 0.5
@@ -190,7 +190,7 @@ static func embers(extent: Vector3, amount: int, color: Color, size: float = 0.1
 ## Steam plume along `dir` (continuous puffs that grow and fade).
 static func steam(dir: Vector3, amount: int = 14, speed: float = 2.4, size: float = 1.1, color: Color = Color(0.92, 0.88, 0.98, 0.42), lifetime: float = 2.2) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = amount
+	p.amount = Fx.count(amount)
 	p.lifetime = lifetime
 	p.preprocess = lifetime
 	var reach: float = speed * lifetime + 4.0
@@ -218,7 +218,7 @@ static func puff_burst(amount: int, color: Color, speed: float = 3.0, size: floa
 	var p := GPUParticles3D.new()
 	p.emitting = false
 	p.one_shot = true
-	p.amount = amount
+	p.amount = Fx.count(amount)
 	p.lifetime = lifetime
 	p.explosiveness = 0.95
 	var reach: float = speed * lifetime + 3.0
@@ -247,7 +247,7 @@ static func spark_burst(amount: int, color: Color, speed: float = 7.0, dir: Vect
 	var p := GPUParticles3D.new()
 	p.emitting = false
 	p.one_shot = true
-	p.amount = amount
+	p.amount = Fx.count(amount)
 	p.lifetime = lifetime
 	p.explosiveness = 1.0
 	p.randomness = 0.4

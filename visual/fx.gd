@@ -8,7 +8,7 @@ extends RefCounted
 ## flat `shockwave` rings, rising `embers`, `smoke` puffs, lit `debris` chunks and
 ## world-space `trail`s. Textures, draw materials and quad meshes are built once and
 ## shared (colour comes from the particle, so one material serves every tint).
-## Emitter sizes are scaled by Settings.quality (see `density`).
+## Emitter sizes are scaled by Settings.particle_scale() (see `density`).
 ##
 ## Typical use:
 ##   var sp := Fx.sparks({"color": Color(2, 1.4, 0.4), "amount": 24})
@@ -32,15 +32,20 @@ static var _curves: Dictionary = {}
 
 # ---- quality -------------------------------------------------------------------------
 
-## Particle density for the graphics quality setting: Low 0.45, Medium 0.75, High 1.
+## Particle density for the graphics quality setting (Settings.particle_scale()):
+## Low 0.45, Medium 0.75, High 1, Ultra 1.75.
 static func density() -> float:
-	var q: int = 2
 	var st: Object = Engine.get_main_loop()
 	if st is SceneTree and (st as SceneTree).root != null:
 		var s: Node = (st as SceneTree).root.get_node_or_null("Settings")
-		if s != null:
-			q = int(s.get("quality"))
-	return [0.45, 0.75, 1.0][clampi(q, 0, 2)]
+		if s != null and s.has_method("particle_scale"):
+			return float(s.call("particle_scale"))
+	return 1.0
+
+
+## True on Ultra: the few extras that only the top tier pays for (extra layers, lights).
+static func ultra() -> bool:
+	return density() > 1.2
 
 
 ## `n` particles scaled by density (never below 1).

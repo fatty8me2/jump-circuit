@@ -40,7 +40,7 @@ func _ready() -> void:
 	_slider_row(box, "Music", 0.0, 1.0, Settings.music_volume, func(v: float) -> void: Settings.music_volume = v, pct)
 
 	_section(box, "Graphics & HUD")
-	_option_row(box, "Quality", ["Low", "Medium", "High"], Settings.quality, func(i: int) -> void: Settings.quality = i)
+	_option_row(box, "Quality", Settings.QUALITY_NAMES, Settings.quality, func(i: int) -> void: Settings.quality = i)
 	_fullscreen_check = _check_row(box, "Fullscreen", Settings.fullscreen, func(on: bool) -> void: Settings.fullscreen = on)
 	_check_row(box, "V-Sync", Settings.vsync, func(on: bool) -> void: Settings.vsync = on)
 	var modes: Array[String] = ["auto", "on", "off"]

@@ -85,7 +85,7 @@ static func _ramp(col: Color, peak: float = 1.0, fade_in: float = 0.15) -> Gradi
 
 static func _emitter(amount: int, life: float, extents: Vector3, quad: QuadMesh) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = amount
+	p.amount = Fx.count(amount)
 	p.lifetime = life
 	p.local_coords = true
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

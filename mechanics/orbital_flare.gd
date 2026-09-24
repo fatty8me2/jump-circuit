@@ -206,7 +206,7 @@ func _build_visual() -> void:
 	_push_shelters()
 	# plasma embers boiling off the front and trailing behind it
 	_embers = GPUParticles3D.new()
-	_embers.amount = 140
+	_embers.amount = Fx.count(140)
 	_embers.lifetime = 0.7
 	_embers.local_coords = false
 	_embers.emitting = false
