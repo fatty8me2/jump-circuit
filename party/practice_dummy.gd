@@ -24,14 +24,19 @@ var _wobble: float = 0.0
 var _wobble_v: float = 0.0
 var _model: Node3D
 var _label: Label3D
-var _ice: Node3D
 var _t: float = 0.0
+## Status visuals shown right now: effect -> PartyStatusFx.
+var _fx: Dictionary = {}
+var _body_mat: StandardMaterial3D
+var _squash: float = 0.0
 
 
 func _ready() -> void:
 	_model = Node3D.new()
 	add_child(_model)
-	var body_mat: StandardMaterial3D = PartyFx.solid_mat(Color(0.55, 0.95, 0.9, 0.55), 0.8, 0.3)
+	# its own copy of the ghostly material, so a hit can flash it white
+	_body_mat = PartyFx.solid_mat(Color(0.55, 0.95, 0.9, 0.55), 0.8, 0.3).duplicate() as StandardMaterial3D
+	var body_mat: StandardMaterial3D = _body_mat
 	PartyFx.part(_model, PartyFx.cyl_mesh(0.34, 1.1, 0.3), body_mat, Vector3(0, 0.75, 0))
 	PartyFx.part(_model, PartyFx.sphere_mesh(0.3), body_mat, Vector3(0, 1.4, 0))
 	PartyFx.part(_model, PartyFx.cyl_mesh(0.42, 0.14, 0.42), PartyFx.solid_mat(Color(0.25, 0.3, 0.38)), Vector3(0, 0.07, 0))
@@ -79,7 +84,7 @@ func reset() -> void:
 	stunned = 0.0
 	shrunk = 0.0
 	_respawn_left = 0.0
-	_show_ice(false)
+	_clear_fx()
 	if _model != null:
 		_model.scale = Vector3.ONE
 
@@ -102,6 +107,7 @@ func take_hit(kb: Vector3, opts: Dictionary) -> void:
 	_update_label()
 	was_hit.emit(last_src)
 	_wobble_v += 9.0
+	_hit_fx(kb)
 	var scale_k: float = 1.5 if shrunk > 0.0 else 1.0
 	if bool(opts.get("add", false)):
 		vel += kb * 0.8 * scale_k
@@ -114,7 +120,6 @@ func take_hit(kb: Vector3, opts: Dictionary) -> void:
 		"freeze":
 			frozen = float(opts.get("ed", 1.8))
 			vel = Vector3.ZERO
-			_show_ice(true)
 		"float":
 			floating = float(opts.get("ed", 2.5))
 			vel = Vector3(0, 2.5, 0)
@@ -129,19 +134,58 @@ func knock_out() -> void:
 	if knocked_out:
 		return
 	knocked_out = true
-	PartyFx.explosion(get_parent(), center(), Color(0.6, 1.0, 0.95), Color(0.3, 0.8, 1.0), 1.6)
+	PartyFx.ko_burst(get_parent(), center(), Color(0.4, 1.0, 0.9))
+	# the sandbag bursts into ghostly scraps
+	PartyFx.debris(get_parent(), center(), Color(0.55, 0.95, 0.9), 14, 7.0, 0.18)
 	visible = false
 	_respawn_left = 1.6
-	_show_ice(false)
+	_clear_fx()
 
 
-func _show_ice(on: bool) -> void:
-	if on and _ice == null:
-		_ice = PartyStatus.ice_block()
-		add_child(_ice)
-	elif not on and _ice != null:
-		_ice.queue_free()
-		_ice = null
+## A hit lands: flash white, squash, a ring of impact stars facing the blow, the tally pops.
+func _hit_fx(kb: Vector3) -> void:
+	if not is_inside_tree():
+		return
+	_squash = 1.0
+	if _body_mat != null:
+		_body_mat.emission_energy_multiplier = 6.0
+		_body_mat.albedo_color = Color(1, 1, 1, 0.9)
+		var tw: Tween = create_tween().set_parallel(true)
+		tw.tween_property(_body_mat, "emission_energy_multiplier", 0.8, 0.25)
+		tw.tween_property(_body_mat, "albedo_color", Color(0.55, 0.95, 0.9, 0.55), 0.25)
+	var n: Vector3 = kb.normalized() if kb.length() > 0.5 else Vector3.UP
+	PartyFx.star_ring(get_parent(), center(), Color(1.0, 0.92, 0.45), 7, 4.0, 0.34, n)
+	if _label != null:
+		_label.scale = Vector3.ONE * 1.7
+		create_tween().tween_property(_label, "scale", Vector3.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+## Status visuals follow the dummy's own timers.
+func _sync_fx() -> void:
+	var want: Dictionary = {"freeze": frozen, "float": floating, "shrink": shrunk}
+	if frozen <= 0.0 and floating <= 0.0:
+		want["stun"] = stunned if stunned > 0.35 or _fx.has("stun") else 0.0
+	else:
+		want["stun"] = 0.0
+	for e: String in want:
+		var left: float = float(want[e])
+		if left > 0.0:
+			if not _fx.has(e):
+				var v: PartyStatusFx = PartyStatusFx.create(e)
+				add_child(v)
+				_fx[e] = v
+			PartyStatus.feed(_fx[e], left)
+		elif _fx.has(e):
+			PartyStatus.retire(_fx[e])
+			_fx.erase(e)
+
+
+## Drops every status visual at once (reset, KO) - no end effects.
+func _clear_fx() -> void:
+	for v: Variant in _fx.values():
+		if is_instance_valid(v):
+			(v as Node).queue_free()
+	_fx.clear()
 
 
 func _physics_process(dt: float) -> void:
@@ -159,17 +203,20 @@ func _physics_process(dt: float) -> void:
 			visible = true
 			scale = Vector3.ONE * 0.1
 			create_tween().tween_property(self, "scale", Vector3.ONE, 0.4).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-			PartyFx.burst(get_parent(), center(), Color(0.6, 1.0, 0.95), 20, 3.0)
+			_respawn_fx()
 		return
 	stunned = maxf(stunned - dt, 0.0)
 	shrunk = maxf(shrunk - dt, 0.0)
+	_sync_fx()
 	var target_scale: float = 0.5 if shrunk > 0.0 else 1.0
+	_squash = move_toward(_squash, 0.0, dt * 5.0)
+	var sq: float = sin(_squash * PI) * 0.22
 	_model.scale = _model.scale.lerp(Vector3.ONE * target_scale, 1.0 - exp(-10.0 * dt))
+	_model.scale = Vector3(_model.scale.x, target_scale * (1.0 - sq) if _squash > 0.0 else _model.scale.y, _model.scale.z)
 	if frozen > 0.0:
 		frozen -= dt
 		if frozen <= 0.0:
-			_show_ice(false)
-			PartyFx.burst(get_parent(), center(), Color(0.7, 0.95, 1.0), 24, 5.0, 0.2)
+			_sync_fx()
 		return
 	var g: float = 25.0
 	if floating > 0.0:
@@ -202,3 +249,13 @@ func _physics_process(dt: float) -> void:
 	_wobble_v += (-_wobble * 60.0 - _wobble_v * 6.0) * dt
 	_wobble += _wobble_v * dt
 	_model.rotation = Vector3(_wobble * 0.08, _t * 9.0 if stunned > 0.0 else 0.0, sin(_t * 1.3) * 0.02)
+
+
+## Popping back home: a column of teal sparkles and a ring on the lawn.
+func _respawn_fx() -> void:
+	var w: Node = get_parent()
+	PartyFx.burst(w, center(), Color(0.6, 1.0, 0.95), 20, 3.0)
+	PartyFx.ring_pulse(w, global_position + Vector3(0, 0.08, 0), Vector3.UP, Color(0.5, 1.0, 0.9), 0.2, 1.6, 0.4, 0.12)
+	PartyFx.one_shot(w, global_position, {"amount": 26, "lifetime": 0.8, "size": 0.14, "color": Color(0.6, 1.2, 1.1),
+		"tex": "star", "shape": "ring", "radius": 0.5, "inner": 0.35, "dir": Vector3.UP, "spread": 8.0,
+		"vmin": 1.5, "vmax": 4.0, "damping": 2.0, "angle": true, "explosiveness": 0.6})

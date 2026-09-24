@@ -109,7 +109,7 @@ func _build_visual() -> void:
 		add_child(mi)
 	# motes drifting slowly UP through the bay: the tell of low gravity
 	var p := GPUParticles3D.new()
-	p.amount = int(clampf(size.x * size.z * 0.12, 24, 110))
+	p.amount = Fx.count(int(clampf(size.x * size.z * 0.12, 24, 110)))
 	p.lifetime = 5.0
 	p.preprocess = 5.0
 	p.local_coords = true

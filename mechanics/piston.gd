@@ -74,7 +74,7 @@ func _ready() -> void:
 func _build_fx() -> void:
 	var face_z: float = -size.z * 0.5 - 0.08
 	var vis := AABB(Vector3(-size.x - 3.0, -size.y - 2.0, -size.z - 6.0), Vector3(size.x * 2.0 + 6.0, size.y * 2.0 + 6.0, size.z * 2.0 + stroke * 2.0 + 10.0))
-	_steam = Fx.smoke({"amount": 26, "lifetime": 1.0, "one_shot": false, "emitting": false,
+	_steam = Fx.smoke({"amount": 40, "lifetime": 1.0, "one_shot": false, "emitting": false,
 		"explosiveness": 0.0, "randomness": 0.3, "shape": "box",
 		"extents": Vector3(size.x * 0.3, size.y * 0.25, 0.1), "dir": Vector3.UP, "spread": 65.0,
 		"speed": Vector2(1.5, 3.2), "gravity": Vector3(0, 1.6, 0), "damping": Vector2(1.5, 2.5),
@@ -82,12 +82,12 @@ func _build_fx() -> void:
 	add_child(_steam)
 	# the punch: a fan of sparks spraying sideways off the face, a dust puff and a ring
 	var face_basis := Fx.basis_up(Vector3.FORWARD)
-	_fan = Fx.sparks({"amount": 34, "lifetime": 0.45, "shape": "box",
+	_fan = Fx.sparks({"amount": 56, "lifetime": 0.45, "shape": "box",
 		"extents": Vector3(size.y * 0.4, 0.05, size.x * 0.5), "dir": Vector3.UP, "spread": 80.0,
 		"speed": Vector2(4.0, 10.0), "gravity": Vector3(0, -14, 0), "aabb": vis})
 	_fan.transform = Transform3D(face_basis, Vector3(0, 0, face_z))
 	add_child(_fan)
-	_puff = Fx.smoke({"amount": 10, "lifetime": 0.7, "shape": "box",
+	_puff = Fx.smoke({"amount": 18, "lifetime": 0.7, "shape": "box",
 		"extents": Vector3(size.y * 0.4, 0.05, size.x * 0.5), "dir": Vector3.UP, "spread": 70.0,
 		"speed": Vector2(1.0, 3.0), "size": 0.7, "color": Color(0.9, 0.86, 0.8, 0.6), "aabb": vis})
 	_puff.transform = _fan.transform
@@ -95,6 +95,23 @@ func _build_fx() -> void:
 	_ring = Fx.shockwave(maxf(size.x, size.y) * 0.9, {"lifetime": 0.3, "color": Color(2.2, 1.6, 0.5)})
 	_ring.transform = Transform3D(face_basis, Vector3(0, 0, face_z - 0.05))
 	add_child(_ring)
+	_lamp = OmniLight3D.new()
+	_lamp.light_color = Color(1.0, 0.7, 0.35)
+	_lamp.omni_range = maxf(size.x, size.y) + 4.0
+	_lamp.light_energy = 0.0
+	_lamp.visible = false
+	_lamp.shadow_enabled = false
+	_lamp.position = Vector3(0, 0, face_z - 0.6)
+	add_child(_lamp)
+	# the ram face corners trace short hot ribbons while it punches
+	for sx: float in [-1.0, 1.0]:
+		var c := Node3D.new()
+		c.position = Vector3(sx * size.x * 0.5, size.y * 0.5, face_z)
+		add_child(c)
+		_corners.append(c)
+		var sw: Swoosh = Swoosh.make(Color(1.0, 0.55, 0.2, 0.7), 0.12, 0.18, false)
+		add_child(sw)
+		_swooshes.append(sw)
 
 
 ## 0 retracted, 1 punching, 2 held out, 3 retracting.
@@ -108,12 +125,19 @@ func _phase_at(time: float) -> int:
 
 
 ## Visual state only: the shove in _physics_process never reads any of this.
+var _lamp: OmniLight3D
+var _corners: Array[Node3D] = []
+var _swooshes: Array[Swoosh] = []
+
+
 func _process(_dt: float) -> void:
 	var t: float = Game.course_time
 	var ph: int = _phase_at(t)
 	if ph == 3:
 		# vent where the rod enters the (static) housing behind the moving ram
 		_steam.position = Vector3(0, 0, size.z * 0.5 + stroke * (1.0 + extension_at(t)) + 0.05)
+	for i: int in _corners.size():
+		_swooshes[i].feed(_corners[i].global_position, ph == 1, _dt)
 	if ph == _fx_phase:
 		return
 	var was: int = _fx_phase
@@ -123,6 +147,8 @@ func _process(_dt: float) -> void:
 		_fan.restart()
 		_puff.restart()
 		_ring.restart()
+		if Fx.density() >= 0.5:
+			Fx.pulse(_lamp, 3.5, 0.0, 0.3)
 
 
 func snap_to_clock() -> void:

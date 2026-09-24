@@ -37,7 +37,7 @@ static func _ramp(colors: Array, offsets: Array = []) -> GradientTexture1D:
 
 static func _node(parent: Node3D, pos: Vector3, amount: int, lifetime: float, pm: ParticleProcessMaterial, quad: float, mat: StandardMaterial3D, aabb: AABB) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = amount
+	p.amount = Fx.count(roundi(amount * Fx.LEVEL_BOOST))
 	p.lifetime = lifetime
 	p.process_material = pm
 	p.visibility_aabb = aabb
@@ -104,7 +104,7 @@ static func streaks(parent: Node3D, center: Vector3, extents: Vector3, amount: i
 	pm.scale_max = 1.6
 	pm.color_ramp = _ramp([Color(1, 1, 1, 0), Color(1, 0.95, 0.85, 1), Color(1.0, 0.6, 0.3, 0)])
 	var p := GPUParticles3D.new()
-	p.amount = amount
+	p.amount = Fx.count(roundi(amount * Fx.LEVEL_BOOST))
 	p.lifetime = 1.4
 	p.randomness = 0.6
 	p.process_material = pm
@@ -184,7 +184,7 @@ static func sparks(parent: Node3D, pos: Vector3, dir: Vector3, amount: int = 22,
 	pm.scale_max = 1.0
 	pm.color_ramp = _ramp([Color(1, 1, 1, 1), Color(color.r, color.g, color.b, 1), Color(color.r, color.g * 0.5, color.b * 0.3, 0)], [0.0, 0.3, 1.0])
 	var p := GPUParticles3D.new()
-	p.amount = amount
+	p.amount = Fx.count(roundi(amount * Fx.LEVEL_BOOST))
 	p.lifetime = 0.7
 	p.one_shot = true
 	p.explosiveness = 0.9

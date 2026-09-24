@@ -8,7 +8,7 @@ extends RefCounted
 ## flat `shockwave` rings, rising `embers`, `smoke` puffs, lit `debris` chunks and
 ## world-space `trail`s. Textures, draw materials and quad meshes are built once and
 ## shared (colour comes from the particle, so one material serves every tint).
-## Emitter sizes are scaled by Settings.quality (see `density`).
+## Emitter sizes are scaled by Settings.particle_scale() (see `density`).
 ##
 ## Typical use:
 ##   var sp := Fx.sparks({"color": Color(2, 1.4, 0.4), "amount": 24})
@@ -18,11 +18,15 @@ extends RefCounted
 ## or, for a rare one-off that cleans up after itself:
 ##   Fx.spawn(self, Fx.burst({...}), global_position)
 
-enum Tex { DOT, RING, STAR, SMOKE, SPARK }
+enum Tex { DOT, RING, STAR, SMOKE, SPARK, PETAL, BUBBLE }
 
 ## Render layer used for effects that should stay out of the player's blob-shadow
 ## decal (it culls layer 1 only) - same as the character layer.
 const LAYER: int = 2
+
+## Extra density for each level's own set-piece and ambient emitters (visual/<level>_fx.gd):
+## the owner wanted the air much fuller than the levels first shipped with.
+const LEVEL_BOOST: float = 1.35
 
 static var _textures: Dictionary = {}
 static var _materials: Dictionary = {}
@@ -32,15 +36,16 @@ static var _curves: Dictionary = {}
 
 # ---- quality -------------------------------------------------------------------------
 
-## Particle density for the graphics quality setting: Low 0.45, Medium 0.75, High 1.
+## Particle density for the graphics quality setting (Settings.particle_scale()):
+## Low 0.45, Medium 0.75, High 1, Ultra 1.75.
 static func density() -> float:
-	var q: int = 2
 	var st: Object = Engine.get_main_loop()
 	if st is SceneTree and (st as SceneTree).root != null:
 		var s: Node = (st as SceneTree).root.get_node_or_null("Settings")
-		if s != null:
-			q = int(s.get("quality"))
-	return [0.45, 0.75, 1.0][clampi(q, 0, 2)]
+		if s != null and s.has_method("particle_scale"):
+			return float(s.call("particle_scale"))
+	return 1.0
+
 
 
 ## `n` particles scaled by density (never below 1).
@@ -65,6 +70,10 @@ static func texture(kind: Tex) -> Texture2D:
 			t = _smoke(64)
 		Tex.SPARK:
 			t = _spark(16, 64)
+		Tex.PETAL:
+			t = _petal(48)
+		Tex.BUBBLE:
+			t = _bubble(64)
 	_textures[kind] = t
 	return t
 
@@ -120,6 +129,39 @@ static func _smoke(px: int) -> ImageTexture:
 			fall = fall * fall * (3.0 - 2.0 * fall)
 			var n: float = noise.get_noise_2d(float(x), float(y)) * 0.5 + 0.5
 			img.set_pixel(x, y, Color(1, 1, 1, clampf(fall * (0.45 + 0.8 * n), 0.0, 1.0)))
+	return ImageTexture.create_from_image(img)
+
+
+## A solid little teardrop leaf / petal (tinted per particle; spin it).
+static func _petal(px: int) -> ImageTexture:
+	var img := Image.create(px, px, false, Image.FORMAT_RGBA8)
+	var h: float = float(px - 1) * 0.5
+	for y: int in px:
+		for x: int in px:
+			var u: float = (float(x) - h) / h
+			var v: float = (float(y) - h) / h
+			# ellipse, pinched toward one end
+			var w: float = 0.42 * (1.0 - 0.45 * v)
+			var d: float = sqrt(pow(u / maxf(w, 0.05), 2.0) + v * v)
+			var a: float = clampf((1.0 - d) * 6.0, 0.0, 1.0)
+			var shade: float = 0.82 + 0.18 * clampf(1.0 - absf(u) * 3.0, 0.0, 1.0)
+			img.set_pixel(x, y, Color(shade, shade, shade, a))
+	return ImageTexture.create_from_image(img)
+
+
+## A bubble: thin bright rim, faint body and a highlight glint.
+static func _bubble(px: int) -> ImageTexture:
+	var img := Image.create(px, px, false, Image.FORMAT_RGBA8)
+	var h: float = float(px - 1) * 0.5
+	for y: int in px:
+		for x: int in px:
+			var u: float = (float(x) - h) / h
+			var v: float = (float(y) - h) / h
+			var r: float = sqrt(u * u + v * v)
+			var rim: float = clampf(1.0 - absf(r - 0.86) * 9.0, 0.0, 1.0)
+			var body: float = 0.12 * clampf(1.0 - r, 0.0, 1.0) if r < 0.9 else 0.0
+			var gl: float = clampf(1.0 - Vector2(u + 0.35, v + 0.35).length() * 5.0, 0.0, 1.0)
+			img.set_pixel(x, y, Color(1, 1, 1, clampf(rim * 0.9 + body + gl, 0.0, 1.0)))
 	return ImageTexture.create_from_image(img)
 
 
@@ -543,10 +585,13 @@ static func flash(parent: Node, at: Vector3, color: Color, energy: float = 4.0, 
 	tw.tween_callback(l.queue_free)
 
 
-## Reusable flash on an existing light: jump to `energy`, ease back to `rest`.
+## Reusable flash on an existing light: jump to `energy`, ease back to `rest`. A flash that
+## ends dark is skipped on Low quality.
 static func pulse(light: Light3D, energy: float, rest: float = 0.0, time: float = 0.35) -> void:
 	if light == null or not light.is_inside_tree():
 		return
+	if rest <= 0.0 and density() < 0.5:
+		return   # Low quality: no light flashes
 	light.light_energy = energy
 	light.visible = true
 	var tw: Tween = light.create_tween()

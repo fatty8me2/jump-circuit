@@ -173,7 +173,7 @@ func _build_visual() -> void:
 		_bell.add_child(d)
 	# shed motes: glowing specks drifting off the tentacles (world space so they trail a drifting jelly)
 	var motes := GPUParticles3D.new()
-	motes.amount = 10
+	motes.amount = Fx.count(10)
 	motes.lifetime = 2.8
 	motes.preprocess = 2.8
 	motes.local_coords = false
@@ -200,7 +200,7 @@ func _build_visual() -> void:
 	_burst = GPUParticles3D.new()
 	_burst.emitting = false
 	_burst.one_shot = true
-	_burst.amount = 28
+	_burst.amount = Fx.count(28)
 	_burst.lifetime = 0.9
 	_burst.explosiveness = 0.95
 	_burst.local_coords = false

@@ -276,7 +276,7 @@ func _eel_fence(c: Vector3, width: float, heights: Array, period: float, on: flo
 ## Little electric motes that flick about a point (additive).
 func _sparks(color: Color, amount: int, extent: Vector3 = Vector3(0.6, 1.4, 0.6)) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = amount
+	p.amount = Fx.count(amount)
 	p.lifetime = 0.5
 	p.preprocess = 0.5
 	p.visibility_aabb = AABB(Vector3(-3, -3, -3), Vector3(6, 6, 6))
@@ -463,6 +463,8 @@ static func _blink_on(bp: BlinkPlatform, t0: float, t1: float) -> bool:
 # ---- the course ---------------------------------------------------------------------------------
 
 func _build() -> void:
+	# themed air at three depths around the camera (visual only)
+	add_child(Ambience.make(theme_id))
 	deco = ReefDecor.new(self, kit.rng)
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 4), 0.0)
@@ -1339,7 +1341,7 @@ func _on_teleported() -> void:
 ## A ring of sand and bubbles thrown out from under a clam when it slams (one-shot, re-fired by _process).
 func _clam_puff(cr: Crusher, floor_world: Vector3, size: Vector3) -> void:
 	var p := GPUParticles3D.new()
-	p.amount = 36
+	p.amount = Fx.count(36)
 	p.lifetime = 1.2
 	p.one_shot = true
 	p.emitting = false

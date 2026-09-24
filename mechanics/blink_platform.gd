@@ -62,7 +62,13 @@ func _build_fx() -> void:
 		"extents": size * 0.5 + Vector3(0.9, 0.6, 0.9), "speed": Vector2.ZERO, "radial": Vector2(-14.0, -9.0),
 		"size": 0.18, "tex": Fx.Tex.STAR, "curve": "pop", "color": hot, "aabb": vis})
 	add_child(_gather)
+	_ring = Fx.shockwave(maxf(size.x, size.z) * 0.9, {"lifetime": 0.35, "color": hot, "aabb": vis})
+	_ring.position = Vector3(0, size.y * 0.5 + 0.03, 0)
+	add_child(_ring)
 	_fx_on = is_on_at(Game.course_time)
+
+
+var _ring: GPUParticles3D
 
 
 func _process(_dt: float) -> void:
@@ -71,6 +77,8 @@ func _process(_dt: float) -> void:
 		return
 	_fx_on = on
 	(_dissolve if not on else _gather).restart()
+	if on:
+		_ring.restart()
 
 
 func is_on_at(time: float) -> bool:

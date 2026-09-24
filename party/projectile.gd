@@ -52,8 +52,11 @@ func _physics_process(dt: float) -> void:
 	var p: Vector3 = pos_at(t)
 	global_position = p
 	var d: Vector3 = p - prev
+	# face along the motion; a basis from the direction (not look_at(p + d)) stays valid far from
+	# the origin, where p + d can round back to p when the step is tiny (a boomerang turning round)
 	if d.length() > 0.001:
-		look_at(p + d, Vector3.UP if absf(d.normalized().y) < 0.98 else Vector3.RIGHT)
+		var dir: Vector3 = d.normalized()
+		global_basis = Basis.looking_at(dir, Vector3.UP if absf(dir.y) < 0.98 else Vector3.RIGHT)
 	if local and layer != null:
 		if hit_world:
 			var q := PhysicsRayQueryParameters3D.create(prev, p, 1)

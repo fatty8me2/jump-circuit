@@ -34,20 +34,43 @@ func begin() -> void:
 	finish()
 
 
+## Twin portals iris open where each racer stands, spinning, with rings rising through them
+## and a swirl of motes; two comets trade places along an arc between them; the portals
+## implode shut with a flash.
 static func _warp_fx(parent: Node, a: Vector3, b: Vector3) -> void:
+	var across: Vector3 = Vector3(b.x - a.x, 0, b.z - a.z)
+	across = across.normalized() if across.length() > 0.1 else Vector3.FORWARD
 	for at: Vector3 in [a, b]:
 		var c: Vector3 = at + Vector3(0, 0.9, 0)
-		PartyFx.implode(parent, c, TEAL, 2.2)
-		PartyFx.one_shot(parent, c, {"amount": 60, "lifetime": 0.8, "size": 0.2, "color": TEAL, "shape": "ring",
-			"radius": 1.1, "inner": 0.9, "axis": Vector3.UP, "height": 1.6, "vmin": 0.1, "vmax": 0.4,
-			"tangential": 14.0, "radial": -1.0, "spark": true, "shrink": false,
+		PartyFx.portal(parent, c, across, TEAL, 1.15, 0.8)
+		PartyFx.ring_pulse(parent, at + Vector3(0, 0.08, 0), Vector3.UP, Color(0.3, 0.8, 1.0), 0.2, 1.5, 0.3, 0.1)
+		PartyFx.one_shot(parent, at, {"amount": 30, "lifetime": 0.8, "size": 0.14, "color": Color(0.3, 0.9, 0.8),
+			"shape": "ring", "radius": 1.0, "inner": 0.8, "axis": Vector3.UP, "dir": Vector3.UP, "spread": 5.0,
+			"vmin": 1.5, "vmax": 3.5, "radial": -1.5, "spark": true, "explosiveness": 0.4,
 			"colors": [Color(1, 1, 1, 0), Color(0.6, 1, 0.9, 1), Color(0.3, 0.6, 1, 0)]})
 		for i: int in 3:
-			PartyFx.ring_pulse(parent, at + Vector3(0, 0.3 + 0.6 * float(i), 0), Vector3.UP, TEAL, 1.4, 0.2, 0.5 + 0.1 * float(i), 0.12)
-		PartyFx.flash(parent, c, TEAL, 6.0, 7.0, 0.4)
-	# the thread between the two portals
-	PartyFx.beam(parent, a + Vector3(0, 0.9, 0), b + Vector3(0, 0.9, 0), Color(0.5, 1.0, 0.9, 0.5), 0.12, 0.6, 3.0)
-	PartyFx.streak(parent, a + Vector3(0, 0.9, 0), b + Vector3(0, 0.9, 0), TEAL, 60, 0.18, 0.7, 0.2, 1.0, true)
+			PartyFx.ring_pulse(parent, at + Vector3(0, 0.3 + 0.6 * float(i), 0), Vector3.UP, Color(0.3, 0.8, 0.7), 1.3, 0.2, 0.5 + 0.1 * float(i), 0.08)
+		PartyFx.flash(parent, c, TEAL, 4.0, 6.0, 0.4)
+		HeroFx.ground_ring(parent, at, Color(0.4, 1.3, 1.1), 1.8, 0.6)
+		HeroFx.dust_ring(parent, at, Color(0.8, 0.9, 0.9, 0.45), 0.7, 10, 4.0)
+		if PartyFx.rich():
+			HeroFx.pop(parent, {"amount": 24, "lifetime": 1.4, "shape": "sphere", "radius": 0.8, "dir": Vector3.UP,
+				"spread": 40.0, "speed": Vector2(0.2, 0.9), "turbulence": 0.6, "tex": Fx.Tex.STAR, "size": 0.14,
+				"curve": "pop", "explosiveness": 0.3, "color": Color(0.6, 1.4, 1.3)}, c)
+	# the two racers trading places: comets crossing on an arc, and a faint thread
+	PartyFx.comet(parent, a + Vector3(0, 0.9, 0), b + Vector3(0, 0.9, 0), Color(0.4, 1.0, 0.85), 2.2, 0.38, 0.24)
+	PartyFx.comet(parent, b + Vector3(0, 0.9, 0), a + Vector3(0, 0.9, 0), Color(0.45, 0.7, 1.0), -0.6, 0.38, 0.2)
+	PartyFx.streak(parent, a + Vector3(0, 0.9, 0), b + Vector3(0, 0.9, 0), TEAL, 40, 0.16, 0.7, 0.2, 1.0, true)
+	PartyFx.speed_lines(parent, a + Vector3(0, 0.9, 0), b + Vector3(0, 0.9, 0), Color(0.8, 1.5, 1.4, 0.7), 16, 0.5)
+	PartyFx.speed_lines(parent, b + Vector3(0, 0.9, 0), a + Vector3(0, 0.9, 0), Color(0.8, 1.2, 1.6, 0.7), 16, 0.5)
+	# a moment later both portals snap shut
+	var t: SceneTree = parent.get_tree()
+	if t != null:
+		t.create_timer(0.72, false).timeout.connect(func() -> void:
+			if is_instance_valid(parent) and parent.is_inside_tree():
+				for at: Vector3 in [a, b]:
+					PartyFx.burst(parent, at + Vector3(0, 0.9, 0), Color(0.6, 1.0, 0.95), 24, 5.0, 0.2, 0.4)
+					PartyFx.star_ring(parent, at + Vector3(0, 0.9, 0), Color(0.5, 1.0, 0.9), 6, 4.0, 0.3, across))
 
 
 static func remote_fx(layer_ref: PartyLayer, _from_id: int, action: String, d: Dictionary) -> void:

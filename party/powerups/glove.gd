@@ -32,11 +32,14 @@ func begin() -> void:
 	if not best.is_empty():
 		var flat := Vector3(dir.x, 0, dir.z).normalized()
 		layer.hit(best, flat * 24.0 + Vector3(0, 10.0, 0), {"st": 0.5, "s": "glove"})
-		PartyFx.popup_text(layer, (best["center"] as Vector3) + Vector3(0, 1.3, 0), "POW!", Color(1.0, 0.85, 0.2))
+		PartyFx.comic_burst(layer, (best["center"] as Vector3) + Vector3(0, 1.4, 0), "POW!", Color(1.0, 0.8, 0.15), 1.0)
+		PartyFx.shake(layer.level, 0.25)
 	finish()
 
 
-## The glove shoots out along `dir` for `reach` m and snaps back (a self-freeing node).
+## The glove shoots out along `dir` for `reach` m and snaps back (a self-freeing node):
+## a tiny wind-up, a rocket out with speed lines and a trail, a BOING wobble on the spring
+## at full stretch, then a quick reel-in.
 static func _punch_fx(parent: Node, o: Vector3, dir: Vector3, reach: float) -> void:
 	var root := Node3D.new()
 	parent.add_child(root)
@@ -47,6 +50,9 @@ static func _punch_fx(parent: Node, o: Vector3, dir: Vector3, reach: float) -> v
 	PartyFx.part(head, PartyFx.sphere_mesh(0.34, 16), red, Vector3(0, 0, -0.1), Vector3(1.0, 0.9, 1.1))
 	PartyFx.part(head, PartyFx.sphere_mesh(0.14, 10), red, Vector3(-0.3, 0.05, -0.02), Vector3(1, 0.8, 1.4))
 	PartyFx.part(head, PartyFx.cyl_mesh(0.2, 0.18), PartyFx.solid_mat(Color(0.95, 0.95, 0.95), 0.2), Vector3(0, 0, 0.26), Vector3.ONE, Vector3(90, 0, 0))
+	# a glossy highlight and a laced seam so it reads as a boxing glove
+	PartyFx.part(head, PartyFx.sphere_mesh(0.08, 8), PartyFx.glow_mat(Color(1, 1, 1, 0.55), 1.5, true), Vector3(0.12, 0.2, -0.25), Vector3(1.2, 0.7, 1))
+	PartyFx.part(head, PartyFx.box_mesh(Vector3(0.05, 0.03, 0.3)), PartyFx.solid_mat(Color(0.95, 0.9, 0.85), 0.3), Vector3(0, 0.3, 0.02))
 	# the spring: rings stretched between the pack and the glove
 	var coils: Array[MeshInstance3D] = []
 	var tm := TorusMesh.new()
@@ -57,9 +63,16 @@ static func _punch_fx(parent: Node, o: Vector3, dir: Vector3, reach: float) -> v
 	var steel: StandardMaterial3D = PartyFx.solid_mat(Color(0.8, 0.82, 0.88), 0.2, 0.25, 0.9)
 	for i: int in 10:
 		coils.append(PartyFx.part(root, tm, steel, Vector3.ZERO, Vector3.ONE, Vector3(90, 0, 0)))
-	var trail: GPUParticles3D = PartyFx.emitter({"amount": 30, "lifetime": 0.25, "size": 0.3, "color": Color(1.0, 0.5, 0.3),
-		"vmin": 0.0, "vmax": 0.4, "aabb": 12.0})
+	var trail: GPUParticles3D = PartyFx.emitter({"amount": 44, "lifetime": 0.28, "size": 0.32, "color": Color(1.0, 0.5, 0.3),
+		"vmin": 0.0, "vmax": 0.4, "aabb": 12.0, "fixed_fps": 0})
 	head.add_child(trail)
+	# wind peeling off the glove as it rockets out
+	head.add_child(HeroFx.em({"amount": 26, "lifetime": 0.2, "shape": "sphere", "radius": 0.35, "speed": Vector2(0.5, 1.5),
+		"spread": 180.0, "facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.04, 0.5), "additive": false,
+		"color": Color(1.0, 1.0, 1.0, 0.55), "fixed_fps": 0, "box_aabb": 12.0}))
+	# a puff of smoke out of the pack as the spring lets go
+	HeroFx.smoke(parent, o, Color(0.85, 0.83, 0.8, 0.5), 8, 0.5, 0.5, 2.0)
+	HeroFx.ring(parent, o + dir * 0.3, dir, Color(1.3, 1.2, 1.0, 0.8), 0.15, 0.9, 0.2, 0.08, true)
 	var ext := func(k: float) -> void:
 		if not is_instance_valid(head):
 			return
@@ -68,15 +81,30 @@ static func _punch_fx(parent: Node, o: Vector3, dir: Vector3, reach: float) -> v
 		for i: int in coils.size():
 			coils[i].position = Vector3(0, 0, z * float(i + 1) / float(coils.size() + 1))
 	ext.call(0.0)
+	PartyFx.speed_lines(parent, o + dir * 0.4, o + dir * reach, Color(1.6, 1.5, 1.4, 0.8), 16, 0.35)
 	var tw: Tween = root.create_tween()
-	tw.tween_method(ext, 0.0, 1.0, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_method(ext, 0.0, -0.06, 0.035)
+	tw.tween_method(ext, -0.06, 1.0, 0.1).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	tw.tween_callback(func() -> void:
 		var tip: Vector3 = o + dir * reach
 		PartyFx.burst(parent, tip, Color(1.0, 0.85, 0.3), 30, 7.0, 0.25, 0.4)
-		PartyFx.ring_pulse(parent, tip, dir, Color(1.0, 0.95, 0.7), 0.3, 1.6, 0.25, 0.2)
-		PartyFx.sparks(parent, tip, Color(1.0, 1.0, 0.8), 18, 8.0, dir, 60.0))
-	tw.tween_interval(0.12)
-	tw.tween_method(ext, 1.0, 0.0, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		PartyFx.ring_pulse(parent, tip, dir, Color(1.0, 0.95, 0.7), 0.3, 1.8, 0.25, 0.2)
+		PartyFx.star_ring(parent, tip, Color(1.0, 0.9, 0.35), 8, 5.5, 0.42, dir)
+		PartyFx.sparks(parent, tip, Color(1.0, 1.0, 0.8), 18, 8.0, dir, 60.0)
+		HeroFx.ring(parent, tip, dir, Color(1.3, 1.1, 0.7, 0.8), 0.2, 2.6, 0.3, 0.06, true)
+		HeroFx.pop(parent, {"amount": 24, "lifetime": 0.3, "shape": "sphere", "radius": 0.3, "dir": dir, "spread": 55.0,
+			"speed": Vector2(8.0, 15.0), "damping": Vector2(10.0, 16.0), "facing": "velocity", "tex": Fx.Tex.SPARK,
+			"size": Vector2(0.06, 0.8), "color": Color(1.6, 1.5, 1.2)}, tip)
+		HeroFx.smoke(parent, tip, Color(0.92, 0.9, 0.86, 0.5), 10, 0.8, 0.7, 3.5)
+		PartyFx.flash(parent, tip, Color(1.0, 0.8, 0.5), 5.0, 6.0, 0.25)
+		if is_instance_valid(head):
+			var sq: Tween = head.create_tween()
+			sq.tween_property(head, "scale", Vector3(1.35, 1.35, 0.6), 0.04)
+			sq.tween_property(head, "scale", Vector3.ONE, 0.12).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT))
+	# BOING: the spring shivers at full stretch
+	tw.tween_method(func(k: float) -> void:
+		ext.call(1.0 - sin(k * PI * 3.0) * 0.1 * (1.0 - k)), 0.0, 1.0, 0.2)
+	tw.tween_method(ext, 1.0, 0.0, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 	tw.tween_callback(root.queue_free)
 
 

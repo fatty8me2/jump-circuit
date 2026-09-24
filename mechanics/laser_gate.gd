@@ -47,6 +47,25 @@ func _ready() -> void:
 	_beam = Look.box(size, beam_mat)
 	_beam.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_beam)
+	# (children of the beam: shown and hidden with it) a white-hot core, a soft red sleeve
+	var core_mat := StandardMaterial3D.new()
+	core_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	core_mat.albedo_color = Color(1.0, 0.85, 0.8)
+	core_mat.emission_enabled = true
+	core_mat.emission = Color(1.0, 0.75, 0.65)
+	core_mat.emission_energy_multiplier = 6.0
+	var core := Look.box(Vector3(size.x, size.y * 0.35, size.z * 1.02), core_mat)
+	core.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_beam.add_child(core)
+	var sleeve_mat := StandardMaterial3D.new()
+	sleeve_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	sleeve_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	sleeve_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	sleeve_mat.albedo_color = Color(1.0, 0.2, 0.1, 0.22)
+	sleeve_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var sleeve := Look.box(Vector3(size.x, size.y + 0.35, size.z + 0.35), sleeve_mat)
+	sleeve.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_beam.add_child(sleeve)
 	_guide_mat = StandardMaterial3D.new()
 	_guide_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_guide_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA

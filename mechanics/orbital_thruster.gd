@@ -128,7 +128,7 @@ func _build_visual() -> void:
 
 func _jet(amount: int, lifetime: float, v_min: float, v_max: float, spread: float, quad: Vector2, s0: float, s1: float, ramp: Array) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = amount
+	p.amount = Fx.count(amount)
 	p.lifetime = lifetime
 	p.emitting = false
 	p.local_coords = false

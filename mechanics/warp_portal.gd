@@ -28,6 +28,10 @@ var _exit_ring: GPUParticles3D
 var _exit_lamp: OmniLight3D
 
 
+var _exit_glitter: GPUParticles3D
+var _entry_lamp: OmniLight3D
+
+
 func _ready() -> void:
 	_area = Area3D.new()
 	_area.collision_layer = 0
@@ -56,12 +60,12 @@ func _build_fx() -> void:
 	# whole cloud turns with it while the radial pull winds each mote into a spiral
 	var entry_hot: Color = Fx.hot(ENTRY_COLOR.lerp(Color.WHITE, 0.15), 2.4)
 	var exit_hot: Color = Fx.hot(EXIT_COLOR.lerp(Color.WHITE, 0.15), 2.4)
-	var vin: GPUParticles3D = Fx.emitter({"amount": 44, "lifetime": 1.1, "local": true, "shape": "ring",
+	var vin: GPUParticles3D = Fx.emitter({"amount": 70, "lifetime": 1.1, "local": true, "shape": "ring",
 		"ring_axis": Vector3.BACK, "ring_radius": r - 0.12, "ring_inner": r - 0.35, "speed": Vector2.ZERO,
 		"radial": Vector2(-3.2, -2.0), "tex": Fx.Tex.STAR, "size": 0.22, "curve": "pop",
 		"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0]), "color": entry_hot, "aabb": vis, "preprocess": 1.1})
 	_swirl[0].add_child(vin)
-	var vout: GPUParticles3D = Fx.emitter({"amount": 44, "lifetime": 1.1, "local": true, "shape": "ring",
+	var vout: GPUParticles3D = Fx.emitter({"amount": 70, "lifetime": 1.1, "local": true, "shape": "ring",
 		"ring_axis": Vector3.BACK, "ring_radius": 0.35, "ring_inner": 0.05, "speed": Vector2(0.2, 0.5),
 		"dir": Vector3.RIGHT, "spread": 180.0, "flatness": 1.0, "radial": Vector2(1.6, 2.6),
 		"tex": Fx.Tex.STAR, "size": 0.22, "curve": "pop", "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0]),
@@ -69,20 +73,20 @@ func _build_fx() -> void:
 	_swirl[1].add_child(vout)
 	# streaks drawn in from all round the entry ring
 	var centre := Vector3(0, r + 0.1, 0)
-	_suck = Fx.emitter({"amount": 26, "lifetime": 0.55, "local": true, "shape": "shell", "radius": 3.2,
+	_suck = Fx.emitter({"amount": 40, "lifetime": 0.55, "local": true, "shape": "shell", "radius": 3.2,
 		"speed": Vector2.ZERO, "radial": Vector2(-22.0, -16.0), "facing": "velocity", "tex": Fx.Tex.SPARK,
 		"size": Vector2(0.05, 0.7), "fade": PackedFloat32Array([0.0, 0.9, 0.0]), "color": entry_hot,
 		"aabb": vis, "preprocess": 0.6})
 	_suck.position = centre
 	add_child(_suck)
 	# warp bursts: sparks out of the entry film, and out of the exit ring with a ring + flash
-	_enter_burst = Fx.sparks({"amount": 34, "lifetime": 0.45, "shape": "ring", "ring_axis": Vector3.BACK,
+	_enter_burst = Fx.sparks({"amount": 50, "lifetime": 0.45, "shape": "ring", "ring_axis": Vector3.BACK,
 		"ring_radius": r - 0.1, "ring_inner": 0.2, "dir": Vector3.BACK, "spread": 60.0,
 		"speed": Vector2(3.0, 8.0), "gravity": Vector3(0, -6, 0), "damping": Vector2(3.0, 5.0),
 		"color": entry_hot, "aabb": vis})
 	_enter_burst.position = centre
 	add_child(_enter_burst)
-	_exit_burst = Fx.sparks({"amount": 50, "lifetime": 0.6, "shape": "ring", "ring_axis": Vector3.BACK,
+	_exit_burst = Fx.sparks({"amount": 80, "lifetime": 0.6, "shape": "ring", "ring_axis": Vector3.BACK,
 		"ring_radius": r - 0.1, "ring_inner": r - 0.3, "dir": Vector3.FORWARD, "spread": 55.0,
 		"radial_vel": Vector2(1.0, 4.0), "speed": Vector2(4.0, 10.0), "gravity": Vector3(0, -5, 0),
 		"damping": Vector2(2.0, 4.0), "size": Vector2(0.07, 0.55), "color": exit_hot, "aabb": vis})
@@ -98,6 +102,29 @@ func _build_fx() -> void:
 	_exit_lamp.visible = false
 	_exit_lamp.position = centre + Vector3(0, 0, -0.8)
 	_exit.add_child(_exit_lamp)
+	# glitter that hangs in front of the exit after a warp
+	_exit_glitter = Fx.embers({"amount": 30, "lifetime": 1.4, "one_shot": true, "explosiveness": 0.8,
+		"emitting": false, "shape": "sphere", "radius": r * 0.8, "speed": Vector2(0.3, 1.2), "tex": Fx.Tex.STAR,
+		"size": 0.26, "curve": "pop", "color": exit_hot, "turbulence": 0.6, "aabb": vis})
+	_exit_glitter.position = centre + Vector3(0, 0, -0.6)
+	_exit.add_child(_exit_glitter)
+	# a steady glow inside each ring (Medium and up) and a flash at the entry on a warp
+	if Fx.density() >= 0.5:
+		for i: int in 2:
+			var glow := OmniLight3D.new()
+			glow.light_color = ENTRY_COLOR if i == 0 else EXIT_COLOR
+			glow.light_energy = 1.2
+			glow.omni_range = 4.5
+			glow.shadow_enabled = false
+			glow.position = centre + Vector3(0, 0, -0.5)
+			(self if i == 0 else _exit).add_child(glow)
+		_entry_lamp = OmniLight3D.new()
+		_entry_lamp.light_color = ENTRY_COLOR
+		_entry_lamp.omni_range = 7.0
+		_entry_lamp.light_energy = 0.0
+		_entry_lamp.visible = false
+		_entry_lamp.position = centre + Vector3(0, 0, 0.8)
+		add_child(_entry_lamp)
 
 
 func _warp_fx() -> void:
@@ -106,7 +133,10 @@ func _warp_fx() -> void:
 	_enter_burst.restart()
 	_exit_burst.restart()
 	_exit_ring.restart()
-	Fx.pulse(_exit_lamp, 5.0, 0.0, 0.45)
+	_exit_glitter.restart()
+	Fx.pulse(_exit_lamp, 7.0, 0.0, 0.5)
+	if _entry_lamp != null:
+		Fx.pulse(_entry_lamp, 5.0, 0.0, 0.4)
 
 
 func _ring(parent: Node3D, color: Color) -> Node3D:

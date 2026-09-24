@@ -34,7 +34,7 @@ func _ready() -> void:
 
 func _build_embers() -> void:
 	var area: float = size.x * size.z
-	var e: GPUParticles3D = Fx.embers({"amount": clampi(int(area * 1.2), 4, 28), "lifetime": 1.5, "additive": false,
+	var e: GPUParticles3D = Fx.embers({"amount": clampi(int(area * 1.8), 6, 40), "lifetime": 1.5, "additive": false,
 		"extents": Vector3(size.x * 0.45, 0.02, size.z * 0.45), "speed": Vector2(0.5, 1.3),
 		"size": 0.17, "color": Color(2.8, 0.75, 0.3), "fade": PackedFloat32Array([0.0, 1.0, 0.6, 0.0]),
 		"curve": "shrink", "turbulence": 0.8, "preprocess": 1.5,

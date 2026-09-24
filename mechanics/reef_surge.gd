@@ -101,7 +101,7 @@ func _build_visual() -> void:
 	var span: float = maxf(absf(size.dot(axis)), 1.0)
 	# current streaks, thick when it surges
 	_streaks = GPUParticles3D.new()
-	_streaks.amount = int(clampf(size.x * size.y * size.z * 0.05, 40, 160))
+	_streaks.amount = Fx.count(int(clampf(size.x * size.y * size.z * 0.05, 40, 160)))
 	_streaks.lifetime = span / 14.0
 	_streaks.preprocess = _streaks.lifetime
 	_streaks.local_coords = true
@@ -137,7 +137,7 @@ func _build_visual() -> void:
 	add_child(_streaks)
 	# silt and bubbles tumbling along with it
 	_silt = GPUParticles3D.new()
-	_silt.amount = int(clampf(size.x * size.z * 0.12, 24, 90))
+	_silt.amount = Fx.count(int(clampf(size.x * size.z * 0.12, 24, 90)))
 	_silt.lifetime = span / 8.0
 	_silt.preprocess = _silt.lifetime
 	_silt.local_coords = true

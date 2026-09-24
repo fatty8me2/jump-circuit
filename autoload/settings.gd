@@ -15,8 +15,11 @@ var fov: float = 72.0
 var master_volume: float = 0.8
 var sfx_volume: float = 0.9
 var music_volume: float = 0.4
-## 0 low, 1 medium, 2 high
+## 0 low, 1 medium, 2 high, 3 ultra (saves from before Ultra only ever hold 0-2)
 var quality: int = 2
+const QUALITY_NAMES: Array[String] = ["Low", "Medium", "High", "Ultra"]
+## Particle amount multiplier per quality tier (see particle_scale()).
+const PARTICLE_SCALE: Array[float] = [0.45, 0.75, 1.0, 1.75]
 var fullscreen: bool = false
 var vsync: bool = true
 ## "auto" hides the timer until a level has been finished once.
@@ -75,7 +78,7 @@ func _sanitize() -> void:
 	master_volume = _finite_clamp(master_volume, 0.0, 1.0, 0.8)
 	sfx_volume = _finite_clamp(sfx_volume, 0.0, 1.0, 0.9)
 	music_volume = _finite_clamp(music_volume, 0.0, 1.0, 0.4)
-	quality = clampi(quality, 0, 2)
+	quality = clampi(quality, 0, QUALITY_NAMES.size() - 1)
 	color_index = posmod(color_index, RACER_COLORS.size())
 	if timer_mode not in ["auto", "on", "off"]:
 		timer_mode = "auto"
@@ -135,6 +138,13 @@ func _props() -> Array[String]:
 		"quality", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_room_code", "party_binds"]
 
 
+## How many particles every emitter builds relative to the High baseline: Low 0.45,
+## Medium 0.75, High 1.0, Ultra 1.75. The single source for particle density (Fx and
+## PartyFx read it).
+func particle_scale() -> float:
+	return PARTICLE_SCALE[clampi(quality, 0, PARTICLE_SCALE.size() - 1)]
+
+
 func my_color() -> Color:
 	return RACER_COLORS[color_index % RACER_COLORS.size()]
 
@@ -154,8 +164,8 @@ func apply() -> void:
 			DisplayServer.window_set_vsync_mode(vs)
 	var vp: Viewport = get_viewport()
 	if vp != null:
-		vp.msaa_3d = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X][quality]
-		vp.scaling_3d_scale = [0.8, 1.0, 1.0][quality]
+		vp.msaa_3d = [Viewport.MSAA_DISABLED, Viewport.MSAA_2X, Viewport.MSAA_4X, Viewport.MSAA_4X][quality]
+		vp.scaling_3d_scale = [0.8, 1.0, 1.0, 1.0][quality]
 	if _env != null and is_instance_valid(_sun):
 		apply_to_environment(_env, _sun)
 	changed.emit()
@@ -168,4 +178,4 @@ func apply_to_environment(env: Environment, sun: DirectionalLight3D) -> void:
 	env.glow_enabled = true
 	sun.shadow_enabled = true
 	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS if quality >= 1 else DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS
-	sun.directional_shadow_max_distance = [80.0, 120.0, 150.0][quality]
+	sun.directional_shadow_max_distance = [80.0, 120.0, 150.0, 190.0][quality]

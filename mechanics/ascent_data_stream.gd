@@ -91,7 +91,7 @@ func _span(lane: String) -> Vector2:
 ## Trail of data bits shed behind the packet (world space, so they stream away downstream).
 func _bits(col: Color, span: Vector2) -> GPUParticles3D:
 	var g := GPUParticles3D.new()
-	g.amount = 22
+	g.amount = Fx.count(22)
 	g.lifetime = 0.7
 	g.local_coords = false
 	g.visibility_aabb = AABB(Vector3(-6, -2, -40), Vector3(12, 5, 80))

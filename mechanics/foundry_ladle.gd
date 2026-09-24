@@ -128,7 +128,7 @@ func _stream_fx() -> GPUParticles3D:
 	pm.color_ramp = FoundryFx.ramp([[0.0, Color(1, 0.95, 0.7, 1)], [0.7, Color(1, 0.6, 0.2, 1)], [1.0, Color(1, 0.4, 0.1, 0.6)]])
 	var life: float = (-6.0 + sqrt(36.0 + 44.0 * drop)) / 22.0
 	var p := GPUParticles3D.new()
-	p.amount = int(clampf(width * 12.0, 24, 60))
+	p.amount = Fx.count(int(clampf(width * 12.0, 24, 60)))
 	p.lifetime = maxf(life, 0.2)
 	p.emitting = false
 	p.visibility_aabb = AABB(Vector3(-width, -drop - 1.0, -2), Vector3(width * 2.0, drop + 3.0, 4))
@@ -151,7 +151,7 @@ func _drip_fx() -> GPUParticles3D:
 	pm.scale_max = 1.0
 	pm.color_ramp = FoundryFx.ramp([[0.0, Color(1, 0.9, 0.6, 1)], [1.0, Color(1, 0.4, 0.1, 0.8)]])
 	var p := GPUParticles3D.new()
-	p.amount = 8
+	p.amount = Fx.count(8)
 	p.lifetime = sqrt(2.0 * drop / 22.0) + 0.05
 	p.emitting = false
 	p.visibility_aabb = AABB(Vector3(-width, -drop - 1.0, -2), Vector3(width * 2.0, drop + 3.0, 4))

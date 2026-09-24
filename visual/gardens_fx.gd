@@ -72,7 +72,7 @@ static func _fade(hold_from: float = 0.15, hold_to: float = 0.75) -> GradientTex
 
 static func _emitter(amount: int, lifetime: float, box: Vector3, mesh: Mesh, pm: ParticleProcessMaterial) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = amount
+	p.amount = Fx.count(roundi(amount * Fx.LEVEL_BOOST))
 	p.lifetime = lifetime
 	p.preprocess = lifetime
 	p.local_coords = false
@@ -88,7 +88,7 @@ static func _emitter(amount: int, lifetime: float, box: Vector3, mesh: Mesh, pm:
 
 static func _burst_base(amount: int, lifetime: float, mesh: Mesh, pm: ParticleProcessMaterial, reach: float) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = amount
+	p.amount = Fx.count(roundi(amount * Fx.LEVEL_BOOST))
 	p.lifetime = lifetime
 	p.one_shot = true
 	p.emitting = false

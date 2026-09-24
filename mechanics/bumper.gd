@@ -15,6 +15,9 @@ var _pulse: float = 0.0
 var _flash_mat: StandardMaterial3D
 var _flash_shell: MeshInstance3D
 var _hit_sparks: GPUParticles3D
+var _hit_ring: GPUParticles3D
+var _body_mat: StandardMaterial3D
+var _t: float = 0.0
 
 
 func _ready() -> void:
@@ -31,7 +34,9 @@ func _ready() -> void:
 	_vis = Node3D.new()
 	add_child(_vis)
 	var cap: StandardMaterial3D = Look.flat(Color(0.12, 0.12, 0.18), 0.4, 0.6)
-	_vis.add_child(Look.cylinder(radius, height, Look.flat(Color(0.95, 0.3, 0.75), 0.35, 0.2, 1.2), Vector3(0, height * 0.5, 0), radius * 0.85, 20))
+	# own material: its glow breathes (Look.flat is shared per colour)
+	_body_mat = Look.flat(Color(0.95, 0.3, 0.75), 0.35, 0.2, 1.2).duplicate() as StandardMaterial3D
+	_vis.add_child(Look.cylinder(radius, height, _body_mat, Vector3(0, height * 0.5, 0), radius * 0.85, 20))
 	_vis.add_child(Look.cylinder(radius * 1.15, 0.2, cap, Vector3(0, height + 0.1, 0), -1.0, 20))
 	_vis.add_child(Look.cylinder(radius * 1.15, 0.2, cap, Vector3(0, 0.1, 0), -1.0, 20))
 	_flash_mat = StandardMaterial3D.new()
@@ -48,6 +53,18 @@ func _ready() -> void:
 		"color": Color(3.0, 1.2, 2.4), "aabb": AABB(Vector3(-5, -3, -5), Vector3(10, 8, 10))})
 	_hit_sparks.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	add_child(_hit_sparks)
+	var vis := AABB(Vector3(-4, -1, -4), Vector3(8, 6, 8))
+	# a flat ring punched out around the post on every hit
+	_hit_ring = Fx.shockwave(radius * 2.6, {"lifetime": 0.35, "color": Color(2.6, 1.0, 2.2), "aabb": vis})
+	_hit_ring.position = Vector3(0, height * 0.5, 0)
+	add_child(_hit_ring)
+	# idle: sparks of charge circling the caps (one cheap local emitter)
+	var motes: GPUParticles3D = Fx.emitter({"amount": 12, "lifetime": 1.2, "local": true, "shape": "ring",
+		"ring_radius": radius * 1.14, "ring_inner": radius * 1.06, "ring_height": height, "dir": Vector3.UP,
+		"spread": 10.0, "speed": Vector2(0.2, 0.6), "tex": Fx.Tex.STAR, "additive": false,
+		"size": 0.3, "curve": "pop", "color": Color(1.0, 0.55, 0.95), "preprocess": 1.2, "aabb": vis})
+	motes.position = Vector3(0, height * 0.5, 0)
+	add_child(motes)
 
 
 ## A hit: the post flashes and sparks spray off the side that was struck.
@@ -55,11 +72,18 @@ func _hit_fx(away: Vector3, at_y: float) -> void:
 	var dir: Vector3 = away.normalized()
 	var y: float = clampf(at_y - global_position.y, 0.3, height - 0.2)
 	Fx.fire(_hit_sparks, global_position + dir * (radius + 0.1) + Vector3(0, y, 0), Fx.basis_up(dir))
+	Fx.fire(_hit_ring, global_position + Vector3(0, y, 0))
+	Fx.flash(self, global_position + Vector3(0, y, 0) + dir * (radius + 0.4), Color(1.0, 0.45, 0.85), 3.5, 6.0, 0.3)
 	_flash_shell.visible = true
 	_flash_mat.albedo_color.a = 0.9
 	var tw: Tween = create_tween()
 	tw.tween_property(_flash_mat, "albedo_color:a", 0.0, 0.3).set_ease(Tween.EASE_OUT)
 	tw.tween_callback(_flash_shell.hide)
+
+
+func _process(dt: float) -> void:
+	_t += dt
+	_body_mat.emission_energy_multiplier = 1.0 + 0.45 * (0.5 + 0.5 * sin(_t * 3.2)) + _pulse * 3.0
 
 
 func _physics_process(dt: float) -> void:
