@@ -10,6 +10,7 @@ extends Area3D
 ## needed it drops like a stone). Deterministic, identical for every racer.
 
 const FIELD_COLOR: Color = Color(0.72, 0.45, 1.0)
+const HUM_DB: float = -9.0
 
 @export var size: Vector3 = Vector3(10, 8, 20)
 ## Gravity cancelled while airborne inside (m/s^2).
@@ -24,6 +25,9 @@ var _frame_mat: StandardMaterial3D
 var _mote_mat: StandardMaterial3D
 var _sheet_mat: StandardMaterial3D
 var _was_on: bool = true
+# sound (side effect only): the field's drone (it stutters with the frame's flicker), on / off wubs
+var _hum: AudioStreamPlayer3D
+var _snd_on: bool = true
 
 
 func _ready() -> void:
@@ -37,6 +41,8 @@ func _ready() -> void:
 	add_child(cs)
 	_build_visual()
 	_apply_visual(Game.course_time)
+	_snd_on = is_on_at(Game.course_time)
+	_hum = WorldAudio.loop("gravity_hum", self, HUM_DB, maxf(maxf(size.x, size.y), size.z) * 0.5 + 10.0, 6.0, _snd_on)
 
 
 func is_on_at(time: float) -> bool:
@@ -161,6 +167,12 @@ func _apply_visual(t: float) -> void:
 		var left: float = time_until_off(t)
 		if left < warn:
 			k = 1.0 if fmod(left, 0.14) > 0.07 else 0.25
+	if _hum != null and period > 0.0:
+		if on != _snd_on:
+			_snd_on = on
+			WorldAudio.at(self, "gravity_on" if on else "gravity_off", global_position, 0.7, maxf(size.x, size.z) + 10.0)
+			WorldAudio.set_active(_hum, on)
+		_hum.volume_db = HUM_DB + linear_to_db(maxf(k, 0.05))
 	if on != _was_on or period > 0.0:
 		_was_on = on
 		_frame_mat.emission_energy_multiplier = 0.15 + 2.45 * k

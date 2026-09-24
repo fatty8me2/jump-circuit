@@ -21,6 +21,8 @@ extends Area3D
 var _streaks: GPUParticles3D
 var _silt: GPUParticles3D
 var _kelp: Array[Node3D] = []
+# sound (side effect only): the rush of the current, following the surge (and its telegraph)
+var _rush: AudioStreamPlayer3D
 
 
 func _ready() -> void:
@@ -33,6 +35,7 @@ func _ready() -> void:
 	cs.shape = shape
 	add_child(cs)
 	_build_visual()
+	_rush = WorldAudio.loop("surge_loop", self, -40.0, maxf(size.x, size.z) * 0.5 + 12.0, 6.0, false)
 	_apply(Game.course_time)
 
 
@@ -83,6 +86,10 @@ func _physics_process(dt: float) -> void:
 
 func _apply(t: float) -> void:
 	var v: float = _look_at_time(t)
+	if _rush != null:
+		WorldAudio.set_active(_rush, v > 0.02)
+		_rush.volume_db = -8.0 + linear_to_db(maxf(v, 0.01))
+		_rush.pitch_scale = 0.85 + 0.3 * v
 	_streaks.amount_ratio = 0.06 + 0.94 * v
 	_streaks.speed_scale = 0.5 + 1.3 * v
 	_silt.amount_ratio = 0.15 + 0.85 * v

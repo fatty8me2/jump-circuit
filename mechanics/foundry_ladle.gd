@@ -29,6 +29,8 @@ var _splash: GPUParticles3D
 var _steam: GPUParticles3D
 var _drips: GPUParticles3D
 var _state: int = -1
+# sound (side effect only): the pour's roar while the sheet is falling
+var _pour: AudioStreamPlayer3D
 
 
 func _ready() -> void:
@@ -45,6 +47,9 @@ func _ready() -> void:
 	add_child(_area)
 	_build_look()
 	_apply(true)
+	_pour = WorldAudio.loop("ladle_pour", self, -7.0, 28.0, 5.0, _state == 2)
+	if _pour != null:
+		_pour.position = Vector3(0, minf(drop * 0.5, 2.0), 0)
 
 
 func _build_look() -> void:
@@ -220,7 +225,10 @@ func _apply(force: bool = false) -> void:
 	var s: int = _state_at(t)
 	if s == _state and not force:
 		return
+	var was: int = _state
 	_state = s
+	if not force and was >= 0:
+		_sound(s)
 	_sheet.visible = s == 2
 	_stream.emitting = s == 2
 	_splash.emitting = s == 2
@@ -228,6 +236,19 @@ func _apply(force: bool = false) -> void:
 	_drips.emitting = s == 1
 	_lip_mat.emission_energy_multiplier = 3.0 if s == 1 or s == 2 else 0.8
 	_channel_mat.emission_energy_multiplier = 2.6 if s == 2 else (1.4 if s == 1 else 0.5)
+
+
+## Sound only: the drum grinding over, the slag hitting the channel and roaring, the steam after.
+func _sound(s: int) -> void:
+	WorldAudio.set_active(_pour, s == 2)
+	var at: Vector3 = to_global(Vector3(0, drop, DRUM_R * 0.55))
+	match s:
+		1:
+			WorldAudio.at(self, "ladle_tip", at, 0.6, 35.0)
+		2:
+			WorldAudio.at(self, "ladle_splash", global_position, 0.9, 40.0)
+		3:
+			WorldAudio.at(self, "ladle_hiss", global_position, 0.5, 30.0)
 
 
 func _physics_process(_dt: float) -> void:

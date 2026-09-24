@@ -43,6 +43,10 @@ func _ready() -> void:
 	_apply(Game.course_time)
 	reset_physics_interpolation()
 	add_to_group("course_clock")
+	# a low turntable motor under the hub (only heard close up)
+	var hum: AudioStreamPlayer3D = WorldAudio.loop("motor_hum", self, -20.0, 12.0, 3.0)
+	if hum != null:
+		hum.pitch_scale = 0.8
 
 
 ## restart_run() winds the clock back in place: take the new pose now, without a streak.

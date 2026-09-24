@@ -85,6 +85,11 @@ func launch_origin() -> Vector3:
 	return global_position + Vector3(0, 0.05, 0)
 
 
+## Its own bounce voice: a squishy bubbling bloop instead of the pad's boing (Player feedback).
+func bounce_clip() -> String:
+	return "jelly_bounce"
+
+
 func on_bounced(_player: Node) -> void:
 	_squash = 1.0
 	if _burst != null:

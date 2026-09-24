@@ -23,6 +23,10 @@ var _rumble: GPUParticles3D
 var _core: GPUParticles3D
 var _glow_mat: StandardMaterial3D
 var _light: OmniLight3D
+# sound (side effect only): the rumble before, the burst, the roaring bubble column
+var _roar: AudioStreamPlayer3D
+var _snd_on: bool = false
+var _snd_warn: bool = false
 
 
 func _ready() -> void:
@@ -39,6 +43,11 @@ func _ready() -> void:
 	add_child(_area)
 	_build_visual()
 	_apply(Game.course_time)
+	_snd_on = is_erupting_at(Game.course_time)
+	_snd_warn = _rumble.emitting
+	_roar = WorldAudio.loop("vent_loop", self, -6.0, 30.0, 5.0, _snd_on)
+	if _roar != null:
+		_roar.position = Vector3(0, 2.0, 0)
 
 
 func is_erupting_at(time: float) -> bool:
@@ -79,6 +88,8 @@ func _apply(t: float) -> void:
 		_plume.emitting = on
 	if _rumble.emitting != warning:
 		_rumble.emitting = warning
+	if _roar != null:
+		_sound(on, warning)
 	var glow: float = 0.8
 	if on:
 		glow = 3.5
@@ -87,6 +98,17 @@ func _apply(t: float) -> void:
 	if not is_equal_approx(_glow_mat.emission_energy_multiplier, glow):
 		_glow_mat.emission_energy_multiplier = glow
 		_light.light_energy = glow * 0.7
+
+
+## Sound only: the crater rumbles in warning, bursts, and roars while it erupts.
+func _sound(on: bool, warning: bool) -> void:
+	if warning and not _snd_warn:
+		WorldAudio.at(self, "vent_rumble", global_position, 0.7, 35.0)
+	if on and not _snd_on:
+		WorldAudio.at(self, "vent_burst", global_position + Vector3(0, 1.0, 0), 0.9, 40.0)
+	_snd_warn = warning
+	_snd_on = on
+	WorldAudio.set_active(_roar, on)
 
 
 func _build_visual() -> void:

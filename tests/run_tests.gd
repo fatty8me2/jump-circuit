@@ -2956,3 +2956,75 @@ func test_zs_soundscapes() -> void:
 		await get_tree().process_frame
 		await get_tree().process_frame
 		check(lvl.theme_id == "reef" and not lvl.checkpoints.is_empty() and rs.progress > 0.0 and rs.progress < 0.2, "reef: reaching the last checkpoint starts easing the deep bed in (progress %.3f)" % rs.progress)
+
+
+## Clips the world sound code plays (a name may be a set of _1.._N variants).
+const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_latch", "land_heavy", "boost",
+	"laser_on", "laser_off", "blink_appear", "blink_vanish", "blink_tick", "crusher_shudder", "crusher_slam",
+	"crusher_rise", "piston_fire", "piston_clank", "piston_retract", "sweep_whoosh", "pendulum_whoosh",
+	"warp_whoosh", "prop_bonk", "platform_reform", "ladle_tip", "ladle_splash", "ladle_hiss", "jelly_bounce",
+	"vent_rumble", "vent_burst", "thruster_ignite", "thruster_cough", "thruster_cutoff", "flare_alarm",
+	"flare_launch", "gravity_on", "gravity_off", "escape_tick", "escape_tock", "trolley_clunk",
+	"counterweight_thud", "billboard_on", "billboard_off", "billboard_glitch", "data_chirp", "data_zip"]
+const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
+	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
+	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz"]
+
+
+func test_z_world_sounds() -> void:
+	# every map has its own footsteps and landings; anything else falls back to the plain ones
+	var old_theme: String = Sfx.get("_theme")
+	for th: String in ["gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent"]:
+		Sfx.set_theme(th)
+		check(Sfx.themed("step") == "step_" + th and Sfx.themed("land") == "land_" + th,
+			"%s has its own footsteps and landings" % th)
+	Sfx.set_theme("no_such_map")
+	check(Sfx.themed("step") == "step" and Sfx.themed("land") == "land", "a map without its own floor falls back to step / land")
+	Sfx.set_theme(old_theme)
+	var missing: Array[String] = []
+	for c: String in WORLD_CLIPS + WORLD_LOOPS:
+		if not Sfx.has_clip(c):
+			missing.append(c)
+	check(missing.is_empty(), "every world sound clip exists %s" % str(missing))
+	var flat: Array[String] = []
+	for c: String in WORLD_LOOPS:
+		var s: AudioStreamWAV = load("res://audio/%s.wav" % c) as AudioStreamWAV
+		if s == null or s.loop_mode == AudioStreamWAV.LOOP_DISABLED:
+			flat.append(c)
+	check(flat.is_empty(), "every machine / movement loop imports as a loop %s" % str(flat))
+	check(not WorldAudio.enabled(), "headless runs make no world sounds (no emitters, no per-frame cost)")
+	# the sound side of every level, forced on: builds its emitters, follows the machines through
+	# their cycles with the player stood next to each kind, and logs no errors doing it
+	WorldAudio._enabled = 1
+	for i: int in Game.LEVELS.size():
+		if only_level >= 0 and i != only_level:
+			continue
+		var lvl: LevelBase = await load_level(i)
+		var label: String = str(Game.LEVELS[i]["name"])
+		var loops: int = lvl.find_children("*", "AudioStreamPlayer3D", true, false).size()
+		check(loops > 3 and lvl.player.find_children("*", "PlayerAudio", true, false).size() == 1,
+			"%s: builds its sound emitters (%d) and the player's own" % [label, loops])
+		var seen: Dictionary = {}
+		var heard: int = 0
+		var pool: Array = Sfx.get("_pool3d")
+		for n: Node in lvl.find_children("*", "Node3D", true, false):
+			var sc: Script = n.get_script() as Script
+			if sc == null or seen.has(sc) or not sc.resource_path.begins_with("res://mechanics/"):
+				continue
+			if n is FinishGate or n is Checkpoint:
+				continue
+			seen[sc] = true
+			lvl.player.teleport(Transform3D(Basis(), (n as Node3D).global_position + Vector3(1.5, 2.0, 2.5)))
+			lvl.player.cmd_move = Vector2(0.4, 1.0)
+			for k: int in 8:
+				await seconds(0.1)
+				for b: AudioStreamPlayer3D in pool:
+					if b.playing:
+						heard += 1
+		lvl.player.cmd_move = Vector2.ZERO
+		check(heard > 0, "%s: the machines' one-shots play near the listener (%d voice-samples)" % [label, heard])
+	WorldAudio._enabled = 0
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)

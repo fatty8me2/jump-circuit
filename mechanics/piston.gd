@@ -143,6 +143,14 @@ func _process(_dt: float) -> void:
 	var was: int = _fx_phase
 	_fx_phase = ph
 	_steam.emitting = ph == 3
+	# sound: the valve fires, the ram hits its stop, then vents on the way back
+	if was >= 0:
+		if ph == 1:
+			WorldAudio.at(self, "piston_fire", global_position, 0.7, 35.0)
+		elif ph == 2 and was == 1:
+			WorldAudio.at(self, "piston_clank", global_position, 0.7, 35.0)
+		elif ph == 3:
+			WorldAudio.at(self, "piston_retract", global_position, 0.4, 25.0)
 	if ph == 2 and (was == 0 or was == 1):
 		_fan.restart()
 		_puff.restart()

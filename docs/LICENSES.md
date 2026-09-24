@@ -3,7 +3,7 @@
 ## Game content
 All code, levels, shaders, meshes (procedural), UI and audio in this repository were created for
 Jump Circuit. There are **no third-party art, audio or code assets** in the project.
-Audio is synthesised by `tools/gen_audio.py` (see `docs/AUDIO.md`).
+Audio (effects, ambience and music) is synthesised by the generators in `tools/` (see `docs/AUDIO.md`).
 
 ## Engine and bundled components
 * **Godot Engine 4.7.1** - MIT licence. Copyright (c) 2014-present Godot Engine contributors,

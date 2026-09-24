@@ -1,10 +1,22 @@
 # Jump Circuit - Audio
 
 **All audio in this project is original.** Every sound effect and every piece of
-music is synthesised from maths and seeded pseudo-random noise by
-`tools/gen_audio.py`. No samples, loops, sound fonts or other third-party assets
+music is synthesised from maths and seeded pseudo-random noise by the generators
+in `tools/` (and `party/`). No samples, loops, sound fonts or other third-party assets
 are used, so no third-party licences or attributions are needed. The generated
 files are released with the project under the project's own terms.
+
+## Where everything lives
+
+| What | Generator | Doc |
+|------|-----------|-----|
+| Core effects (jump, land, bounce, checkpoint / finish fallbacks, UI ...) | `tools/gen_audio.py` | this file |
+| The score: map music, menus, fanfares, checkpoint chimes | `tools/gen_music.py` + `tools/music_engine.py` | [Music](#music) below |
+| Map soundscapes: ambience beds + scheduled one-shots (`sound/soundscape.gd`) | `tools/gen_ambience.py` | [AUDIO_AMBIENCE.md](AUDIO_AMBIENCE.md) |
+| Machine, mechanic, footstep and movement sounds (`mechanics/world_audio.gd`, `player/player_audio.gd`) | `tools/gen_world_sfx.py` | [AUDIO_WORLD.md](AUDIO_WORLD.md) |
+| Party Mode effects | `party/gen_party_audio.py` | [PARTY_BRIEF.md](PARTY_BRIEF.md) |
+
+The music and ambience generators need `soundfile` (`pip install soundfile`) as well as numpy.
 
 ## Regenerating
 
@@ -34,7 +46,7 @@ checks the total size budget (currently about 14 MB of the 25 MB allowed).
 | Group   | Format                        | Level                                      |
 |---------|-------------------------------|--------------------------------------------|
 | Effects | 44.1 kHz, mono, 16-bit PCM    | peak normalised to -3 dBFS, 2 ms fade in, 8+ ms fade out, DC removed |
-| Music   | 22.05 kHz, stereo, 16-bit PCM | -14 dBFS RMS, peaks held under about -1.5 dBFS by a memoryless soft knee |
+| Music   | 32 kHz, stereo, Ogg Vorbis (~96 kbps) | K-weighted loudness: full map score about -14.5 dB (base layer alone about -16.5), menus -15.5, results -17; circular look-ahead limiter, peaks under -1 dBFS |
 
 Music is stored at 22.05 kHz because it is deliberately soft and dark (it sits
 under the effects) and this keeps stereo loops inside the size budget.

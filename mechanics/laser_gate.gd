@@ -25,6 +25,8 @@ var _haze: MeshInstance3D
 var _lamp: OmniLight3D
 var _fx_on: bool = false
 var _fx_charging: bool = false
+# sound (side effect only): the beam's hum, spun up through the charge, zaps on the switch
+var _hum: AudioStreamPlayer3D
 
 
 func _ready() -> void:
@@ -115,6 +117,7 @@ func _apply() -> void:
 
 
 const HOT_RED: Color = Color(3.0, 0.55, 0.3)
+const HUM_DB: float = -13.0
 
 
 func _build_fx() -> void:
@@ -162,6 +165,7 @@ func _build_fx() -> void:
 	_lamp.visible = false
 	add_child(_lamp)
 	_fx_on = is_on_at(Game.course_time)
+	_hum = WorldAudio.loop("laser_hum", self, HUM_DB, 20.0, 4.0, _fx_on)
 
 
 ## Visual state only (the kill check in _physics_process never reads any of this).
@@ -175,12 +179,18 @@ func _process(_dt: float) -> void:
 			c.emitting = charging
 		for g: MeshInstance3D in _eye_glow:
 			g.visible = charging
+		if charging:
+			WorldAudio.set_active(_hum, true)
 	if charging:
 		var k: float = clampf(1.0 - time_until_on(t) / maxf(warn, 0.01), 0.0, 1.0)
 		var flick: float = 0.75 + 0.25 * sin(t * 83.0) * sin(t * 57.0)
 		for g: MeshInstance3D in _eye_glow:
 			g.scale = Vector3.ONE * lerpf(0.35, 1.3, k) * flick
 			(g.material_override as StandardMaterial3D).albedo_color.a = lerpf(0.3, 1.0, k)
+		if _hum != null:
+			# the hum spins up with the charge
+			_hum.pitch_scale = lerpf(0.5, 1.0, k * k)
+			_hum.volume_db = HUM_DB - 16.0 * (1.0 - k)
 	if on != _fx_on:
 		_fx_on = on
 		_beam_sparks.emitting = on
@@ -189,6 +199,11 @@ func _process(_dt: float) -> void:
 		if on:
 			_snap.restart()
 			Fx.pulse(_lamp, 4.0, 0.0, 0.35)
+		WorldAudio.at(self, "laser_on" if on else "laser_off", global_position, 0.75 if on else 0.55, 35.0)
+		WorldAudio.set_active(_hum, on)
+		if _hum != null:
+			_hum.pitch_scale = 1.0
+			_hum.volume_db = HUM_DB
 
 
 func _physics_process(_dt: float) -> void:

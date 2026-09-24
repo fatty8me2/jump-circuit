@@ -20,9 +20,35 @@ extends MovingPlatform
 @export var beat_offset: float = 0.0
 
 
+var _beat_n: int = 0
+
+
 func _ready() -> void:
 	period = beat * 2.0
 	super()
+	_beat_n = floori(beat_pos(Game.course_time))
+	set_process(WorldAudio.enabled())
+
+
+func _hums() -> bool:
+	return false
+
+
+## Sound only: tick as it snaps up, tock as it drops. A row of pallets all move on the same beat,
+## so each of the two plays once per beat, not once per pallet.
+func _process(_dt: float) -> void:
+	var n: int = floori(beat_pos(Game.course_time))
+	if n == _beat_n:
+		return
+	var fresh: bool = n == _beat_n + 1
+	_beat_n = n
+	if not fresh:
+		return
+	var clip: String = "escape_tick" if is_high_at(Game.course_time) else "escape_tock"
+	var pl: Node3D = WorldAudio.local_player(self)
+	var pos: Vector3 = global_position
+	if WorldAudio.hears(self, pos, 30.0) and (pl == null or pl.global_position.distance_to(pos) < 18.0) 			and WorldAudio.once(clip, 0.08):
+		Sfx.play_at(clip, pos, 0.03, 0.8)
 
 
 func beat_pos(time: float) -> float:

@@ -53,6 +53,11 @@ func _ready() -> void:
 		_build_boost_fx()
 	elif kind == Kind.SLICK:
 		_build_ice_fx()
+	elif kind == Kind.CONVEYOR:
+		# the belt's motor and rollers (the boost strip's zing and the ice hiss are the player's)
+		var hum: AudioStreamPlayer3D = WorldAudio.loop("conveyor_hum", self, -17.0, 18.0, 4.0)
+		if hum != null:
+			hum.pitch_scale = clampf(0.8 + speed / 30.0, 0.8, 1.25)
 
 
 ## Ice twinkles: a few star glints popping on the sheet (visual only, one tiny emitter).

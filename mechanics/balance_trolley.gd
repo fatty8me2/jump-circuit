@@ -17,6 +17,9 @@ var ledge_lip: bool = false
 var run_lines: bool = false
 
 var _sparks: GPUParticles3D
+# sound (side effect only): the crane motor and rattling cable while it runs, a clunk as it
+# starts and stops
+var _motor: AudioStreamPlayer3D
 
 
 func _ready() -> void:
@@ -33,6 +36,9 @@ func _ready() -> void:
 	position = _origin + offset_at(Game.course_time)
 	reset_physics_interpolation()
 	add_to_group("course_clock")
+	_motor = WorldAudio.loop("trolley_run", self, -40.0, 26.0, 5.0)
+	if _motor != null:
+		_motor.position = Vector3(0, size.y * 0.5 + cable_height, 0)
 
 
 func _build_look() -> void:
@@ -122,6 +128,14 @@ func speed_at(time: float) -> float:
 func _physics_process(_dt: float) -> void:
 	var t: float = Game.course_time
 	position = _origin + offset_at(t)
-	var run: bool = speed_at(t) > 1.2
+	var speed: float = speed_at(t)
+	var run: bool = speed > 1.2
 	if _sparks.emitting != run:
 		_sparks.emitting = run
+		if _motor != null:
+			WorldAudio.at(self, "trolley_clunk", _motor.global_position, 0.55, 35.0)
+	if _motor != null:
+		var k: float = clampf(speed / 6.0, 0.0, 1.0)
+		WorldAudio.set_active(_motor, k > 0.03)
+		_motor.volume_db = -11.0 + linear_to_db(maxf(k, 0.03))
+		_motor.pitch_scale = 0.75 + 0.35 * k

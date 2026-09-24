@@ -14,6 +14,11 @@ extends Node3D
 var _pivot: Node3D
 var _tips: Array[Node3D] = []
 var _swooshes: Array[Swoosh] = []
+# sound (side effect only): seconds until each bar next sweeps past the player
+var _eta: Array[float] = []
+
+## Seconds before a bar reaches the player that its whoosh starts (the clip peaks ~0.22 s in).
+const WHOOSH_LEAD: float = 0.21
 
 
 func _ready() -> void:
@@ -61,6 +66,30 @@ func snap_to_clock() -> void:
 func _process(dt: float) -> void:
 	for i: int in _tips.size():
 		_swooshes[i].feed(_tips[i].global_position, true, dt)
+	if WorldAudio.enabled():
+		_whoosh_past_player()
+
+
+## A whoosh each time a bar is about to sweep past a player standing within its reach
+## (timed so the rush peaks as the bar goes by). Sound only.
+func _whoosh_past_player() -> void:
+	var pl: Node3D = WorldAudio.local_player(self)
+	_eta.resize(bar_count)
+	if pl == null:
+		return
+	var rel: Vector3 = to_local(pl.global_position)
+	var r: float = Vector2(rel.x, rel.z).length()
+	var near: bool = r < arm_length + 1.2 and r > 0.4 and absf(rel.y - bar_height) < 2.5
+	var ang_p: float = atan2(-rel.z, rel.x)
+	var omega: float = TAU / period
+	for i: int in bar_count:
+		var bar_ang: float = _pivot.rotation.y + TAU * float(i) / float(bar_count)
+		# (a sweeper may spin either way)
+		var eta: float = (fposmod(ang_p - bar_ang, TAU) if omega > 0.0 else fposmod(bar_ang - ang_p, TAU)) / absf(omega)
+		if near and _eta[i] > WHOOSH_LEAD and eta <= WHOOSH_LEAD:
+			var at: Vector3 = to_global(Vector3(cos(ang_p) * r, bar_height, -sin(ang_p) * r))
+			WorldAudio.at(self, "sweep_whoosh", at, 0.8, 30.0, 0.08)
+		_eta[i] = eta
 
 
 func angle_at(time: float) -> float:

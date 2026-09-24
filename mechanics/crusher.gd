@@ -118,6 +118,12 @@ func _process(_dt: float) -> void:
 	var shudder: bool = u >= SHUDDER and u < DOWN
 	if _grit.emitting != shudder:
 		_grit.emitting = shudder
+	# sound: the shudder's groan, and the hydraulics hauling it back up (a wrap never counts)
+	if u - was < 0.25:
+		if was < SHUDDER and u >= SHUDDER:
+			WorldAudio.at(self, "crusher_shudder", global_position, 0.6, 35.0)
+		elif was < RISE and u >= RISE:
+			WorldAudio.at(self, "crusher_rise", global_position, 0.5, 35.0)
 	# the frame the press reaches the floor (u passes DOWN; a wrap never counts)
 	if was < DOWN and u >= DOWN and u - was < 0.25:
 		var floor_local := Vector3(0, -size.y * 0.5 - gap_at(Game.course_time), 0)
@@ -128,6 +134,7 @@ func _process(_dt: float) -> void:
 		Fx.pulse(_lamp, 5.0, 0.0, 0.5)
 		_haze.position = floor_local + Vector3(0, 0.1, 0)
 		_haze.restart()
+		WorldAudio.at(self, "crusher_slam", to_global(floor_local), 1.0, 55.0)
 
 
 func snap_to_clock() -> void:

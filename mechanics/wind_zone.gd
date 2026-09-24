@@ -59,6 +59,11 @@ func _ready() -> void:
 	p.draw_pass_1 = m
 	add_child(p)
 	_build_motes(along, axis, span)
+	# moving air you can hear before you step into it
+	var wind: AudioStreamPlayer3D = WorldAudio.loop("wind_loop", self, -12.0,
+		maxf(maxf(size.x, size.y), size.z) * 0.5 + 12.0, 5.0)
+	if wind != null:
+		wind.pitch_scale = clampf(0.85 + push.length() / 400.0, 0.85, 1.2)
 
 
 ## Soft motes tumbling along with the streaks, on turbulent paths (visual only).

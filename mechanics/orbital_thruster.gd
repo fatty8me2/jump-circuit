@@ -27,6 +27,9 @@ var _cough: GPUParticles3D
 var _throat_mat: StandardMaterial3D
 var _light: OmniLight3D
 var _firing: bool = false
+# sound (side effect only): sputters in the warning, ignition, the burn's roar, the cut-off
+var _burn: AudioStreamPlayer3D
+var _cough_on: bool = false
 
 
 func _ready() -> void:
@@ -43,6 +46,9 @@ func _ready() -> void:
 	add_child(_area)
 	_build_visual()
 	_apply(Game.course_time)
+	_burn = WorldAudio.loop("thruster_burn", self, -5.0, 35.0, 6.0, _firing)
+	if _burn != null:
+		_burn.position = Vector3(0, 1.5, 0)
 
 
 func is_firing_at(time: float) -> bool:
@@ -82,6 +88,14 @@ func _apply(t: float) -> void:
 		_firing = on
 		_plume.emitting = on
 		_core.emitting = on
+		if _burn != null:
+			WorldAudio.set_active(_burn, on)
+			WorldAudio.at(self, "thruster_ignite" if on else "thruster_cutoff", _burn.global_position, 0.85 if on else 0.5, 45.0)
+	var cough: bool = coughing and fmod(until, 0.12) > 0.06
+	if cough != _cough_on:
+		_cough_on = cough
+		if cough and _burn != null:
+			WorldAudio.at(self, "thruster_cough", _burn.global_position, 0.55, 35.0, 0.1)
 	if _cough.emitting != coughing:
 		_cough.emitting = coughing
 	var glow: float = 5.0 if on else (2.0 if coughing and fmod(until, 0.12) > 0.06 else 0.5)

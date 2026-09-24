@@ -36,6 +36,10 @@ func _ready() -> void:
 			gate.add_child(clip)
 	add_to_group("course_clock")
 	snap_to_clock()
+	# the shears' motors and the leaves they shred ride along with the beam (it hums too)
+	var buzz: AudioStreamPlayer3D = WorldAudio.loop("trimmer_buzz", gate, -9.0, 24.0, 4.0)
+	if buzz != null:
+		buzz.position = Vector3(0, beam_size.y * 0.5 + 0.4, 0)
 
 
 ## Beam offset (local to this node) at course time `time`.

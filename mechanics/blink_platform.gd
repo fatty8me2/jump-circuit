@@ -69,16 +69,32 @@ func _build_fx() -> void:
 
 
 var _ring: GPUParticles3D
+var _tick: int = -1   # which flicker of the vanish warning last ticked (sound only)
 
 
 func _process(_dt: float) -> void:
 	var on: bool = is_on_at(Game.course_time)
+	if on and _fx_on:
+		_warn_tick()
 	if on == _fx_on:
 		return
 	_fx_on = on
 	(_dissolve if not on else _gather).restart()
 	if on:
 		_ring.restart()
+	WorldAudio.at(self, "blink_appear" if on else "blink_vanish", global_position, 0.6, 30.0)
+
+
+## A soft tick on every flicker of the warning before it vanishes (sound only).
+func _warn_tick() -> void:
+	if not WorldAudio.enabled():
+		return
+	var left: float = (on_fraction - fposmod(Game.course_time / period + phase, 1.0)) * period
+	var k: int = int(left / 0.16) if left < warn else -1
+	if k != _tick:
+		_tick = k
+		if k >= 0:
+			WorldAudio.at(self, "blink_tick", global_position, 0.35, 25.0, 0.02)
 
 
 func is_on_at(time: float) -> bool:

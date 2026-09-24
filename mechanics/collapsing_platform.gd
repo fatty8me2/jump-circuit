@@ -133,5 +133,6 @@ func _physics_process(dt: float) -> void:
 			if _timer >= respawn:
 				reset_state()
 				_vis.scale = Vector3.ONE * 0.05
+				WorldAudio.at(self, "platform_reform", global_position, 0.5, 30.0)
 				_grow = create_tween()
 				_grow.tween_property(_vis, "scale", Vector3.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
