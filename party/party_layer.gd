@@ -928,8 +928,10 @@ func _on_swap(from_id: int, pos: Vector3) -> void:
 	last_hit_by = from_id
 	last_hit_at = clock
 	PartyFx.implode(self, player.global_position + Vector3(0, 0.8, 0), Color(0.4, 1.0, 0.85), 2.0)
+	PartyFx.portal(self, player.global_position + Vector3(0, 0.9, 0), Vector3.UP.cross(Basis(Vector3.UP, player.camera_yaw).x), Color(0.4, 1.0, 0.85), 1.1, 0.6)
 	player.teleport(Transform3D(Basis(Vector3.UP, player.camera_yaw), pos + Vector3(0, 0.1, 0)))
 	PartyFx.burst(self, pos + Vector3(0, 0.8, 0), Color(0.4, 1.0, 0.85), 40, 6.0)
+	PartyFx.portal(self, pos + Vector3(0, 0.9, 0), Vector3.UP.cross(Basis(Vector3.UP, player.camera_yaw).x), Color(0.4, 1.0, 0.85), 1.1, 0.6)
 	sfx.play("warp", 1.0)
 	hud.announce("SWAPPED!", Color(0.4, 1.0, 0.85))
 	hit_taken.emit(from_id, "swap")

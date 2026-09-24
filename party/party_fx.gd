@@ -1056,21 +1056,21 @@ static func portal(parent: Node, pos: Vector3, normal: Vector3, color: Color, ra
 	tm.outer_radius = 1.0
 	tm.rings = 40
 	tm.ring_segments = 6
-	part(spin, tm, glow_mat(color, 3.0), Vector3.ZERO)
+	part(spin, tm, glow_mat(color, 1.5), Vector3.ZERO)
 	var disc := CylinderMesh.new()
 	disc.top_radius = 0.9
 	disc.bottom_radius = 0.9
 	disc.height = 0.02
 	disc.radial_segments = 32
 	disc.rings = 1
-	part(spin, disc, glow_mat(Color(color.r * 0.3, color.g * 0.5, color.b * 0.6, 0.55), 1.5, true), Vector3.ZERO)
+	part(spin, disc, glow_mat(Color(color.r * 0.15, color.g * 0.3, color.b * 0.45, 0.6), 1.0), Vector3.ZERO)
 	# spiral arms: particles orbiting and sinking to the centre
-	var arms: GPUParticles3D = emitter({"amount": 40, "lifetime": 0.5, "size": 0.16, "color": color.lerp(Color.WHITE, 0.3),
+	var arms: GPUParticles3D = emitter({"amount": 40, "lifetime": 0.5, "size": 0.14, "color": color,
 		"shape": "ring", "radius": 0.95, "inner": 0.8, "dir": Vector3(1, 0, 0), "spread": 0.0, "vmin": 0.0, "vmax": 0.0,
 		"radial": -3.4, "local": true, "spark": true, "aabb": 3.0,
 		"colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0)]})
 	spin.add_child(arms)
-	part(spin, sphere_mesh(0.18, 12), glow_mat(Color(1, 1, 1), 3.0), Vector3.ZERO)
+	part(spin, sphere_mesh(0.1, 10), glow_mat(Color(1, 1, 1), 1.5), Vector3.ZERO)
 	root.scale = Vector3.ONE * 0.01
 	var tw: Tween = root.create_tween()
 	tw.tween_property(root, "scale", Vector3.ONE * radius, 0.16).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)

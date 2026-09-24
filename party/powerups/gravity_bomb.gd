@@ -35,7 +35,9 @@ static func _spawn(layer_ref: PartyLayer, key: String, o: Vector3, v: Vector3, i
 	pr.gravity = 20.0
 	pr.life = 2.0
 	pr.radius = 0.8
+	# the orb: a black core that bends the light around it, two violet rings orbiting
 	PartyFx.part(pr, PartyFx.sphere_mesh(0.3, 16), PartyFx.glow_mat(Color(0.03, 0.0, 0.06), 1.0), Vector3.ZERO)
+	pr.add_child(PartyFx.lens_sphere(0.6, Color(0.7, 0.4, 1.0), 0.05))
 	var ring := Node3D.new()
 	pr.add_child(ring)
 	var tm := TorusMesh.new()
@@ -47,11 +49,15 @@ static func _spawn(layer_ref: PartyLayer, key: String, o: Vector3, v: Vector3, i
 	PartyFx.part(ring, tm, PartyFx.glow_mat(Color(0.4, 0.6, 1.0), 2.0), Vector3.ZERO, Vector3(0.8, 0.8, 0.8), Vector3(-40, 60, 0))
 	var tw: Tween = ring.create_tween().set_loops()
 	tw.tween_property(ring, "rotation:y", TAU, 0.6).from(0.0)
+	# accretion: motes spiralling in, a dark violet wake behind it
 	pr.add_child(PartyFx.emitter({"amount": 40, "lifetime": 0.5, "size": 0.2, "color": VIOLET, "shape": "shell",
 		"radius": 0.9, "vmin": 0.0, "vmax": 0.1, "radial": -6.0, "tangential": 6.0, "aabb": 25.0,
 		"colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0)]}))
-	pr.add_child(PartyFx.emitter({"amount": 24, "lifetime": 0.4, "size": 0.3, "color": Color(0.3, 0.1, 0.5),
-		"vmin": 0.0, "vmax": 0.3, "aabb": 25.0}))
+	pr.add_child(PartyFx.emitter({"amount": 30, "lifetime": 0.45, "size": 0.4, "color": Color(0.22, 0.08, 0.35, 0.75),
+		"additive": false, "tex": "smoke", "vmin": 0.0, "vmax": 0.3, "grow": true, "angle": true, "aabb": 25.0,
+		"fixed_fps": 0, "colors": [Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)]}))
+	pr.add_child(PartyFx.emitter({"amount": 24, "lifetime": 0.4, "size": 0.18, "color": Color(0.8, 0.5, 1.4),
+		"vmin": 0.0, "vmax": 0.3, "aabb": 25.0, "fixed_fps": 0}))
 	var boom := func(pos: Vector3) -> void: _burst(layer_ref, key, pos, true)
 	pr.on_world = func(pos: Vector3, n: Vector3) -> void: boom.call(pos + n * 0.4)
 	pr.on_expire = boom
@@ -62,17 +68,46 @@ static func _spawn(layer_ref: PartyLayer, key: String, o: Vector3, v: Vector3, i
 	return pr
 
 
+## Space folds in: a lens bubble swells over the blast, then collapses to a point while
+## streaks and rings are sucked in; then it lets go - a violet shockwave, and dust, rocks and
+## sparkles drifting up weightless.
 static func _burst(layer_ref: PartyLayer, key: String, pos: Vector3, is_local: bool) -> void:
 	PartyFx.implode(layer_ref, pos, VIOLET, RADIUS)
-	PartyFx.orb_pulse(layer_ref, pos, Color(0.5, 0.25, 1.0, 0.35), 0.5, RADIUS, 0.6, 2.0)
 	PartyFx.orb_pulse(layer_ref, pos, Color(0.05, 0.0, 0.1, 0.9), 1.4, 0.1, 0.45, 1.0)
+	# the warp: a lens that grows fast, then collapses to nothing
+	var lens: MeshInstance3D = PartyFx.lens_sphere(1.0, Color(0.75, 0.45, 1.0), 0.12)
+	layer_ref.add_child(lens)
+	lens.global_position = pos
+	lens.scale = Vector3.ONE * 0.3
+	var lw: Tween = lens.create_tween()
+	lw.tween_property(lens, "scale", Vector3.ONE * RADIUS * 0.75, 0.12).set_ease(Tween.EASE_OUT)
+	lw.tween_property(lens, "scale", Vector3.ONE * 0.05, 0.4).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	lw.tween_callback(lens.queue_free)
+	# streaks sucked into the centre
+	PartyFx.one_shot(layer_ref, pos, {"amount": 50, "lifetime": 0.45, "size": Vector2(0.06, 0.9), "color": Color(0.8, 0.55, 1.5),
+		"tex": "streak", "facing": "velocity", "shape": "shell", "radius": RADIUS * 1.1, "vmin": 0.0, "vmax": 0.5,
+		"radial": -RADIUS * 9.0, "explosiveness": 0.7, "shrink": false, "aabb": RADIUS * 3.0,
+		"colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0)]})
 	for i: int in 3:
 		PartyFx.ring_pulse(layer_ref, pos, Vector3(randf_range(-1, 1), 1.0, randf_range(-1, 1)), VIOLET.lerp(Color(0.4, 0.6, 1.0), float(i) / 2.0), RADIUS, 0.3, 0.45 + 0.1 * float(i), 0.08)
-	PartyFx.one_shot(layer_ref, pos, {"amount": 60, "lifetime": 1.8, "size": 0.18, "color": VIOLET, "shape": "sphere",
-		"radius": RADIUS * 0.8, "vmin": 0.2, "vmax": 0.8, "dir": Vector3.UP, "spread": 30.0, "gravity": Vector3(0, 1.2, 0),
-		"spark": true, "explosiveness": 0.7})
 	PartyFx.flash(layer_ref, pos, VIOLET, 8.0, RADIUS * 3.0, 0.5)
 	layer_ref.sfx.play_at("warp", pos, 1.0, 0.6)
+	# ...and lets go
+	layer_ref.get_tree().create_timer(0.48, false).timeout.connect(func() -> void:
+		if not is_instance_valid(layer_ref) or not layer_ref.is_inside_tree():
+			return
+		PartyFx.orb_pulse(layer_ref, pos, Color(0.5, 0.25, 1.0, 0.3), 0.3, RADIUS, 0.5, 1.6)
+		PartyFx.shockwave(layer_ref, pos - Vector3(0, 0.6, 0), VIOLET, RADIUS * 1.1, 0.5)
+		PartyFx.ring_pulse(layer_ref, pos, Vector3.UP, Color(0.8, 0.6, 1.0), 0.3, RADIUS * 1.2, 0.4, 0.1)
+		PartyFx.star_ring(layer_ref, pos, Color(0.8, 0.6, 1.0), 8, 6.0, 0.4)
+		PartyFx.one_shot(layer_ref, pos, {"amount": 60, "lifetime": 1.8, "size": 0.18, "color": VIOLET, "shape": "sphere",
+			"radius": RADIUS * 0.8, "vmin": 0.2, "vmax": 0.8, "dir": Vector3.UP, "spread": 30.0, "gravity": Vector3(0, 1.2, 0),
+			"spark": true, "explosiveness": 0.7})
+		# weightless rubble drifting up, tumbling slowly
+		PartyFx.one_shot(layer_ref, pos - Vector3(0, 0.5, 0), {"amount": 14, "lifetime": 1.8, "facing": "mesh",
+			"mesh": Fx.chunk_mesh(0.16), "color": Color(0.55, 0.5, 0.6), "shape": "sphere", "radius": RADIUS * 0.6,
+			"dir": Vector3.UP, "spread": 25.0, "vmin": 0.6, "vmax": 1.6, "gravity": Vector3(0, 0.6, 0), "angle": true,
+			"spin": 90.0, "explosiveness": 0.9, "colors": [Color(1, 1, 1, 1), Color(1, 1, 1, 1)], "aabb": RADIUS * 3.0}))
 	if not is_local:
 		return
 	layer_ref.send_fx("gravity", "burst", {"k": key, "pos": PowerUp.arr(pos)})
