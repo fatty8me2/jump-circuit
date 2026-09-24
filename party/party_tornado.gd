@@ -24,6 +24,9 @@ var _cooldown: float = 0.0
 var _dummy_cd: Dictionary = {}
 var _spin: Node3D
 var _done: bool = false
+## Own funnel materials (they fade as it winds down) and their full alphas.
+var _mats: Array[StandardMaterial3D] = []
+var _alphas: Array[float] = []
 
 
 func _ready() -> void:
@@ -43,33 +46,63 @@ func _build() -> void:
 	_spin = Node3D.new()
 	add_child(_spin)
 	# the funnel: stacked translucent cones and swirling rings of dust, wider toward the top
-	var mat: StandardMaterial3D = PartyFx.glow_mat(Color(0.8, 0.9, 1.0, 0.07), 1.2, true)
+	var mat: StandardMaterial3D = PartyFx.fading_mat(Color(0.8, 0.9, 1.0, 0.07), 1.2)
 	var c: CylinderMesh = PartyFx.cyl_mesh(0.35, HEIGHT, 2.0, 20)
 	c.cap_top = false
 	c.cap_bottom = false
 	PartyFx.part(_spin, c, mat, Vector3(0, HEIGHT * 0.5, 0))
+	var mat2: StandardMaterial3D = PartyFx.fading_mat(Color(1.0, 1.0, 1.0, 0.06), 1.4)
 	var c2: CylinderMesh = PartyFx.cyl_mesh(0.2, HEIGHT * 0.8, 1.3, 16)
 	c2.cap_top = false
 	c2.cap_bottom = false
-	PartyFx.part(_spin, c2, PartyFx.glow_mat(Color(1.0, 1.0, 1.0, 0.06), 1.4, true), Vector3(0, HEIGHT * 0.42, 0))
+	PartyFx.part(_spin, c2, mat2, Vector3(0, HEIGHT * 0.42, 0))
+	# wind bands: thin tilted rings whipping round inside the funnel
+	var band: StandardMaterial3D = PartyFx.fading_mat(Color(1.0, 1.0, 1.0, 0.22), 1.3)
+	for i: int in 4:
+		var h: float = 0.6 + float(i) * (HEIGHT / 4.5)
+		var r: float = lerpf(0.5, 1.9, float(i) / 3.0)
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.93
+		tm.outer_radius = 1.0
+		tm.rings = 32
+		tm.ring_segments = 4
+		PartyFx.part(_spin, tm, band, Vector3(0, h, 0), Vector3(r, 1.0, r * 0.9), Vector3(8.0 + 5.0 * float(i % 2), 30.0 * float(i), -6.0))
+	for m: StandardMaterial3D in [mat, mat2, band]:
+		_mats.append(m)
+		_alphas.append(m.albedo_color.a)
 	for i: int in 6:
 		var h: float = 0.3 + float(i) * (HEIGHT / 6.0)
 		var r: float = lerpf(0.45, 2.1, float(i) / 5.0)
-		# swirling dust: alpha-blended grey-white puffs whipped round the funnel wall
-		var e: GPUParticles3D = PartyFx.emitter({"amount": 34, "lifetime": 0.7, "size": 0.55 + 0.12 * float(i), "color": Color(0.86, 0.9, 0.95, 0.75),
-			"shape": "ring", "radius": r, "inner": r * 0.8, "height": 0.3, "vmin": 0.0, "vmax": 0.3, "dir": Vector3.UP,
-			"spread": 20.0, "orbit": 1.6 - 0.15 * float(i), "local": true, "aabb": 6.0, "additive": false, "angle": true, "shrink": false,
+		# swirling dust: alpha-blended grey-white puffs whipped round with the funnel
+		var e: GPUParticles3D = PartyFx.emitter({"amount": 30, "lifetime": 0.7, "size": 0.55 + 0.12 * float(i), "color": Color(0.86, 0.9, 0.95, 0.75),
+			"tex": "smoke", "shape": "ring", "radius": r, "inner": r * 0.8, "height": 0.3, "vmin": 0.0, "vmax": 0.3, "dir": Vector3.UP,
+			"spread": 20.0, "local": true, "aabb": 6.0, "additive": false, "angle": true, "shrink": false,
 			"colors": [Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0.0)]})
 		e.position = Vector3(0, h, 0)
-		add_child(e)
-	# debris (leaves, pebbles) whipped around, and a dust skirt at the base
-	add_child(PartyFx.emitter({"amount": 20, "lifetime": 1.2, "size": 0.12, "color": Color(0.55, 0.75, 0.4),
-		"shape": "ring", "radius": 1.2, "inner": 0.6, "height": 2.0, "vmin": 2.0, "vmax": 4.0, "dir": Vector3.UP,
-		"spread": 15.0, "orbit": 1.2, "local": true, "additive": false, "angle": true, "aabb": 6.0}))
+		_spin.add_child(e)
+	# debris - clods and pebbles, leaves - carried round and up with the wind
+	var clods: GPUParticles3D = PartyFx.emitter({"amount": 14, "lifetime": 1.3, "facing": "mesh", "mesh": Fx.chunk_mesh(0.14),
+		"color": Color(0.5, 0.42, 0.32), "shape": "ring", "radius": 1.3, "inner": 0.7, "height": 1.0, "dir": Vector3.UP,
+		"spread": 10.0, "vmin": 1.5, "vmax": 3.0, "local": true, "angle": true, "spin": 300.0, "scale_min": 0.6, "scale_max": 1.3,
+		"aabb": 7.0, "colors": [Color(1, 1, 1, 1), Color(1, 1, 1, 1)]})
+	clods.position = Vector3(0, 0.4, 0)
+	_spin.add_child(clods)
+	_spin.add_child(PartyFx.emitter({"amount": 18, "lifetime": 1.2, "size": Vector2(0.18, 0.12), "color": Color(0.55, 0.8, 0.35),
+		"tex": "none", "shape": "ring", "radius": 1.2, "inner": 0.6, "height": 2.0, "vmin": 2.0, "vmax": 4.0, "dir": Vector3.UP,
+		"spread": 15.0, "local": true, "additive": false, "angle": true, "spin": 400.0, "flutter": true, "aabb": 7.0,
+		"pick": [Color(0.5, 0.8, 0.3), Color(0.75, 0.85, 0.3), Color(0.4, 0.65, 0.25)],
+		"colors": [Color(1, 1, 1, 1), Color(1, 1, 1, 1)]}))
+	# the dust skirt at the base, and dust streaks being sucked in along the ground
 	add_child(PartyFx.emitter({"amount": 30, "lifetime": 0.9, "size": 0.7, "color": Color(0.7, 0.65, 0.55, 0.45),
-		"shape": "ring", "radius": 1.0, "inner": 0.4, "vmin": 2.0, "vmax": 4.0, "dir": Vector3(1, 0.2, 0), "spread": 180.0,
-		"flat": 1.0, "tangential": 10.0, "additive": false, "grow": true, "aabb": 6.0,
+		"tex": "smoke", "shape": "ring", "radius": 1.0, "inner": 0.4, "vmin": 2.0, "vmax": 4.0, "dir": Vector3(1, 0.2, 0), "spread": 180.0,
+		"flat": 1.0, "additive": false, "grow": true, "angle": true, "aabb": 6.0,
 		"colors": [Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.5), Color(1, 1, 1, 0.0)]}))
+	var suck: GPUParticles3D = PartyFx.emitter({"amount": 20, "lifetime": 0.5, "size": Vector2(0.08, 0.7), "color": Color(0.9, 0.88, 0.8, 0.6),
+		"tex": "streak", "facing": "velocity", "additive": false, "shape": "ring", "radius": 3.0, "inner": 2.4,
+		"vmin": 0.5, "vmax": 1.0, "radial": -14.0, "dir": Vector3.UP, "spread": 10.0, "shrink": false, "aabb": 6.0,
+		"colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)]})
+	suck.position = Vector3(0, 0.2, 0)
+	add_child(suck)
 
 
 ## Where the tornado is `time` seconds after spawning (the same on every screen).
@@ -129,6 +162,13 @@ func _physics_process(dt: float) -> void:
 func _process(dt: float) -> void:
 	if _spin != null:
 		_spin.rotation.y += dt * 9.0
+		# winding down: the funnel thins and fades over its last moments
+		var left: float = LIFE - t
+		if left < 1.2 and not _done:
+			var k: float = clampf(left / 1.2, 0.0, 1.0)
+			_spin.scale = Vector3(lerpf(0.55, 1.0, k), 1.0, lerpf(0.55, 1.0, k))
+			for i: int in _mats.size():
+				_mats[i].albedo_color.a = _alphas[i] * k
 
 
 func _catches(feet: Vector3) -> bool:
@@ -137,8 +177,15 @@ func _catches(feet: Vector3) -> bool:
 
 
 func _fling_fx(at: Vector3) -> void:
-	PartyFx.one_shot(get_parent(), at + Vector3(0, 0.8, 0), {"amount": 30, "lifetime": 0.6, "size": 0.3, "color": GREY,
+	var w: Node = get_parent()
+	PartyFx.one_shot(w, at + Vector3(0, 0.8, 0), {"amount": 30, "lifetime": 0.6, "size": 0.3, "color": GREY,
 		"dir": Vector3.UP, "spread": 50.0, "vmin": 4.0, "vmax": 9.0, "tangential": 12.0, "damping": 4.0})
+	PartyFx.one_shot(w, at + Vector3(0, 0.8, 0), {"amount": 16, "lifetime": 0.5, "size": Vector2(0.08, 1.0),
+		"color": Color(1.2, 1.25, 1.3, 0.8), "tex": "streak", "facing": "velocity", "dir": Vector3.UP, "spread": 25.0,
+		"vmin": 10.0, "vmax": 16.0, "damping": 8.0, "colors": [Color(1, 1, 1, 1), Color(1, 1, 1, 0)]})
+	PartyFx.star_ring(w, at + Vector3(0, 0.8, 0), Color(1.0, 0.9, 0.4), 6, 4.0, 0.34)
+	PartyFx.debris(w, at + Vector3(0, 0.3, 0), Color(0.5, 0.42, 0.32), 8, 6.0, 0.13)
+	PartyFx.comic_burst(w, at + Vector3(0, 2.2, 0), "WHOOSH!", Color(0.6, 0.85, 1.0), 0.75)
 	if layer != null:
 		layer.sfx.play_at("wind", at, 1.0, 1.2)
 
@@ -151,7 +198,19 @@ func dissipate() -> void:
 		layer.hazards.erase(key)
 	for c: Node in find_children("*", "GPUParticles3D", true, false):
 		(c as GPUParticles3D).emitting = false
-	PartyFx.smoke(get_parent(), global_position + Vector3(0, 1.0, 0), Color(0.8, 0.85, 0.9, 0.5), 16, 1.2, 1.2)
+	var w: Node = get_parent()
+	PartyFx.smoke(w, global_position + Vector3(0, 1.0, 0), Color(0.8, 0.85, 0.9, 0.5), 16, 1.2, 1.2)
+	# what it was carrying falls out of the sky
+	PartyFx.debris(w, global_position + Vector3(0, 2.5, 0), Color(0.5, 0.42, 0.32), 10, 3.0, 0.14)
+	PartyFx.one_shot(w, global_position + Vector3(0, 3.0, 0), {"amount": 16, "lifetime": 2.0, "size": Vector2(0.18, 0.12),
+		"tex": "none", "additive": false, "shape": "sphere", "radius": 1.5, "vmin": 0.5, "vmax": 2.0,
+		"gravity": Vector3(0, -2.0, 0), "damping": 1.0, "angle": true, "spin": 300.0, "flutter": true, "turbulence": 1.0,
+		"pick": [Color(0.5, 0.8, 0.3), Color(0.75, 0.85, 0.3), Color(0.4, 0.65, 0.25)], "color": Color.WHITE,
+		"colors": [Color(1, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 1, 1, 0)]})
+	PartyFx.one_shot(w, global_position + Vector3(0, 0.3, 0), {"amount": 22, "lifetime": 0.9, "size": 0.9,
+		"color": Color(0.8, 0.78, 0.7, 0.5), "additive": false, "tex": "smoke", "shape": "ring", "radius": 0.6, "inner": 0.3,
+		"dir": Vector3(1, 0.1, 0), "spread": 180.0, "flat": 1.0, "vmin": 3.0, "vmax": 5.0, "damping": 4.0, "grow": true,
+		"angle": true, "colors": [Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)]})
 	var tw: Tween = create_tween()
 	tw.tween_property(self, "scale", Vector3(1.8, 0.05, 1.8), 0.6).set_ease(Tween.EASE_IN)
 	tw.tween_callback(queue_free)

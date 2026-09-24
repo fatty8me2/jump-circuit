@@ -44,7 +44,7 @@ static func _warp_fx(parent: Node, a: Vector3, b: Vector3) -> void:
 		var c: Vector3 = at + Vector3(0, 0.9, 0)
 		PartyFx.portal(parent, c, across, TEAL, 1.15, 0.8)
 		PartyFx.ring_pulse(parent, at + Vector3(0, 0.08, 0), Vector3.UP, Color(0.3, 0.8, 1.0), 0.2, 1.5, 0.3, 0.1)
-		PartyFx.one_shot(parent, at, {"amount": 50, "lifetime": 0.8, "size": 0.16, "color": Color(0.6, 1.3, 1.2),
+		PartyFx.one_shot(parent, at, {"amount": 30, "lifetime": 0.8, "size": 0.14, "color": Color(0.3, 0.9, 0.8),
 			"shape": "ring", "radius": 1.0, "inner": 0.8, "axis": Vector3.UP, "dir": Vector3.UP, "spread": 5.0,
 			"vmin": 1.5, "vmax": 3.5, "radial": -1.5, "spark": true, "explosiveness": 0.4,
 			"colors": [Color(1, 1, 1, 0), Color(0.6, 1, 0.9, 1), Color(0.3, 0.6, 1, 0)]})
