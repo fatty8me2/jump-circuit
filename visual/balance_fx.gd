@@ -70,7 +70,7 @@ static func ramp(colors: PackedColorArray, offsets: PackedFloat32Array = PackedF
 
 static func _base(amount: int, lifetime: float, quad: float, mat: StandardMaterial3D, aabb: AABB) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = Fx.count(amount)
+	p.amount = Fx.count(roundi(amount * Fx.LEVEL_BOOST))
 	p.lifetime = lifetime
 	p.visibility_aabb = aabb
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -129,7 +129,7 @@ static func motes(size: Vector3, color: Color, amount: int = 24, quad: float = 0
 ## Wind streaks flying along `dir` through a box (thin boxes aligned to their velocity).
 static func streaks(size: Vector3, dir: Vector3, color: Color = Color(1, 1, 1, 0.3), amount: int = 20, speed: float = 9.0) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = Fx.count(amount)
+	p.amount = Fx.count(roundi(amount * Fx.LEVEL_BOOST))
 	var along: Vector3 = dir.normalized()
 	var span: float = maxf(absf(size.dot(along.abs())), 1.0)
 	p.lifetime = span / speed

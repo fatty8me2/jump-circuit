@@ -82,7 +82,7 @@ static func fade_ramp(peak: float = 1.0, hot: Color = Color(1, 1, 1)) -> Gradien
 
 static func _emitter(amount: int, lifetime: float, aabb: AABB, mesh: Mesh, pm: ParticleProcessMaterial) -> GPUParticles3D:
 	var p := GPUParticles3D.new()
-	p.amount = Fx.count(amount)
+	p.amount = Fx.count(roundi(amount * Fx.LEVEL_BOOST))
 	p.lifetime = lifetime
 	p.visibility_aabb = aabb
 	p.process_material = pm

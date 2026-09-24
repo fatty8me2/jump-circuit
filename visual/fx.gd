@@ -24,6 +24,10 @@ enum Tex { DOT, RING, STAR, SMOKE, SPARK, PETAL, BUBBLE }
 ## decal (it culls layer 1 only) - same as the character layer.
 const LAYER: int = 2
 
+## Extra density for each level's own set-piece and ambient emitters (visual/<level>_fx.gd):
+## the owner wanted the air much fuller than the levels first shipped with.
+const LEVEL_BOOST: float = 1.35
+
 static var _textures: Dictionary = {}
 static var _materials: Dictionary = {}
 static var _meshes: Dictionary = {}
@@ -585,10 +589,13 @@ static func flash(parent: Node, at: Vector3, color: Color, energy: float = 4.0, 
 	tw.tween_callback(l.queue_free)
 
 
-## Reusable flash on an existing light: jump to `energy`, ease back to `rest`.
+## Reusable flash on an existing light: jump to `energy`, ease back to `rest`. A flash that
+## ends dark is skipped on Low quality.
 static func pulse(light: Light3D, energy: float, rest: float = 0.0, time: float = 0.35) -> void:
 	if light == null or not light.is_inside_tree():
 		return
+	if rest <= 0.0 and density() < 0.5:
+		return   # Low quality: no light flashes
 	light.light_energy = energy
 	light.visible = true
 	var tw: Tween = light.create_tween()
