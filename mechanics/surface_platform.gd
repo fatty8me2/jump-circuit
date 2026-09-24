@@ -51,6 +51,19 @@ func _ready() -> void:
 	add_child(mi)
 	if kind == Kind.BOOST:
 		_build_boost_fx()
+	elif kind == Kind.SLICK:
+		_build_ice_fx()
+
+
+## Ice twinkles: a few star glints popping on the sheet (visual only, one tiny emitter).
+func _build_ice_fx() -> void:
+	var p: GPUParticles3D = Fx.emitter({"amount": clampi(int(size.x * size.z * 0.35), 3, 16), "lifetime": 0.9,
+		"local": true, "shape": "box", "extents": Vector3(size.x * 0.45, 0.01, size.z * 0.45),
+		"speed": Vector2.ZERO, "spread": 0.0, "tex": Fx.Tex.STAR, "size": 0.34, "curve": "pop",
+		"angle": Vector2(0.0, 45.0), "color": Color(1.6, 2.2, 2.6), "preprocess": 0.9,
+		"aabb": AABB(-size * 0.5 - Vector3(1, 0, 1), size + Vector3(2, 2, 2))})
+	p.position = Vector3(0, size.y * 0.5 + 0.06, 0)
+	add_child(p)
 
 
 ## Boost strips stream sparks along their arrow (local -Z), riding just over the deck:

@@ -105,7 +105,7 @@ func _build_frame() -> void:
 
 func _particles(amount: int, life: float, extents: Vector3, col: Color, quad: float) -> GPUParticles3D:
 	var g := GPUParticles3D.new()
-	g.amount = amount
+	g.amount = Fx.count(amount)
 	g.lifetime = life
 	g.local_coords = true
 	g.visibility_aabb = AABB(-extents - Vector3(4, 4, 4), extents * 2.0 + Vector3(8, 8, 8))

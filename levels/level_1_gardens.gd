@@ -159,6 +159,8 @@ func _mower_hop(from: Vector3, to: Vector3) -> void:
 # ---- the course --------------------------------------------------------------------------------
 
 func _build() -> void:
+	# themed air at three depths around the camera (visual only)
+	add_child(Ambience.make(theme_id))
 	set_spawn(Vector3(0, 0.1, 4), 0.0)
 	_frame(Vector3.ZERO, 0.0)
 	var cp1: Vector3 = _stage_1_gate()

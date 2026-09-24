@@ -62,11 +62,11 @@ func _build_fx() -> void:
 		"color": Color(0.42, 0.3, 0.26, 0.95), "fade": PackedFloat32Array([1.0, 1.0, 0.0]), "aabb": vis})
 	_grit.position = Vector3(0, -size.y * 0.5 - 0.02, 0)
 	add_child(_grit)
-	_crumble = Fx.debris({"amount": 20, "lifetime": 1.1, "shape": "box",
+	_crumble = Fx.debris({"amount": 32, "lifetime": 1.1, "shape": "box",
 		"extents": Vector3(size.x * 0.45, size.y * 0.4, size.z * 0.45), "dir": Vector3.UP, "spread": 70.0,
 		"speed": Vector2(1.0, 4.0), "color": Color(0.62, 0.36, 0.3), "chunk": 0.2, "aabb": vis})
 	add_child(_crumble)
-	_crumble_dust = Fx.smoke({"amount": 12, "lifetime": 0.9, "shape": "box",
+	_crumble_dust = Fx.smoke({"amount": 20, "lifetime": 0.9, "shape": "box",
 		"extents": Vector3(size.x * 0.5, size.y * 0.3, size.z * 0.5), "dir": Vector3.UP, "spread": 80.0,
 		"speed": Vector2(0.5, 2.0), "size": 1.0, "color": Color(0.8, 0.7, 0.62, 0.6), "aabb": vis})
 	add_child(_crumble_dust)

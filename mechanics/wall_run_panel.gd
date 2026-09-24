@@ -57,6 +57,14 @@ func _build_fx() -> void:
 				"scale": Vector2(0.5, 1.0), "curve": "pop", "color": glint, "aabb": vis, "preprocess": 1.8})
 			p.position = Vector3(0, -size.y * 0.5 + size.y * h, z)
 			add_child(p)
+			# pulses of light running along the line, like current
+			var flow: GPUParticles3D = Fx.emitter({"amount": maxi(2, int(n * 0.5)), "lifetime": size.x / 7.0, "local": true,
+				"shape": "box", "extents": Vector3(0.05, 0.0, 0.0), "offset": Vector3(-size.x * 0.5 + 0.3, 0, 0),
+				"dir": Vector3.RIGHT, "spread": 0.0, "speed": Vector2(7.0, 7.0), "facing": "velocity",
+				"tex": Fx.Tex.SPARK, "size": Vector2(0.12, 1.4), "color": glint,
+				"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0]), "aabb": vis, "preprocess": size.x / 7.0})
+			flow.position = p.position
+			add_child(flow)
 
 
 func is_wall_run() -> bool:

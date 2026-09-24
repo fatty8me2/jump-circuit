@@ -16,6 +16,8 @@ var _area: Area3D
 var _cool: float = 0.0
 # effects (visual only): a smear of glow left behind the head, strongest at the bottom
 var _smear: GPUParticles3D
+var _swooshes: Array[Swoosh] = []
+var _rims: Array[Node3D] = []
 
 
 func _ready() -> void:
@@ -46,19 +48,35 @@ func _ready() -> void:
 		"fade": PackedFloat32Array([0.8, 0.0]), "emitting": true,
 		"aabb": AABB(Vector3(-length * 2.0, -length * 1.5, -length), Vector3(length * 4.0, length * 2.0, length * 2.0))})
 	_smear.position = Vector3(0, -length, 0)
+	_smear.amount = maxi(1, _smear.amount / 2)
 	_arm.add_child(_smear)
+	# two arcs of light swept by the head's front and back rims
+	for sz: float in [-1.0, 1.0]:
+		var rim := Node3D.new()
+		rim.position = Vector3(0, -length - head_radius * 0.55, sz * head_radius * 0.62)
+		_arm.add_child(rim)
+		_rims.append(rim)
+		var sw: Swoosh = Swoosh.make(Color(1.0, 0.25, 0.15, 0.85), head_radius * 0.42, 0.28, false)
+		sw.spacing = 0.12
+		add_child(sw)
+		_swooshes.append(sw)
 
 
-func _process(_dt: float) -> void:
+func _process(dt: float) -> void:
 	# fraction of the top swing speed right now
 	var w: float = absf(cos(TAU * (Game.course_time / period + phase)))
 	_smear.amount_ratio = clampf((w - 0.25) / 0.75, 0.0, 1.0)
+	var fast: bool = w > 0.35
+	for i: int in _swooshes.size():
+		_swooshes[i].feed(_rims[i].global_position, fast, dt)
 
 
 ## restart_run() winds the clock back in place: take the new pose now, without a streak.
 func snap_to_clock() -> void:
 	_apply(Game.course_time)
 	reset_physics_interpolation()
+	for s: Swoosh in _swooshes:
+		s.clear()
 
 
 func angle_at(time: float) -> float:

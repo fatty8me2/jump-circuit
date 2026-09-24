@@ -113,7 +113,7 @@ func _build_visual() -> void:
 	add_child(_light)
 	# eruption: a dense column of bubbles racing up through the updraft
 	_plume = GPUParticles3D.new()
-	_plume.amount = 90
+	_plume.amount = Fx.count(90)
 	_plume.lifetime = size.y / 11.0 + 0.6
 	_plume.local_coords = false
 	_plume.visibility_aabb = AABB(Vector3(-4, -1, -4), Vector3(8, size.y + 6, 8))
@@ -142,7 +142,7 @@ func _build_visual() -> void:
 	add_child(_plume)
 	# warning rumble: sand skirt + small bubbles spilling out of the crater
 	_rumble = GPUParticles3D.new()
-	_rumble.amount = 26
+	_rumble.amount = Fx.count(26)
 	_rumble.lifetime = 0.8
 	_rumble.local_coords = false
 	_rumble.visibility_aabb = AABB(Vector3(-4, -1, -4), Vector3(8, 5, 8))

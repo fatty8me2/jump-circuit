@@ -24,7 +24,7 @@ func _ready() -> void:
 	var axis: Vector3 = along.abs()
 	var span: float = maxf(absf(size.dot(axis)), 0.5)
 	var p := GPUParticles3D.new()
-	p.amount = int(clampf(size.x * size.y * size.z * 0.35, 16, 90))
+	p.amount = Fx.count(int(clampf(size.x * size.y * size.z * 0.35, 16, 90)))
 	p.lifetime = maxf(span / 8.0, 0.3)  # 8 = initial_velocity_max: no streak leaves the box
 	p.preprocess = p.lifetime
 	p.local_coords = true
@@ -54,7 +54,7 @@ func _ready() -> void:
 	qm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	qm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	qm.vertex_color_use_as_albedo = true  # needed for the fade ramp to reach the pixels
-	qm.albedo_color = Color(1, 1, 1, 0.35)
+	qm.albedo_color = Color(0.92, 0.97, 1.0, 0.5)
 	m.material = qm  # no billboard: a thin box reads along the wind from any angle
 	p.draw_pass_1 = m
 	add_child(p)
