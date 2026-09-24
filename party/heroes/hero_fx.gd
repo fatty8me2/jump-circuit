@@ -5,9 +5,9 @@ extends RefCounted
 ## afterimages, a body-following costume rig and a local screen flash.
 ## Purely cosmetic: nothing here collides, pushes or times anything.
 ##
-## Particles are built with the shared `Fx` library (so their amounts follow Settings.quality:
-## Low 45%, Medium 75%, High 100%) on the character render layer; light flashes go through
-## `Fx.flash` (skipped on Low). One-shots free themselves on a timer (headless runs never
+## Particles are built with the shared `Fx` library, their amounts scaled by the one Party
+## quality knob (PartyFx.quality_scale) on the character render layer; light flashes go
+## through `PartyFx.flash` (skipped on Low). One-shots free themselves on a timer (headless runs never
 ## signal `finished`).
 
 const LAYER: int = 2
@@ -22,12 +22,13 @@ static func clear_caches() -> void:
 	_mats.clear()
 
 
+## Party particle scale (PartyFx.quality_scale: the one knob).
 static func density() -> float:
-	return Fx.density()
+	return PartyFx.quality_scale()
 
 
 static func low() -> bool:
-	return Fx.density() < 0.5
+	return PartyFx.quality_scale() < 0.5
 
 
 # ---- emitters ------------------------------------------------------------------------------
@@ -40,6 +41,10 @@ static func em(o: Dictionary) -> GPUParticles3D:
 	var d: Dictionary = o.duplicate()
 	if not d.has("layers"):
 		d["layers"] = LAYER
+	# amounts scale through the Party quality knob, not Fx's own
+	if not bool(d.get("exact_amount", false)):
+		d["amount"] = PartyFx.count(int(d.get("amount", 16)))
+		d["exact_amount"] = true
 	if not d.has("aabb"):
 		var h: float = float(d.get("box_aabb", 4.0))
 		d["aabb"] = AABB(Vector3.ONE * -h, Vector3.ONE * h * 2.0)
@@ -157,7 +162,7 @@ static func free_after(node: Node, after: float) -> void:
 
 ## Light flash (skipped on Low quality).
 static func flash(parent: Node, at: Vector3, color: Color, energy: float = 6.0, light_range: float = 8.0, time: float = 0.35) -> void:
-	Fx.flash(parent, at, color, energy, light_range, time)
+	PartyFx.flash(parent, at, color, energy, light_range, time)
 
 
 ## Velocity-stretched sparks.
@@ -336,6 +341,39 @@ void fragment() {
 }
 """
 
+## A dark energy dome (the Tailed Beast Bomb's blast): a near-black, swirling interior with a
+## hot fresnel rim and bright lightning veins crawling over it. Mix-blended so it really reads
+## dark on a sunny level; culled from the inside so a camera caught in it sees through.
+const DARK_DOME: String = """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_back, shadows_disabled;
+uniform vec4 inner : source_color = vec4(0.03, 0.0, 0.06, 1.0);
+uniform vec4 rim : source_color = vec4(0.9, 0.35, 1.4, 1.0);
+uniform vec4 vein : source_color = vec4(1.0, 0.75, 1.6, 1.0);
+uniform float alpha = 1.0;
+uniform float veins = 1.0;
+uniform float rim_power = 2.4;
+varying vec3 lpos;
+NOISE
+void vertex() {
+	lpos = VERTEX;
+	float n = hfx_n(VERTEX * 3.0 + vec3(0.0, TIME * 2.5, 0.0));
+	VERTEX += NORMAL * (n - 0.5) * 0.08;
+}
+void fragment() {
+	float facing = clamp(dot(NORMAL, VIEW), 0.0, 1.0);
+	float fres = pow(1.0 - facing, rim_power);
+	vec3 q = lpos * 3.2 + vec3(0.0, -TIME * 1.6, TIME * 0.8);
+	float n = hfx_n(q) * 0.6 + hfx_n(q * 2.1 + vec3(3.0)) * 0.4;
+	float ridge = 1.0 - abs(n * 2.0 - 1.0);
+	ridge = pow(ridge, 14.0) * veins;
+	vec3 c = mix(inner.rgb * (0.5 + 1.0 * n), rim.rgb * 2.4, fres);
+	c += vein.rgb * 3.0 * ridge;
+	ALBEDO = c;
+	ALPHA = clamp((0.86 + fres * 0.14 + ridge) * alpha, 0.0, 1.0);
+}
+"""
+
 
 static func shader(key: String) -> Shader:
 	if _shaders.has(key):
@@ -352,6 +390,8 @@ static func shader(key: String) -> Shader:
 			code = BEAM.replace("BLEND", "blend_add")
 		"beam_mix":
 			code = BEAM.replace("BLEND", "blend_mix")
+		"dark_dome":
+			code = DARK_DOME
 	var sh := Shader.new()
 	sh.code = code.replace("NOISE", NOISE_GLSL)
 	_shaders[key] = sh

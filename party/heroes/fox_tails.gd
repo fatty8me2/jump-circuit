@@ -36,7 +36,18 @@ var _fringe: MultiMeshInstance3D
 var _core_mat: ShaderMaterial
 var _fringe_mat: ShaderMaterial
 var _tip_fx: Array[GPUParticles3D] = []
+var _tip_hot: Array[GPUParticles3D] = []
 var _licks: GPUParticles3D
+## Glowing flame ribbons streaming off the tips as they whip (one mesh for all nine).
+var _ribbon: MeshInstance3D
+var _ribbon_im := ImmediateMesh.new()
+var _ribbon_mat: StandardMaterial3D
+var _hist: Array = []   # per tail: Array of [pos, age]
+var _tip_speed := PackedFloat32Array()
+var _prev_tips := PackedVector3Array()
+## Sparks thrown off whichever tip is whipping hardest.
+var _whip_sparks: GPUParticles3D
+var _emit_on: bool = true
 var _t: float = 0.0
 var _started: bool = false
 var _last_root: Vector3 = Vector3.ZERO
@@ -95,14 +106,48 @@ func _ready() -> void:
 	add_child(_fringe)
 	# flames streaming off every tip (world space: they trail behind a moving tail)
 	for i: int in TAILS:
-		var f: GPUParticles3D = HeroFx.em({"amount": 12, "lifetime": 0.36, "size": 0.24, "fixed_fps": 0,
-			"speed": Vector2(0.2, 1.0), "spread": 50.0, "dir": Vector3.UP, "gravity": Vector3(0, 2.5, 0),
-			"curve": "shrink", "scale": Vector2(0.6, 1.0), "box_aabb": 6.0, "additive": false,
+		var f: GPUParticles3D = HeroFx.em({"amount": 18, "lifetime": 0.42, "size": 0.32, "fixed_fps": 0,
+			"speed": Vector2(0.2, 1.1), "spread": 50.0, "dir": Vector3.UP, "gravity": Vector3(0, 3.0, 0),
+			"curve": "shrink", "scale": Vector2(0.6, 1.1), "box_aabb": 6.0, "additive": false,
 			"tex": Fx.Tex.SMOKE, "angle": Vector2(0, 360),
-			"colors": PackedColorArray([Color(2.0, 1.5, 0.5, 0.95), Color(1.8, 0.45, 0.04, 0.8), Color(0.7, 0.08, 0.0, 0.0)])})
+			"colors": PackedColorArray([Color(2.2, 1.6, 0.55, 0.95), Color(1.9, 0.5, 0.05, 0.85), Color(0.8, 0.1, 0.0, 0.5), Color(0.15, 0.04, 0.03, 0.0)])})
 		f.top_level = true
 		add_child(f)
 		_tip_fx.append(f)
+		# a white-hot core flickering at every tip
+		var hc: GPUParticles3D = HeroFx.em({"amount": 8, "lifetime": 0.18, "size": 0.26, "fixed_fps": 0,
+			"speed": Vector2(0.0, 0.3), "spread": 180.0, "curve": "shrink", "box_aabb": 6.0,
+			"color": Color(2.6, 1.9, 1.0, 0.9)})
+		hc.top_level = true
+		add_child(hc)
+		_tip_hot.append(hc)
+		_hist.append([])
+	_tip_speed.resize(TAILS)
+	_prev_tips.resize(TAILS)
+	# the ribbons: one additive mesh redrawn each frame from the tips' recent path
+	_ribbon_mat = StandardMaterial3D.new()
+	_ribbon_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_ribbon_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	_ribbon_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	_ribbon_mat.vertex_color_use_as_albedo = true
+	_ribbon_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_ribbon_mat.disable_receive_shadows = true
+	_ribbon = MeshInstance3D.new()
+	_ribbon.mesh = _ribbon_im
+	_ribbon.material_override = _ribbon_mat
+	_ribbon.top_level = true
+	_ribbon.layers = HeroFx.LAYER
+	_ribbon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_ribbon.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	_ribbon.set_meta("no_ghost", true)
+	add_child(_ribbon)
+	_whip_sparks = HeroFx.em({"amount": 40, "lifetime": 0.4, "fixed_fps": 0, "spread": 180.0,
+		"speed": Vector2(2.0, 6.0), "gravity": Vector3(0, -9, 0), "damping": Vector2(1.0, 3.0), "facing": "velocity",
+		"tex": Fx.Tex.SPARK, "size": Vector2(0.05, 0.3), "curve": "shrink", "box_aabb": 8.0, "emitting": false,
+		"shape": "sphere", "radius": 0.12, "color": Color(2.6, 1.5, 0.5)})
+	_whip_sparks.top_level = true
+	_whip_sparks.interpolate = false
+	add_child(_whip_sparks)
 	# flame licks along the tails: one emitter hopping between random beads every frame
 	_licks = HeroFx.em({"amount": 40, "lifetime": 0.42, "size": 0.22, "fixed_fps": 0,
 		"speed": Vector2(0.4, 1.4), "spread": 35.0, "dir": Vector3.UP, "gravity": Vector3(0, 3.0, 0),
@@ -130,9 +175,14 @@ func whip(v: Vector3) -> void:
 
 
 func set_emitting(on: bool) -> void:
+	_emit_on = on
 	for f: GPUParticles3D in _tip_fx:
 		f.emitting = on
+	for f: GPUParticles3D in _tip_hot:
+		f.emitting = on
 	_licks.emitting = on
+	if not on:
+		_whip_sparks.emitting = false
 
 
 func _body_vel() -> Vector3:
@@ -196,8 +246,10 @@ func _process(dt: float) -> void:
 				var l: float = d.length()
 				if l > 0.0001:
 					_p[idx2] = _p[idx2 - 1] + d * (seg / l)
+	var first: bool = not _started
 	_started = true
 	_draw()
+	_track_tips(dt, first or teleported)
 
 
 ## The pose the tails spring toward, eased from the racer's motion (or an override).
@@ -211,7 +263,9 @@ func _ease_pose(dt: float, b: Basis) -> void:
 	var tgt := [deg_to_rad(22.0), deg_to_rad(64.0), deg_to_rad(165.0), 0.95, deg_to_rad(100.0), 0.22, 0.0]
 	match pose:
 		"charge":
-			tgt = [deg_to_rad(55.0), deg_to_rad(58.0), deg_to_rad(175.0), 1.3, deg_to_rad(150.0), 0.06, 0.04]
+			# a crown: the fan stands up wide round the head and every tail arches over to point
+			# forward at the sphere in front of the mouth
+			tgt = [deg_to_rad(68.0), deg_to_rad(55.0), deg_to_rad(205.0), 1.55, deg_to_rad(178.0), 0.05, 0.035]
 		"roar":
 			tgt = [deg_to_rad(18.0), deg_to_rad(80.0), deg_to_rad(185.0), 0.1, deg_to_rad(90.0), 0.05, 0.08]
 		"wilt":
@@ -312,6 +366,7 @@ func _draw() -> void:
 		hi = hi.max(t)
 		var f: GPUParticles3D = _tip_fx[i]
 		f.global_position = t
+		(_tip_hot[i] as GPUParticles3D).global_position = t
 	var box := AABB(lo, hi - lo).grow(0.6)
 	_core.custom_aabb = box
 	_fringe.custom_aabb = box
@@ -319,3 +374,82 @@ func _draw() -> void:
 	var ti: int = _rng.randi_range(0, TAILS - 1)
 	var si: int = _rng.randi_range(2, SEGS)
 	_licks.global_position = _p[ti * (SEGS + 1) + si]
+
+
+## Tip speeds, the whip sparks and the flame ribbons (drawn camera-facing each frame).
+func _track_tips(dt: float, reset: bool) -> void:
+	var best: int = 0
+	var best_v: float = 0.0
+	for i: int in TAILS:
+		var t: Vector3 = tip(i)
+		var v: float = 0.0 if reset else t.distance_to(_prev_tips[i]) / maxf(dt, 0.001)
+		_tip_speed[i] = lerpf(_tip_speed[i], v, 1.0 - exp(-20.0 * dt))
+		_prev_tips[i] = t
+		if _tip_speed[i] > best_v:
+			best_v = _tip_speed[i]
+			best = i
+		var h: Array = _hist[i]
+		if reset:
+			h.clear()
+		for e: Array in h:
+			e[1] = float(e[1]) + dt
+		while not h.is_empty() and float(h[0][1]) > 0.22:
+			h.pop_front()
+		h.append([t, 0.0, _tip_speed[i]])
+	# sparks fly off the tip that whips hardest (sharp turns, jumps, claws)
+	var body_v: float = _body_vel().length()
+	var whip: float = best_v - body_v
+	_whip_sparks.emitting = _emit_on and dissolve <= 0.0 and whip > 5.5 and grow > 0.5
+	if _whip_sparks.emitting:
+		_whip_sparks.global_position = tip(best)
+		_whip_sparks.amount_ratio = clampf((whip - 5.5) / 8.0, 0.3, 1.0)
+	_draw_ribbons(body_v)
+
+
+func _draw_ribbons(body_v: float) -> void:
+	_ribbon_im.clear_surfaces()
+	if dissolve >= 1.0 or grow < 0.05:
+		return
+	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	var eye: Vector3 = cam.global_position if cam != null else global_position + Vector3(0, 2, 5)
+	var fade: float = clampf(1.0 - dissolve * 1.3, 0.0, 1.0) * clampf(grow, 0.0, 1.0)
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	var verts := PackedVector3Array()
+	var cols := PackedColorArray()
+	for i: int in TAILS:
+		var h: Array = _hist[i]
+		if h.size() < 2:
+			continue
+		for k: int in h.size() - 1:
+			var p0: Vector3 = h[k][0]
+			var p1: Vector3 = h[k + 1][0]
+			var seg: Vector3 = p1 - p0
+			if seg.length() < 0.002:
+				continue
+			var side0: Vector3 = seg.cross(eye - p0).normalized()
+			var a0: float = 1.0 - float(h[k][1]) / 0.22
+			var a1: float = 1.0 - float(h[k + 1][1]) / 0.22
+			# brighter when the tail whips faster than the body moves
+			var sp0: float = clampf((float(h[k][2]) - body_v * 0.6 - 1.5) / 6.0, 0.0, 1.0)
+			var sp1: float = clampf((float(h[k + 1][2]) - body_v * 0.6 - 1.5) / 6.0, 0.0, 1.0)
+			var w0: float = 0.16 * a0 + 0.02
+			var w1: float = 0.16 * a1 + 0.02
+			var c0: Color = Color(0.9, 0.12, 0.0).lerp(Color(2.2, 1.3, 0.4), a0 * a0)
+			var c1: Color = Color(0.9, 0.12, 0.0).lerp(Color(2.2, 1.3, 0.4), a1 * a1)
+			c0.a = a0 * a0 * (0.25 + 0.75 * sp0) * fade
+			c1.a = a1 * a1 * (0.25 + 0.75 * sp1) * fade
+			var q: Array = [p0 - side0 * w0, p0 + side0 * w0, p1 + side0 * w1, p1 - side0 * w1]
+			for idx: int in [0, 1, 2, 0, 2, 3]:
+				cols.append(c0 if idx < 2 else c1)
+				verts.append(q[idx])
+			lo = lo.min(p0).min(p1)
+			hi = hi.max(p0).max(p1)
+	if verts.is_empty():
+		return
+	_ribbon_im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+	for j: int in verts.size():
+		_ribbon_im.surface_set_color(cols[j])
+		_ribbon_im.surface_add_vertex(verts[j])
+	_ribbon_im.surface_end()
+	_ribbon.custom_aabb = AABB(lo, hi - lo).grow(0.4)

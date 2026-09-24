@@ -36,20 +36,54 @@ static func clear_caches() -> void:
 
 # ---- quality ---------------------------------------------------------------------------
 
-## Particle density for Settings.quality (Low 0.45, Medium 0.75, High 1) - the same scale
-## as the rest of the game's effects (Fx.density).
-static func density() -> float:
+## THE one knob for every Party Mode particle amount (PartyFx.emitter, HeroFx.em and the
+## per-frame spawn rates all go through it). Today it is the game's Graphics Quality scale:
+## Low 0.45, Medium 0.75, High 1.0 (Fx.density). When Settings grows a
+## `particle_scale()` (an "Ultra" tier, ~1.6-2.0) it is picked up here automatically - or
+## make this the single line `return Settings.particle_scale()`.
+static func quality_scale() -> float:
+	var st: Object = Engine.get_main_loop()
+	if st is SceneTree and (st as SceneTree).root != null:
+		var s: Node = (st as SceneTree).root.get_node_or_null("Settings")
+		if s != null and s.has_method("particle_scale"):
+			return clampf(float(s.call("particle_scale")), 0.2, 2.5)
 	return Fx.density()
 
 
-## `n` particles scaled by density (never below 1).
+## Old name, kept for callers: the same as quality_scale().
+static func density() -> float:
+	return quality_scale()
+
+
+## `n` particles scaled by quality (never below 1).
 static func count(n: int) -> int:
-	return maxi(1, roundi(float(n) * density()))
+	return maxi(1, roundi(float(n) * quality_scale()))
 
 
 ## Light flashes are skipped on Low quality.
 static func lights_on() -> bool:
-	return density() >= 0.5
+	return quality_scale() >= 0.5
+
+
+## Optional extra layers (lingering embers, secondary debris, heat shimmer) are skipped on
+## Low so it stays light.
+static func rich() -> bool:
+	return quality_scale() >= 0.6
+
+
+## 0..1: how far the current camera is from a big effect at `pos` of size `radius` (0 =
+## the camera is inside it). Big dark / bright volumes fade by this so they never fill the
+## local player's own view.
+static func camera_clear(pos: Vector3, radius: float) -> float:
+	var st: Object = Engine.get_main_loop()
+	if not (st is SceneTree):
+		return 1.0
+	var vp: Viewport = (st as SceneTree).root
+	var cam: Camera3D = vp.get_camera_3d() if vp != null else null
+	if cam == null:
+		return 1.0
+	var d: float = cam.global_position.distance_to(pos)
+	return clampf((d - radius * 0.9) / maxf(radius * 1.2, 0.5), 0.0, 1.0)
 
 
 # ---- materials ------------------------------------------------------------------------
@@ -1138,6 +1172,9 @@ static func heat_haze(size: float = 1.0, strength: float = 0.012) -> MeshInstanc
 	var m := ShaderMaterial.new()
 	m.shader = _shader("heat", _HEAT_SHADER)
 	m.set_shader_parameter("strength", strength)
+	# drawn first among the see-through things: it wobbles the solid world behind it, and the
+	# flames and glows drawn after it stay on top instead of being painted over
+	m.render_priority = -120
 	var q := QuadMesh.new()
 	q.size = Vector2.ONE * size
 	var mi := MeshInstance3D.new()
@@ -1325,3 +1362,313 @@ static func star_sprite(size: float, color: Color) -> MeshInstance3D:
 	mi.layers = LAYER
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
+
+
+# ---- heavy pass: layered building blocks ---------------------------------------------------------
+# Bigger effects are stacked from these: ground damage (cracks, scorch, footprints), lingering
+# embers, burning debris that sparks where it lands, dust walls, a fire mushroom, lightning
+# crawling over a sphere. All free themselves; amounts go through quality_scale().
+
+## A flat mark's material: mix-blended (reads on bright grass), HDR colour, vertex alpha.
+static func _flat_mat(color: Color, tex: Texture2D, priority: int = 0) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.vertex_color_use_as_albedo = true
+	m.albedo_color = color
+	if tex != null:
+		m.albedo_texture = tex
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.disable_receive_shadows = true
+	m.render_priority = priority
+	return m
+
+
+## Glowing cracks split across the ground from `pos` (on the ground, normal `up`): jagged,
+## branching lines with a dark rim, white-hot at the centre, cooling to a dull red and
+## fading over `life` s; embers seep out of them (not on Low).
+static func ground_cracks(parent: Node, pos: Vector3, radius: float, hot: Color = Color(2.6, 1.2, 0.3), n: int = 8, life: float = 2.6, seed_value: int = 0, up: Vector3 = Vector3.UP) -> void:
+	if parent == null or not parent.is_inside_tree():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = seed_value if seed_value != 0 else randi()
+	var lines: Array = []   # [points, width]
+	var w0: float = clampf(radius * 0.022, 0.035, 0.09)
+	for i: int in n:
+		var a: float = TAU * float(i) / float(n) + rng.randf_range(-0.35, 0.35)
+		var length: float = radius * rng.randf_range(0.55, 1.0)
+		var pts: Array[Vector3] = [Vector3(cos(a), 0, sin(a)) * radius * rng.randf_range(0.05, 0.15)]
+		var da: float = a
+		var steps: int = 6
+		for s: int in steps:
+			da += rng.randf_range(-0.5, 0.5)
+			pts.append(pts[-1] + Vector3(cos(da), 0, sin(da)) * length / float(steps))
+		lines.append([pts, w0 * rng.randf_range(0.8, 1.2)])
+		if rng.randf() < 0.65:
+			var from: int = rng.randi_range(2, 4)
+			var bp: Array[Vector3] = [pts[from]]
+			var ba: float = da + (1.0 if rng.randf() < 0.5 else -1.0) * rng.randf_range(0.5, 1.0)
+			for s: int in 3:
+				ba += rng.randf_range(-0.4, 0.4)
+				bp.append(bp[-1] + Vector3(cos(ba), 0, sin(ba)) * length * 0.13)
+			lines.append([bp, w0 * 0.6])
+	glow_lines(parent, pos, lines, hot, life, up)
+	if rich():
+		HeroFx.pop(parent, {"amount": 10 + n * 2, "lifetime": 1.3, "shape": "ring", "ring_radius": radius * 0.7,
+			"ring_inner": radius * 0.1, "dir": up, "spread": 20.0, "speed": Vector2(0.4, 1.6), "gravity": up * 0.8,
+			"facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.05, 0.16), "turbulence": 0.8,
+			"explosiveness": 0.15, "color": Color(hot.r, hot.g * 0.8, hot.b * 0.6), "box_aabb": radius + 4.0,
+			"fade": PackedFloat32Array([0.0, 1.0, 0.7, 0.0])}, pos + up * 0.05, Fx.basis_up(up))
+
+
+## Draws glowing lines flat on the ground at `pos` (normal `up`): `lines` = [[points (local,
+## XZ plane), half-width], ...]. Each has a dark rim, is hottest at its start and cools to a
+## dull red, then fades over `life` s.
+static func glow_lines(parent: Node, pos: Vector3, lines: Array, hot: Color, life: float, up: Vector3 = Vector3.UP) -> void:
+	if parent == null or not parent.is_inside_tree() or lines.is_empty():
+		return
+	var glow := ImmediateMesh.new()
+	var dark := ImmediateMesh.new()
+	for pass_i: int in 2:
+		var im: ImmediateMesh = dark if pass_i == 0 else glow
+		im.surface_begin(Mesh.PRIMITIVE_TRIANGLES)
+		for L: Array in lines:
+			var pts2: Array[Vector3] = L[0]
+			var w: float = float(L[1]) * (3.2 if pass_i == 0 else 1.0)
+			for k: int in pts2.size() - 1:
+				var a0: Vector3 = pts2[k]
+				var a1: Vector3 = pts2[k + 1]
+				var side: Vector3 = (a1 - a0).cross(Vector3.UP).normalized()
+				var u0: float = float(k) / float(pts2.size() - 1)
+				var u1: float = float(k + 1) / float(pts2.size() - 1)
+				var ww0: float = w * (1.0 - u0 * 0.85)
+				var ww1: float = w * (1.0 - u1 * 0.85)
+				var c0 := Color(1, 1, 1, 1.0 - u0 * 0.5)
+				var c1 := Color(1, 1, 1, 1.0 - u1 * 0.5)
+				if pass_i == 1:
+					c0 = Color(1.0, 1.0, 1.0, 1.0).lerp(Color(1.0, 0.55, 0.3, 0.7), u0)
+					c1 = Color(1.0, 1.0, 1.0, 1.0).lerp(Color(1.0, 0.55, 0.3, 0.7), u1)
+				for v: Array in [[a0 - side * ww0, c0], [a0 + side * ww0, c0], [a1 + side * ww1, c1],
+						[a0 - side * ww0, c0], [a1 + side * ww1, c1], [a1 - side * ww1, c1]]:
+					im.surface_set_color(v[1])
+					im.surface_add_vertex(v[0])
+		im.surface_end()
+	var root := Node3D.new()
+	parent.add_child(root)
+	root.global_transform = Transform3D(Fx.basis_up(up), pos + up * 0.03)
+	var dark_mat: StandardMaterial3D = _flat_mat(Color(0.05, 0.02, 0.02, 0.85), null, 0)
+	var glow_m: StandardMaterial3D = _flat_mat(Color(hot.r * 1.3, hot.g * 1.3, hot.b * 1.3, hot.a), null, 1)
+	part(root, dark, dark_mat, Vector3.ZERO)
+	part(root, glow, glow_m, Vector3(0, 0.01, 0))
+	var tw: Tween = root.create_tween()
+	tw.tween_property(glow_m, "albedo_color", Color(hot.r * 0.45, hot.g * 0.12, hot.b * 0.05, 1.0), life * 0.45).set_ease(Tween.EASE_OUT)
+	tw.tween_property(glow_m, "albedo_color:a", 0.0, life * 0.55).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(dark_mat, "albedo_color:a", 0.0, life * 0.55).set_ease(Tween.EASE_IN)
+	tw.tween_callback(root.queue_free)
+
+
+## Claw gouges: `n` roughly parallel jagged glowing furrows torn into the ground along `dir`
+## (`spacing` m apart, `length` m long) that smoulder and fade over `life` s.
+static func claw_gouges(parent: Node, pos: Vector3, dir: Vector3, length: float, n: int = 3, spacing: float = 0.3, hot: Color = Color(2.6, 1.0, 0.25), life: float = 2.2, up: Vector3 = Vector3.UP) -> void:
+	var f: Vector3 = Vector3(dir.x, 0, dir.z).normalized() if Vector2(dir.x, dir.z).length() > 0.01 else Vector3.FORWARD
+	var side: Vector3 = f.cross(Vector3.UP).normalized()
+	var lines: Array = []
+	for i: int in n:
+		var off: float = (float(i) - float(n - 1) * 0.5) * spacing
+		var pts: Array[Vector3] = []
+		var steps: int = 7
+		for k: int in steps + 1:
+			var u: float = float(k) / float(steps)
+			var j: float = randf_range(-0.05, 0.05) if k > 0 and k < steps else 0.0
+			pts.append(f * (u * length) + side * (off * (0.7 + 0.3 * u) + j))
+		lines.append([pts, clampf(length * 0.02, 0.04, 0.07)])
+	glow_lines(parent, pos, lines, hot, life, up)
+	if rich():
+		for i: int in 3:
+			HeroFx.pop(parent, {"amount": 6, "lifetime": 1.0, "shape": "sphere", "radius": 0.15, "dir": up, "spread": 25.0,
+				"speed": Vector2(0.3, 1.2), "gravity": up * 0.6, "facing": "velocity", "tex": Fx.Tex.SPARK,
+				"size": Vector2(0.04, 0.14), "turbulence": 0.8, "explosiveness": 0.1, "color": Color(hot.r, hot.g * 0.8, hot.b * 0.6),
+				"fade": PackedFloat32Array([0.0, 1.0, 0.6, 0.0])}, pos + f * length * (0.25 + 0.3 * float(i)) + up * 0.05)
+
+## Lingering embers drifting up and around from a volume (`radius`) for about `life` s.
+static func embers(parent: Node, pos: Vector3, radius: float, color: Color = Color(2.6, 1.1, 0.3), amount: int = 30, life: float = 1.8, rise: float = 1.5) -> void:
+	HeroFx.pop(parent, {"amount": amount, "lifetime": life, "shape": "sphere", "radius": radius, "dir": Vector3.UP,
+		"spread": 60.0, "speed": Vector2(0.3, rise), "gravity": Vector3(0, rise * 0.6, 0), "damping": Vector2(0.3, 0.8),
+		"facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.05, 0.17), "turbulence": 1.4, "explosiveness": 0.25,
+		"scale": Vector2(0.6, 1.3), "color": color, "box_aabb": radius + life * rise + 3.0,
+		"fade": PackedFloat32Array([0.0, 1.0, 0.8, 0.0])}, pos)
+
+
+## A wall of dust thrown out along the ground (a big blast's skirt): tall soft puffs rolling
+## outward, plus low fast streaks.
+static func dust_wall(parent: Node, pos: Vector3, radius: float, color: Color = Color(0.85, 0.8, 0.72, 0.7), amount: int = 26) -> void:
+	var fade: float = camera_clear(pos, radius * 0.6)
+	HeroFx.pop(parent, {"amount": amount, "lifetime": 1.3, "facing": "mesh", "mesh": HeroFx.soft_quad(Fx.Tex.SMOKE, false, clampf(radius * 0.55, 0.8, 3.2)),
+		"shape": "ring", "ring_radius": radius * 0.25, "ring_inner": radius * 0.1, "dir": Vector3(1, 0.3, 0), "spread": 180.0,
+		"flatness": 0.8, "speed": Vector2(radius * 1.6, radius * 3.0), "damping": Vector2(radius * 1.8, radius * 2.6),
+		"gravity": Vector3(0, 0.6, 0), "curve": "puff", "angle": Vector2(0, 360), "spin": Vector2(-40, 40),
+		"color": Color(color.r, color.g, color.b, color.a * (0.35 + 0.65 * fade)), "box_aabb": radius * 3.0 + 4.0,
+		"fade": PackedFloat32Array([0.0, 0.9, 0.5, 0.0])}, pos + Vector3(0, 0.2, 0))
+	HeroFx.pop(parent, {"amount": amount, "lifetime": 0.5, "shape": "ring", "ring_radius": radius * 0.2, "ring_inner": 0.1,
+		"dir": Vector3(1, 0.1, 0), "spread": 180.0, "flatness": 0.95, "speed": Vector2(radius * 3.0, radius * 5.0),
+		"damping": Vector2(radius * 4.0, radius * 6.0), "facing": "velocity", "tex": Fx.Tex.SPARK,
+		"size": Vector2(0.12, 0.9), "additive": false, "color": Color(color.r, color.g, color.b, color.a * 0.8),
+		"box_aabb": radius * 3.0 + 4.0}, pos + Vector3(0, 0.15, 0))
+
+
+## Chunks flung out of a blast on real arcs: each glows and trails fire and smoke, and where it
+## lands it bursts into sparks and leaves a little scorch (`hot` = its glow, `rock` = its body).
+## `up` 0..1 = how steep they fly.
+static func burning_debris(parent: Node, pos: Vector3, amount: int = 8, speed: float = 9.0, hot: Color = Color(2.4, 0.9, 0.2), rock: Color = Color(0.22, 0.18, 0.2), up: float = 0.7, flame: bool = true) -> void:
+	if parent == null or not parent.is_inside_tree() or not (parent is Node3D):
+		return
+	var space: PhysicsDirectSpaceState3D = (parent as Node3D).get_world_3d().direct_space_state
+	var n: int = maxi(1, roundi(float(amount) * minf(quality_scale(), 1.6)))
+	var g := Vector3(0, -22.0, 0)
+	var chunk_mat: StandardMaterial3D = solid_mat(rock, 0.0, 0.9)
+	var core_mat: StandardMaterial3D = glow_mat(hot, 1.0)
+	var trail_o: Dictionary = {"amount": 22, "lifetime": 0.45, "fixed_fps": 0,
+		"speed": Vector2(0.0, 0.4), "spread": 180.0, "gravity": Vector3(0, 1.5, 0), "curve": "shrink",
+		"tex": Fx.Tex.SMOKE, "additive": false, "angle": Vector2(0, 360), "box_aabb": 30.0,
+		"colors": PackedColorArray([Color(hot.r, hot.g, hot.b, 0.9), Color(hot.r * 0.6, hot.g * 0.3, hot.b * 0.2, 0.6), Color(0.2, 0.18, 0.2, 0.4), Color(0.2, 0.18, 0.2, 0.0)]),
+		"color_offsets": PackedFloat32Array([0.0, 0.25, 0.55, 1.0])}
+	if not flame:
+		trail_o = {"amount": 12, "lifetime": 0.5, "fixed_fps": 0, "speed": Vector2(0.0, 0.3), "spread": 180.0,
+			"curve": "puff", "tex": Fx.Tex.SMOKE, "additive": false, "angle": Vector2(0, 360), "box_aabb": 30.0,
+			"color": Color(minf(rock.r * 2.5, 1.0), minf(rock.g * 2.5, 1.0), minf(rock.b * 2.5, 1.0), 0.5), "fade": PackedFloat32Array([0.8, 0.0])}
+	for i: int in n:
+		var a: float = randf() * TAU
+		var v0: Vector3 = (Vector3(cos(a), lerpf(0.4, 1.8, up) * randf_range(0.7, 1.2), sin(a))).normalized() * speed * randf_range(0.55, 1.0)
+		var land_t: float = 1.6
+		var land_p: Vector3 = Vector3.INF
+		var land_n: Vector3 = Vector3.UP
+		var prev: Vector3 = pos
+		var t: float = 0.0
+		while t < 1.6:
+			t += 0.05
+			var q: Vector3 = pos + v0 * t + g * (0.5 * t * t)
+			var hit: Dictionary = space.intersect_ray(PhysicsRayQueryParameters3D.create(prev, q, 1))
+			if not hit.is_empty() and t > 0.08:
+				land_t = t
+				land_p = hit["position"]
+				land_n = hit["normal"]
+				break
+			prev = q
+		var root := Node3D.new()
+		parent.add_child(root)
+		root.global_position = pos
+		var body := Node3D.new()
+		root.add_child(body)
+		var sz: float = randf_range(0.12, 0.26)
+		part(body, box_mesh(Vector3.ONE * sz), chunk_mat, Vector3.ZERO, Vector3(1.0, 0.7, 0.85), Vector3(randf() * 90, randf() * 90, 0))
+		if flame:
+			part(body, sphere_mesh(sz * 0.55, 8), core_mat, Vector3.ZERO)
+		var to: Dictionary = trail_o.duplicate()
+		to["size"] = sz * 2.2
+		var trail: GPUParticles3D = HeroFx.em(to)
+		root.add_child(trail)
+		var spin := Vector3(randf_range(-12, 12), randf_range(-12, 12), randf_range(-12, 12))
+		var tw: Tween = root.create_tween()
+		tw.tween_method(func(tt: float) -> void:
+			if is_instance_valid(root):
+				root.global_position = pos + v0 * tt + g * (0.5 * tt * tt)
+				body.rotation = spin * tt, 0.0, land_t, land_t)
+		var lp: Vector3 = land_p
+		var ln: Vector3 = land_n
+		tw.tween_callback(func() -> void:
+			if not is_instance_valid(root) or not root.is_inside_tree():
+				return
+			trail.emitting = false
+			body.visible = false
+			if lp != Vector3.INF:
+				HeroFx.sparks(parent, lp + ln * 0.05, Color(hot.r, hot.g * 0.9, hot.b * 0.7), 10, 5.0, ln, 70.0, 0.3)
+				HeroFx.pop(parent, {"amount": 5, "lifetime": 0.6, "tex": Fx.Tex.SMOKE, "additive": false, "size": 0.45,
+					"speed": Vector2(0.3, 1.0), "spread": 60.0, "dir": ln, "curve": "puff", "angle": Vector2(0, 360),
+					"color": Color(0.3, 0.27, 0.28, 0.5), "fade": PackedFloat32Array([0.0, 0.8, 0.0])}, lp + ln * 0.1)
+				if rich() and flame:
+					scorch(parent, lp, sz * 3.0, 1.2, Color(hot.r * 0.4, hot.g * 0.4, hot.b * 0.4)))
+		tw.tween_interval(0.6)
+		tw.tween_callback(root.queue_free)
+
+
+## A mushroom of fire: a column boiling up from `pos` to `height`, a cap rolling outward at
+## the top, a smoke skirt at the foot and embers raining out of it.
+static func fire_mushroom(parent: Node, pos: Vector3, height: float, radius: float, hot: Color = Color(2.4, 1.5, 0.6), mid: Color = Color(1.9, 0.55, 0.08), smoke_col: Color = Color(0.2, 0.15, 0.18, 0.75)) -> void:
+	if parent == null or not parent.is_inside_tree():
+		return
+	var fade: float = 0.35 + 0.65 * camera_clear(pos + Vector3(0, height * 0.5, 0), radius + height * 0.3)
+	var cols := PackedColorArray([hot, mid, Color(smoke_col.r, smoke_col.g, smoke_col.b, smoke_col.a * fade), Color(smoke_col.r, smoke_col.g, smoke_col.b, 0.0)])
+	var offs := PackedFloat32Array([0.0, 0.18, 0.5, 1.0])
+	# the stem
+	HeroFx.pop(parent, {"amount": 26, "lifetime": 1.5, "facing": "mesh", "mesh": HeroFx.soft_quad(Fx.Tex.SMOKE, false, radius * 0.8),
+		"shape": "sphere", "radius": radius * 0.25, "dir": Vector3.UP, "spread": 10.0, "speed": Vector2(height * 1.2, height * 2.2),
+		"damping": Vector2(height * 1.1, height * 1.6), "curve": "puff", "angle": Vector2(0, 360), "spin": Vector2(-60, 60),
+		"explosiveness": 0.55, "colors": cols, "color_offsets": offs, "box_aabb": height + radius * 3.0}, pos)
+	# the cap: rolls out at the top a beat later
+	var root := Node3D.new()
+	parent.add_child(root)
+	root.global_position = pos + Vector3(0, height, 0)
+	var tw: Tween = root.create_tween()
+	tw.tween_interval(0.16)
+	tw.tween_callback(func() -> void:
+		if not is_instance_valid(root) or not root.is_inside_tree():
+			return
+		HeroFx.pop(root, {"amount": 30, "lifetime": 1.6, "facing": "mesh", "mesh": HeroFx.soft_quad(Fx.Tex.SMOKE, false, radius * 1.0),
+			"shape": "ring", "ring_radius": radius * 0.35, "ring_inner": radius * 0.1, "dir": Vector3(1, 0.35, 0), "spread": 180.0,
+			"flatness": 0.55, "speed": Vector2(radius * 1.2, radius * 2.4), "damping": Vector2(radius * 1.2, radius * 1.8),
+			"gravity": Vector3(0, 0.8, 0), "curve": "puff", "angle": Vector2(0, 360), "spin": Vector2(-50, 50),
+			"explosiveness": 0.7, "colors": cols, "color_offsets": offs, "box_aabb": radius * 4.0 + 3.0}, root.global_position)
+		HeroFx.pop(root, {"amount": 20, "lifetime": 0.8, "facing": "mesh", "mesh": HeroFx.soft_quad(Fx.Tex.SMOKE, true, radius * 0.7),
+			"shape": "sphere", "radius": radius * 0.35, "spread": 180.0, "speed": Vector2(radius * 0.6, radius * 1.4),
+			"damping": Vector2(radius, radius * 1.5), "curve": "puff", "angle": Vector2(0, 360),
+			"colors": PackedColorArray([hot, Color(mid.r, mid.g, mid.b, 0.6), Color(mid.r, mid.g, mid.b, 0.0)]), "box_aabb": radius * 4.0 + 3.0}, root.global_position)
+		if rich():
+			embers(root, root.global_position, radius * 0.8, Color(hot.r, hot.g * 0.7, hot.b * 0.4), 30, 2.2, 1.2))
+	tw.tween_interval(2.6)
+	tw.tween_callback(root.queue_free)
+	# the skirt of smoke at the foot
+	HeroFx.pop(parent, {"amount": 16, "lifetime": 1.4, "facing": "mesh", "mesh": HeroFx.soft_quad(Fx.Tex.SMOKE, false, radius * 0.8),
+		"shape": "ring", "ring_radius": radius * 0.4, "ring_inner": radius * 0.2, "dir": Vector3(1, 0.1, 0), "spread": 180.0,
+		"flatness": 0.9, "speed": Vector2(radius * 1.5, radius * 2.5), "damping": Vector2(radius * 1.6, radius * 2.2),
+		"curve": "puff", "angle": Vector2(0, 360), "colors": cols, "color_offsets": PackedFloat32Array([0.0, 0.08, 0.35, 1.0]),
+		"box_aabb": radius * 4.0 + 3.0}, pos + Vector3(0, 0.2, 0))
+
+
+## Lightning crawling over a sphere's surface: `n` short bolts between random points on it.
+static func lightning_shell(parent: Node, center: Vector3, radius: float, color: Color, n: int = 4, time: float = 0.12) -> void:
+	for i: int in n:
+		var a: Vector3 = Vector3(randf_range(-1, 1), randf_range(-0.2, 1), randf_range(-1, 1)).normalized()
+		var b: Vector3 = (a + Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * 0.9).normalized()
+		var prev: Vector3 = center + a * radius
+		var segs: int = 5
+		for s: int in range(1, segs + 1):
+			var k: float = float(s) / float(segs)
+			var d: Vector3 = a.slerp(b, k).normalized()
+			var p: Vector3 = center + d * radius * (1.0 + randf_range(-0.06, 0.12)) + Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * radius * 0.05
+			beam(parent, prev, p, color, 0.035, time, 5.0)
+			beam(parent, prev, p, Color(color.r, color.g, color.b, 0.3), 0.12, time * 0.8, 1.6)
+			prev = p
+
+
+## A glowing footprint pressed into the ground that cools and fades (fire runners).
+static func footprint(parent: Node, pos: Vector3, facing_dir: Vector3, hot: Color = Color(2.4, 0.9, 0.2), life: float = 1.6, size: float = 0.36) -> void:
+	if parent == null or not parent.is_inside_tree():
+		return
+	if not _mats.has("print_mesh"):
+		var pm := PlaneMesh.new()
+		pm.size = Vector2(1.0, 1.0)
+		_mats["print_mesh"] = pm
+	var m: StandardMaterial3D = _flat_mat(hot, dot_texture(), 1)
+	var mi := MeshInstance3D.new()
+	mi.mesh = _mats["print_mesh"]
+	mi.material_override = m
+	mi.layers = LAYER
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	var f: Vector3 = Vector3(facing_dir.x, 0, facing_dir.z)
+	var b: Basis = facing(f) if f.length() > 0.01 else Basis.IDENTITY
+	mi.global_transform = Transform3D(b * Basis.from_scale(Vector3(size * 0.62, 1.0, size)), pos + Vector3(0, 0.04, 0))
+	var tw: Tween = mi.create_tween()
+	tw.tween_property(m, "albedo_color", Color(hot.r * 0.35, hot.g * 0.08, 0.02, 0.9), life * 0.35).set_ease(Tween.EASE_OUT)
+	tw.tween_property(m, "albedo_color", Color(0.06, 0.04, 0.04, 0.0), life * 0.65).set_ease(Tween.EASE_IN)
+	tw.tween_callback(mi.queue_free)
