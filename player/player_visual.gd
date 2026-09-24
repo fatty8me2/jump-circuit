@@ -109,6 +109,25 @@ var _skid_dust: GPUParticles3D     # grit kicked up by hard turns and stops
 var _cheer_confetti: GPUParticles3D
 var _hand_trail_l: Swoosh          # ribbons off the mitts: boost pose, flips, rolls
 var _hand_trail_r: Swoosh
+# ---- the heavy layer: more of everything, all one-shots idle until their event ----
+var _body_trail: Swoosh            # a wide ribbon off the body on launches and at boost speed
+var _jump_streaks: GPUParticles3D  # takeoff: streaks shot down from the soles
+var _jump_glints: GPUParticles3D
+var _land_ring_small: GPUParticles3D   # every real landing gets a ring
+var _land_sparks: GPUParticles3D   # big landings: a hot fan of sparks along the floor
+var _land_haze: GPUParticles3D     # ... and dust that hangs a moment
+var _step_puff: GPUParticles3D     # a small kick of dust per foot plant at speed
+var _sprint_dust: GPUParticles3D   # boost pose on the ground: a wake of dust
+var _wall_step: GPUParticles3D     # a crackle of sparks per foot plant on the panel
+var _wall_light: OmniLight3D       # cyan glow riding the contact point while wall running
+var _kick_smoke: GPUParticles3D    # wall jump: a puff blown off the panel
+var _mantle_glints: GPUParticles3D # gold glints left on the lip
+var _spring_streaks: GPUParticles3D  # pad launch: a column of upward streaks
+var _knock_ring: GPUParticles3D
+var _knock_stars: GPUParticles3D   # a daze of stars circling after a hit
+var _arrive_suck: GPUParticles3D   # respawn: motes drawn in before the pop
+var _arrive_motes: GPUParticles3D  # ... and a few that linger after it
+var _cp_confetti: GPUParticles3D
 
 
 func _ready() -> void:
@@ -400,6 +419,7 @@ func _build_fx() -> void:
 	_hand_trail_r = Swoosh.make(Color.WHITE, 0.09, 0.22)
 	add_child(_hand_trail_l)
 	add_child(_hand_trail_r)
+	_build_fx_heavy()
 	_light = OmniLight3D.new()
 	_light.position = Vector3(0, 0.8, 0)
 	_light.omni_range = 5.0
@@ -408,6 +428,77 @@ func _build_fx() -> void:
 	_light.visible = false
 	add_child(_light)
 	_tint_fx()
+
+
+## The second, heavier layer on every move (see the heavy-layer vars).
+func _build_fx_heavy() -> void:
+	var dust := Color(0.95, 0.92, 0.86, 0.75)
+	_body_trail = Swoosh.make(Color.WHITE, 0.26, 0.28)
+	add_child(_body_trail)
+	_jump_streaks = _fx(Fx.sparks({"amount": 12, "lifetime": 0.28, "shape": "ring", "ring_radius": 0.3,
+		"ring_inner": 0.15, "dir": Vector3.DOWN, "spread": 14.0, "speed": Vector2(5.0, 9.0),
+		"gravity": Vector3.ZERO, "damping": Vector2(8.0, 12.0), "size": Vector2(0.05, 0.6),
+		"color": Color(1.8, 1.8, 1.9, 0.8)}))
+	_jump_glints = _fx(Fx.burst({"amount": 6, "lifetime": 0.45, "tex": Fx.Tex.STAR, "size": 0.2,
+		"shape": "ring", "ring_radius": 0.4, "dir": Vector3.UP, "spread": 40.0, "speed": Vector2(1.0, 2.5),
+		"curve": "pop", "color": Color(2.0, 2.0, 2.0)}))
+	_land_ring_small = _fx(Fx.shockwave(1.2, {"lifetime": 0.3, "color": Color(1.2, 1.2, 1.15, 0.6),
+		"fade": PackedFloat32Array([0.9, 0.5, 0.0])}))
+	_land_sparks = _fx(Fx.sparks({"amount": 30, "lifetime": 0.45, "shape": "ring", "ring_radius": 0.45,
+		"ring_inner": 0.3, "dir": Vector3.UP, "spread": 80.0, "flatness": 0.85, "speed": Vector2(5.0, 11.0),
+		"gravity": Vector3(0, -14, 0), "damping": Vector2(2.0, 4.0), "size": Vector2(0.06, 0.45),
+		"color": Color(2.8, 2.0, 1.1)}))
+	_land_haze = _fx(Fx.smoke({"amount": 10, "lifetime": 1.6, "explosiveness": 0.7, "shape": "ring",
+		"ring_radius": 1.0, "ring_inner": 0.5, "dir": Vector3.UP, "spread": 60.0, "speed": Vector2(0.3, 0.9),
+		"damping": Vector2(1.0, 2.0), "size": 1.3, "color": Color(dust.r, dust.g, dust.b, 0.45)}))
+	_step_puff = _fx(Fx.smoke({"amount": 4, "lifetime": 0.45, "size": 0.32, "dir": Vector3(0, 0.6, 1),
+		"spread": 40.0, "speed": Vector2(0.6, 1.4), "damping": Vector2(3.0, 5.0),
+		"color": Color(dust.r, dust.g, dust.b, 0.55)}))
+	_sprint_dust = _fx(Fx.smoke({"amount": 26, "lifetime": 0.6, "one_shot": false, "emitting": false,
+		"explosiveness": 0.0, "shape": "box", "extents": Vector3(0.22, 0.02, 0.1), "dir": Vector3(0, 0.5, 1),
+		"spread": 30.0, "speed": Vector2(1.0, 2.5), "damping": Vector2(2.0, 4.0), "size": 0.5,
+		"color": Color(dust.r, dust.g, dust.b, 0.5)}))
+	_wall_step = _fx(Fx.sparks({"amount": 10, "lifetime": 0.3, "dir": Vector3.UP, "spread": 70.0,
+		"speed": Vector2(2.5, 6.0), "gravity": Vector3(0, -12, 0), "size": Vector2(0.05, 0.32),
+		"color": Fx.hot(WALL_FX.lerp(Color.WHITE, 0.5), 2.6)}))
+	if Fx.density() >= 0.5:
+		_wall_light = OmniLight3D.new()
+		_wall_light.light_color = WALL_FX
+		_wall_light.light_energy = 0.0
+		_wall_light.omni_range = 3.5
+		_wall_light.shadow_enabled = false
+		_wall_light.visible = false
+		_wall_light.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		add_child(_wall_light)
+	_kick_smoke = _fx(Fx.smoke({"amount": 10, "lifetime": 0.7, "shape": "sphere", "radius": 0.25,
+		"dir": Vector3.UP, "spread": 60.0, "speed": Vector2(1.5, 3.0), "damping": Vector2(3.0, 5.0),
+		"size": 0.7, "color": Color(0.85, 0.97, 1.0, 0.6)}))
+	_mantle_glints = _fx(Fx.embers({"amount": 12, "lifetime": 1.2, "one_shot": true, "explosiveness": 0.7,
+		"emitting": false, "extents": Vector3(0.5, 0.02, 0.05), "speed": Vector2(0.2, 0.7), "tex": Fx.Tex.STAR,
+		"size": 0.22, "curve": "pop", "color": Fx.hot(LIP_FX, 2.4), "turbulence": 0.3}))
+	_spring_streaks = _fx(Fx.sparks({"amount": 18, "lifetime": 0.5, "shape": "ring", "ring_radius": 0.5,
+		"ring_inner": 0.35, "dir": Vector3.UP, "spread": 4.0, "speed": Vector2(12.0, 20.0),
+		"gravity": Vector3.ZERO, "damping": Vector2(10.0, 16.0), "size": Vector2(0.07, 1.1)}))
+	_knock_ring = _fx(Fx.shockwave(1.5, {"lifetime": 0.3, "color": Color(2.4, 2.1, 1.8)}))
+	_knock_stars = Fx.burst({"amount": 6, "lifetime": 1.0, "explosiveness": 0.9, "local": true,
+		"tex": Fx.Tex.STAR, "size": 0.26, "shape": "ring", "ring_radius": 0.45, "ring_inner": 0.4,
+		"speed": Vector2.ZERO, "spread": 0.0, "damping": Vector2.ZERO, "curve": "pop",
+		"color": Color(2.8, 2.4, 0.9), "layers": 2})
+	_knock_stars.position = Vector3(0, 1.3, 0)
+	_cp_spin.add_child(_knock_stars)
+	_arrive_suck = _fx(Fx.emitter({"amount": 30, "lifetime": 0.35, "one_shot": true, "explosiveness": 0.9,
+		"shape": "shell", "radius": 1.6, "offset": Vector3(0, 0.6, 0), "speed": Vector2.ZERO, "spread": 0.0,
+		"radial": Vector2(-38.0, -30.0), "tex": Fx.Tex.DOT, "size": 0.16, "curve": "grow",
+		"fade": PackedFloat32Array([0.0, 1.0, 1.0])}))
+	_arrive_motes = _fx(Fx.embers({"amount": 14, "lifetime": 1.4, "one_shot": true, "explosiveness": 0.6,
+		"emitting": false, "shape": "ring", "ring_radius": 0.6, "ring_inner": 0.2, "speed": Vector2(0.4, 1.2),
+		"tex": Fx.Tex.STAR, "size": 0.2, "curve": "pop", "turbulence": 0.5}))
+	_cp_confetti = _fx(Fx.burst({"amount": 26, "lifetime": 1.1, "tex": Fx.Tex.PETAL, "additive": false,
+		"size": 0.2, "shape": "sphere", "radius": 0.3, "dir": Vector3.UP, "spread": 55.0,
+		"speed": Vector2(3.5, 6.5), "damping": Vector2(1.5, 2.5), "gravity": Vector3(0, -7.0, 0),
+		"angle": Vector2(0, 360), "spin": Vector2(-500, 500), "curve": "flat", "fade": PackedFloat32Array([1.0, 1.0, 0.0]),
+		"pick": PackedColorArray([Color(1.0, 0.3, 0.45), Color(0.25, 0.8, 1.0), Color(1.0, 0.85, 0.2),
+			Color(0.45, 1.0, 0.4), Color(0.85, 0.45, 1.0)])}))
 
 
 func _fx(p: GPUParticles3D) -> GPUParticles3D:
@@ -428,6 +519,12 @@ func _tint_fx() -> void:
 	var streak: Color = Fx.hot(accent.lerp(Color.WHITE, 0.4), 1.5)
 	_hand_trail_l.color = streak
 	_hand_trail_r.color = streak
+	if _body_trail != null:
+		var bc: Color = Fx.hot(accent.lerp(Color.WHITE, 0.3), 1.2)
+		bc.a = 0.6
+		_body_trail.color = bc
+		for p: GPUParticles3D in [_arrive_suck, _arrive_motes]:
+			(p.process_material as ParticleProcessMaterial).color = hot
 
 
 ## Fires a prebuilt one-shot at `at` with its local Y along `up`.
@@ -464,6 +561,8 @@ func on_jump() -> void:
 	_jump_dust.amount_ratio = 0.5
 	_jump_dust.restart()
 	_pop(_jump_ring, _feet() + Vector3(0, 0.04, 0))
+	_pop(_jump_streaks, _feet() + Vector3(0, 0.1, 0))
+	_pop(_jump_glints, _feet())
 
 
 func on_land(impact: float) -> void:
@@ -476,6 +575,9 @@ func on_land(impact: float) -> void:
 	_blink = maxf(_blink, 0.6 * _land_k)
 	_dust.amount_ratio = clampf(k + 0.2, 0.3, 1.0)
 	_dust.restart()
+	if impact > 8.0 and _land_ring_small != null:
+		_set_scale(_land_ring_small, lerpf(0.7, 1.4, clampf((impact - 8.0) / 10.0, 0.0, 1.0)))
+		_pop(_land_ring_small, _feet() + Vector3(0, 0.03, 0))
 	if _mantle_pending > 0.0:
 		# topped out a climb: a little hop puff
 		_mantle_pending = 0.0
@@ -488,8 +590,9 @@ func on_land(impact: float) -> void:
 		_pop(_land_ring, _feet() + Vector3(0, 0.04, 0))
 		_pop(_land_smoke, _feet(), Vector3.UP, 0.45 + big * 0.55)
 		_pop(_land_debris, _feet(), Vector3.UP, 0.35 + big * 0.65)
-		if big > 0.5:
-			_flash(Color(1.0, 0.92, 0.8), 1.5 + big * 2.0, 0.25)
+		_pop(_land_sparks, _feet() + Vector3(0, 0.05, 0), Vector3.UP, 0.3 + big * 0.7)
+		_pop(_land_haze, _feet(), Vector3.UP, 0.4 + big * 0.6)
+		_flash(Color(1.0, 0.92, 0.8), 1.2 + big * 3.0, 0.3)
 
 
 func on_bounce(strength: float) -> void:
@@ -502,7 +605,9 @@ func on_bounce(strength: float) -> void:
 	_set_scale(_spring_ring, lerpf(1.2, 2.2, k))
 	_pop(_spring_ring, _feet() + Vector3(0, 0.06, 0))
 	_pop(_spring_sparkle, _feet(), Vector3.UP, 0.4 + k * 0.6)
-	_flash(col, 2.5 * k, 0.3)
+	(_spring_streaks.process_material as ParticleProcessMaterial).color = col
+	_pop(_spring_streaks, _feet(), Vector3.UP, 0.4 + k * 0.6)
+	_flash(col, 1.5 + 3.0 * k, 0.35)
 	# strong pads: a tucked front flip (or a twirl on a straight-up launch)
 	if strength >= 18.0:
 		var hs: float = Vector2(_prev_hvel.x, _prev_hvel.z).length()
@@ -523,7 +628,11 @@ func on_knock(v: Vector3) -> void:
 		var local: Vector3 = Basis(Vector3.UP, -_yaw) * flat.normalized()
 		_start_flip(Vector3(-local.z, 0, local.x) * TAU_F, 0.6, 0.0, 0.6)
 	_pop(_knock_sparks, global_position + Vector3(0, 0.6, 0))
-	_flash(Color(1.0, 0.9, 0.85), 2.5, 0.2)
+	var flat_v := Vector3(v.x, 0.0, v.z)
+	_pop(_knock_ring, global_position + Vector3(0, 0.6, 0), flat_v if flat_v.length() > 0.5 else Vector3.UP)
+	if _knock_stars != null and _knock_stars.is_inside_tree():
+		_knock_stars.restart()
+	_flash(Color(1.0, 0.9, 0.85), 3.5, 0.25)
 
 
 ## The squash-and-stretch pop and takeoff puff shared by pad launches and knocks.
@@ -543,7 +652,8 @@ func on_wall_run(normal: Vector3) -> void:
 	var at: Vector3 = _wall_contact(0.3)
 	_pop(_latch_sparks, at, wall_normal)
 	_pop(_latch_ring, at + wall_normal * 0.03, wall_normal)
-	_flash(WALL_FX, 2.0, 0.25)
+	_pop(_kick_smoke, at + wall_normal * 0.2, wall_normal, 0.5)
+	_flash(WALL_FX, 3.0, 0.3)
 
 
 ## Kicked off the wall: a radial burst and a ring blown off the panel, then a short trail.
@@ -555,7 +665,8 @@ func on_wall_jump() -> void:
 	_pop(_kick_ring, at + wall_normal * 0.03, wall_normal)
 	_kick_t = 0.35
 	_kick_trail.emitting = true
-	_flash(WALL_FX, 3.0, 0.3)
+	_pop(_kick_smoke, at + wall_normal * 0.2, wall_normal)
+	_flash(WALL_FX, 4.5, 0.35)
 	# push-off: a barrel roll away from the wall (head leads away from it)
 	var side: float = _last_wall if _last_wall != 0.0 else 1.0
 	_start_flip(Vector3(0, 0, side * TAU_F), 0.5, 0.04, 0.8)
@@ -586,7 +697,9 @@ func on_mantle_grab(lip: Vector3, into: Vector3) -> void:
 	_mantle_sparks.amount_ratio = 1.0
 	Fx.fire(_mantle_sparks, lip + out * 0.06 + Vector3(0, 0.02, 0), b)
 	_mantle_pending = 1.0
-	_flash(LIP_FX, 1.6, 0.25)
+	_mantle_glints.amount_ratio = 1.0
+	Fx.fire(_mantle_glints, lip + out * 0.05 + Vector3(0, 0.03, 0), b)
+	_flash(LIP_FX, 2.4, 0.3)
 	_lip = lip
 	_lip_in = d
 	_mantle_t = 0.0
@@ -601,7 +714,8 @@ func on_checkpoint() -> void:
 	if _cp_helix != null and _cp_helix.is_inside_tree():
 		_cp_helix.restart()
 		_pop(_cp_ring, _feet() + Vector3(0, 0.05, 0))
-		_flash(accent, 3.0, 0.45)
+		_pop(_cp_confetti, global_position + Vector3(0, 1.1, 0))
+		_flash(accent, 4.0, 0.5)
 
 
 ## Crossed the finish: a big stretch and the brightest bulb flash.
@@ -652,12 +766,27 @@ func on_respawn() -> void:
 	_pop(_arrive_column, _feet())
 	_pop(_arrive_ring, _feet() + Vector3(0, 0.05, 0))
 	_pop(_arrive_stars, global_position)
-	_flash(accent.lerp(Color.WHITE, 0.3), 3.5, 0.5)
+	_pop(_arrive_suck, _feet())
+	_pop(_arrive_motes, _feet() + Vector3(0, 0.2, 0))
+	_flash(accent.lerp(Color.WHITE, 0.3), 4.5, 0.6)
 
 
 func snap_facing(dir: Vector3) -> void:
 	if dir.length() > 0.01:
 		_yaw = atan2(-dir.x, -dir.z)
+
+
+## A foot plant: a small dust kick at speed, a crackle of sparks on a wall-run panel.
+func _step_fx(speed: float, walling: bool) -> void:
+	if _step_puff == null or not is_inside_tree():
+		return
+	if walling and wall_normal != Vector3.ZERO:
+		_pop(_wall_step, _wall_contact(0.15) + wall_normal * 0.05, wall_normal)
+	elif speed > 6.0:
+		var back := -global_basis.z
+		back = Vector3(-back.x, 0.0, -back.z).normalized()
+		_step_puff.amount_ratio = clampf((speed - 6.0) / 6.0, 0.3, 1.0)
+		Fx.fire(_step_puff, _feet() + back * 0.1, Basis(back.cross(Vector3.UP).normalized(), Vector3.UP, back))
 
 
 ## Where the feet meet the panel we run on, `h` above the feet.
@@ -681,6 +810,11 @@ func _stop_moves_fx() -> void:
 	_speed_lines.emitting = false
 	_hand_trail_l.clear()
 	_hand_trail_r.clear()
+	if _body_trail != null:
+		_body_trail.clear()
+		_sprint_dust.emitting = false
+		if _wall_light != null:
+			_wall_light.visible = false
 	_kick_t = 0.0
 	_speed_k = 0.0
 	_mantle_pending = 0.0
@@ -731,6 +865,25 @@ func _animate_fx(dt: float, vel: Vector3, on_floor: bool) -> void:
 	var hands_on: bool = _sprint > 0.35 or (_flip_t < _flip_len and _flip_delay <= 0.0) or _speed_k > 0.3
 	_hand_trail_l.feed(_hand_l.global_position, hands_on, dt)
 	_hand_trail_r.feed(_hand_r.global_position, hands_on, dt)
+	# the body ribbon: pad launches and real speed (never plain hops or runs)
+	var hs2: float = Vector2(vel.x, vel.z).length()
+	var body_on: bool = (not on_floor and vel.y > 13.0) or hs2 > 13.0 or (_flip_t < _flip_len and _flip_delay <= 0.0 and not on_floor)
+	_body_trail.feed(global_position + Vector3(0, 0.55, 0), body_on, dt)
+	# boost pose on the ground: a wake of dust off the heels
+	var wake: bool = on_floor and _sprint > 0.4 and wall_roll == 0.0
+	if wake:
+		var back := Vector3(-vel.x, 0.0, -vel.z).normalized()
+		_sprint_dust.global_transform = Transform3D(Basis(back.cross(Vector3.UP).normalized(), Vector3.UP, back), _feet() + back * 0.2)
+		_sprint_dust.amount_ratio = _sprint
+	if _sprint_dust.emitting != wake:
+		_sprint_dust.emitting = wake
+	# a cyan glow rides the contact point on the panel
+	if _wall_light != null:
+		if running:
+			_wall_light.global_position = _wall_contact(0.4) + wall_normal * 0.35
+			_wall_light.light_energy = 1.6 + 0.4 * sin(_t * 30.0)
+		if _wall_light.visible != running:
+			_wall_light.visible = running
 
 
 # ---- per-frame ----------------------------------------------------------
@@ -920,6 +1073,7 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 		# a foot plants each time the stride phase crosses a multiple of PI
 		if speed > 1.5 and _step_quiet <= 0.0 and floori(prev / PI) != floori(_stride / PI):
 			footstep.emit(speed)
+			_step_fx(speed, walling)
 		var s: float = sin(_stride)
 		var c: float = cos(_stride)
 		var reach: float = (0.24 + 0.08 * _sprint) * amp
