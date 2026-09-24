@@ -7,10 +7,12 @@ extends PowerUp
 ##    Boomerang - curves out and back, stunning everyone it passes through.
 ##    Hookshot  - fires a chain: yanks a rival to you, or pulls you to the wall / floor it bites.
 ##    Bombs     - a lobbed bomb with a fizzing fuse; big blast knockback.
-## The look: an item-get pose on pickup (the blade raised in a column of golden light), a cap
-## that flops with every move, a glinting shield, a blade that leaves a swept trail on every
-## swing, a whirlwind spin, a spinning boomerang with a smear, a real chain for the hookshot and
-## cartoon bomb blasts.
+## The look: an item-get pose on pickup (the blade raised in a column of golden light with rays
+## falling round it and leaves blown out), a cap that flops with every move, a glinting shield,
+## a blade that leaves a swept trail and a wind arc on every swing (cut grass flies; the chop
+## splits the ground), a whirlwind spin that cuts a glowing circle and raises a dust wall, a
+## spinning boomerang in a whirl of wind, a real chain for the hookshot that bites with chips,
+## and cartoon bomb blasts with burning chunks, scorch and cracks.
 
 const GREEN := Color(0.18, 0.6, 0.2)
 const BLADE := Color(0.65, 0.88, 1.0)
@@ -149,26 +151,40 @@ func build_look() -> void:
 		_item_get()
 
 
-## The pickup: the hero thrusts the blade to the sky in a column of golden light - a star
-## flashes on its tip, sparkles pour down, rings rise round the body.
+## The pickup: the hero thrusts the blade to the sky in a column of golden light - rays of
+## light fall round the hero, a star flashes on the tip, sparkles pour down, rings rise round
+## the body and a ring of light and leaves washes out over the ground.
 func _item_get() -> void:
 	var w: Node = world()
 	var at: Vector3 = global_position
-	PartyFx.burst(w, at + Vector3(0, 0.8, 0), Color(0.45, 1.0, 0.4), 40, 7.0, 0.3, 0.7)
-	HeroFx.ring(w, at + Vector3(0, 0.1, 0), Vector3.UP, Color(0.5, 1.0, 0.45, 0.9), 0.4, 3.2, 0.45, 0.06)
-	HeroFx.ground_ring(w, at, Color(1.1, 0.95, 0.4), 2.2, 0.6)
+	PartyFx.burst(w, at + Vector3(0, 0.8, 0), Color(0.45, 1.0, 0.4), 50, 7.0, 0.3, 0.7)
+	HeroFx.ring(w, at + Vector3(0, 0.1, 0), Vector3.UP, Color(0.5, 1.0, 0.45, 0.9), 0.4, 3.6, 0.5, 0.06)
+	HeroFx.ground_ring(w, at, Color(1.1, 0.95, 0.4), 2.6, 0.7)
+	HeroFx.dust_ring(w, at, Color(0.92, 0.9, 0.78, 0.5), 1.0, 14, 5.0)
 	HeroFx.flash(w, at + Vector3(0, 1, 0), Color(0.8, 1.0, 0.6), 7.0, 8.0, 0.6)
+	# leaves and grass blown out round the feet
+	HeroFx.pop(w, {"amount": 26, "lifetime": 1.2, "shape": "ring", "ring_radius": 0.5, "ring_inner": 0.2,
+		"dir": Vector3(1, 0.6, 0), "spread": 180.0, "flatness": 0.5, "speed": Vector2(2.0, 5.0), "damping": Vector2(2.0, 3.0),
+		"gravity": Vector3(0, -2.0, 0), "size": Vector2(0.16, 0.09), "curve": "shrink", "angle": Vector2(0, 360),
+		"spin": Vector2(-400, 400), "additive": false, "tex": Fx.Tex.DOT,
+		"pick": PackedColorArray([Color(0.35, 0.8, 0.3), Color(0.5, 0.95, 0.35), Color(0.25, 0.6, 0.2)]),
+		"fade": PackedFloat32Array([1.0, 1.0, 0.0]), "box_aabb": 8.0}, at + Vector3(0, 0.2, 0))
 	# golden rings rising round the hero, one after another
-	for i: int in 3:
+	for i: int in 4:
 		var tw: Tween = create_tween()
-		tw.tween_interval(0.1 + 0.12 * float(i))
+		tw.tween_interval(0.1 + 0.11 * float(i))
 		tw.tween_callback(func() -> void:
 			if is_inside_tree():
-				HeroFx.ring(world(), global_position + Vector3(0, 0.2 + 0.5 * float(i), 0), Vector3.UP, Color(1.2, 1.0, 0.4, 0.85), 0.9, 0.5, 0.4, 0.05))
-	# a column of golden light and sparkles
-	HeroFx.pop(w, {"amount": 36, "lifetime": 1.0, "shape": "ring", "ring_radius": 0.8, "ring_inner": 0.5,
-		"dir": Vector3.UP, "spread": 5.0, "speed": Vector2(2.0, 4.0), "tex": Fx.Tex.STAR, "size": 0.3, "curve": "pop",
+				HeroFx.ring(world(), global_position + Vector3(0, 0.2 + 0.45 * float(i), 0), Vector3.UP, Color(1.2, 1.0, 0.4, 0.85), 0.9, 0.5, 0.4, 0.05))
+	# a column of golden light and sparkles, and rays of light falling round the hero
+	HeroFx.pop(w, {"amount": 48, "lifetime": 1.1, "shape": "ring", "ring_radius": 0.8, "ring_inner": 0.5,
+		"dir": Vector3.UP, "spread": 5.0, "speed": Vector2(2.0, 4.5), "tex": Fx.Tex.STAR, "size": 0.3, "curve": "pop",
 		"angle": Vector2(0, 360), "color": Color(1.3, 1.1, 0.5), "explosiveness": 0.4}, at)
+	for i: int in 6:
+		var a: float = TAU * float(i) / 6.0 + 0.3
+		var base: Vector3 = at + Vector3(cos(a) * 1.1, 0.0, sin(a) * 1.1)
+		PartyFx.beam(w, base, base + Vector3(0, 6.0, 0), Color(1.2, 1.05, 0.55, 0.35), 0.12, 0.7 + 0.05 * float(i), 1.4)
+	PartyFx.beam(w, at, at + Vector3(0, 8.0, 0), Color(1.2, 1.1, 0.6, 0.3), 0.55, 0.8, 1.2)
 	# the pose: blade straight up above the head, hold, back to the side
 	_kill_sword_tween()
 	_sword_tw = create_tween()
@@ -178,17 +194,18 @@ func _item_get() -> void:
 		if not is_inside_tree():
 			return
 		var tip: Vector3 = _sword.global_transform * Vector3(0, 1.08, 0)
-		_tip_glow.scale = Vector3.ONE * 3.0
+		_tip_glow.scale = Vector3.ONE * 3.4
 		(_tip_glow.material_override as StandardMaterial3D).albedo_color.a = 1.0
 		var gt: Tween = create_tween().set_parallel(true)
-		gt.tween_property(_tip_glow, "scale", Vector3.ONE, 0.5).set_ease(Tween.EASE_OUT)
-		gt.tween_property(_tip_glow, "rotation:z", TAU * 0.5, 0.5)
-		gt.tween_property(_tip_glow.material_override, "albedo_color:a", 0.0, 0.6).set_ease(Tween.EASE_IN)
-		HeroFx.stars(world(), tip, Color(1.4, 1.25, 0.6), 14, 3.0, 0.5, 0.2)
-		HeroFx.pop(world(), {"amount": 28, "lifetime": 0.9, "shape": "sphere", "radius": 0.15, "dir": Vector3.DOWN,
+		gt.tween_property(_tip_glow, "scale", Vector3.ONE, 0.55).set_ease(Tween.EASE_OUT)
+		gt.tween_property(_tip_glow, "rotation:z", TAU * 0.5, 0.55)
+		gt.tween_property(_tip_glow.material_override, "albedo_color:a", 0.0, 0.65).set_ease(Tween.EASE_IN)
+		HeroFx.stars(world(), tip, Color(1.4, 1.25, 0.6), 18, 3.5, 0.5, 0.2)
+		HeroFx.ring(world(), tip, Vector3.BACK, Color(1.3, 1.15, 0.6, 0.9), 0.1, 1.4, 0.35, 0.08, true)
+		HeroFx.pop(world(), {"amount": 40, "lifetime": 1.1, "shape": "sphere", "radius": 0.15, "dir": Vector3.DOWN,
 			"spread": 70.0, "speed": Vector2(1.0, 3.0), "gravity": Vector3(0, -3.0, 0), "tex": Fx.Tex.STAR, "size": 0.18,
 			"curve": "pop", "color": Color(1.3, 1.15, 0.55)}, tip)
-		HeroFx.flash(world(), tip, GOLD, 5.0, 6.0, 0.5))
+		HeroFx.flash(world(), tip, GOLD, 6.0, 7.0, 0.55))
 	_sword_tw.tween_interval(0.45)
 	_sword_tw.tween_property(_sword, "position", SWORD_REST_POS, 0.2).set_ease(Tween.EASE_IN_OUT)
 	_sword_tw.parallel().tween_property(_sword, "rotation_degrees", SWORD_REST_ROT, 0.2).set_ease(Tween.EASE_IN_OUT)
@@ -373,29 +390,49 @@ func _slash() -> void:
 
 
 ## A crescent smear of blade-light for each swing (right-to-left, left-to-right, then a big
-## overhead chop that cracks the ground), with sparks off the edge.
+## overhead chop that splits the ground), a wind arc flying on past it, sparks and glints off
+## the edge, cut grass and a puff of dust off the ground.
 static func _slash_fx(parent: Node, o: Vector3, dir: Vector3, combo: int) -> void:
 	var b := PartyFx.facing(dir)
 	var col := Color(0.55, 0.85, 1.1, 0.85)
 	var core := Color(1.3, 1.4, 1.5)
 	match combo:
 		0:
-			HeroFx.slash(parent, o, Basis(dir, deg_to_rad(-14.0)) * b, 1.55, 1.35, -1.35, col, 0.42, 0.08, 0.2, core)
+			var p0: Basis = Basis(dir, deg_to_rad(-14.0)) * b
+			HeroFx.slash(parent, o, p0, 1.55, 1.35, -1.35, col, 0.42, 0.08, 0.2, core)
+			HeroFx.slash(parent, o + dir * 0.4, p0, 2.2, 1.0, -1.0, Color(0.7, 0.9, 1.1, 0.35), 0.18, 0.12, 0.25, Color(1.0, 1.1, 1.2), true)
 		1:
-			HeroFx.slash(parent, o + Vector3(0, 0.1, 0), Basis(dir, deg_to_rad(18.0)) * b, 1.55, -1.35, 1.35, col, 0.42, 0.08, 0.2, core)
+			var p1: Basis = Basis(dir, deg_to_rad(18.0)) * b
+			HeroFx.slash(parent, o + Vector3(0, 0.1, 0), p1, 1.55, -1.35, 1.35, col, 0.42, 0.08, 0.2, core)
+			HeroFx.slash(parent, o + Vector3(0, 0.1, 0) + dir * 0.4, p1, 2.2, -1.0, 1.0, Color(0.7, 0.9, 1.1, 0.35), 0.18, 0.12, 0.25, Color(1.0, 1.1, 1.2), true)
 		_:
 			# the chop is drawn in a plane leaned toward the viewer behind so it reads head-on too
 			var plane := Basis(dir, deg_to_rad(70.0)) * b
 			HeroFx.slash(parent, o + Vector3(0, 0.25, 0), plane, 1.8, -1.5, 1.4, Color(0.7, 0.95, 1.2, 0.9), 0.55, 0.11, 0.28, core)
 			var ground: Vector3 = o + dir * 1.7 - Vector3(0, 0.75, 0)
-			PartyFx.shockwave(parent, ground, Color(0.6, 0.9, 1.0), 1.6, 0.3)
-			HeroFx.dust_ring(parent, ground, Color(0.9, 0.87, 0.8, 0.6), 0.8, 10, 5.0)
-			HeroFx.sparks(parent, ground + Vector3(0, 0.1, 0), Color(1.4, 1.3, 0.9), 22, 8.0, Vector3.UP, 60.0, 0.4)
-			HeroFx.pop(parent, {"amount": 8, "lifetime": 0.7, "facing": "mesh", "mesh": Fx.chunk_mesh(0.1), "spread": 40.0,
-				"speed": Vector2(3.0, 5.0), "gravity": Vector3(0, -18, 0), "scale": Vector2(0.6, 1.2), "curve": "shrink",
+			PartyFx.shockwave(parent, ground, Color(0.6, 0.9, 1.0), 1.8, 0.35)
+			HeroFx.dust_ring(parent, ground, Color(0.9, 0.87, 0.8, 0.6), 0.9, 14, 6.0)
+			HeroFx.sparks(parent, ground + Vector3(0, 0.1, 0), Color(1.4, 1.3, 0.9), 30, 9.0, Vector3.UP, 60.0, 0.45)
+			HeroFx.pop(parent, {"amount": 10, "lifetime": 0.8, "facing": "mesh", "mesh": Fx.chunk_mesh(0.1), "spread": 40.0,
+				"speed": Vector2(3.0, 6.0), "gravity": Vector3(0, -18, 0), "scale": Vector2(0.6, 1.2), "curve": "shrink",
 				"spin": Vector2(-400, 400), "angle": Vector2(0, 360), "color": Color(0.55, 0.5, 0.45),
 				"fade": PackedFloat32Array([1.0, 1.0])}, ground)
-	HeroFx.sparks(parent, o + dir * 1.2, Color(1.2, 1.4, 1.6), 18, 9.0, dir, 50.0, 0.35)
+			# the blade's cut, glowing in the ground, with a split either side
+			if parent is Node3D and (parent as Node3D).is_inside_tree():
+				var gq := PhysicsRayQueryParameters3D.create(ground + Vector3(0, 0.8, 0), ground + Vector3(0, -1.5, 0), 1)
+				var gh: Dictionary = (parent as Node3D).get_world_3d().direct_space_state.intersect_ray(gq)
+				if not gh.is_empty():
+					var gp: Vector3 = gh["position"]
+					PartyFx.claw_gouges(parent, gp - dir * 0.6, dir, 2.4, 1, 0.0, Color(1.2, 1.9, 2.6), 1.8, gh["normal"] as Vector3)
+					PartyFx.ground_cracks(parent, gp + dir * 0.4, 1.2, Color(1.1, 1.7, 2.4), 6, 1.6, 0, gh["normal"] as Vector3)
+	HeroFx.sparks(parent, o + dir * 1.2, Color(1.2, 1.4, 1.6), 26, 10.0, dir, 50.0, 0.4)
+	HeroFx.stars(parent, o + dir * 1.3, Color(1.3, 1.45, 1.6), 5, 2.5, 0.3, 0.3)
+	# cut grass and leaves flicked off the swing
+	HeroFx.pop(parent, {"amount": 12, "lifetime": 0.8, "shape": "sphere", "radius": 0.4, "dir": dir + Vector3(0, 0.6, 0),
+		"spread": 55.0, "speed": Vector2(2.0, 5.0), "gravity": Vector3(0, -6.0, 0), "damping": Vector2(1.0, 2.0),
+		"size": Vector2(0.14, 0.06), "curve": "shrink", "angle": Vector2(0, 360), "spin": Vector2(-500, 500), "additive": false,
+		"pick": PackedColorArray([Color(0.35, 0.8, 0.3), Color(0.5, 0.95, 0.35), Color(0.25, 0.6, 0.2)]),
+		"fade": PackedFloat32Array([1.0, 1.0, 0.0]), "box_aabb": 6.0}, o + dir * 1.0 - Vector3(0, 0.5, 0))
 
 
 ## The blade's own swing (every screen): wound back, whipped through with a trail, recovered.
@@ -450,35 +487,51 @@ func _spin_anim() -> void:
 	_sword_tw.parallel().tween_property(_sword, "position", SWORD_REST_POS, 0.15)
 
 
-## The spin's whirlwind: a full ring of blade-light, a swirling cyclone of sparks and leaves,
-## a ground shockwave and a flash.
+## The spin's whirlwind: a full ring of blade-light and a wider wind ring, a swirling cyclone of
+## sparks, leaves and grass, a circle cut into the ground, a dust wall, and a flash.
 static func _spin_fx(parent: Node, o: Vector3) -> void:
 	var col := Color(0.6, 0.9, 1.15, 0.85)
 	for i: int in 4:
 		var a0: float = float(i) * PI * 0.5
 		HeroFx.slash(parent, o, Basis.IDENTITY, 2.2, a0, a0 + PI * 0.7, col, 0.45, 0.12, 0.3, Color(1.3, 1.4, 1.5))
-	PartyFx.shockwave(parent, o - Vector3(0, 0.7, 0), Color(0.75, 0.95, 1.0), 4.0, 0.4)
-	HeroFx.dust_ring(parent, o - Vector3(0, 0.7, 0), Color(0.9, 0.88, 0.8, 0.55), 1.2, 16, 7.0)
-	# the cyclone: a spinning node carries sparks and leaves round and up
+		HeroFx.slash(parent, o + Vector3(0, 0.15, 0), Basis.IDENTITY, 3.0, a0 + 0.3, a0 + 0.3 + PI * 0.6, Color(0.75, 0.95, 1.1, 0.3), 0.2, 0.16, 0.3, Color(1.0, 1.1, 1.2), true)
+	PartyFx.shockwave(parent, o - Vector3(0, 0.7, 0), Color(0.75, 0.95, 1.0), 4.4, 0.45)
+	PartyFx.dust_wall(parent, o - Vector3(0, 0.75, 0), 2.0, Color(0.9, 0.88, 0.8, 0.55), 20)
+	# the cyclone: a spinning node carries sparks, leaves and grass round and up
 	if parent == null or not parent.is_inside_tree():
 		return
 	var spin := Node3D.new()
 	parent.add_child(spin)
 	spin.global_position = o - Vector3(0, 0.6, 0)
-	spin.add_child(HeroFx.em({"amount": 60, "lifetime": 0.55, "one_shot": true, "explosiveness": 0.6, "local": true,
-		"shape": "ring", "ring_radius": 1.8, "ring_inner": 1.2, "ring_height": 0.3, "dir": Vector3.UP, "spread": 20.0,
-		"speed": Vector2(1.0, 3.0), "facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.1, 0.5),
-		"color": Color(0.6, 0.9, 1.2, 0.8), "additive": false, "fixed_fps": 0}))
-	spin.add_child(HeroFx.em({"amount": 20, "lifetime": 0.8, "one_shot": true, "explosiveness": 0.6, "local": true,
-		"shape": "ring", "ring_radius": 1.5, "ring_inner": 0.8, "ring_height": 0.6, "dir": Vector3.UP, "spread": 30.0,
-		"speed": Vector2(1.0, 3.0), "size": 0.16, "curve": "shrink", "angle": Vector2(0, 360), "spin": Vector2(-300, 300),
-		"additive": false, "color": Color(0.45, 0.9, 0.35), "fixed_fps": 0}))
+	spin.add_child(HeroFx.em({"amount": 80, "lifetime": 0.6, "one_shot": true, "explosiveness": 0.6, "local": true,
+		"shape": "ring", "ring_radius": 1.9, "ring_inner": 1.2, "ring_height": 0.4, "dir": Vector3.UP, "spread": 20.0,
+		"speed": Vector2(1.0, 3.5), "facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.1, 0.55),
+		"color": Color(0.6, 0.9, 1.2, 0.8), "additive": false, "fixed_fps": 0, "box_aabb": 8.0}))
+	spin.add_child(HeroFx.em({"amount": 34, "lifetime": 0.9, "one_shot": true, "explosiveness": 0.6, "local": true,
+		"shape": "ring", "ring_radius": 1.6, "ring_inner": 0.8, "ring_height": 0.8, "dir": Vector3.UP, "spread": 30.0,
+		"speed": Vector2(1.0, 3.5), "size": Vector2(0.18, 0.1), "curve": "shrink", "angle": Vector2(0, 360),
+		"spin": Vector2(-400, 400), "additive": false, "fixed_fps": 0, "box_aabb": 8.0,
+		"pick": PackedColorArray([Color(0.35, 0.8, 0.3), Color(0.5, 0.95, 0.35), Color(0.25, 0.6, 0.2)]),
+		"fade": PackedFloat32Array([1.0, 1.0, 0.0])}))
+	spin.add_child(HeroFx.em({"amount": 16, "lifetime": 0.7, "one_shot": true, "explosiveness": 0.7, "local": true,
+		"shape": "ring", "ring_radius": 1.4, "ring_inner": 1.0, "ring_height": 0.2, "dir": Vector3.UP, "spread": 20.0,
+		"speed": Vector2(1.0, 2.0), "tex": Fx.Tex.STAR, "size": 0.3, "curve": "pop", "angle": Vector2(0, 360),
+		"color": Color(1.2, 1.4, 1.6), "fixed_fps": 0, "box_aabb": 8.0}))
 	for c: Node in spin.get_children():
 		(c as GPUParticles3D).emitting = true
 	var tw: Tween = spin.create_tween()
-	tw.tween_property(spin, "rotation:y", -TAU * 2.0, 0.9).set_ease(Tween.EASE_OUT)
+	tw.tween_property(spin, "rotation:y", -TAU * 2.5, 1.0).set_ease(Tween.EASE_OUT)
 	tw.tween_callback(spin.queue_free)
-	PartyFx.flash(parent, o, col, 6.0, 8.0, 0.35)
+	# a circle cut into the ground round the hero
+	var gq := PhysicsRayQueryParameters3D.create(o, o + Vector3(0, -2.0, 0), 1)
+	var gh: Dictionary = (parent as Node3D).get_world_3d().direct_space_state.intersect_ray(gq)
+	if not gh.is_empty():
+		var pts: Array[Vector3] = []
+		for k: int in 33:
+			var a: float = TAU * float(k) / 32.0
+			pts.append(Vector3(cos(a), 0, sin(a)) * (1.9 + randf_range(-0.05, 0.05)))
+		PartyFx.glow_lines(parent, gh["position"] as Vector3, [[pts, 0.05]], Color(1.1, 1.7, 2.4), 1.8, gh["normal"] as Vector3)
+	PartyFx.flash(parent, o, col, 7.0, 9.0, 0.4)
 
 
 # ---- tools ----------------------------------------------------------------------------------
@@ -548,13 +601,18 @@ static func _spawn_boomerang(layer_ref: PartyLayer, key: String, o: Vector3, dir
 	smear.b_local = Vector3(0.45, 0, 0.08)
 	smear.color = Color(1.0, 0.8, 0.45)
 	smear.hot = Color(1.3, 1.1, 0.7)
-	smear.max_age = 0.12
+	smear.max_age = 0.14
 	smear.active = true
 	pr.add_child(smear)
-	pr.add_child(PartyFx.emitter({"amount": 30, "lifetime": 0.3, "size": 0.2, "color": Color(1.0, 0.85, 0.5),
+	pr.add_child(PartyFx.emitter({"amount": 40, "lifetime": 0.35, "size": 0.22, "color": Color(1.0, 0.85, 0.5),
 		"vmin": 0.0, "vmax": 0.3, "aabb": 20.0, "colors": [Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)]}))
-	pr.add_child(HeroFx.em({"amount": 14, "lifetime": 0.45, "speed": Vector2(0.1, 0.5), "tex": Fx.Tex.STAR,
+	pr.add_child(HeroFx.em({"amount": 18, "lifetime": 0.5, "speed": Vector2(0.1, 0.5), "tex": Fx.Tex.STAR,
 		"size": 0.16, "curve": "pop", "color": Color(1.3, 1.2, 0.8), "box_aabb": 20.0, "fixed_fps": 0}))
+	# a little whirl of wind around it: pale streaks peeling off the spinning wings
+	var whirl := HeroFx.em({"amount": 20, "lifetime": 0.3, "shape": "ring", "ring_radius": 0.5, "ring_inner": 0.4,
+		"speed": Vector2(1.5, 3.0), "spread": 180.0, "flatness": 1.0, "facing": "velocity", "tex": Fx.Tex.SPARK,
+		"size": Vector2(0.04, 0.35), "additive": false, "color": Color(1.0, 1.0, 1.0, 0.5), "fixed_fps": 0, "box_aabb": 20.0})
+	spinner.add_child(whirl)
 	pr.on_target = func(t: Dictionary, pos: Vector3) -> bool:
 		var away: Vector3 = (t["center"] as Vector3) - pos
 		away.y = 0.0
@@ -611,8 +669,8 @@ func _end_hook(pop: bool) -> void:
 		HeroFx.burst(world(), p.global_position + Vector3(0, 0.6, 0), Color(1.2, 1.1, 0.8), 12, 4.0, 0.2, 0.3)
 
 
-## The hookshot's shot, on every screen: the chain shoots out link by link, bites with sparks,
-## then whips back in.
+## The hookshot's shot, on every screen: the chain shoots out link by link with sparks
+## streaming off it, bites with a burst of chips, sparks and dust, then whips back in.
 static func _hook_fx(parent: Node, o: Vector3, to: Vector3, yank: bool) -> void:
 	if parent == null or not parent.is_inside_tree():
 		return
@@ -622,12 +680,20 @@ static func _hook_fx(parent: Node, o: Vector3, to: Vector3, yank: bool) -> void:
 	var tw: Tween = ch.create_tween()
 	tw.tween_method(func(k: float) -> void: ch.set_ends(o, to, k), 0.0, 1.0, 0.1)
 	tw.tween_callback(func() -> void:
-		PartyFx.sparks(parent, to, Color(1.0, 0.85, 0.5), 20 if yank else 12, 6.0)
-		HeroFx.ring(parent, to, (o - to).normalized(), Color(1.2, 1.0, 0.6, 0.9), 0.1, 0.8, 0.22, 0.1))
+		PartyFx.sparks(parent, to, Color(1.0, 0.85, 0.5), 26 if yank else 18, 7.0)
+		HeroFx.stars(parent, to, Color(1.4, 1.25, 0.7), 6, 3.0, 0.35, 0.2)
+		HeroFx.ring(parent, to, (o - to).normalized(), Color(1.2, 1.0, 0.6, 0.9), 0.1, 1.0, 0.22, 0.1)
+		if not yank:
+			HeroFx.pop(parent, {"amount": 8, "lifetime": 0.7, "facing": "mesh", "mesh": Fx.chunk_mesh(0.08), "spread": 60.0,
+				"dir": (o - to).normalized(), "speed": Vector2(2.0, 5.0), "gravity": Vector3(0, -18, 0), "scale": Vector2(0.6, 1.2),
+				"curve": "shrink", "spin": Vector2(-400, 400), "angle": Vector2(0, 360), "color": Color(0.55, 0.5, 0.45),
+				"fade": PackedFloat32Array([1.0, 1.0])}, to)
+			HeroFx.smoke(parent, to, Color(0.8, 0.77, 0.72, 0.45), 6, 0.6, 0.6, 1.2))
 	tw.tween_interval(0.08)
 	tw.tween_method(func(k: float) -> void: ch.set_ends(o, to, 1.0 - k), 0.0, 1.0, 0.18).set_ease(Tween.EASE_IN)
 	tw.tween_callback(ch.queue_free)
-	PartyFx.streak(parent, o, to, Color(1.0, 0.9, 0.6), 24, 0.1, 0.3, 0.05, 0.6, true)
+	PartyFx.streak(parent, o, to, Color(1.0, 0.9, 0.6), 34, 0.1, 0.35, 0.05, 0.6, true)
+	PartyFx.tether(parent, o, to, Color(1.4, 1.2, 0.8), 12, 26.0)
 
 
 func _throw_bomb() -> void:
@@ -664,12 +730,12 @@ static func _spawn_bomb(layer_ref: PartyLayer, key: String, o: Vector3, v: Vecto
 	PartyFx.part(body, PartyFx.sphere_mesh(0.26, 16), shell_mat, Vector3.ZERO)
 	PartyFx.part(body, PartyFx.sphere_mesh(0.06, 8), PartyFx.glow_mat(Color(1, 1, 1, 0.8), 1.4, true), Vector3(-0.1, 0.12, -0.18))
 	PartyFx.part(body, PartyFx.cyl_mesh(0.07, 0.1), PartyFx.solid_mat(Color(0.5, 0.5, 0.55)), Vector3(0, 0.27, 0))
-	var fuse: GPUParticles3D = PartyFx.emitter({"amount": 26, "lifetime": 0.3, "size": 0.1, "color": Color(1.0, 0.75, 0.3),
-		"vmin": 1.5, "vmax": 3.5, "dir": Vector3.UP, "spread": 60.0, "gravity": Vector3(0, -6, 0), "spark": true, "aabb": 20.0})
+	var fuse: GPUParticles3D = PartyFx.emitter({"amount": 34, "lifetime": 0.32, "size": 0.1, "color": Color(1.0, 0.75, 0.3),
+		"vmin": 1.5, "vmax": 3.8, "dir": Vector3.UP, "spread": 60.0, "gravity": Vector3(0, -6, 0), "spark": true, "aabb": 20.0})
 	fuse.position = Vector3(0, 0.34, 0)
 	body.add_child(fuse)
-	var puff: GPUParticles3D = HeroFx.em({"amount": 10, "lifetime": 0.5, "speed": Vector2(0.1, 0.4), "tex": Fx.Tex.SMOKE,
-		"additive": false, "size": 0.25, "curve": "puff", "angle": Vector2(0, 360), "color": Color(0.5, 0.5, 0.52, 0.5),
+	var puff: GPUParticles3D = HeroFx.em({"amount": 16, "lifetime": 0.6, "speed": Vector2(0.1, 0.4), "tex": Fx.Tex.SMOKE,
+		"additive": false, "size": 0.28, "curve": "puff", "angle": Vector2(0, 360), "color": Color(0.5, 0.5, 0.52, 0.5),
 		"fade": PackedFloat32Array([0.0, 0.8, 0.0]), "box_aabb": 20.0, "fixed_fps": 0})
 	puff.position = Vector3(0, 0.36, 0)
 	body.add_child(puff)
@@ -691,18 +757,28 @@ static func _spawn_bomb(layer_ref: PartyLayer, key: String, o: Vector3, v: Vecto
 	return pr
 
 
-## A cartoon blast: a white pop, puffy orange-to-grey smoke balls, star-shaped sparks, a ring,
-## and a "BOOM!".
+## A cartoon blast: a white pop, puffy orange-to-grey smoke balls, star-shaped sparks, burning
+## chunks that spark where they land, a ring and a wall of dust, a scorch mark with a few
+## cracks, drifting embers and a "BOOM!".
 static func _bomb_boom(layer_ref: PartyLayer, key: String, pos: Vector3, is_local: bool) -> void:
-	HeroFx.orb(layer_ref, pos, Color(1.0, 0.95, 0.8, 1.0), 0.3, 2.0, 0.14)
+	HeroFx.orb(layer_ref, pos, Color(1.0, 0.95, 0.8, 1.0), 0.3, 1.8, 0.12)
 	HeroFx.orb(layer_ref, pos, Color(1.0, 0.55, 0.15, 0.8), 0.5, 2.6, 0.3, false)
-	HeroFx.fireball(layer_ref, pos, 2.6, 26, Color(1.3, 1.15, 0.7), Color(1.15, 0.5, 0.08), Color(0.4, 0.37, 0.4, 0.75))
-	HeroFx.smoke(layer_ref, pos + Vector3(0, 0.4, 0), Color(0.55, 0.52, 0.55, 0.6), 10, 1.6, 1.4, 2.5)
-	HeroFx.stars(layer_ref, pos, Color(1.4, 1.2, 0.5), 12, 8.0, 0.5, 0.4)
-	HeroFx.sparks(layer_ref, pos, Color(1.5, 1.1, 0.5), 30, 12.0, Vector3.UP, 90.0, 0.5)
-	HeroFx.ring(layer_ref, pos + Vector3(0, -0.2, 0), Vector3.UP, Color(1.2, 0.9, 0.4, 0.9), 0.4, 3.6, 0.35, 0.06)
-	HeroFx.ground_ring(layer_ref, pos - Vector3(0, 0.3, 0), Color(1.2, 0.8, 0.3), 3.0, 0.35)
-	HeroFx.dust_ring(layer_ref, pos - Vector3(0, 0.3, 0), Color(0.85, 0.8, 0.72, 0.6), 1.0, 14, 7.0)
+	HeroFx.fireball(layer_ref, pos, 2.6, 34, Color(1.3, 1.15, 0.7), Color(1.15, 0.5, 0.08), Color(0.4, 0.37, 0.4, 0.75))
+	HeroFx.smoke(layer_ref, pos + Vector3(0, 0.4, 0), Color(0.55, 0.52, 0.55, 0.6), 14, 1.6, 1.6, 2.5)
+	HeroFx.stars(layer_ref, pos, Color(1.4, 1.2, 0.5), 16, 8.0, 0.5, 0.4)
+	HeroFx.sparks(layer_ref, pos, Color(1.5, 1.1, 0.5), 40, 13.0, Vector3.UP, 90.0, 0.55)
+	HeroFx.ring(layer_ref, pos + Vector3(0, -0.2, 0), Vector3.UP, Color(1.2, 0.9, 0.4, 0.9), 0.4, 3.8, 0.35, 0.06)
+	var gq := PhysicsRayQueryParameters3D.create(pos + Vector3(0, 0.5, 0), pos + Vector3(0, -2.5, 0), 1)
+	var gh: Dictionary = layer_ref.get_world_3d().direct_space_state.intersect_ray(gq)
+	var ground: Vector3 = gh["position"] if not gh.is_empty() else pos - Vector3(0, 0.3, 0)
+	HeroFx.ground_ring(layer_ref, ground, Color(1.2, 0.8, 0.3), 3.0, 0.35)
+	PartyFx.dust_wall(layer_ref, ground, 1.8, Color(0.85, 0.8, 0.72, 0.6), 18)
+	PartyFx.burning_debris(layer_ref, pos + Vector3(0, 0.2, 0), 6, 8.0, Color(2.2, 0.9, 0.25), Color(0.3, 0.26, 0.24), 0.7)
+	if not gh.is_empty():
+		PartyFx.scorch(layer_ref, ground, 1.5, 2.8, Color(1.0, 0.55, 0.2))
+		PartyFx.ground_cracks(layer_ref, ground, 1.8, Color(2.2, 0.9, 0.25), 7, 1.8, 0, gh["normal"] as Vector3)
+	if PartyFx.rich():
+		PartyFx.embers(layer_ref, pos, 0.9, Color(2.4, 1.0, 0.3), 24, 1.6, 1.4)
 	HeroFx.flash(layer_ref, pos, Color(1.0, 0.7, 0.3), 10.0, 12.0, 0.5)
 	PartyFx.popup_text(layer_ref, pos + Vector3(0, 1.4, 0), "BOOM!", Color(1.0, 0.75, 0.25), 110)
 	layer_ref.sfx.play_at("boom", pos, 1.0, 1.1)
@@ -768,9 +844,11 @@ static func remote_fx(layer_ref: PartyLayer, _from_id: int, action: String, d: D
 func on_end() -> void:
 	_end_hook(false)
 	if is_inside_tree():
-		PartyFx.burst(world(), global_position + Vector3(0, 0.8, 0), Color(0.45, 1.0, 0.4), 30, 5.0, 0.25)
-		HeroFx.stars(world(), global_position + Vector3(0, 0.8, 0), Color(1.3, 1.2, 0.6), 10, 3.0, 0.4, 0.5)
-		HeroFx.pop(world(), {"amount": 16, "lifetime": 1.2, "shape": "sphere", "radius": 0.5, "dir": Vector3.UP,
-			"spread": 60.0, "speed": Vector2(0.5, 1.5), "gravity": Vector3(0, -0.8, 0), "size": 0.14, "curve": "shrink",
+		PartyFx.burst(world(), global_position + Vector3(0, 0.8, 0), Color(0.45, 1.0, 0.4), 40, 5.0, 0.25)
+		HeroFx.stars(world(), global_position + Vector3(0, 0.8, 0), Color(1.3, 1.2, 0.6), 14, 3.0, 0.4, 0.5)
+		HeroFx.ring(world(), global_position + Vector3(0, 0.1, 0), Vector3.UP, Color(0.5, 1.0, 0.45, 0.8), 0.3, 2.0, 0.4, 0.05)
+		HeroFx.smoke(world(), global_position + Vector3(0, 0.7, 0), Color(0.85, 0.95, 0.8, 0.45), 10, 0.8, 0.8, 1.2)
+		HeroFx.pop(world(), {"amount": 22, "lifetime": 1.3, "shape": "sphere", "radius": 0.5, "dir": Vector3.UP,
+			"spread": 60.0, "speed": Vector2(0.5, 1.5), "gravity": Vector3(0, -0.8, 0), "size": Vector2(0.16, 0.09), "curve": "shrink",
 			"angle": Vector2(0, 360), "spin": Vector2(-300, 300), "additive": false, "color": Color(0.45, 0.9, 0.35),
 			"explosiveness": 0.7}, global_position + Vector3(0, 0.8, 0))

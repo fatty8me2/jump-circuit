@@ -4,10 +4,12 @@ extends PowerUp
 ##  Attack (tap): Dash Punch - a blurring lunge; whoever it meets is sent flying.
 ##  Attack (hold): charge the Energy Wave between the hands ("Ka... me..."), release to fire a
 ##  long beam that shoves everyone along it (shortened by walls).
-## The look: the hair flares up in a transformation burst (a pillar of light, a crater of
-## dust, lightning); a flickering flame aura with rising motes, lifted pebbles and crackles;
-## afterimages behind the dash; a gathering orb at the hip and a thick shimmering beam; the
-## aura sputters out when it ends.
+## The look: the hair flares up in a transformation burst (a pillar of light, golden cracks,
+## a wall of dust and flung rocks, forked lightning); a roaring aura of golden flame tongues
+## (a pointed, flickering blaze - no shell) with surges, sparks, rising motes, lifted pebbles,
+## dust blown out along the ground and crackles; a flame trail and afterimages behind the
+## dash; a gathering orb at the hip and a thick shimmering beam wrapped in spiral ribbons that
+## scorches the ground and bursts at its end; the aura sputters out when it ends.
 
 const GOLDEN := Color(1.0, 0.84, 0.2)
 const WAVE := Color(0.45, 0.8, 1.0)
@@ -45,6 +47,12 @@ var _pebbles: GPUParticles3D
 var _floor_glow: MeshInstance3D
 var _light: OmniLight3D
 var _dash_vis: float = 0.0
+var _inner: GPUParticles3D
+var _ground_wind: GPUParticles3D
+var _ground_streaks: GPUParticles3D
+var _zaps: GPUParticles3D
+var _dash_trail: GPUParticles3D
+var _surge_t: float = 0.6
 var _ghost_t: float = 0.0
 var _vis_dir: Vector3 = Vector3.FORWARD
 var _dust_t: float = 0.0
@@ -92,37 +100,83 @@ func build_look() -> void:
 		_spikes.append(piv)
 		_spike_rest.append(s[1])
 	HeroFx.mesh_part(_hair, PartyFx.sphere_mesh(0.3, 16), _hair_mat, Vector3(0, 0.02, 0.04), Vector3(1.05, 0.5, 1.0))
-	# the aura: a flame-shaped shell (pointed top) plus a soft additive glow round it
-	_aura_mat = HeroFx.flame_mat(Color(1.0, 0.68, 0.06), Color(1.0, 0.9, 0.4), 1.0, 0.1, 4.0, true)
-	_aura_mat.set_shader_parameter("stretch", 0.22)
+	# golden sparks fizzing off the hair tips
+	var hair_sparks: GPUParticles3D = HeroFx.em({"amount": 14, "lifetime": 0.35, "shape": "sphere", "radius": 0.35,
+		"dir": Vector3.UP, "spread": 50.0, "speed": Vector2(1.0, 2.5), "gravity": Vector3(0, 1.0, 0), "facing": "velocity",
+		"tex": Fx.Tex.SPARK, "size": Vector2(0.04, 0.16), "fixed_fps": 0, "color": Color(2.2, 1.9, 0.9)})
+	hair_sparks.position = Vector3(0, 0.3, 0)
+	_hair.add_child(hair_sparks)
+	# the aura, made of fire rather than a shell: a thin golden glow hugging the body...
+	_aura_mat = HeroFx.flame_mat(Color(1.0, 0.68, 0.06), Color(1.0, 0.9, 0.4), 1.1, 0.08, 4.0)
+	_aura_mat.set_shader_parameter("stretch", 0.12)
 	_aura_mat.set_shader_parameter("base_alpha", 0.0)
-	_aura_mat.set_shader_parameter("freq", 3.0)
-	_aura_shell = HeroFx.mesh_part(_rig, PartyFx.sphere_mesh(0.5, 40), _aura_mat, Vector3(0, 0.72, 0), Vector3(1.25, 1.5, 1.25))
+	_aura_mat.set_shader_parameter("freq", 4.0)
+	_aura_mat.set_shader_parameter("alpha", 0.7)
+	_aura_shell = HeroFx.mesh_part(_rig, PartyFx.sphere_mesh(0.5, 32), _aura_mat, Vector3(0, 0.66, 0), Vector3(0.98, 1.12, 0.98))
 	_aura_shell.set_meta("no_ghost", true)
-	# tongues of golden flame licking up around the body (a ring, so the body stays visible)
-	var fo: Dictionary = {"amount": 64, "lifetime": 0.45, "shape": "ring", "ring_radius": 0.62, "ring_inner": 0.42,
-		"ring_height": 0.25, "dir": Vector3.UP, "spread": 6.0, "speed": Vector2(2.2, 4.2), "gravity": Vector3(0, 2.0, 0),
-		"curve": "shrink", "scale": Vector2(0.7, 1.2), "fixed_fps": 0,
-		"colors": PackedColorArray([Color(1.2, 1.1, 0.6, 0.0), Color(1.2, 0.88, 0.22, 0.95), Color(1.1, 0.55, 0.04, 0.0)])}
-	fo.merge(HeroFx.tongues(Vector2(0.5, 1.0)))
+	# ...and a roaring blaze round it: tall golden flame tongues streaming up from a ring round
+	# the body, drawing in toward the top so the silhouette is a pointed, flickering flame
+	# (world space, so it streams back behind a runner); a hotter white-gold layer inside
+	var fo: Dictionary = {"amount": 96, "lifetime": 0.46, "shape": "ring", "ring_radius": 0.64, "ring_inner": 0.36,
+		"ring_height": 0.9, "dir": Vector3.UP, "spread": 7.0, "speed": Vector2(2.6, 4.8), "gravity": Vector3(0, 3.0, 0),
+		"radial": Vector2(-2.4, -1.2), "curve": "shrink", "scale": Vector2(0.7, 1.3), "fixed_fps": 0, "box_aabb": 8.0,
+		"colors": PackedColorArray([Color(1.5, 1.3, 0.6, 0.0), Color(1.6, 1.15, 0.3, 0.85), Color(1.35, 0.62, 0.05, 0.5), Color(0.9, 0.3, 0.0, 0.0)])}
+	fo.merge(HeroFx.tongues(Vector2(0.5, 1.2)))
 	_flames = HeroFx.em(fo)
-	_flames.position = Vector3(0, 0.05, 0)
+	_flames.position = Vector3(0, 0.55, 0)
 	_rig.add_child(_flames)
+	var fi: Dictionary = {"amount": 50, "lifetime": 0.32, "shape": "ring", "ring_radius": 0.44, "ring_inner": 0.26,
+		"ring_height": 0.7, "dir": Vector3.UP, "spread": 6.0, "speed": Vector2(2.2, 3.6), "gravity": Vector3(0, 2.0, 0),
+		"radial": Vector2(-1.8, -0.8), "curve": "shrink", "scale": Vector2(0.7, 1.2), "fixed_fps": 0, "box_aabb": 8.0,
+		"colors": PackedColorArray([Color(1.6, 1.5, 1.0, 0.0), Color(1.5, 1.35, 0.7, 0.7), Color(1.2, 0.8, 0.2, 0.0)])}
+	fi.merge(HeroFx.tongues(Vector2(0.34, 0.8), true))
+	_inner = HeroFx.em(fi)
+	_inner.position = Vector3(0, 0.5, 0)
+	_rig.add_child(_inner)
 	# rising motes of light, and pebbles lifted off the ground by the energy
-	_motes = HeroFx.em({"amount": 22, "lifetime": 1.0, "shape": "ring", "ring_radius": 1.1, "ring_inner": 0.6,
-		"ring_height": 0.1, "dir": Vector3.UP, "spread": 5.0, "speed": Vector2(1.0, 2.6), "facing": "velocity",
-		"tex": Fx.Tex.SPARK, "size": Vector2(0.08, 0.3), "color": Color(1.2, 1.0, 0.4), "additive": false,
+	_motes = HeroFx.em({"amount": 34, "lifetime": 1.1, "shape": "ring", "ring_radius": 1.2, "ring_inner": 0.6,
+		"ring_height": 0.1, "dir": Vector3.UP, "spread": 5.0, "speed": Vector2(1.0, 2.8), "facing": "velocity",
+		"tex": Fx.Tex.SPARK, "size": Vector2(0.08, 0.32), "color": Color(1.3, 1.05, 0.4), "additive": false,
 		"fade": PackedFloat32Array([0.0, 1.0, 0.8, 0.0])})
 	add_child(_motes)
-	_pebbles = HeroFx.em({"amount": 7, "lifetime": 1.4, "shape": "ring", "ring_radius": 1.2, "ring_inner": 0.5,
-		"ring_height": 0.02, "dir": Vector3.UP, "spread": 10.0, "speed": Vector2(0.4, 1.0), "gravity": Vector3(0, 0.6, 0),
+	_pebbles = HeroFx.em({"amount": 12, "lifetime": 1.5, "shape": "ring", "ring_radius": 1.3, "ring_inner": 0.5,
+		"ring_height": 0.02, "dir": Vector3.UP, "spread": 10.0, "speed": Vector2(0.4, 1.1), "gravity": Vector3(0, 0.6, 0),
 		"facing": "mesh", "mesh": Fx.chunk_mesh(0.1), "scale": Vector2(0.6, 1.3), "curve": "shrink",
 		"spin": Vector2(-120, 120), "angle": Vector2(0, 360), "color": Color(0.55, 0.5, 0.45),
 		"fade": PackedFloat32Array([1.0, 1.0])})
 	_pebbles.position = Vector3(0, 0.05, 0)
 	add_child(_pebbles)
+	# the energy pushes the air out along the ground: dust and wind streaks blown outward
+	_ground_wind = HeroFx.em({"amount": 18, "lifetime": 0.8, "shape": "ring", "ring_radius": 0.55, "ring_inner": 0.35,
+		"dir": Vector3(1, 0.08, 0), "spread": 180.0, "flatness": 0.95, "speed": Vector2(2.5, 4.5), "damping": Vector2(2.5, 4.0),
+		"facing": "mesh", "mesh": HeroFx.soft_quad(Fx.Tex.SMOKE, false, 0.7), "curve": "puff", "angle": Vector2(0, 360),
+		"spin": Vector2(-60, 60), "color": Color(0.92, 0.88, 0.76, 0.28), "fade": PackedFloat32Array([0.0, 0.9, 0.0]),
+		"box_aabb": 6.0})
+	_ground_wind.position = Vector3(0, 0.15, 0)
+	add_child(_ground_wind)
+	_ground_streaks = HeroFx.em({"amount": 12, "lifetime": 0.35, "shape": "ring", "ring_radius": 0.7, "ring_inner": 0.5,
+		"dir": Vector3(1, 0.02, 0), "spread": 180.0, "flatness": 1.0, "speed": Vector2(5.0, 8.0), "damping": Vector2(4.0, 6.0),
+		"facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.05, 0.6), "additive": false,
+		"color": Color(1.3, 1.15, 0.6, 0.6), "box_aabb": 6.0})
+	_ground_streaks.position = Vector3(0, 0.08, 0)
+	add_child(_ground_streaks)
+	# electric sparks snapping out of the aura
+	_zaps = HeroFx.em({"amount": 22, "lifetime": 0.22, "shape": "sphere", "radius": 0.6, "spread": 180.0,
+		"speed": Vector2(3.0, 6.0), "damping": Vector2(4.0, 8.0), "facing": "velocity", "tex": Fx.Tex.SPARK,
+		"size": Vector2(0.04, 0.3), "fixed_fps": 0, "color": Color(1.6, 1.9, 2.4), "box_aabb": 6.0})
+	_zaps.position = Vector3(0, 0.8, 0)
+	_rig.add_child(_zaps)
+	# a golden trail of flame, lit only while dashing
+	var dt_o: Dictionary = {"amount": 60, "lifetime": 0.32, "shape": "sphere", "radius": 0.45, "dir": Vector3.UP,
+		"spread": 60.0, "speed": Vector2(0.5, 2.0), "curve": "shrink", "scale": Vector2(0.7, 1.3), "fixed_fps": 0,
+		"emitting": false, "box_aabb": 12.0,
+		"colors": PackedColorArray([Color(1.8, 1.5, 0.6, 0.9), Color(1.5, 0.9, 0.15, 0.6), Color(1.0, 0.4, 0.0, 0.0)])}
+	dt_o.merge(HeroFx.tongues(Vector2(0.45, 1.0)))
+	_dash_trail = HeroFx.em(dt_o)
+	_dash_trail.position = Vector3(0, 0.7, 0)
+	add_child(_dash_trail)
 	# a glowing pool of light under the feet
-	_floor_glow = HeroFx.glow_sprite(self, Color(1.0, 0.8, 0.2, 0.55), 2.6, Fx.Tex.RING, Vector3(0, 0.05, 0))
+	_floor_glow = HeroFx.glow_sprite(self, Color(1.0, 0.8, 0.2, 0.55), 2.8, Fx.Tex.RING, Vector3(0, 0.05, 0))
 	(_floor_glow.material_override as StandardMaterial3D).billboard_mode = BaseMaterial3D.BILLBOARD_DISABLED
 	_floor_glow.rotation_degrees = Vector3(-90, 0, 0)
 	_floor_glow.set_meta("no_ghost", true)
@@ -130,7 +184,7 @@ func build_look() -> void:
 		_light = OmniLight3D.new()
 		_light.light_color = Color(1.0, 0.85, 0.4)
 		_light.light_energy = 0.0
-		_light.omni_range = 4.0
+		_light.omni_range = 4.5
 		_light.shadow_enabled = false
 		_light.position = Vector3(0, 0.9, 0)
 		_rig.add_child(_light)
@@ -138,8 +192,9 @@ func build_look() -> void:
 		_transform_in()
 
 
-## The transformation: a pillar of golden light, a crater of dust and pebbles, lightning, and
-## the hair shoots up spike by spike while the aura ignites.
+## The transformation: the ground cracks with golden light, a pillar of light shoots up, the
+## air is blasted out in a wall of dust and flung rocks, lightning forks to the ground, the
+## aura roars up in a burst of flame, and the hair shoots up spike by spike.
 func _transform_in() -> void:
 	var w: Node = world()
 	var at: Vector3 = global_position
@@ -154,7 +209,7 @@ func _transform_in() -> void:
 	_hair_mat.set_shader_parameter("flash", 1.0)
 	HeroFx.tween_param(self, _hair_mat, "flash", 1.0, 0.0, 0.6)
 	# the aura ignites with a big flare
-	_flare = 1.6
+	_flare = 1.8
 	# the pillar of light
 	var pm := ShaderMaterial.new()
 	pm.shader = HeroFx.shader("beam")
@@ -175,29 +230,41 @@ func _transform_in() -> void:
 	pillar.global_transform = PartyFx.beam_transform(at, at + Vector3(0, 0.3, 0), 0.4)
 	var ptw: Tween = pillar.create_tween()
 	ptw.tween_method(func(k: float) -> void:
-		pillar.global_transform = PartyFx.beam_transform(at - Vector3(0, 0.2, 0), at + Vector3(0, 0.3 + 9.0 * k, 0), 0.3 + 0.3 * k), 0.0, 1.0, 0.16).set_ease(Tween.EASE_OUT)
-	ptw.tween_method(func(v: float) -> void: pm.set_shader_parameter("alpha", v), 1.0, 0.0, 0.35).set_ease(Tween.EASE_IN)
+		pillar.global_transform = PartyFx.beam_transform(at - Vector3(0, 0.2, 0), at + Vector3(0, 0.3 + 11.0 * k, 0), 0.3 + 0.4 * k), 0.0, 1.0, 0.16).set_ease(Tween.EASE_OUT)
+	ptw.tween_method(func(v: float) -> void: pm.set_shader_parameter("alpha", v), 1.0, 0.0, 0.45).set_ease(Tween.EASE_IN)
 	ptw.parallel().tween_method(func(k: float) -> void:
-		pillar.global_transform = PartyFx.beam_transform(at - Vector3(0, 0.2, 0), at + Vector3(0, 9.3, 0), 0.6 + 0.5 * k), 0.0, 1.0, 0.35)
+		pillar.global_transform = PartyFx.beam_transform(at - Vector3(0, 0.2, 0), at + Vector3(0, 11.3, 0), 0.7 + 0.6 * k), 0.0, 1.0, 0.45)
 	ptw.tween_callback(pillar.queue_free)
-	# the burst: a crater of dust and pebbles, rings, sparks and lightning
-	HeroFx.ring(w, at + Vector3(0, 0.1, 0), Vector3.UP, Color(1.2, 0.95, 0.35, 0.95), 0.4, 5.0, 0.5, 0.06)
-	HeroFx.ground_ring(w, at, Color(1.2, 0.95, 0.4), 3.5, 0.5)
-	HeroFx.dust_ring(w, at, Color(0.9, 0.85, 0.7, 0.3), 1.2, 12, 6.0)
-	HeroFx.pop(w, {"amount": 14, "lifetime": 1.0, "facing": "mesh", "mesh": Fx.chunk_mesh(0.12), "spread": 35.0,
+	# the ground: golden cracks, a crater of dust, rocks flung out
+	PartyFx.ground_cracks(w, at, 3.4, Color(2.2, 1.7, 0.6), 10, 2.8)
+	PartyFx.scorch(w, at, 1.8, 2.4, Color(1.0, 0.8, 0.3))
+	HeroFx.ring(w, at + Vector3(0, 0.1, 0), Vector3.UP, Color(1.2, 0.95, 0.35, 0.95), 0.4, 6.0, 0.55, 0.05)
+	HeroFx.ground_ring(w, at, Color(1.2, 0.95, 0.4), 4.0, 0.5)
+	PartyFx.dust_wall(w, at, 2.6, Color(0.92, 0.88, 0.76, 0.55), 22)
+	PartyFx.burning_debris(w, at + Vector3(0, 0.2, 0), 6, 8.0, Color(1.4, 1.2, 0.6), Color(0.5, 0.45, 0.4), 0.8, false)
+	HeroFx.pop(w, {"amount": 16, "lifetime": 1.1, "facing": "mesh", "mesh": Fx.chunk_mesh(0.12), "spread": 35.0,
 		"shape": "ring", "ring_radius": 1.0, "ring_inner": 0.4, "speed": Vector2(4.0, 8.0), "gravity": Vector3(0, -18, 0),
 		"scale": Vector2(0.6, 1.3), "curve": "shrink", "spin": Vector2(-400, 400), "angle": Vector2(0, 360),
 		"color": Color(0.55, 0.5, 0.45), "fade": PackedFloat32Array([1.0, 1.0])}, at)
-	HeroFx.pop(w, {"amount": 60, "lifetime": 0.7, "shape": "ring", "ring_radius": 0.7, "ring_inner": 0.4, "dir": Vector3.UP,
-		"spread": 10.0, "speed": Vector2(8.0, 15.0), "damping": Vector2(5.0, 8.0), "facing": "velocity",
+	# the aura bursts up: a gout of golden flame and a fountain of light streaks
+	var gout: Dictionary = {"amount": 56, "lifetime": 0.6, "shape": "ring", "ring_radius": 0.7, "ring_inner": 0.3,
+		"dir": Vector3.UP, "spread": 12.0, "speed": Vector2(6.0, 11.0), "damping": Vector2(3.0, 5.0), "curve": "shrink",
+		"scale": Vector2(0.8, 1.4), "explosiveness": 0.6, "box_aabb": 12.0,
+		"colors": PackedColorArray([Color(1.8, 1.5, 0.7, 0.9), Color(1.6, 1.0, 0.2, 0.7), Color(1.1, 0.45, 0.0, 0.0)])}
+	gout.merge(HeroFx.tongues(Vector2(0.6, 1.6)))
+	HeroFx.pop(w, gout, at + Vector3(0, 0.3, 0))
+	HeroFx.pop(w, {"amount": 70, "lifetime": 0.7, "shape": "ring", "ring_radius": 0.7, "ring_inner": 0.4, "dir": Vector3.UP,
+		"spread": 10.0, "speed": Vector2(8.0, 16.0), "damping": Vector2(5.0, 8.0), "facing": "velocity",
 		"tex": Fx.Tex.SPARK, "size": Vector2(0.1, 0.9), "color": Color(1.6, 1.3, 0.5), "explosiveness": 0.8}, at)
 	HeroFx.burst(w, at + Vector3(0, 0.8, 0), Color(1.4, 1.1, 0.4), 50, 9.0, 0.3, 0.6)
-	for i: int in 4:
-		var a: float = float(i) * TAU / 4.0 + randf() * 0.6
-		PartyFx.bolt(w, at + Vector3(0, 1.0, 0), at + Vector3(cos(a) * 2.2, 0.05, sin(a) * 2.2), BOLT, randi(), 0.2)
-	HeroFx.flash(w, at + Vector3(0, 1, 0), GOLDEN, 10.0, 10.0, 0.6)
+	for i: int in 6:
+		var a: float = float(i) * TAU / 6.0 + randf() * 0.5
+		PartyFx.bolt(w, at + Vector3(0, 1.0, 0), at + Vector3(cos(a) * 2.6, 0.05, sin(a) * 2.6), BOLT, randi(), 0.22)
+	if PartyFx.rich():
+		PartyFx.embers(w, at + Vector3(0, 1.0, 0), 1.4, Color(1.8, 1.5, 0.6), 30, 1.8, 1.6)
+	HeroFx.flash(w, at + Vector3(0, 1, 0), GOLDEN, 9.0, 10.0, 0.6)
 	if local and layer != null:
-		HeroFx.screen_flash(layer, Color(1.0, 0.9, 0.5), 0.45, 0.45)
+		HeroFx.screen_flash(layer, Color(1.0, 0.9, 0.5), 0.35, 0.45)
 
 
 func begin() -> void:
@@ -213,15 +280,35 @@ func _process(dt: float) -> void:
 	_flare = maxf(_flare - dt * 2.2, 0.0)
 	var charging: float = charge_frac() if _charge >= 0.0 else 0.0
 	var power: float = _flare + charging * 0.8
-	# the aura flickers and flares (stretching taller while charging)
+	# the body glow flickers; the flames roar higher when flaring or charging
 	if _aura_shell != null:
-		var k: float = 1.0 + sin(_t * 18.0) * 0.05 + sin(_t * 7.0) * 0.04 + power * 0.12
-		_aura_shell.scale = Vector3(1.25 * k, 1.5 * k * (1.0 + power * 0.15), 1.25 * k)
-		_aura_mat.set_shader_parameter("stretch", 0.22 + power * 0.35 + sin(_t * 11.0) * 0.05)
-		_aura_mat.set_shader_parameter("lick", 0.1 + power * 0.08)
+		var k: float = 1.0 + sin(_t * 18.0) * 0.04 + sin(_t * 7.0) * 0.03 + power * 0.08
+		_aura_shell.scale = Vector3(0.98 * k, 1.12 * k * (1.0 + power * 0.1), 0.98 * k)
+		_aura_mat.set_shader_parameter("stretch", 0.12 + power * 0.25 + sin(_t * 11.0) * 0.04)
+		_aura_mat.set_shader_parameter("lick", 0.08 + power * 0.08)
 	if not ended:
-		_flames.amount_ratio = clampf(0.7 + power * 0.5, 0.0, 1.0)
+		_flames.amount_ratio = clampf(0.75 + power * 0.4, 0.0, 1.0)
+		_flames.speed_scale = 1.0 + power * 0.35
+		_inner.amount_ratio = clampf(0.7 + power * 0.5, 0.0, 1.0)
 		_pebbles.amount_ratio = clampf(0.4 + charging, 0.0, 1.0)
+		var grounded: bool = true
+		if body is Player:
+			grounded = (body as Player).grounded
+		elif body != null and body.has_method("is_grounded"):
+			grounded = bool(body.call("is_grounded"))
+		_ground_wind.emitting = grounded
+		_ground_streaks.emitting = grounded
+		_ground_wind.amount_ratio = clampf(0.5 + power * 0.5 + charging * 0.5, 0.0, 1.0)
+		_zaps.amount_ratio = clampf(0.4 + power * 0.6, 0.0, 1.0)
+		# now and then the blaze surges: a burst of tall tongues
+		_surge_t -= dt
+		if _surge_t <= 0.0:
+			_surge_t = randf_range(0.5, 1.2) * (0.5 if charging > 0.0 else 1.0)
+			var sg: Dictionary = {"amount": 8, "lifetime": 0.4, "shape": "ring", "ring_radius": 0.5, "ring_inner": 0.3,
+				"dir": Vector3.UP, "spread": 8.0, "speed": Vector2(5.0, 7.5), "damping": Vector2(2.0, 3.0), "curve": "shrink",
+				"box_aabb": 8.0, "colors": PackedColorArray([Color(1.6, 1.4, 0.6, 0.0), Color(1.6, 1.1, 0.25, 0.8), Color(1.2, 0.5, 0.0, 0.0)])}
+			sg.merge(HeroFx.tongues(Vector2(0.55, 1.5)))
+			HeroFx.pop(world(), sg, global_position + Vector3(0, 0.6, 0))
 	# the hair: a crackling shimmer, swept back by speed
 	var vel: Vector3 = _vel()
 	var inv: Basis = global_basis.orthonormalized().inverse()
@@ -236,17 +323,17 @@ func _process(dt: float) -> void:
 		sp.rotation_degrees = rest + Vector3(sin(_t * 23.0 + float(i) * 1.9) * 2.5, 0, cos(_t * 19.0 + float(i) * 2.3) * 2.5)
 	if _floor_glow != null:
 		var fm := _floor_glow.material_override as StandardMaterial3D
-		fm.albedo_color.a = (0.0 if ended else 0.4 + 0.15 * sin(_t * 13.0) + power * 0.3)
+		fm.albedo_color.a = (0.0 if ended else 0.45 + 0.15 * sin(_t * 13.0) + power * 0.3)
 		_floor_glow.scale = Vector3.ONE * (1.0 + power * 0.4 + sin(_t * 9.0) * 0.05)
 	if _light != null:
-		var want: float = 0.0 if ended else 1.2 + sin(_t * 23.0) * 0.3 + power * 2.0
+		var want: float = 0.0 if ended else 1.4 + sin(_t * 23.0) * 0.3 + power * 2.0
 		_light.light_energy = lerpf(_light.light_energy, want, 1.0 - exp(-14.0 * dt))
 	# lightning crackling round the body (a bigger arc to the ground now and then)
 	_crackle_t -= dt
 	if _crackle_t <= 0.0 and not ended:
-		_crackle_t = randf_range(0.1, 0.3) * (0.5 if charging > 0.0 else 1.0)
-		PartyFx.crackle(world(), global_position + Vector3(0, 0.75, 0), 0.8, BOLT, 4, 0.08)
-		if randf() < 0.2:
+		_crackle_t = randf_range(0.08, 0.25) * (0.5 if charging > 0.0 else 1.0)
+		PartyFx.crackle(world(), global_position + Vector3(0, 0.75, 0), 0.85, BOLT, 4, 0.08)
+		if randf() < 0.25:
 			var a: float = randf() * TAU
 			PartyFx.crackle(world(), global_position + Vector3(cos(a) * 0.5, 0.3, sin(a) * 0.5), 0.6, Color(1.0, 0.95, 0.6), 3, 0.08)
 	# charging: dust swirls in toward the feet
@@ -254,7 +341,7 @@ func _process(dt: float) -> void:
 		_dust_t -= dt
 		if _dust_t <= 0.0:
 			_dust_t = lerpf(0.3, 0.15, charging)
-			HeroFx.ring(world(), global_position + Vector3(0, 0.08, 0), Vector3.UP, Color(0.5, 0.8, 1.2, 0.5), 2.4, 0.5, 0.3, 0.04)
+			HeroFx.ring(world(), global_position + Vector3(0, 0.08, 0), Vector3.UP, Color(0.5, 0.8, 1.2, 0.5), 2.6, 0.5, 0.3, 0.04)
 			if charging > 0.5:
 				HeroFx.dust_ring(world(), global_position, Color(0.85, 0.82, 0.75, 0.5), 0.9, 6, 3.0)
 	if _orb != null:
@@ -265,7 +352,8 @@ func _process(dt: float) -> void:
 				(c as Node3D).rotate_object_local(Vector3.UP, dt * 11.0)
 		if _orb_light != null:
 			_orb_light.light_energy = 2.0 + 5.0 * s
-	# afterimages streaming behind a dash
+	# afterimages and a trail of golden flame streaming behind a dash
+	_dash_trail.emitting = _dash_vis > 0.0 and not ended
 	if _dash_vis > 0.0:
 		_dash_vis -= dt
 		_ghost_t -= dt
@@ -317,12 +405,18 @@ func _double_jump_fx() -> void:
 	HeroFx.afterimage(w, get_parent() as Node3D, Color(1.0, 0.8, 0.25), 0.3, Vector3.UP, 1.2)
 
 
-## Where the dash punch lands: a flash of light, a starburst and a punch ring.
+## Where the dash punch lands: a flash of light, a starburst, a punch ring and dust.
 func _impact_fx(at: Vector3, dir: Vector3) -> void:
 	var w: Node = world()
-	HeroFx.ring(w, at, dir, Color(1.3, 1.1, 0.5, 0.95), 0.2, 2.0, 0.25, 0.12)
-	HeroFx.stars(w, at, Color(1.6, 1.4, 0.6), 10, 5.0, 0.55, 0.3)
-	HeroFx.sparks(w, at, Color(1.6, 1.3, 0.5), 26, 12.0, dir, 50.0, 0.6)
+	HeroFx.ring(w, at, dir, Color(1.3, 1.1, 0.5, 0.95), 0.2, 2.2, 0.25, 0.12)
+	HeroFx.ring(w, at, dir, Color(1.5, 1.4, 1.0, 0.8), 0.1, 1.2, 0.18, 0.08, true)
+	HeroFx.stars(w, at, Color(1.6, 1.4, 0.6), 14, 5.5, 0.55, 0.3)
+	HeroFx.sparks(w, at, Color(1.6, 1.3, 0.5), 36, 13.0, dir, 50.0, 0.65)
+	HeroFx.burst(w, at, Color(1.5, 1.2, 0.5), 30, 7.0, 0.28, 0.4)
+	var gq := PhysicsRayQueryParameters3D.create(at, at + Vector3(0, -2.5, 0), 1)
+	var g: Dictionary = get_world_3d().direct_space_state.intersect_ray(gq)
+	if not g.is_empty():
+		HeroFx.dust_ring(w, g["position"] as Vector3, Color(0.9, 0.86, 0.75, 0.55), 0.8, 12, 5.0)
 	HeroFx.flash(w, at, GOLDEN, 8.0, 7.0, 0.3)
 	if local and layer != null:
 		HeroFx.screen_flash(layer, Color(1.0, 0.95, 0.7), 0.2, 0.15)
@@ -356,18 +450,28 @@ func _dash_punch() -> void:
 	fx("dash", {"o": arr(chest()), "d": arr(_dash_dir)})
 
 
-## The burst of a dash: a speed streak ahead, a puff blown back, a ring punched through the air
-## and a golden fist-flash at the front.
+## The burst of a dash: a speed streak ahead, speed lines, a puff blown back, rings punched
+## through the air, a golden fist-flash at the front and dust kicked off the ground.
 static func _dash_fx(parent: Node, o: Vector3, dir: Vector3) -> void:
-	PartyFx.streak(parent, o - dir * 1.0, o + dir * 4.5, Color(1.0, 0.9, 0.4), 40, 0.16, 0.35, 0.35, 0.5)
-	HeroFx.pop(parent, {"amount": 30, "lifetime": 0.3, "dir": -dir, "spread": 25.0, "speed": Vector2(6.0, 12.0),
+	PartyFx.streak(parent, o - dir * 1.0, o + dir * 4.5, Color(1.0, 0.9, 0.4), 50, 0.16, 0.35, 0.35, 0.5)
+	PartyFx.speed_lines(parent, o - dir * 0.5, o + dir * 5.0, Color(1.5, 1.35, 0.8, 0.8), 22, 0.6)
+	HeroFx.pop(parent, {"amount": 36, "lifetime": 0.32, "dir": -dir, "spread": 25.0, "speed": Vector2(6.0, 12.0),
 		"damping": Vector2(10.0, 14.0), "size": 0.26, "curve": "shrink", "color": Color(1.3, 1.0, 0.35)}, o)
-	HeroFx.ring(parent, o + dir * 0.6, dir, Color(1.2, 1.05, 0.55, 0.9), 0.2, 1.3, 0.2, 0.1)
-	HeroFx.ring(parent, o + dir * 1.4, dir, Color(1.2, 1.05, 0.55, 0.7), 0.15, 0.9, 0.25, 0.08)
-	HeroFx.pop(parent, {"amount": 26, "lifetime": 0.3, "shape": "sphere", "radius": 0.6, "dir": -dir, "spread": 8.0,
+	HeroFx.ring(parent, o + dir * 0.6, dir, Color(1.2, 1.05, 0.55, 0.9), 0.2, 1.5, 0.2, 0.1)
+	HeroFx.ring(parent, o + dir * 1.4, dir, Color(1.2, 1.05, 0.55, 0.7), 0.15, 1.1, 0.25, 0.08)
+	HeroFx.ring(parent, o + dir * 2.3, dir, Color(1.2, 1.05, 0.55, 0.5), 0.1, 0.8, 0.28, 0.06)
+	HeroFx.pop(parent, {"amount": 30, "lifetime": 0.3, "shape": "sphere", "radius": 0.6, "dir": -dir, "spread": 8.0,
 		"speed": Vector2(10.0, 16.0), "facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.05, 0.9),
 		"color": Color(1.3, 1.2, 0.8)}, o + dir * 2.0)
-	HeroFx.orb(parent, o + dir * 0.7, Color(1.0, 0.85, 0.4, 0.8), 0.15, 0.55, 0.16)
+	HeroFx.orb(parent, o + dir * 0.7, Color(1.0, 0.85, 0.4, 0.8), 0.15, 0.6, 0.16)
+	if parent is Node3D and (parent as Node3D).is_inside_tree():
+		var gq := PhysicsRayQueryParameters3D.create(o, o + Vector3(0, -2.0, 0), 1)
+		var g: Dictionary = (parent as Node3D).get_world_3d().direct_space_state.intersect_ray(gq)
+		if not g.is_empty():
+			HeroFx.pop(parent, {"amount": 14, "lifetime": 0.6, "facing": "mesh", "mesh": HeroFx.soft_quad(Fx.Tex.SMOKE, false, 0.8),
+				"shape": "sphere", "radius": 0.3, "dir": -dir + Vector3(0, 0.3, 0), "spread": 40.0, "speed": Vector2(2.0, 5.0),
+				"damping": Vector2(4.0, 6.0), "curve": "puff", "angle": Vector2(0, 360), "color": Color(0.9, 0.86, 0.75, 0.5),
+				"fade": PackedFloat32Array([0.0, 0.9, 0.0]), "box_aabb": 8.0}, (g["position"] as Vector3) + Vector3(0, 0.2, 0))
 
 
 ## The dasher's side (every screen): afterimages trail it for the length of the dash.
@@ -478,8 +582,9 @@ func _show_orb(on: bool) -> void:
 
 
 ## The beam: it shoots out to its end in a blink, holds (thick, shimmering, a white-hot core)
-## and thins away; spiral rings race along it, the ground under it is torn up, and its end
-## bursts.
+## and thins away; two ribbons spiral round it, rings race along it, light motes hang in the
+## air after it, the ground under it is torn up and scorched, and its end bursts in a blast
+## of light with flung rocks, a wall of dust and cracks.
 static func _wave_fx(parent: Node, o: Vector3, end: Vector3, width: float) -> void:
 	var dir: Vector3 = (end - o).normalized() if o.distance_to(end) > 0.01 else Vector3.FORWARD
 	var length: float = o.distance_to(end)
@@ -516,17 +621,26 @@ static func _wave_fx(parent: Node, o: Vector3, end: Vector3, width: float) -> vo
 			mi.global_transform = PartyFx.beam_transform(o, end, r * (1.0 - k * 0.9))
 			m.set_shader_parameter("alpha", 1.0 - k), 0.0, 1.0, 0.3).set_ease(Tween.EASE_IN)
 		tw.tween_callback(mi.queue_free)
-	# particles along the beam: a shimmer of light and fast streaks
-	PartyFx.streak(parent, o, end, Color(0.6, 0.9, 1.0), 110, 0.26, 0.7, width * 1.2, 4.0)
-	HeroFx.pop(parent, {"amount": 60, "lifetime": 0.45, "shape": "box", "extents": Vector3(width, width, length * 0.5),
+	# two ribbons of light spiralling round the beam
+	var waves: float = maxf(length / 3.0, 2.0)
+	PartyFx.wave_ribbon(parent, o, end, Color(0.7, 0.9, 1.3, 0.9), width * 1.15, waves, 0.07, 0.75, 0.0, false, 1.6)
+	PartyFx.wave_ribbon(parent, o, end, Color(0.9, 0.95, 1.3, 0.8), width * 1.15, waves, 0.06, 0.7, PI * 0.5, false, 1.6)
+	# particles along the beam: a shimmer of light, fast streaks, and motes left hanging
+	PartyFx.streak(parent, o, end, Color(0.6, 0.9, 1.0), 130, 0.26, 0.7, width * 1.2, 4.0)
+	HeroFx.pop(parent, {"amount": 80, "lifetime": 0.45, "shape": "box", "extents": Vector3(width, width, length * 0.5),
 		"dir": Vector3(0, 0, -1), "spread": 5.0, "speed": Vector2(15.0, 30.0), "facing": "velocity", "tex": Fx.Tex.SPARK,
 		"size": Vector2(0.06, 1.0), "color": Color(1.2, 1.4, 1.6), "explosiveness": 0.7, "box_aabb": length + 6.0},
 		(o + end) * 0.5, PartyFx.facing(dir))
+	if PartyFx.rich():
+		HeroFx.pop(parent, {"amount": 60, "lifetime": 1.6, "shape": "box", "extents": Vector3(width * 1.6, width * 1.6, length * 0.5),
+			"dir": Vector3.UP, "spread": 60.0, "speed": Vector2(0.1, 0.7), "gravity": Vector3(0, 0.5, 0), "turbulence": 0.8,
+			"size": 0.12, "curve": "pop", "tex": Fx.Tex.STAR, "explosiveness": 0.6, "color": Color(0.9, 1.2, 1.8),
+			"box_aabb": length + 6.0}, (o + end) * 0.5, PartyFx.facing(dir))
 	# spiral rings racing along it
 	var n: int = int(length / 3.0)
 	for i: int in n:
-		HeroFx.ring(parent, o + dir * (1.5 + 3.0 * float(i)), dir, Color(0.45, 0.75, 1.1, 0.7), width * 1.05, width * 1.6, 0.3 + 0.02 * float(i), 0.05)
-	# the ground torn up under the beam: dust puffs and debris along its track
+		HeroFx.ring(parent, o + dir * (1.5 + 3.0 * float(i)), dir, Color(0.45, 0.75, 1.1, 0.7), width * 1.05, width * 1.7, 0.3 + 0.02 * float(i), 0.05)
+	# the ground torn up under the beam: dust puffs, debris and scorch marks along its track
 	var steps: int = mini(int(length / 2.5), 12)
 	for i: int in steps:
 		var p: Vector3 = o + dir * (2.0 + 2.5 * float(i))
@@ -535,9 +649,10 @@ static func _wave_fx(parent: Node, o: Vector3, end: Vector3, width: float) -> vo
 		if hit.is_empty():
 			continue
 		var g: Vector3 = hit["position"]
-		HeroFx.smoke(parent, g + Vector3(0, 0.3, 0), Color(0.85, 0.82, 0.78, 0.5), 5, 1.1, 0.9, 2.5)
+		HeroFx.smoke(parent, g + Vector3(0, 0.3, 0), Color(0.85, 0.82, 0.78, 0.5), 6, 1.1, 0.9, 2.5)
+		PartyFx.scorch(parent, g, 0.6 + width * 0.8, 2.2, Color(0.5, 0.8, 1.4))
 		if i % 2 == 0:
-			HeroFx.pop(parent, {"amount": 6, "lifetime": 0.8, "facing": "mesh", "mesh": Fx.chunk_mesh(0.12), "spread": 40.0,
+			HeroFx.pop(parent, {"amount": 7, "lifetime": 0.8, "facing": "mesh", "mesh": Fx.chunk_mesh(0.12), "spread": 40.0,
 				"speed": Vector2(3.0, 6.0), "gravity": Vector3(0, -18, 0), "scale": Vector2(0.6, 1.2), "curve": "shrink",
 				"spin": Vector2(-400, 400), "angle": Vector2(0, 360), "color": Color(0.55, 0.5, 0.45),
 				"fade": PackedFloat32Array([1.0, 1.0])}, g)
@@ -545,9 +660,17 @@ static func _wave_fx(parent: Node, o: Vector3, end: Vector3, width: float) -> vo
 	HeroFx.orb(parent, o, Color(0.6, 0.85, 1.0, 0.8), 0.3, width * 1.3, 0.25)
 	HeroFx.ring(parent, o + dir * 0.3, dir, Color(0.8, 0.95, 1.2, 0.9), 0.3, width * 3.0, 0.3, 0.06)
 	HeroFx.orb(parent, end, Color(0.6, 0.85, 1.0, 0.8), 0.4, width * 2.0, 0.3)
-	HeroFx.fireball(parent, end, 1.8 + width, 20, Color(1.2, 1.3, 1.4), Color(0.5, 0.75, 1.1), Color(0.55, 0.6, 0.7, 0.5))
-	HeroFx.sparks(parent, end, Color(1.0, 1.3, 1.6), 36, 12.0, -dir, 80.0, 0.7)
+	HeroFx.fireball(parent, end, 1.8 + width, 24, Color(1.2, 1.3, 1.4), Color(0.5, 0.75, 1.1), Color(0.55, 0.6, 0.7, 0.5))
+	HeroFx.sparks(parent, end, Color(1.0, 1.3, 1.6), 44, 13.0, -dir, 80.0, 0.7)
 	HeroFx.ring(parent, end, -dir, Color(0.7, 0.9, 1.2, 0.9), 0.4, 3.0 + width, 0.4, 0.06)
+	if parent is Node3D:
+		var eq := PhysicsRayQueryParameters3D.create(end + Vector3(0, 0.5, 0), end + Vector3(0, -3.0, 0), 1)
+		var eh: Dictionary = (parent as Node3D).get_world_3d().direct_space_state.intersect_ray(eq)
+		if not eh.is_empty():
+			var eg: Vector3 = eh["position"]
+			PartyFx.ground_cracks(parent, eg, 1.8 + width, Color(1.2, 1.8, 2.6), 8, 2.2, 0, eh["normal"] as Vector3)
+			PartyFx.dust_wall(parent, eg, 1.6 + width, Color(0.88, 0.86, 0.82, 0.6), 18)
+			PartyFx.burning_debris(parent, eg + Vector3(0, 0.3, 0), 5, 7.0, Color(1.0, 1.3, 1.8), Color(0.5, 0.47, 0.44), 0.7, false)
 	HeroFx.flash(parent, o, WAVE, 10.0, 12.0, 0.5)
 	HeroFx.flash(parent, end, WAVE, 8.0, 10.0, 0.5)
 
@@ -592,7 +715,8 @@ func on_end() -> void:
 
 
 ## Ends like the base (multipliers restored and "off" sent at once), but the look powers down:
-## the aura sputters out, the hair sinks and loses its glow, a puff of golden smoke.
+## the flames and body glow sputter out, the hair sinks and loses its glow, a puff of golden
+## smoke and a last scatter of sparks.
 func finish() -> void:
 	if ended:
 		return
@@ -606,14 +730,13 @@ func finish() -> void:
 	var w: Node = world()
 	var at: Vector3 = global_position
 	var time: float = 0.6
-	_flames.emitting = false
-	_motes.emitting = false
-	_pebbles.emitting = false
-	# the aura sputters: flickers, then gone
+	for e: GPUParticles3D in [_flames, _inner, _motes, _pebbles, _ground_wind, _ground_streaks, _zaps, _dash_trail]:
+		e.emitting = false
+	# the body glow sputters: flickers, then gone
 	var tw: Tween = create_tween()
 	tw.tween_method(func(k: float) -> void:
 		var fl: float = (1.0 - k) * (0.5 + 0.5 * signf(sin(k * 60.0)))
-		_aura_mat.set_shader_parameter("alpha", fl)
+		_aura_mat.set_shader_parameter("alpha", fl * 0.7)
 , 0.0, 1.0, time * 0.7)
 	for i: int in _spikes.size():
 		var st: Tween = create_tween()
@@ -622,9 +745,14 @@ func finish() -> void:
 	var ht: Tween = create_tween()
 	ht.tween_property(_hair, "scale", Vector3(0.8, 0.3, 0.8), time).set_ease(Tween.EASE_IN)
 	ht.tween_callback(queue_free)
-	HeroFx.pop(w, {"amount": 24, "lifetime": 0.9, "shape": "sphere", "radius": 0.5, "dir": Vector3.UP, "spread": 50.0,
+	HeroFx.pop(w, {"amount": 30, "lifetime": 1.0, "shape": "sphere", "radius": 0.5, "dir": Vector3.UP, "spread": 50.0,
 		"speed": Vector2(0.8, 2.5), "gravity": Vector3(0, 1.0, 0), "facing": "velocity", "tex": Fx.Tex.SPARK,
 		"size": Vector2(0.06, 0.24), "explosiveness": 0.5, "color": Color(1.6, 1.3, 0.5),
 		"fade": PackedFloat32Array([0.0, 1.0, 0.6, 0.0])}, at + Vector3(0, 0.8, 0))
-	HeroFx.smoke(w, at + Vector3(0, 0.9, 0), Color(1.0, 0.92, 0.7, 0.45), 10, 0.9, 0.9, 1.4)
+	var last: Dictionary = {"amount": 16, "lifetime": 0.45, "shape": "ring", "ring_radius": 0.5, "ring_inner": 0.3,
+		"dir": Vector3.UP, "spread": 10.0, "speed": Vector2(3.0, 5.0), "damping": Vector2(3.0, 5.0), "curve": "shrink",
+		"colors": PackedColorArray([Color(1.6, 1.4, 0.6, 0.0), Color(1.5, 1.05, 0.25, 0.6), Color(1.0, 0.4, 0.0, 0.0)])}
+	last.merge(HeroFx.tongues(Vector2(0.45, 1.1)))
+	HeroFx.pop(w, last, at + Vector3(0, 0.5, 0))
+	HeroFx.smoke(w, at + Vector3(0, 0.9, 0), Color(1.0, 0.92, 0.7, 0.45), 12, 0.9, 0.9, 1.4)
 	PartyFx.crackle(w, at + Vector3(0, 0.8, 0), 0.8, BOLT, 5, 0.12)
