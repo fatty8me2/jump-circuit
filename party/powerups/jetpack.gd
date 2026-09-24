@@ -13,6 +13,7 @@ var _cores: Array[MeshInstance3D] = []
 var _jets: Array[GPUParticles3D] = []
 var _smoke: GPUParticles3D
 var _haze: MeshInstance3D
+var _spits: GPUParticles3D
 var _t: float = 0.0
 var _puff_t: float = 0.0
 ## Mirrors learn thrust from "thrust" messages; the fuel gauge only exists on the owner.
@@ -61,6 +62,13 @@ func build_look() -> void:
 		"colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 0.6), Color(1, 1, 1, 0)]})
 	_smoke.position = Vector3(0, 0.0, 0.44)
 	add_child(_smoke)
+	# hot sparks spitting out of the nozzles and falling away behind
+	_spits = HeroFx.em({"amount": 30, "lifetime": 0.5, "shape": "box", "extents": Vector3(0.2, 0.05, 0.05),
+		"dir": Vector3.DOWN, "spread": 25.0, "speed": Vector2(3.0, 7.0), "gravity": Vector3(0, -12, 0),
+		"facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.04, 0.22), "fixed_fps": 0, "box_aabb": 10.0,
+		"color": Color(2.2, 1.2, 0.4)})
+	_spits.position = Vector3(0, -0.05, 0.44)
+	add_child(_spits)
 	_haze = PartyFx.heat_haze(0.9, 0.012)
 	_haze.position = Vector3(0, -0.15, 0.46)
 	add_child(_haze)
@@ -130,6 +138,10 @@ static func _blast_fx(parent: Node, at: Vector3) -> void:
 	PartyFx.shockwave(parent, at, FLAME, 3.0, 0.35)
 	PartyFx.speed_lines(parent, at, at + Vector3(0, 4.0, 0), Color(1.4, 1.3, 1.2, 0.6), 12, 0.6)
 	PartyFx.flash(parent, at + Vector3(0, 0.5, 0), FLAME, 7.0, 7.0, 0.35)
+	PartyFx.dust_wall(parent, at, 1.6, Color(0.78, 0.75, 0.7, 0.55), 18)
+	PartyFx.ground_cracks(parent, at, 1.3, Color(2.2, 0.9, 0.25), 6, 1.6)
+	if PartyFx.rich():
+		PartyFx.embers(parent, at + Vector3(0, 0.4, 0), 0.6, Color(2.4, 1.0, 0.3), 20, 1.2, 1.2)
 
 
 func tick(dt: float) -> void:
@@ -159,6 +171,8 @@ func _show_thrust(on: bool) -> void:
 		j.emitting = on
 	if _smoke != null:
 		_smoke.amount_ratio = 1.0 if on else 0.4
+	if _spits != null:
+		_spits.amount_ratio = 1.0 if on else 0.3
 	for c: MeshInstance3D in _cores:
 		c.scale = Vector3(1.3, -1.8, 1.3) if on else Vector3(1, -1, 1)
 

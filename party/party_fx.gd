@@ -910,6 +910,16 @@ static func ko_burst(parent: Node, pos: Vector3, color: Color = Color(1.0, 0.45,
 	beam(parent, pos - Vector3(0, 0.9, 0), pos + Vector3(0, 7.5, 0), Color(1, 0.95, 0.85, 0.5), 0.12, 0.35, 1.8)
 	smoke(parent, pos, Color(0.3, 0.26, 0.3, 0.55), 12, 0.8, 1.2)
 	comic_burst(parent, pos + Vector3(0, 1.4, 0), "KO!", Color(1.0, 0.3, 0.2), 1.25)
+	# the ground under them takes it (a dust ring and a scorch) and gold motes hang after
+	if parent is Node3D and (parent as Node3D).is_inside_tree():
+		var gq := PhysicsRayQueryParameters3D.create(pos, pos + Vector3(0, -3.0, 0), 1)
+		var gh: Dictionary = (parent as Node3D).get_world_3d().direct_space_state.intersect_ray(gq)
+		if not gh.is_empty():
+			HeroFx.dust_ring(parent, gh["position"] as Vector3, Color(0.9, 0.86, 0.78, 0.5), 0.8, 12, 5.0)
+			scorch(parent, gh["position"] as Vector3, 1.0, 1.6, color)
+	if rich():
+		embers(parent, pos, 0.8, Color(1.8, 1.4, 0.5), 22, 1.4, 1.2)
+	HeroFx.sparks(parent, pos, color.lerp(Color(1.6, 1.4, 1.0), 0.5), 26, 11.0, Vector3.UP, 180.0, 0.5)
 	flash(parent, pos, color.lerp(Color.WHITE, 0.25), 4.5, 10.0, 0.4)
 
 
@@ -1387,7 +1397,7 @@ static func _flat_mat(color: Color, tex: Texture2D, priority: int = 0) -> Standa
 ## Glowing cracks split across the ground from `pos` (on the ground, normal `up`): jagged,
 ## branching lines with a dark rim, white-hot at the centre, cooling to a dull red and
 ## fading over `life` s; embers seep out of them (not on Low).
-static func ground_cracks(parent: Node, pos: Vector3, radius: float, hot: Color = Color(2.6, 1.2, 0.3), n: int = 8, life: float = 2.6, seed_value: int = 0, up: Vector3 = Vector3.UP) -> void:
+static func ground_cracks(parent: Node, pos: Vector3, radius: float, hot: Color = Color(2.6, 1.2, 0.3), n: int = 8, life: float = 2.6, seed_value: int = 0, up: Vector3 = Vector3.UP, rim: Color = Color(0.05, 0.02, 0.02, 0.85)) -> void:
 	if parent == null or not parent.is_inside_tree():
 		return
 	var rng := RandomNumberGenerator.new()
@@ -1412,7 +1422,7 @@ static func ground_cracks(parent: Node, pos: Vector3, radius: float, hot: Color 
 				ba += rng.randf_range(-0.4, 0.4)
 				bp.append(bp[-1] + Vector3(cos(ba), 0, sin(ba)) * length * 0.13)
 			lines.append([bp, w0 * 0.6])
-	glow_lines(parent, pos, lines, hot, life, up)
+	glow_lines(parent, pos, lines, hot, life, up, rim)
 	if rich():
 		HeroFx.pop(parent, {"amount": 10 + n * 2, "lifetime": 1.3, "shape": "ring", "ring_radius": radius * 0.7,
 			"ring_inner": radius * 0.1, "dir": up, "spread": 20.0, "speed": Vector2(0.4, 1.6), "gravity": up * 0.8,
@@ -1424,7 +1434,7 @@ static func ground_cracks(parent: Node, pos: Vector3, radius: float, hot: Color 
 ## Draws glowing lines flat on the ground at `pos` (normal `up`): `lines` = [[points (local,
 ## XZ plane), half-width], ...]. Each has a dark rim, is hottest at its start and cools to a
 ## dull red, then fades over `life` s.
-static func glow_lines(parent: Node, pos: Vector3, lines: Array, hot: Color, life: float, up: Vector3 = Vector3.UP) -> void:
+static func glow_lines(parent: Node, pos: Vector3, lines: Array, hot: Color, life: float, up: Vector3 = Vector3.UP, rim: Color = Color(0.05, 0.02, 0.02, 0.85)) -> void:
 	if parent == null or not parent.is_inside_tree() or lines.is_empty():
 		return
 	var glow := ImmediateMesh.new()
@@ -1456,7 +1466,7 @@ static func glow_lines(parent: Node, pos: Vector3, lines: Array, hot: Color, lif
 	var root := Node3D.new()
 	parent.add_child(root)
 	root.global_transform = Transform3D(Fx.basis_up(up), pos + up * 0.03)
-	var dark_mat: StandardMaterial3D = _flat_mat(Color(0.05, 0.02, 0.02, 0.85), null, 0)
+	var dark_mat: StandardMaterial3D = _flat_mat(rim, null, 0)
 	var glow_m: StandardMaterial3D = _flat_mat(Color(hot.r * 1.3, hot.g * 1.3, hot.b * 1.3, hot.a), null, 1)
 	part(root, dark, dark_mat, Vector3.ZERO)
 	part(root, glow, glow_m, Vector3(0, 0.01, 0))
@@ -1672,3 +1682,33 @@ static func footprint(parent: Node, pos: Vector3, facing_dir: Vector3, hot: Colo
 	tw.tween_property(m, "albedo_color", Color(hot.r * 0.35, hot.g * 0.08, 0.02, 0.9), life * 0.35).set_ease(Tween.EASE_OUT)
 	tw.tween_property(m, "albedo_color", Color(0.06, 0.04, 0.04, 0.0), life * 0.65).set_ease(Tween.EASE_IN)
 	tw.tween_callback(mi.queue_free)
+
+
+## Frost spreading over the ground (a frozen racer's feet): a pale icy sheen, white crystal
+## cracks and a low creeping mist, melting away over `life` s.
+static func frost_patch(parent: Node, pos: Vector3, radius: float, life: float = 3.0, up: Vector3 = Vector3.UP) -> void:
+	if parent == null or not parent.is_inside_tree():
+		return
+	if not _mats.has("print_mesh"):
+		var pm := PlaneMesh.new()
+		pm.size = Vector2(1.0, 1.0)
+		_mats["print_mesh"] = pm
+	var m: StandardMaterial3D = _flat_mat(Color(0.85, 0.96, 1.0, 0.0), dot_texture(), 0)
+	var mi := MeshInstance3D.new()
+	mi.mesh = _mats["print_mesh"]
+	mi.material_override = m
+	mi.layers = LAYER
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+	mi.global_transform = Transform3D(Fx.basis_up(up) * Basis.from_scale(Vector3.ONE * radius * 2.2), pos + up * 0.03)
+	var tw: Tween = mi.create_tween()
+	tw.tween_property(m, "albedo_color:a", 0.75, 0.25).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(life * 0.5)
+	tw.tween_property(m, "albedo_color:a", 0.0, life * 0.5).set_ease(Tween.EASE_IN)
+	tw.tween_callback(mi.queue_free)
+	ground_cracks(parent, pos, radius, Color(1.5, 1.9, 2.3), 9, life, 0, up, Color(0.55, 0.8, 0.95, 0.45))
+	HeroFx.pop(parent, {"amount": 18, "lifetime": 1.6, "facing": "mesh", "mesh": HeroFx.soft_quad(Fx.Tex.SMOKE, false, 1.0),
+		"shape": "ring", "ring_radius": radius * 0.6, "ring_inner": radius * 0.2, "dir": Vector3(1, 0.05, 0), "spread": 180.0,
+		"flatness": 0.9, "speed": Vector2(0.4, 1.2), "damping": Vector2(0.4, 0.8), "curve": "puff", "angle": Vector2(0, 360),
+		"explosiveness": 0.5, "color": Color(0.92, 0.97, 1.0, 0.45), "fade": PackedFloat32Array([0.0, 0.8, 0.5, 0.0]),
+		"box_aabb": radius * 3.0}, pos + up * 0.2)

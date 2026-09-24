@@ -96,7 +96,13 @@ static func _pop_fx(parent: Node, at: Vector3) -> void:
 	for i: int in 3:
 		PartyFx.burst(parent, at + Vector3(-0.35 + 0.35 * float(i), 0, 0), COLORS[i], 24, 6.0, 0.22, 0.5)
 	# confetti fluttering down, and scraps of balloon rubber flung out
-	PartyFx.confetti(parent, at, 60, 8.0, Vector3.UP, 80.0, 1.8)
+	PartyFx.confetti(parent, at, 90, 9.0, Vector3.UP, 85.0, 2.0)
+	# streamers: long curling ribbons of colour flung out and falling
+	PartyFx.one_shot(parent, at, {"amount": 14, "lifetime": 1.6, "size": Vector2(0.06, 0.55), "color": Color.WHITE,
+		"tex": "none", "additive": false, "shape": "sphere", "radius": 0.3, "vmin": 4.0, "vmax": 7.0, "damping": 3.0,
+		"gravity": Vector3(0, -5, 0), "angle": true, "spin": 300.0, "flutter": true, "pick": COLORS, "turbulence": 1.2,
+		"colors": [Color(1, 1, 1, 1), Color(1, 1, 1, 1), Color(1, 1, 1, 0)]})
+	HeroFx.ring(parent, at, Vector3.UP, Color(1.0, 0.85, 0.95, 0.7), 0.3, 2.8, 0.3, 0.05, true)
 	PartyFx.one_shot(parent, at, {"amount": 18, "lifetime": 0.7, "size": Vector2(0.2, 0.14), "color": Color.WHITE,
 		"tex": "none", "additive": false, "shape": "sphere", "radius": 0.4, "vmin": 4.0, "vmax": 8.0, "damping": 5.0,
 		"gravity": Vector3(0, -10, 0), "angle": true, "spin": 600.0, "flutter": true, "pick": COLORS,

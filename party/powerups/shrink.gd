@@ -38,6 +38,8 @@ static func _ray_fx(parent: Node, o: Vector3, to: Vector3, hit: bool) -> void:
 	PartyFx.one_shot(parent, o, {"amount": 16, "lifetime": 0.18, "size": 0.16, "color": Color(1.4, 0.8, 1.5), "tex": "star",
 		"shape": "shell", "radius": 0.7, "vmin": 0.0, "vmax": 0.1, "radial": -30.0, "explosiveness": 1.0, "shrink": false})
 	PartyFx.ring_pulse(parent, o, dir, Color(1.0, 0.7, 1.0), 0.1, 0.8, 0.2, 0.2)
+	HeroFx.stars(parent, o, Color(1.4, 0.9, 1.5), 8, 3.0, 0.3, 0.15)
+	PartyFx.flash(parent, o, PINK, 4.0, 5.0, 0.25)
 	PartyFx.beam(parent, o, to, Color(1.0, 0.8, 1.0, 1.0), 0.045, 0.35, 2.2)
 	PartyFx.beam(parent, o, to, Color(0.9, 0.35, 1.0, 0.22), 0.2, 0.45, 1.2)
 	# the wobble: two rainbow ribbons twisting round the core
@@ -63,6 +65,17 @@ static func _ray_fx(parent: Node, o: Vector3, to: Vector3, hit: bool) -> void:
 		PartyFx.star_ring(parent, to, Color(1.2, 0.7, 1.3), 10, 4.5, 0.4)
 		PartyFx.ring_pulse(parent, to, Vector3.UP, PINK, 1.6, 0.2, 0.3, 0.12)
 		PartyFx.comic_burst(parent, to + Vector3(0, 1.1, 0), "SHRINK!", Color(1.0, 0.45, 0.95), 0.8)
+		# a spiral of rainbow glitter wrapping them as they shrink, then a sparkle cloud that hangs
+		for k: int in 3:
+			PartyFx.ring_pulse(parent, to + Vector3(0, -0.5 + 0.5 * float(k), 0), Vector3.UP, Color.from_hsv(0.8 + 0.1 * float(k), 0.55, 1.0), 1.4 - 0.2 * float(k), 0.15, 0.35 + 0.08 * float(k), 0.1)
+		HeroFx.pop(parent, {"amount": 40, "lifetime": 0.6, "local": false, "shape": "shell", "radius": 1.3,
+			"speed": Vector2(0.0, 0.2), "radial": Vector2(-7.0, -5.0), "tex": Fx.Tex.STAR, "size": 0.2, "curve": "pop",
+			"hue": 0.5, "color": Color(1.3, 0.8, 1.4), "explosiveness": 0.5}, to)
+		if PartyFx.rich():
+			HeroFx.pop(parent, {"amount": 24, "lifetime": 1.4, "shape": "sphere", "radius": 0.8, "dir": Vector3.UP,
+				"spread": 60.0, "speed": Vector2(0.2, 0.8), "turbulence": 0.8, "tex": Fx.Tex.STAR, "size": 0.15,
+				"curve": "pop", "hue": 0.5, "explosiveness": 0.3, "color": Color(1.3, 0.9, 1.4)}, to)
+		HeroFx.ground_ring(parent, to - Vector3(0, 0.8, 0), Color(1.2, 0.5, 1.3), 1.6, 0.4)
 	else:
 		PartyFx.burst(parent, to, PINK, 16, 3.0, 0.2)
 		PartyFx.star_ring(parent, to, Color(1.2, 0.8, 1.3), 6, 3.0, 0.3, -dir)

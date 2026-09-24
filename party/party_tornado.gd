@@ -103,6 +103,17 @@ func _build() -> void:
 		"colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)]})
 	suck.position = Vector3(0, 0.2, 0)
 	add_child(suck)
+	# a scar of churned-up dust left along its path, and grit thrown out of the top
+	add_child(PartyFx.emitter({"amount": 26, "lifetime": 1.6, "size": 1.0, "color": Color(0.72, 0.66, 0.56, 0.35),
+		"tex": "smoke", "shape": "ring", "radius": 0.8, "inner": 0.3, "vmin": 0.2, "vmax": 0.8, "dir": Vector3.UP,
+		"spread": 40.0, "additive": false, "grow": true, "angle": true, "aabb": 12.0, "fixed_fps": 0,
+		"colors": [Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.55), Color(1, 1, 1, 0.0)]}))
+	var spray: GPUParticles3D = PartyFx.emitter({"amount": 20, "lifetime": 1.4, "facing": "mesh", "mesh": Fx.chunk_mesh(0.1),
+		"color": Color(0.45, 0.38, 0.3), "shape": "ring", "radius": 2.0, "inner": 1.6, "vmin": 3.0, "vmax": 6.0,
+		"dir": Vector3(1, 0.4, 0), "spread": 180.0, "flat": 0.6, "gravity": Vector3(0, -14, 0), "angle": true,
+		"spin": 400.0, "aabb": 14.0, "colors": [Color(1, 1, 1, 1), Color(1, 1, 1, 1)]})
+	spray.position = Vector3(0, HEIGHT * 0.85, 0)
+	add_child(spray)
 
 
 ## Where the tornado is `time` seconds after spawning (the same on every screen).

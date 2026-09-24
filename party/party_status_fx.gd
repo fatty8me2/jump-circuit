@@ -108,16 +108,16 @@ func _build_ice() -> void:
 		c.visible = false
 		_cracks.append(c)
 	# frost rolling off the base, glints on the faces, a few flakes
-	add_child(PartyFx.emitter({"amount": 8, "lifetime": 1.4, "size": 0.8, "color": Color(0.9, 0.97, 1.0, 0.35),
+	add_child(PartyFx.emitter({"amount": 12, "lifetime": 1.4, "size": 0.8, "color": Color(0.9, 0.97, 1.0, 0.35),
 		"additive": false, "tex": "smoke", "shape": "ring", "radius": 0.8, "inner": 0.5, "dir": Vector3(1, 0, 0),
 		"spread": 180.0, "flat": 0.8, "vmin": 0.3, "vmax": 0.8, "gravity": Vector3(0, -0.3, 0), "grow": true,
 		"angle": true, "spin": 20.0, "aabb": 3.0, "colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)]}))
-	var glint: GPUParticles3D = PartyFx.emitter({"amount": 5, "lifetime": 0.5, "size": 0.45, "color": Color(1.6, 1.9, 2.0),
+	var glint: GPUParticles3D = PartyFx.emitter({"amount": 8, "lifetime": 0.5, "size": 0.45, "color": Color(1.6, 1.9, 2.0),
 		"tex": "star", "shape": "box", "extents": Vector3(0.62, 0.9, 0.62), "vmin": 0.0, "vmax": 0.0, "angle": true,
 		"randomness": 1.0, "aabb": 3.0, "grow": true, "colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0)]})
 	glint.position = Vector3(0, 0.9, 0)
 	add_child(glint)
-	var flakes: GPUParticles3D = PartyFx.emitter({"amount": 10, "lifetime": 1.3, "size": 0.12, "color": Color(0.85, 0.97, 1.0),
+	var flakes: GPUParticles3D = PartyFx.emitter({"amount": 15, "lifetime": 1.3, "size": 0.12, "color": Color(0.85, 0.97, 1.0),
 		"tex": "star", "shape": "box", "extents": Vector3(0.7, 0.2, 0.7), "dir": Vector3.DOWN, "spread": 30.0,
 		"vmin": 0.2, "vmax": 0.5, "gravity": Vector3(0, -0.5, 0), "spin": 90.0, "angle": true, "aabb": 3.0,
 		"colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0)]})
@@ -146,10 +146,10 @@ func _build_bubble() -> void:
 	_body = PartyFx.part(self, PartyFx.sphere_mesh(1.0, 28), _mat, Vector3(0, 0.8, 0))
 	# a glossy highlight, swirling motes (the spinning pivot carries them round)
 	PartyFx.part(self, PartyFx.sphere_mesh(0.14, 10), PartyFx.glow_mat(Color(1, 1, 1, 0.6), 1.6, true), Vector3(-0.42, 1.32, -0.55), Vector3(1.0, 0.6, 1.0))
-	_spin.add_child(PartyFx.emitter({"amount": 22, "lifetime": 0.9, "size": 0.14, "color": Color(0.8, 0.55, 1.4),
+	_spin.add_child(PartyFx.emitter({"amount": 32, "lifetime": 0.9, "size": 0.14, "color": Color(0.8, 0.55, 1.4),
 		"shape": "shell", "radius": 0.85, "vmin": 0.0, "vmax": 0.15, "local": true, "spark": true, "aabb": 2.5,
 		"colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0)]}))
-	var rise: GPUParticles3D = PartyFx.emitter({"amount": 6, "lifetime": 1.3, "size": 0.2, "color": Color(0.85, 0.7, 1.3),
+	var rise: GPUParticles3D = PartyFx.emitter({"amount": 10, "lifetime": 1.3, "size": 0.2, "color": Color(0.85, 0.7, 1.3),
 		"tex": "ring", "shape": "sphere", "radius": 0.9, "dir": Vector3.UP, "spread": 20.0, "vmin": 0.4, "vmax": 0.9,
 		"shrink": false, "aabb": 3.0, "colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 0.9), Color(1, 1, 1, 0)]})
 	rise.position = Vector3(0, 0.8, 0)
@@ -175,10 +175,10 @@ func _build_stars() -> void:
 	tm.rings = 32
 	tm.ring_segments = 4
 	PartyFx.part(_spin, tm, PartyFx.glow_mat(Color(1.0, 0.9, 0.5, 0.25), 1.5, true), Vector3.ZERO)
-	_spin.add_child(PartyFx.emitter({"amount": 10, "lifetime": 0.5, "size": 0.12, "color": STAR, "spark": true,
+	_spin.add_child(PartyFx.emitter({"amount": 15, "lifetime": 0.5, "size": 0.12, "color": STAR, "spark": true,
 		"shape": "ring", "radius": 0.45, "inner": 0.4, "vmin": 0.0, "vmax": 0.2, "aabb": 2.0}))
 	if effect == "spin":
-		var whirl: GPUParticles3D = PartyFx.emitter({"amount": 18, "lifetime": 0.45, "size": 0.35, "color": Color(0.95, 0.9, 0.7, 0.55),
+		var whirl: GPUParticles3D = PartyFx.emitter({"amount": 26, "lifetime": 0.45, "size": 0.35, "color": Color(0.95, 0.9, 0.7, 0.55),
 			"additive": false, "tex": "smoke", "shape": "ring", "radius": 0.6, "inner": 0.4, "local": true,
 			"vmin": 0.0, "vmax": 0.2, "aabb": 2.0, "angle": true, "colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)]})
 		whirl.position = Vector3(0, 0.15, 0)
@@ -199,11 +199,11 @@ func _build_storm() -> void:
 		var r: float = 0.22 if i % 2 == 0 else 0.3
 		PartyFx.part(_spin, PartyFx.sphere_mesh(r, 12), cloud, Vector3(cos(a) * 0.28, (0.06 if i % 2 == 0 else 0.0), sin(a) * 0.22))
 	PartyFx.part(_spin, PartyFx.sphere_mesh(0.3, 12), cloud, Vector3(0, 0.12, 0))
-	_spin.add_child(PartyFx.emitter({"amount": 14, "lifetime": 0.4, "size": Vector2(0.025, 0.3), "color": Color(0.7, 0.8, 1.2, 0.8),
+	_spin.add_child(PartyFx.emitter({"amount": 20, "lifetime": 0.4, "size": Vector2(0.025, 0.3), "color": Color(0.7, 0.8, 1.2, 0.8),
 		"tex": "streak", "facing": "velocity", "shape": "box", "extents": Vector3(0.35, 0.02, 0.3), "offset": Vector3(0, -0.2, 0),
 		"dir": Vector3.DOWN, "spread": 4.0, "vmin": 5.0, "vmax": 6.5, "shrink": false, "aabb": 4.0,
 		"colors": [Color(1, 1, 1, 0.9), Color(1, 1, 1, 0.3)]}))
-	var stat: GPUParticles3D = PartyFx.emitter({"amount": 14, "lifetime": 0.22, "size": 0.12, "color": Color(0.65, 0.75, 1.3),
+	var stat: GPUParticles3D = PartyFx.emitter({"amount": 20, "lifetime": 0.22, "size": 0.12, "color": Color(0.65, 0.75, 1.3),
 		"shape": "sphere", "radius": 0.5, "vmin": 1.0, "vmax": 3.0, "spark": true, "aabb": 1.5})
 	stat.position = Vector3(0, 0.75, 0)
 	add_child(stat)
@@ -219,7 +219,7 @@ func _build_shrink() -> void:
 		var s: MeshInstance3D = PartyFx.star_sprite(0.24, Color(1.0, 0.55, 0.95))
 		s.position = Vector3(cos(a) * 0.55, 0.25 * float(i % 2), sin(a) * 0.55)
 		_spin.add_child(s)
-	_spin.add_child(PartyFx.emitter({"amount": 12, "lifetime": 0.7, "size": 0.12, "color": PINK, "spark": true,
+	_spin.add_child(PartyFx.emitter({"amount": 18, "lifetime": 0.7, "size": 0.12, "color": PINK, "spark": true,
 		"shape": "ring", "radius": 0.55, "inner": 0.45, "vmin": 0.1, "vmax": 0.4, "dir": Vector3.UP, "spread": 30.0,
 		"aabb": 2.0, "hue": 0.08}))
 	PartyFx.pop_in(_spin, 0.4)
@@ -233,7 +233,7 @@ func _entry() -> void:
 	match effect:
 		"freeze":
 			PartyFx.shards(w, global_position + Vector3(0, 0.5, 0), ICE, 14, 6.0, 0.14)
-			PartyFx.one_shot(w, global_position + Vector3(0, 0.2, 0), {"amount": 26, "lifetime": 0.7, "size": 0.7,
+			PartyFx.one_shot(w, global_position + Vector3(0, 0.2, 0), {"amount": 38, "lifetime": 0.7, "size": 0.7,
 				"color": Color(0.9, 0.97, 1.0, 0.6), "additive": false, "tex": "smoke", "shape": "ring", "radius": 0.5,
 				"inner": 0.3, "dir": Vector3(1, 0.1, 0), "spread": 180.0, "flat": 1.0, "vmin": 3.0, "vmax": 5.0,
 				"damping": 6.0, "grow": true, "angle": true, "colors": [Color(1, 1, 1, 0.9), Color(1, 1, 1, 0)]})
@@ -308,13 +308,16 @@ func retire() -> void:
 			PartyFx.shards(w, c, ICE, 22, 8.0, 0.2, Vector3.UP, 110.0)
 			PartyFx.shards(w, c + Vector3(0, 0.5, 0), Color(0.95, 1.0, 1.0), 10, 5.0, 0.12)
 			PartyFx.burst(w, c, Color(0.75, 0.95, 1.0), 26, 6.0, 0.22)
-			PartyFx.one_shot(w, c, {"amount": 16, "lifetime": 0.6, "size": 0.35, "color": Color(1.5, 1.8, 2.0), "tex": "star",
+			PartyFx.one_shot(w, c, {"amount": 24, "lifetime": 0.6, "size": 0.35, "color": Color(1.5, 1.8, 2.0), "tex": "star",
 				"shape": "box", "extents": Vector3(0.6, 0.85, 0.6), "vmin": 0.5, "vmax": 2.0, "angle": true, "grow": true,
 				"colors": [Color(1, 1, 1, 1), Color(1, 1, 1, 0)]})
 			PartyFx.smoke(w, global_position + Vector3(0, 0.5, 0), Color(0.9, 0.97, 1.0, 0.5), 10, 0.7, 0.9)
 			PartyFx.ring_pulse(w, global_position + Vector3(0, 0.15, 0), Vector3.UP, ICE, 0.5, 2.4, 0.3, 0.1)
+			# chunks of the block tumble away and burst into glitter where they land
+			PartyFx.burning_debris(w, c, 5, 6.0, Color(1.3, 1.7, 2.1), Color(0.72, 0.9, 1.0), 0.8, false)
+			PartyFx.frost_patch(w, global_position, 1.2, 1.8)
 		"float":
-			PartyFx.one_shot(w, c, {"amount": 26, "lifetime": 0.5, "size": 0.16, "color": Color(0.9, 0.7, 1.4),
+			PartyFx.one_shot(w, c, {"amount": 38, "lifetime": 0.5, "size": 0.16, "color": Color(0.9, 0.7, 1.4),
 				"tex": "ring", "shape": "shell", "radius": 0.95, "vmin": 2.0, "vmax": 4.5, "damping": 3.0,
 				"gravity": Vector3(0, -6, 0), "colors": [Color(1, 1, 1, 1), Color(1, 1, 1, 0)]})
 			PartyFx.ring_pulse(w, c, Vector3.UP, VIOLET, 0.9, 2.0, 0.22, 0.08)

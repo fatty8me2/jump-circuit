@@ -51,10 +51,18 @@ static func _warp_fx(parent: Node, a: Vector3, b: Vector3) -> void:
 		for i: int in 3:
 			PartyFx.ring_pulse(parent, at + Vector3(0, 0.3 + 0.6 * float(i), 0), Vector3.UP, Color(0.3, 0.8, 0.7), 1.3, 0.2, 0.5 + 0.1 * float(i), 0.08)
 		PartyFx.flash(parent, c, TEAL, 4.0, 6.0, 0.4)
+		HeroFx.ground_ring(parent, at, Color(0.4, 1.3, 1.1), 1.8, 0.6)
+		HeroFx.dust_ring(parent, at, Color(0.8, 0.9, 0.9, 0.45), 0.7, 10, 4.0)
+		if PartyFx.rich():
+			HeroFx.pop(parent, {"amount": 24, "lifetime": 1.4, "shape": "sphere", "radius": 0.8, "dir": Vector3.UP,
+				"spread": 40.0, "speed": Vector2(0.2, 0.9), "turbulence": 0.6, "tex": Fx.Tex.STAR, "size": 0.14,
+				"curve": "pop", "explosiveness": 0.3, "color": Color(0.6, 1.4, 1.3)}, c)
 	# the two racers trading places: comets crossing on an arc, and a faint thread
 	PartyFx.comet(parent, a + Vector3(0, 0.9, 0), b + Vector3(0, 0.9, 0), Color(0.4, 1.0, 0.85), 2.2, 0.38, 0.24)
 	PartyFx.comet(parent, b + Vector3(0, 0.9, 0), a + Vector3(0, 0.9, 0), Color(0.45, 0.7, 1.0), -0.6, 0.38, 0.2)
 	PartyFx.streak(parent, a + Vector3(0, 0.9, 0), b + Vector3(0, 0.9, 0), TEAL, 40, 0.16, 0.7, 0.2, 1.0, true)
+	PartyFx.speed_lines(parent, a + Vector3(0, 0.9, 0), b + Vector3(0, 0.9, 0), Color(0.8, 1.5, 1.4, 0.7), 16, 0.5)
+	PartyFx.speed_lines(parent, b + Vector3(0, 0.9, 0), a + Vector3(0, 0.9, 0), Color(0.8, 1.2, 1.6, 0.7), 16, 0.5)
 	# a moment later both portals snap shut
 	var t: SceneTree = parent.get_tree()
 	if t != null:

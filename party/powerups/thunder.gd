@@ -37,6 +37,8 @@ static func _summon_fx(parent: Node, o: Vector3, seed_value: int = 0) -> void:
 	PartyFx.crackle(parent, o, 0.7, BOLT, 5, 0.15)
 	PartyFx.crackle(parent, o + Vector3(0, 0.3, 0), 0.6, Color(0.9, 0.95, 1.0), 4, 0.12)
 	PartyFx.ring_pulse(parent, o - Vector3(0, 0.7, 0), Vector3.UP, BOLT, 0.2, 1.8, 0.35, 0.14)
+	HeroFx.dust_ring(parent, o - Vector3(0, 0.7, 0), Color(0.8, 0.8, 0.86, 0.45), 0.7, 10, 4.0)
+	HeroFx.sparks(parent, o + Vector3(0, 0.5, 0), Color(1.3, 1.5, 2.4), 20, 8.0, Vector3.UP, 40.0, 0.5)
 	PartyFx.one_shot(parent, o, {"amount": 24, "lifetime": 0.5, "size": 0.12, "color": Color(0.8, 0.9, 1.4), "spark": true,
 		"shape": "sphere", "radius": 0.6, "dir": Vector3.UP, "spread": 25.0, "vmin": 3.0, "vmax": 7.0, "damping": 2.0})
 	PartyFx.flash(parent, sky, BOLT, 5.0, 6.0, 0.3)
@@ -60,6 +62,20 @@ static func _strikes(layer_ref: PartyLayer, pts: Array, seed_value: int) -> void
 		PartyFx.star_ring(layer_ref, c, Color(0.85, 0.92, 1.3), 8, 6.0, 0.4)
 		PartyFx.sparks(layer_ref, c, Color(0.85, 0.9, 1.0), 30, 9.0)
 		PartyFx.smoke(layer_ref, floor_at + Vector3(0, 0.3, 0), Color(0.3, 0.3, 0.36, 0.5), 10, 0.6, 1.2)
+		# the ground takes it: electric cracks, clods thrown up, a dust ring and static left hanging
+		PartyFx.ground_cracks(layer_ref, floor_at, 1.8, Color(1.3, 1.6, 2.6), 7, 1.8, seed_value + i * 3 + 1)
+		PartyFx.burning_debris(layer_ref, floor_at + Vector3(0, 0.2, 0), 3, 6.0, Color(1.4, 1.6, 2.4), Color(0.35, 0.3, 0.26), 0.85, false)
+		HeroFx.dust_ring(layer_ref, floor_at, Color(0.8, 0.8, 0.85, 0.5), 0.9, 10, 5.0)
+		HeroFx.pop(layer_ref, {"amount": 26, "lifetime": 0.5, "shape": "sphere", "radius": 0.2, "dir": Vector3.UP,
+			"spread": 70.0, "speed": Vector2(5.0, 11.0), "gravity": Vector3(0, -16, 0), "facing": "velocity",
+			"tex": Fx.Tex.SPARK, "size": Vector2(0.05, 0.4), "color": Color(1.5, 1.7, 2.4)}, floor_at + Vector3(0, 0.1, 0))
+		if PartyFx.rich():
+			PartyFx.embers(layer_ref, c, 0.7, Color(1.2, 1.5, 2.6), 18, 1.1, 0.8)
+			for k: int in 3:
+				var cc: Vector3 = c
+				layer_ref.get_tree().create_timer(0.2 + 0.18 * float(k), false).timeout.connect(func() -> void:
+					if is_instance_valid(layer_ref) and layer_ref.is_inside_tree():
+						PartyFx.crackle(layer_ref, cc, 0.7, Color(0.8, 0.9, 1.4), 4, 0.08))
 		layer_ref.sfx.play_at("zap", c, 1.0, 0.8 + 0.1 * float(i % 3))
 		# the afterflash: a second, thinner fork a blink later
 		var s2: int = seed_value + i + 7

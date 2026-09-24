@@ -56,8 +56,11 @@ static func _spawn(layer_ref: PartyLayer, key: String, o: Vector3, v: Vector3, i
 	pr.add_child(PartyFx.emitter({"amount": 30, "lifetime": 0.45, "size": 0.4, "color": Color(0.22, 0.08, 0.35, 0.75),
 		"additive": false, "tex": "smoke", "vmin": 0.0, "vmax": 0.3, "grow": true, "angle": true, "aabb": 25.0,
 		"fixed_fps": 0, "colors": [Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)]}))
-	pr.add_child(PartyFx.emitter({"amount": 24, "lifetime": 0.4, "size": 0.18, "color": Color(0.8, 0.5, 1.4),
+	pr.add_child(PartyFx.emitter({"amount": 40, "lifetime": 0.45, "size": 0.2, "color": Color(0.8, 0.5, 1.4),
 		"vmin": 0.0, "vmax": 0.3, "aabb": 25.0, "fixed_fps": 0}))
+	# a dark ribbon of warped space streaming behind it
+	pr.add_child(HeroFx.em({"amount": 30, "lifetime": 0.35, "size": 0.3, "fixed_fps": 0, "speed": Vector2.ZERO,
+		"spread": 0.0, "curve": "shrink", "additive": false, "box_aabb": 25.0, "color": Color(0.1, 0.02, 0.18, 0.6)}))
 	var boom := func(pos: Vector3) -> void: _burst(layer_ref, key, pos, true)
 	pr.on_world = func(pos: Vector3, n: Vector3) -> void: boom.call(pos + n * 0.4)
 	pr.on_expire = boom
@@ -91,6 +94,16 @@ static func _burst(layer_ref: PartyLayer, key: String, pos: Vector3, is_local: b
 	for i: int in 3:
 		PartyFx.ring_pulse(layer_ref, pos, Vector3(randf_range(-1, 1), 1.0, randf_range(-1, 1)), VIOLET.lerp(Color(0.4, 0.6, 1.0), float(i) / 2.0), RADIUS, 0.3, 0.45 + 0.1 * float(i), 0.08)
 	PartyFx.flash(layer_ref, pos, VIOLET, 8.0, RADIUS * 3.0, 0.5)
+	# the ground buckles toward the centre: dust and grit dragged in, violet cracks
+	var gh: Dictionary = layer_ref.ground_at(pos, 4.0)
+	if not gh.is_empty():
+		var g: Vector3 = gh["position"]
+		PartyFx.ground_cracks(layer_ref, g, RADIUS * 0.8, Color(1.4, 0.8, 2.6), 9, 2.6, 0, gh["normal"] as Vector3)
+		HeroFx.pop(layer_ref, {"amount": 30, "lifetime": 0.5, "shape": "ring", "ring_radius": RADIUS, "ring_inner": RADIUS * 0.6,
+			"speed": Vector2(0.0, 0.3), "radial": Vector2(-RADIUS * 6.0, -RADIUS * 4.0), "facing": "mesh",
+			"mesh": HeroFx.soft_quad(Fx.Tex.SMOKE, false, 0.9), "curve": "shrink", "angle": Vector2(0, 360),
+			"color": Color(0.75, 0.7, 0.8, 0.45), "fade": PackedFloat32Array([0.0, 1.0, 0.0]), "explosiveness": 0.6,
+			"box_aabb": RADIUS * 2.0}, g + Vector3(0, 0.25, 0))
 	layer_ref.sfx.play_at("warp", pos, 1.0, 0.6)
 	# ...and lets go
 	layer_ref.get_tree().create_timer(0.48, false).timeout.connect(func() -> void:
@@ -107,7 +120,13 @@ static func _burst(layer_ref: PartyLayer, key: String, pos: Vector3, is_local: b
 		PartyFx.one_shot(layer_ref, pos - Vector3(0, 0.5, 0), {"amount": 14, "lifetime": 1.8, "facing": "mesh",
 			"mesh": Fx.chunk_mesh(0.16), "color": Color(0.55, 0.5, 0.6), "shape": "sphere", "radius": RADIUS * 0.6,
 			"dir": Vector3.UP, "spread": 25.0, "vmin": 0.6, "vmax": 1.6, "gravity": Vector3(0, 0.6, 0), "angle": true,
-			"spin": 90.0, "explosiveness": 0.9, "colors": [Color(1, 1, 1, 1), Color(1, 1, 1, 1)], "aabb": RADIUS * 3.0}))
+			"spin": 90.0, "explosiveness": 0.9, "colors": [Color(1, 1, 1, 1), Color(1, 1, 1, 1)], "aabb": RADIUS * 3.0})
+		PartyFx.dust_wall(layer_ref, pos - Vector3(0, 0.6, 0), RADIUS * 0.8, Color(0.78, 0.74, 0.84, 0.55), 22)
+		if PartyFx.rich():
+			HeroFx.pop(layer_ref, {"amount": 40, "lifetime": 2.4, "shape": "sphere", "radius": RADIUS * 0.7, "dir": Vector3.UP,
+				"spread": 40.0, "speed": Vector2(0.1, 0.5), "gravity": Vector3(0, 0.4, 0), "turbulence": 0.6, "size": 0.14,
+				"curve": "pop", "tex": Fx.Tex.STAR, "explosiveness": 0.5, "color": Color(1.1, 0.8, 1.6),
+				"box_aabb": RADIUS * 3.0}, pos))
 	if not is_local:
 		return
 	layer_ref.send_fx("gravity", "burst", {"k": key, "pos": PowerUp.arr(pos)})

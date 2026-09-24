@@ -75,6 +75,17 @@ static func _beam_fx(parent: Node, o: Vector3, to: Vector3, hit: bool) -> void:
 		tw.tween_property(gm, "albedo_color:a", 0.0, 0.4)
 		tw.chain().tween_callback(glint.queue_free)
 		PartyFx.flash(parent, to, ICE, 6.0, 6.0, 0.4)
+		# frost spreads over the ground under them, and snow drifts down round the block
+		if parent is Node3D and (parent as Node3D).is_inside_tree():
+			var gq := PhysicsRayQueryParameters3D.create(to, to + Vector3(0, -3.0, 0), 1)
+			var gh: Dictionary = (parent as Node3D).get_world_3d().direct_space_state.intersect_ray(gq)
+			if not gh.is_empty():
+				PartyFx.frost_patch(parent, gh["position"] as Vector3, 1.8, 3.0, gh["normal"] as Vector3)
+		if PartyFx.rich():
+			HeroFx.pop(parent, {"amount": 30, "lifetime": 1.6, "shape": "box", "extents": Vector3(1.0, 0.1, 1.0),
+				"dir": Vector3.DOWN, "spread": 20.0, "speed": Vector2(0.3, 0.8), "gravity": Vector3(0, -0.6, 0),
+				"turbulence": 0.8, "tex": Fx.Tex.STAR, "size": 0.14, "curve": "pop", "explosiveness": 0.2,
+				"color": Color(1.3, 1.6, 1.9)}, to + Vector3(0, 1.4, 0))
 	else:
 		PartyFx.burst(parent, to, ICE, 18, 3.0, 0.2)
 		PartyFx.shards(parent, to, ICE, 10, 4.0, 0.12, -dir, 70.0)

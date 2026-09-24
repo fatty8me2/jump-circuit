@@ -148,6 +148,11 @@ func consume(tell: bool, splash: bool = true) -> void:
 		PartyFx.ring_pulse(w, global_position + Vector3(0, 0.08, 0), Vector3.UP, Color(1.0, 0.9, 0.4), 0.5, RADIUS * 2.2, 0.4, 0.12)
 		PartyFx.star_ring(w, at + Vector3(0, 0.6, 0), Color(1.0, 0.9, 0.3), 7, 4.0, 0.36)
 		PartyFx.comic_burst(w, at + Vector3(0, 1.6, 0), "SLIP!", Color(1.0, 0.85, 0.2), 0.8)
+		# a sheet of slick sprays up and splats back down in blobs, leaving a skid streak
+		HeroFx.pop(w, {"amount": 16, "lifetime": 0.8, "shape": "sphere", "radius": 0.3, "dir": Vector3.UP, "spread": 55.0,
+			"speed": Vector2(3.0, 6.5), "gravity": Vector3(0, -16, 0), "size": 0.32, "curve": "shrink", "additive": false,
+			"color": Color(1.1, 0.9, 0.3, 0.9)}, at)
+		HeroFx.ring(w, global_position + Vector3(0, 0.06, 0), Vector3.UP, Color(1.2, 1.0, 0.45, 0.7), 0.4, RADIUS * 2.8, 0.5, 0.05, true)
 		if layer != null:
 			layer.sfx.play_at("pop", at, 0.9, 0.7)
 	elif is_inside_tree():

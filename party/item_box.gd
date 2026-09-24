@@ -57,7 +57,7 @@ func _ready() -> void:
 	_q.layers = PartyFx.LAYER
 	add_child(_q)
 	# orbiting sparkles and a soft ground glow ring
-	_halo = PartyFx.emitter({"amount": 16, "lifetime": 1.2, "size": 0.12, "color": Color(1.0, 0.9, 0.5),
+	_halo = PartyFx.emitter({"amount": 22, "lifetime": 1.2, "size": 0.12, "color": Color(1.0, 0.9, 0.5),
 		"shape": "ring", "radius": 0.9, "inner": 0.7, "height": 0.6, "vmin": 0.2, "vmax": 0.6, "dir": Vector3.UP,
 		"spread": 20.0, "tangential": 2.5, "spark": true, "aabb": 2.0})
 	add_child(_halo)
@@ -148,6 +148,15 @@ func _break_fx() -> void:
 	PartyFx.sparks(parent, at, Color(1, 1, 1), 18, 8.0)
 	PartyFx.ring_pulse(parent, at + Vector3(0, -1.0, 0), Vector3.UP, col, 0.5, 2.2, 0.35, 0.12)
 	PartyFx.flash(parent, at, col.lerp(Color.WHITE, 0.4), 5.0, 6.0, 0.3)
+	# rays of rainbow light burst out of it, glitter rains down, dust puffs off the lawn
+	for i: int in 6:
+		var a: float = TAU * float(i) / 6.0 + _t
+		var d := Vector3(cos(a), 0.45 + 0.35 * float(i % 2), sin(a)).normalized()
+		PartyFx.beam(parent, at, at + d * 2.6, Color.from_hsv(fmod(hue + float(i) / 6.0, 1.0), 0.5, 1.0, 0.5), 0.07, 0.28, 2.0)
+	HeroFx.pop(parent, {"amount": 30, "lifetime": 1.2, "shape": "sphere", "radius": 0.5, "dir": Vector3.UP,
+		"spread": 70.0, "speed": Vector2(1.0, 3.5), "gravity": Vector3(0, -3.0, 0), "tex": Fx.Tex.STAR, "size": 0.16,
+		"curve": "pop", "hue": 0.5, "color": Color(1.3, 1.2, 0.8)}, at)
+	HeroFx.dust_ring(parent, at + Vector3(0, -1.0, 0), Color(0.9, 0.88, 0.8, 0.4), 0.6, 8, 3.5)
 	# the "?" pops off, spinning up and away
 	var q := Label3D.new()
 	q.text = "?"

@@ -51,7 +51,7 @@ func build_look() -> void:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			holder.add_child(mi)
 	# the field: sparks streaking in from all round, a glow under the tips
-	var field: GPUParticles3D = PartyFx.emitter({"amount": 70, "lifetime": 0.7, "size": Vector2(0.05, 0.55), "color": Color(1.0, 0.5, 0.55),
+	var field: GPUParticles3D = PartyFx.emitter({"amount": 90, "lifetime": 0.7, "size": Vector2(0.05, 0.55), "color": Color(1.0, 0.5, 0.55),
 		"tex": "streak", "facing": "velocity", "shape": "shell", "radius": RANGE * 0.7, "vmin": 0.0, "vmax": 0.2,
 		"radial": -RANGE * 2.6, "shrink": false, "aabb": RANGE + 3.0,
 		"colors": [Color(0.5, 0.6, 1.0, 0.0), Color(1.0, 0.4, 0.5, 1.0), Color(1, 1, 1, 0.2)]})
@@ -62,6 +62,13 @@ func build_look() -> void:
 		"aabb": 3.0})
 	tips.position = Vector3(0, -0.5, 0)
 	_magnet.add_child(tips)
+	# grit and metal filings dragged in across the ground from the edge of the field
+	var grit: GPUParticles3D = HeroFx.em({"amount": 40, "lifetime": 0.9, "shape": "ring", "ring_radius": RANGE * 0.8,
+		"ring_inner": RANGE * 0.4, "speed": Vector2(0.0, 0.2), "radial": Vector2(-RANGE * 1.4, -RANGE * 1.0),
+		"facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.05, 0.3), "additive": false,
+		"color": Color(0.35, 0.33, 0.38, 0.8), "fade": PackedFloat32Array([0.0, 1.0, 0.6]), "box_aabb": RANGE + 3.0})
+	grit.position = Vector3(0, 0.1, 0)
+	add_child(grit)
 	PartyFx.pop_in(_magnet, 0.45)
 	if is_inside_tree():
 		var top: Vector3 = global_position + Vector3(0, 1.7, 0)
@@ -121,6 +128,11 @@ func _process(dt: float) -> void:
 		PartyFx.ring_pulse(world(), global_position + Vector3(0, 0.25, 0), Vector3.UP, Color(1.0, 0.35, 0.45, 0.3), RANGE * 0.8, 0.8, 0.5, 0.04)
 		if left < 1.5 and left > 0.0:
 			PartyFx.sparks(world(), global_position + Vector3(0, 1.3, 0), Color(1.0, 0.8, 0.6), 8, 4.0)
+		# an arc snaps between the poles now and then
+		if _magnet != null and _magnet.visible and randf() < 0.5:
+			var l: Vector3 = _magnet.global_transform * Vector3(-0.36, -0.5, 0)
+			var r: Vector3 = _magnet.global_transform * Vector3(0.36, -0.5, 0)
+			PartyFx.bolt(world(), l, r, Color(1.2, 0.7, 1.0), randi(), 0.1)
 	_tether_t -= dt
 	if _tether_t <= 0.0 and is_inside_tree() and layer != null and not ended:
 		_tether_t = 0.12

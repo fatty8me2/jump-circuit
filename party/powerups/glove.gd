@@ -63,9 +63,16 @@ static func _punch_fx(parent: Node, o: Vector3, dir: Vector3, reach: float) -> v
 	var steel: StandardMaterial3D = PartyFx.solid_mat(Color(0.8, 0.82, 0.88), 0.2, 0.25, 0.9)
 	for i: int in 10:
 		coils.append(PartyFx.part(root, tm, steel, Vector3.ZERO, Vector3.ONE, Vector3(90, 0, 0)))
-	var trail: GPUParticles3D = PartyFx.emitter({"amount": 30, "lifetime": 0.25, "size": 0.3, "color": Color(1.0, 0.5, 0.3),
+	var trail: GPUParticles3D = PartyFx.emitter({"amount": 44, "lifetime": 0.28, "size": 0.32, "color": Color(1.0, 0.5, 0.3),
 		"vmin": 0.0, "vmax": 0.4, "aabb": 12.0, "fixed_fps": 0})
 	head.add_child(trail)
+	# wind peeling off the glove as it rockets out
+	head.add_child(HeroFx.em({"amount": 26, "lifetime": 0.2, "shape": "sphere", "radius": 0.35, "speed": Vector2(0.5, 1.5),
+		"spread": 180.0, "facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.04, 0.5), "additive": false,
+		"color": Color(1.0, 1.0, 1.0, 0.55), "fixed_fps": 0, "box_aabb": 12.0}))
+	# a puff of smoke out of the pack as the spring lets go
+	HeroFx.smoke(parent, o, Color(0.85, 0.83, 0.8, 0.5), 8, 0.5, 0.5, 2.0)
+	HeroFx.ring(parent, o + dir * 0.3, dir, Color(1.3, 1.2, 1.0, 0.8), 0.15, 0.9, 0.2, 0.08, true)
 	var ext := func(k: float) -> void:
 		if not is_instance_valid(head):
 			return
@@ -84,6 +91,12 @@ static func _punch_fx(parent: Node, o: Vector3, dir: Vector3, reach: float) -> v
 		PartyFx.ring_pulse(parent, tip, dir, Color(1.0, 0.95, 0.7), 0.3, 1.8, 0.25, 0.2)
 		PartyFx.star_ring(parent, tip, Color(1.0, 0.9, 0.35), 8, 5.5, 0.42, dir)
 		PartyFx.sparks(parent, tip, Color(1.0, 1.0, 0.8), 18, 8.0, dir, 60.0)
+		HeroFx.ring(parent, tip, dir, Color(1.3, 1.1, 0.7, 0.8), 0.2, 2.6, 0.3, 0.06, true)
+		HeroFx.pop(parent, {"amount": 24, "lifetime": 0.3, "shape": "sphere", "radius": 0.3, "dir": dir, "spread": 55.0,
+			"speed": Vector2(8.0, 15.0), "damping": Vector2(10.0, 16.0), "facing": "velocity", "tex": Fx.Tex.SPARK,
+			"size": Vector2(0.06, 0.8), "color": Color(1.6, 1.5, 1.2)}, tip)
+		HeroFx.smoke(parent, tip, Color(0.92, 0.9, 0.86, 0.5), 10, 0.8, 0.7, 3.5)
+		PartyFx.flash(parent, tip, Color(1.0, 0.8, 0.5), 5.0, 6.0, 0.25)
 		if is_instance_valid(head):
 			var sq: Tween = head.create_tween()
 			sq.tween_property(head, "scale", Vector3(1.35, 1.35, 0.6), 0.04)
