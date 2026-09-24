@@ -29,6 +29,7 @@ var _sparks: GPUParticles3D
 var _ring: GPUParticles3D
 var _lamp: OmniLight3D
 var _fx_u: float = -1.0
+var _haze: GPUParticles3D
 
 
 func _ready() -> void:
@@ -83,16 +84,22 @@ func _build_fx() -> void:
 		"radial_vel": Vector2(4.0, 8.0), "speed": Vector2(0.0, 0.4), "damping": Vector2(5.0, 8.0),
 		"gravity": Vector3(0, 0.6, 0), "size": 1.4, "color": Color(0.78, 0.72, 0.64, 0.85), "aabb": vis})
 	add_child(_dust)
-	_debris = Fx.debris({"amount": 18, "shape": "ring", "ring_radius": reach * 0.5, "ring_inner": reach * 0.3,
+	_debris = Fx.debris({"amount": 26, "shape": "ring", "ring_radius": reach * 0.5, "ring_inner": reach * 0.3,
 		"dir": Vector3.UP, "spread": 50.0, "radial_vel": Vector2(2.0, 5.0), "speed": Vector2(3.0, 7.0),
 		"color": Color(0.4, 0.33, 0.27), "chunk": 0.22, "aabb": vis})
 	add_child(_debris)
-	_sparks = Fx.sparks({"amount": 30, "lifetime": 0.45, "shape": "ring", "ring_radius": reach * 0.55,
+	_sparks = Fx.sparks({"amount": 50, "lifetime": 0.45, "shape": "ring", "ring_radius": reach * 0.55,
 		"ring_inner": reach * 0.45, "dir": Vector3.UP, "spread": 70.0, "radial_vel": Vector2(3.0, 7.0),
 		"speed": Vector2(2.0, 6.0), "color": Color(3.0, 1.5, 0.6), "aabb": vis})
 	add_child(_sparks)
 	_ring = Fx.shockwave(reach * 1.4, {"lifetime": 0.5, "color": Color(2.2, 1.7, 1.2), "aabb": vis})
 	add_child(_ring)
+	# dust that hangs over the floor after the slam
+	_haze = Fx.smoke({"amount": 14, "lifetime": 2.0, "explosiveness": 0.6, "shape": "ring",
+		"ring_radius": reach * 0.8, "ring_inner": reach * 0.3, "dir": Vector3.UP, "spread": 50.0,
+		"speed": Vector2(0.2, 0.6), "damping": Vector2(0.5, 1.0), "size": 1.8,
+		"color": Color(0.78, 0.72, 0.64, 0.4), "aabb": vis})
+	add_child(_haze)
 	_lamp = OmniLight3D.new()
 	_lamp.light_color = Color(1.0, 0.55, 0.3)
 	_lamp.omni_range = reach * 2.0 + 2.0
@@ -118,7 +125,9 @@ func _process(_dt: float) -> void:
 			p.position = floor_local + Vector3(0, 0.08, 0)
 			p.restart()
 		_lamp.position = floor_local + Vector3(0, 0.8, 0)
-		Fx.pulse(_lamp, 3.0, 0.0, 0.4)
+		Fx.pulse(_lamp, 5.0, 0.0, 0.5)
+		_haze.position = floor_local + Vector3(0, 0.1, 0)
+		_haze.restart()
 
 
 func snap_to_clock() -> void:

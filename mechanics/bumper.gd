@@ -73,6 +73,7 @@ func _hit_fx(away: Vector3, at_y: float) -> void:
 	var y: float = clampf(at_y - global_position.y, 0.3, height - 0.2)
 	Fx.fire(_hit_sparks, global_position + dir * (radius + 0.1) + Vector3(0, y, 0), Fx.basis_up(dir))
 	Fx.fire(_hit_ring, global_position + Vector3(0, y, 0))
+	Fx.flash(self, global_position + Vector3(0, y, 0) + dir * (radius + 0.4), Color(1.0, 0.45, 0.85), 3.5, 6.0, 0.3)
 	_flash_shell.visible = true
 	_flash_mat.albedo_color.a = 0.9
 	var tw: Tween = create_tween()

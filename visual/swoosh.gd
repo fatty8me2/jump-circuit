@@ -19,6 +19,7 @@ var _ages: PackedFloat32Array = PackedFloat32Array()
 var _im: ImmediateMesh
 
 static var _mats: Dictionary = {}
+static var _live: int = 0   # swooshes in the tree; the shared materials go with the last one
 
 
 ## `additive` glows (best on dark scenes and for the player's own streaks); false = a
@@ -66,6 +67,18 @@ static func _material(additive: bool) -> StandardMaterial3D:
 	m.disable_receive_shadows = true
 	_mats[additive] = m
 	return m
+
+
+func _enter_tree() -> void:
+	_live += 1
+
+
+func _exit_tree() -> void:
+	_live -= 1
+	if _live <= 0:
+		# nothing holds the shared materials past the last ribbon (no leak reports at exit)
+		_live = 0
+		_mats.clear()
 
 
 ## Drops every stored point (teleports, respawns).
