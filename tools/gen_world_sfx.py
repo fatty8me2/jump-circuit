@@ -31,9 +31,9 @@ SR = ga.SR
 TAU = ga.TAU
 PEAK_DB = ga.SFX_PEAK_DB
 OUT = ga.OUT
-SIZE_BUDGET = 9.6e6
+SIZE_BUDGET = 12.6e6
 
-THEMES = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent", "xeno", "volcano")
+THEMES = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent", "xeno", "volcano", "glacier", "desert")
 
 # ---------------------------------------------------------------------------
 # clip table: name -> (seconds, loop).  The verifier checks the files against it.
@@ -74,6 +74,12 @@ for _i in range(1, 3):
     _reg("snapjaw_snap_%d" % _i, 0.55)
     _reg("basalt_sink_%d" % _i, 1.4)
     _reg("crust_crack_%d" % _i, 0.5)
+    _reg("icicle_shatter_%d" % _i, 0.9)
+    _reg("ice_crack_%d" % _i, 0.6)
+    _reg("spike_trap_%d" % _i, 0.5)
+    _reg("stone_grind_%d" % _i, 1.3)
+for _i in range(1, 4):
+    _reg("snow_thump_%d" % _i, 0.4)
 for _n, _d in (("wallrun_latch", 0.35), ("land_heavy", 0.8), ("boost", 0.6),
                ("laser_on", 0.4), ("laser_off", 0.35),
                ("blink_appear", 0.4), ("blink_vanish", 0.45), ("blink_tick", 0.06),
@@ -89,7 +95,10 @@ for _n, _d in (("wallrun_latch", 0.35), ("land_heavy", 0.8), ("boost", 0.6),
                ("trolley_clunk", 0.6), ("counterweight_thud", 0.7),
                ("billboard_on", 0.45), ("billboard_off", 0.4),
                ("snapjaw_open", 0.7), ("geyser_erupt", 1.6), ("leviathan_call", 3.6),
-               ("bomb_launch", 1.0), ("bomb_whistle", 2.0), ("crust_break", 1.0), ("eruption_boom", 2.8)):
+               ("bomb_launch", 1.0), ("bomb_whistle", 2.0), ("crust_break", 1.0), ("eruption_boom", 2.8),
+               ("icicle_crack", 0.5), ("icicle_fall", 0.8), ("gust_whoosh", 1.4), ("ice_break", 1.0),
+               ("avalanche_rumble", 2.5),
+               ("spike_retract", 0.6), ("quicksand_sink", 1.2), ("mirage_shimmer", 1.0), ("boulder_impact", 1.4)):
     _reg(_n, _d)
 for _n, _d in (("air_rush", 2.5), ("wallrun_scrape", 1.0), ("ice_slide", 1.2),
                ("laser_hum", 1.0), ("conveyor_hum", 1.0), ("wind_loop", 2.0), ("motor_hum", 1.0),
@@ -97,7 +106,8 @@ for _n, _d in (("air_rush", 2.5), ("wallrun_scrape", 1.0), ("ice_slide", 1.2),
                ("thruster_burn", 1.2), ("flare_roar", 1.5), ("gravity_hum", 2.0),
                ("scanner_servo", 1.0), ("trolley_run", 1.2), ("pulley_rattle", 1.0),
                ("trimmer_buzz", 1.0), ("billboard_buzz", 1.0),
-               ("drift_hum", 2.0), ("lava_rise", 2.5), ("fumarole_loop", 2.0), ("lavafall_loop", 2.0)):
+               ("drift_hum", 2.0), ("lava_rise", 2.5), ("fumarole_loop", 2.0), ("lavafall_loop", 2.0),
+               ("avalanche_roar", 2.5), ("sandfall_loop", 2.0), ("dustdevil_loop", 2.0), ("boulder_roll", 2.0)):
     _reg(_n, _d, True)
 
 
@@ -586,6 +596,45 @@ def surface_hit(theme, r, k, dur):
                 clack = modes(tv(0.08), [(r.uniform(900, 1600), 1.0, 0.01), (r.uniform(2200, 3400), 0.5, 0.005)], r, 0.0)
                 place(x, r.uniform(0.05, 0.2), clack + 0.4 * click(r, 0.08, 1500, 7000, 0.001), r.uniform(0.08, 0.2))
             x += 0.06 * noise(r, n, 1500, 6000) * env(t, 0.02, 0.1)   # a puff of ash
+    elif theme == "glacier":
+        # crunchy packed snow over hard ice: the snow compresses in a quick run of crunches (cold
+        # grains fracturing, with the faint tonal squeak of very cold snow) over a dull pat, and the
+        # ice under it answers with a hard, glassy tick
+        body = thud(t, r.uniform(120, 140), 70, 0.04, 0.025 + 0.03 * k, harm=(0.2,))
+        ice = modes(t, [(r.uniform(1800, 2300), 1.0, 0.02), (r.uniform(3900, 4700), 0.6, 0.012),
+                        (r.uniform(6500, 7800), 0.3, 0.006)], r, 0.0)
+        both(0.8 * body + 0.2 * ice + 0.3 * click(r, dur, 2500, 12000, 0.0008))
+        span = 0.05 + 0.1 * k
+        crunch = np.zeros(n)
+        grains(r, crunch, int(40 + 90 * k), 0.0, span, 500, 4000, 0.001, 0.004, 1.0, decay=0.03 + 0.05 * k)
+        squeak = np.zeros(n)
+        for _ in range(int(3 + 5 * k)):
+            ts = tv(0.02)
+            sq = tone(r.uniform(900, 1800) * (1.0 + 0.3 * ts / 0.02)) * env(ts, 0.002, 0.006)
+            place(squeak, r.uniform(0.0, span), taper(sq), r.uniform(0.3, 1.0))
+        x += 0.8 * unit(crunch) + 0.15 * unit(squeak)
+        x = band(x, None, 11000)
+        if k:
+            place(x, 0.0, thud(t, 95, 50, 0.1, 0.08), 0.6)
+            x += 0.1 * noise(r, n, 1500, 6000) * env(t, 0.01, 0.08)   # a puff of powder
+    elif theme == "desert":
+        # soft sand over sandstone: the sole shushes into the sand (a soft, dry hiss that swells as
+        # the foot slides and settles) with fine grains trickling off it, a muffled pat, and under the
+        # sand the sandstone gives a gritty scuff and a short, dead knock
+        shh = noise(r, n, 600, 5000) * env(t, 0.008 + 0.006 * k, 0.03 + 0.04 * k)
+        body = thud(t, r.uniform(110, 130), 62, 0.05, 0.03 + 0.03 * k, harm=(0.2,))
+        stone = modes(t, [(r.uniform(420, 500), 1.0, 0.008), (r.uniform(900, 1050), 0.6, 0.006),
+                          (r.uniform(1600, 1900), 0.35, 0.004)], r, 0.0)
+        grit = noise(r, n, 1500, 7000) * env(t, 0.001, 0.006)
+        both(0.7 * shh + 0.8 * body + 0.3 * stone + 0.25 * grit)
+        trickle = np.zeros(n)
+        grains(r, trickle, int(25 + 60 * k), 0.01, 0.08 + 0.15 * k, 2500, 9000, 0.0006, 0.002, 1.0,
+               decay=0.04 + 0.06 * k)
+        x += 0.35 * unit(trickle)
+        x = band(x, None, 9000)
+        if k:
+            place(x, 0.0, thud(t, 90, 48, 0.1, 0.08), 0.6)
+            x += 0.3 * noise(r, n, 800, 6000) * env(t, 0.01, 0.12)   # sand thrown up
     return x
 
 
@@ -1753,6 +1802,304 @@ def gen_volcano():
     save(name, band(space(r, y, 1.8, 0.3, 80, 4000, 0.4), None, 7000), fin=0.001, fout=0.5)
 
 
+def ice_modes(r, t, f11, tau, count=6, hard=None):
+    """Ice: a hard, bright solid - glass-like plate modes, but damped faster than glass."""
+    return modes(t, plate_modes(f11, 1.3, tau, count, 0.5, r), r, 0.02, hard=hard)
+
+
+def pew(dur, f_hi, f_lo):
+    """The 'pew' of ice under strain: ice is dispersive (flexural waves travel faster the higher
+    they are), so a crack reaches the ear as a laser-like chirp sweeping down,
+    f = f_hi / (1 + t / t0)^2."""
+    t = tv(dur)
+    t0 = dur / (np.sqrt(f_hi / f_lo) - 1.0)
+    f = f_hi / (1.0 + t / t0) ** 2
+    return taper((tone(f) + 0.2 * tone(2 * f)) * env(t, 0.0015, dur * 0.4))
+
+
+def gen_glacier():
+    # an icicle shivering loose: a fast run of tiny ticks (the ice fracturing at its root), then a
+    # sharp, glassy crack, the icicle ringing (a thin ice rod) and a pew through the overhang
+    name = "icicle_crack"
+    r = rng(name)
+    t = tv(dur(name))
+    x = np.zeros(len(t))
+    tj, g = 0.0, 0.25
+    while tj < 0.12:
+        place(x, tj, click(r, 0.01, 3000, 11000, 0.0005), g)
+        tj += r.uniform(0.004, 0.02) * (1.0 - 0.6 * tj / 0.12)
+        g = min(g * 1.12, 0.8)
+    tt = tv(dur(name) - 0.13)
+    ring = modes(tt, bar_modes(r.uniform(1400, 1800), 0.15, (1.0, 0.6, 0.4, 0.25, 0.15), 0.6), r, 0.02, hard=9000)
+    place(x, 0.13, click(r, dur(name) - 0.13, 1500, 12000, 0.002) + 0.5 * ring)
+    place(x, 0.135, pew(0.25, 5000, 900), 0.3)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # the icicle dropping: an airy whoosh rising as it gathers speed (a band sweeping up and
+    # narrowing), and a thin glassy ring from the tumbling rod
+    name = "icicle_fall"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    u = t / dur(name)
+    wh = unit(svf(r.standard_normal(n), glide(600, 3200, t, 0.7), 2.5)) * u ** 1.5
+    ring = tone(glide(2400, 2600, t, 0.7)) * (0.6 + 0.4 * np.sin(TAU * 14.0 * t))
+    save(name, wh + 0.1 * ring * u, fin=0.02, fout=0.05)
+
+    # the icicle hits the ground and explodes: a sharp crack and a thud, dozens of glassy shards
+    # (bright, short ice modes) spraying and skittering, tinkles settling
+    for i in range(1, 3):
+        name = "icicle_shatter_%d" % i
+        r = rng(name)
+        t = tv(dur(name))
+        x = click(r, dur(name), 1200, 12000, 0.003) + 0.6 * thud(t, 160, 80, 0.03, 0.03)
+        x += 0.4 * ice_modes(r, t, r.uniform(700, 900), 0.05, hard=8000)
+        for _ in range(40):
+            tj = r.gamma(1.3, 0.08)
+            f = r.uniform(2500, 9000)
+            shard = modes(tv(0.1), [(f, 1.0, r.uniform(0.01, 0.04)), (f * 2.76, 0.4, 0.008)], r, 0.0)
+            place(x, tj, shard, r.uniform(0.1, 0.6) * np.exp(-tj / 0.25))
+        grains(r, x, 60, 0.0, 0.4, 2000, 10000, 0.0006, 0.002, 0.2, decay=0.15)
+        save(name, space(r, x, 0.7, 0.15, 300, 10000, 0.6), fin=0.0008, fout=0.15)
+
+    # a blizzard gust front shoving past: the wind swelling and passing (a band rising to the pass,
+    # then falling), a howl riding it, a blast of driven snow and a low buffet
+    name = "gust_whoosh"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    tp = 0.55
+    ge = np.where(t < tp, np.exp(-0.5 * ((t - tp) / 0.22) ** 2), np.exp(-0.5 * ((t - tp) / 0.32) ** 2))
+    w = whoosh(r, dur(name), 200, 1400, 400, tp, 0.22, 1.2)
+    howl = unit(svf(r.standard_normal(n), np.interp(t, [0, tp, dur(name)], [380, 900, 500]), 10.0)) * ge ** 1.3
+    snow = noise(r, n, 3000, 9000) * ge ** 1.5
+    low = noise(r, n, 40, 200) * ge
+    save(name, w + 0.45 * howl + 0.35 * snow + 0.3 * low, fin=0.02, fout=0.2)
+
+    # thin ice under your feet: a sharp snap, the panel's glassy plate modes, pews running out
+    # through the sheet, and a creak
+    for i in range(1, 3):
+        name = "ice_crack_%d" % i
+        r = rng(name)
+        t = tv(dur(name))
+        x = click(r, dur(name), 1500, 12000, 0.0015) + 0.5 * ice_modes(r, t, r.uniform(500, 650), 0.03, hard=7000)
+        x += 0.4 * thud(t, 180, 100, 0.02, 0.02)
+        for _ in range(int(r.integers(2, 4))):
+            place(x, r.uniform(0.0, 0.08), pew(r.uniform(0.2, 0.35), r.uniform(3500, 6000), r.uniform(500, 900)),
+                  r.uniform(0.2, 0.4))
+        cr = creak(r, 0.2, lambda u: 60.0 - 30.0 * u, [(300, 1.0, 0.01), (700, 0.6, 0.006), (1500, 0.3, 0.004)])
+        place(x, 0.05, cr * np.linspace(1.0, 0.0, len(cr)), 0.2)
+        save(name, x, fin=0.0008, fout=0.12)
+
+    # the panel gives way: a big crack and boom, the sheet breaking into slabs (ice plate hits), a
+    # spray of shards, and chunks tumbling away into the crevasse (duller and fainter as they fall)
+    name = "ice_break"
+    r = rng(name)
+    t = tv(dur(name))
+    x = click(r, dur(name), 800, 12000, 0.005) + 0.7 * thud(t, 130, 62, 0.06, 0.07)
+    place(x, 0.01, pew(0.4, 5000, 400), 0.3)
+    for _ in range(5):
+        slab = ice_modes(r, tv(0.3), r.uniform(350, 700), 0.04, 6, 6000) + 0.4 * click(r, 0.3, 800, 8000, 0.002)
+        place(x, r.uniform(0.02, 0.2), slab, r.uniform(0.3, 0.7))
+    for _ in range(50):
+        tj = r.gamma(1.3, 0.1)
+        f = r.uniform(2000, 8000)
+        place(x, tj, modes(tv(0.08), [(f, 1.0, r.uniform(0.008, 0.03))], r, 0.0), r.uniform(0.05, 0.3) * np.exp(-tj / 0.3))
+    for j in range(6):
+        tf = 0.35 + 0.1 * j + r.uniform(0, 0.05)
+        chunk = thud(tv(0.2), r.uniform(140, 200), 80, 0.03, 0.03) + 0.4 * ice_modes(r, tv(0.2), r.uniform(500, 900), 0.02)
+        place(x, tf, band(chunk, None, 2500 - 300 * j), 0.35 * 0.75 ** j)
+    save(name, space(r, x, 1.0, 0.25, 200, 8000, 0.5), fin=0.0008, fout=0.2)
+
+    # the avalanche: a massive tumbling roar (dark noise churning), blocks of snow thudding inside
+    # it, the hiss of the powder cloud and a rumble through the ground
+    name = "avalanche_roar"
+    r = rng(name)
+    n = ns(dur(name))
+    roar = unit(tilt(cnoise(r, n, 45, 3000, 2), -3.0, circular=True)) * (0.7 + 0.3 * crand(r, n, 30, 0.4))
+    churn = cnoise(r, n, 200, 900) * (0.5 + 0.5 * crand(r, n, 20, 0.3)) ** 2
+    thumps = np.zeros(n)
+    for _ in range(16):
+        tt = tv(0.3)
+        th = thud(tt, r.uniform(90, 140), 55, 0.06, 0.06) + 0.5 * noise(r, len(tt), 100, 700) * env(tt, 0.002, 0.04)
+        cplace(thumps, r.uniform(0, dur(name)), taper(th), r.uniform(0.3, 1.0))
+    powder = cnoise(r, n, 2000, 8000) * (0.6 + 0.4 * crand(r, n, 12))
+    rumble = cnoise(r, n, 40, 130) * (0.7 + 0.3 * crand(r, n, 8))
+    save_loop(name, roar + 0.4 * churn + 0.4 * unit(thumps) + 0.2 * powder + 0.35 * rumble)
+
+    # the avalanche letting go: the snowpack fracturing (a deep 'whumpf' and a crack across the
+    # slope with a pew), then a rumble building as the slide gathers
+    name = "avalanche_rumble"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.8 * thud(t, 95, 48, 0.15, 0.18) + 0.6 * noise(r, n, 60, 600) * env(t, 0.01, 0.15)
+    place(x, 0.05, click(r, 0.4, 600, 8000, 0.008), 0.6)
+    place(x, 0.06, pew(0.5, 4000, 300), 0.25)
+    grow = np.clip((t - 0.3) / 2.0, 0, 1) ** 1.5
+    x += 0.9 * unit(tilt(noise(r, n, 45, 2500, 2), -3.0)) * grow * (0.7 + 0.3 * noise(r, n, None, 6))
+    for j in range(10):
+        tb = 0.5 + 1.9 * np.sqrt(r.uniform(0, 1))
+        place(x, tb, thud(tv(0.3), r.uniform(90, 140), 55, 0.06, 0.06), 0.3 * np.clip((tb - 0.3) / 2.0, 0, 1))
+    save(name, x, fin=0.002, fout=0.3)
+
+    # a lump of snow landing: a soft, dull whump (a low pat and a burst of muffled noise), a
+    # crumble of powder and a faint crunch
+    for i in range(1, 4):
+        name = "snow_thump_%d" % i
+        r = rng(name)
+        t = tv(dur(name))
+        n = len(t)
+        x = thud(t, r.uniform(120, 150), 62, 0.05, 0.05, harm=(0.2,)) + 0.7 * noise(r, n, 80, 700) * env(t, 0.003, 0.04)
+        x += 0.25 * noise(r, n, 1500, 6000) * env(t, 0.01, 0.08)
+        crunch = np.zeros(n)
+        grains(r, crunch, 30, 0.0, 0.1, 500, 3000, 0.001, 0.004, 1.0, decay=0.05)
+        save(name, band(x + 0.3 * unit(crunch), None, 7000), fin=0.001, fout=0.1)
+
+
+def gen_desert():
+    # a spike trap firing: the stone latch clunks, a rank of bronze spikes shoots up out of its
+    # sleeves (a fast metallic 'shing': a bright scrape sweeping up and the spikes ringing), a thud
+    # as they hit the top of their travel, and a puff of sand
+    for i in range(1, 3):
+        name = "spike_trap_%d" % i
+        r = rng(name)
+        t = tv(dur(name))
+        x = 0.7 * (thud(t, 140, 80, 0.02, 0.03) + 0.5 * click(r, dur(name), 600, 5000, 0.002))
+        for j in range(5):
+            tj = 0.03 + j * r.uniform(0.004, 0.01)
+            tt = tv(dur(name) - tj)
+            m = len(tt)
+            scrape = unit(svf(r.standard_normal(m), glide(2500, 7000, tt, 0.06), 4.0)) * env(tt, 0.003, 0.035)
+            ring = modes(tt, bar_modes(r.uniform(1100, 1500), 0.08, (1.0, 0.6, 0.4, 0.25, 0.12), 0.6), r, 0.02, hard=9000)
+            place(x, tj, 1.0 * scrape + 0.15 * ring, r.uniform(0.6, 1.0))
+        place(x, 0.09, thud(tv(0.3), 180, 100, 0.02, 0.025) + 0.5 * click(r, 0.3, 1000, 7000, 0.0015), 0.6)
+        puff = np.zeros(len(t))
+        grains(r, puff, 40, 0.09, 0.3, 1500, 7000, 0.0008, 0.003, 1.0, decay=0.08)
+        x += 0.2 * unit(puff) + 0.15 * noise(r, len(t), 1000, 6000) * env(np.maximum(t - 0.09, 0), 0.01, 0.08) * (t > 0.09)
+        save(name, space(r, x, 0.9, 0.2, 200, 7000), fin=0.0008, fout=0.1)
+
+    # the spikes sliding back down: a slower, falling bronze scrape, the plate grinding as it
+    # resets, and a clunk
+    name = "spike_retract"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.6 * unit(svf(r.standard_normal(n), glide(4200, 1400, t, 0.35), 5.0)) * env(t, 0.02, 0.15)
+    x += 0.15 * modes(t, bar_modes(r.uniform(1100, 1400), 0.1, (1.0, 0.5, 0.3, 0.15, 0.08), 0.6), r, 0.02, hard=6000)
+    gr = creak(r, 0.4, lambda u: 40.0 + 20.0 * u, [(220, 1.0, 0.015), (520, 0.6, 0.01), (1100, 0.3, 0.006)])
+    place(x, 0.02, gr * np.sin(np.pi * np.linspace(0, 1, len(gr))), 0.35)
+    place(x, 0.45, thud(tv(0.15), 170, 90, 0.02, 0.03) + 0.5 * click(r, 0.15, 800, 6000, 0.002), 0.7)
+    save(name, space(r, x, 0.9, 0.2, 200, 7000), fin=0.004, fout=0.08)
+
+    # a curtain of sand pouring from the ceiling: a dense, dry hiss of grains, a softer pouring
+    # body, the patter where it lands, and a touch of the hall
+    name = "sandfall_loop"
+    r = rng(name)
+    n = ns(dur(name))
+    hiss = cnoise(r, n, 1800, 9000) * (0.75 + 0.25 * crand(r, n, 40, 0.3))
+    ticks = crackle(r, dur(name), 900, 2500, 10000, wrap=True, n=n)
+    body = cnoise(r, n, 250, 1800) * (0.8 + 0.2 * crand(r, n, 12))
+    pat = np.zeros(n)
+    grains(r, pat, 160, 0.0, dur(name), 200, 900, 0.002, 0.006, 1.0, wrap=True)
+    dry = 0.7 * hiss + 0.3 * unit(ticks) + 0.5 * body + 0.45 * unit(pat)
+    wet = cconv(dry, room_ir(r, 1.2, 150, 6000))
+    save_loop(name, dry + 0.25 * unit(wet) * np.max(np.abs(dry)))
+
+    # sinking sand swallowing a foot: a low sucking pull (a band sweeping down), sand shifting and
+    # pouring in round it, and a deep, dull gulp at the end
+    name = "quicksand_sink"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.7 * unit(svf(r.standard_normal(n), glide(700, 150, t, 0.9), 2.5)) * np.sin(np.pi * np.clip(t / 1.0, 0, 1)) ** 1.5
+    x += 0.35 * noise(r, n, 800, 6000) * (0.4 + 0.6 * np.abs(noise(r, n, None, 12))) * np.sin(np.pi * t / dur(name))
+    x += 0.4 * noise(r, n, 60, 300) * np.sin(np.pi * np.clip(t / 0.9, 0, 1))
+    grains(r, x, 80, 0.05, 1.0, 2500, 8000, 0.0006, 0.002, 0.15)
+    place(x, 0.85, thud(tv(0.3), 120, 55, 0.08, 0.06) + 0.6 * bubble(90, 0.3, 0.04, 0.8), 0.7)
+    save(name, x, fin=0.02, fout=0.15)
+
+    # a dust devil: wind swirling round (bands whose centres circle up and down, whole cycles per
+    # loop), sand whipped round in pulses with the swirl, a thin whistle and a low buffet
+    name = "dustdevil_loop"
+    r = rng(name)
+    n = ns(dur(name))
+    base = unit(tilt(cnoise(r, n, 100, 6000, 1), -2.5, circular=True))
+    swirl = unit(csvf(r.standard_normal(n), 900 * 2.0 ** (0.9 * clfo(n, 3)), 2.5))
+    swirl2 = unit(csvf(r.standard_normal(n), 1800 * 2.0 ** (0.7 * clfo(n, 5, 1.3)), 4.0))
+    sand = cnoise(r, n, 2500, 9000) * (0.5 + 0.5 * clfo(n, 3)) ** 2
+    whistle = unit(csvf(r.standard_normal(n), 2200 * (1.0 + 0.1 * crand(r, n, 3)), 16.0))
+    low = cnoise(r, n, 40, 160) * (0.6 + 0.4 * crand(r, n, 10))
+    save_loop(name, 0.6 * base + 0.7 * swirl + 0.35 * swirl2 + 0.35 * sand + 0.06 * whistle + 0.35 * low)
+
+    # heat haze: pale, glassy tones wavering in and out of tune (slow, deep vibrato at different
+    # rates), swelling and fading like the air, over a breathy band
+    name = "mirage_shimmer"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    for f, a in ((1318.5, 1.0), (1760.0, 0.7), (1975.5, 0.6), (2637.0, 0.45), (3520.0, 0.3)):
+        rate = r.uniform(3.0, 6.0)
+        x += a * tone(f * (1.0 + 0.012 * np.sin(TAU * rate * t + r.uniform(0, TAU))))
+    swell = np.sin(np.pi * t / dur(name)) ** 2
+    air = unit(svf(r.standard_normal(n), 2500 * (1.0 + 0.3 * np.sin(TAU * 3.0 * t)), 3.0))
+    save(name, (unit(x) + 0.25 * air) * swell, fin=0.02, fout=0.1)
+
+    # the stone ball rolling: a deep rumble, knocks from its chips and flats coming round in a
+    # repeating pattern (it turns twice per loop), grit crushed under it and dust
+    name = "boulder_roll"
+    r = rng(name)
+    n = ns(dur(name))
+    rumble = cnoise(r, n, 45, 400) * (0.6 + 0.4 * crand(r, n, 16, 0.5))
+    knocks = np.zeros(n)
+    marks = [(r.uniform(0, 1.0), r.uniform(0.4, 1.0), r.uniform(110, 150)) for _ in range(5)]
+    for rev in range(2):
+        for ph, g, f in marks:
+            tt = tv(0.2)
+            k = thud(tt, f, 55, 0.04, 0.05) + 0.3 * band(click(r, 0.2, 400, 4000, 0.004), None, 3000)
+            cplace(knocks, rev * 1.0 + ph, taper(k), g)
+    grit = crackle(r, dur(name), 400, 800, 5000, wrap=True, n=n)
+    crunch = np.zeros(n)
+    grains(r, crunch, 200, 0.0, dur(name), 1000, 4000, 0.001, 0.004, 1.0, wrap=True)
+    dust = cnoise(r, n, 1500, 5000)
+    save_loop(name, unit(rumble) + 0.6 * unit(knocks) + 0.35 * unit(grit) + 0.2 * unit(crunch) + 0.12 * dust)
+
+    # the ball smashing into a wall or dropping into its pit: a huge thud, a stone crack, rubble
+    # tumbling and rattling, and a dust hiss, in the temple
+    name = "boulder_impact"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.9 * thud(t, 95, 55, 0.15, 0.18, harm=(0.5, 0.25)) + 0.7 * click(r, dur(name), 500, 9000, 0.008)
+    x += 0.7 * noise(r, n, 60, 500) * env(t, 0.003, 0.15)
+    for _ in range(30):
+        tj = 0.05 + r.gamma(1.5, 0.15)
+        f0 = r.uniform(300, 1500)
+        rock = modes(tv(0.12), [(f0, 1.0, 0.012), (f0 * 1.71, 0.6, 0.008), (f0 * 2.63, 0.4, 0.005)], r, 0.0)
+        place(x, tj, rock + 0.5 * click(r, 0.12, f0 * 0.8, min(f0 * 7, 12000), 0.002), r.uniform(0.1, 0.4) * np.exp(-tj / 0.5))
+    grains(r, x, 60, 0.05, 1.0, 800, 5000, 0.002, 0.008, 0.2, decay=0.3)
+    x += 0.12 * noise(r, n, 1000, 6000) * env(t, 0.05, 0.4)
+    save(name, space(r, x, 1.4, 0.35, 100, 6000), fin=0.0008, fout=0.3)
+
+    # a sandstone block sliding: stone grinding on stone (stick-slip through the block's dead
+    # resonances and a rough scrape), sand crunching under it, and the block settling with a knock
+    for i in range(1, 3):
+        name = "stone_grind_%d" % i
+        r = rng(name)
+        t = tv(dur(name))
+        x = np.zeros(len(t))
+        grind = creak(r, 1.0, lambda u: 26.0 + 26.0 * np.sin(np.pi * u) ** 0.8,
+                      [(r.uniform(100, 130), 1.0, 0.03), (r.uniform(240, 300), 0.7, 0.02),
+                       (r.uniform(520, 640), 0.45, 0.012), (r.uniform(1100, 1350), 0.25, 0.006)])
+        m = len(grind)
+        rough = noise(r, m, 200, 2500) * (0.4 + 0.6 * np.abs(noise(r, m, None, 30)))
+        place(x, 0.02, (grind + 0.4 * rough) * np.sin(np.pi * np.linspace(0, 1, m)) ** 0.5, 0.9)
+        grains(r, x, 40, 0.05, 1.0, 1500, 6000, 0.001, 0.004, 0.15)
+        place(x, 1.03, thud(tv(0.25), 140, 70, 0.03, 0.04) + 0.5 * click(r, 0.25, 500, 5000, 0.003), 0.6)
+        save(name, space(r, x, 1.0, 0.25, 150, 6000), fin=0.004, fout=0.12)
+
+
 # ===========================================================================
 # verification
 # ===========================================================================
@@ -1812,7 +2159,7 @@ def verify():
 
 GENERATORS = (gen_steps, gen_wall, gen_movement_loops, gen_lasers, gen_crusher_piston, gen_swings, gen_surfaces,
               gen_foundry, gen_reef, gen_orbital, gen_clockwork, gen_balance, gen_gardens, gen_ascent, gen_xeno,
-              gen_volcano)
+              gen_volcano, gen_glacier, gen_desert)
 
 
 def main():

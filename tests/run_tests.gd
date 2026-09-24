@@ -2903,7 +2903,8 @@ func test_zp_party_finish_bar() -> void:
 ## Every map's ambience (sound/soundscape.gd): its bed (and second layer) load as looping Ogg and
 ## play on the Ambience bus through the pause, every scheduled one-shot has clips and plays in 3D
 ## on the Ambience bus, and every second layer (the reef's deep, the xeno jungle's depths, the
-## volcano's crater, the Ascent's summit wind) takes over as the course runs out.
+## volcano's crater, the glacier's blizzard, the desert's sandstorm, the Ascent's summit wind) takes
+## over as the course runs out.
 func test_zs_soundscapes() -> void:
 	await new_world()
 	var cam := Camera3D.new()
@@ -2968,17 +2969,21 @@ const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_l
 	"flare_launch", "gravity_on", "gravity_off", "escape_tick", "escape_tock", "trolley_clunk",
 	"counterweight_thud", "billboard_on", "billboard_off", "billboard_glitch", "data_chirp", "data_zip",
 	"spore_boing", "snapjaw_snap", "snapjaw_open", "geyser_erupt", "leviathan_call",
-	"bomb_launch", "bomb_whistle", "bomb_impact", "basalt_sink", "crust_crack", "crust_break", "eruption_boom"]
+	"bomb_launch", "bomb_whistle", "bomb_impact", "basalt_sink", "crust_crack", "crust_break", "eruption_boom",
+	"icicle_crack", "icicle_fall", "icicle_shatter", "gust_whoosh", "ice_crack", "ice_break", "avalanche_rumble",
+	"snow_thump", "spike_trap", "spike_retract", "quicksand_sink", "mirage_shimmer", "boulder_impact", "stone_grind"]
 const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
 	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
 	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz",
-	"drift_hum", "lava_rise", "fumarole_loop", "lavafall_loop"]
+	"drift_hum", "lava_rise", "fumarole_loop", "lavafall_loop", "avalanche_roar", "sandfall_loop", "dustdevil_loop",
+	"boulder_roll"]
 
 
 func test_z_world_sounds() -> void:
 	# every map has its own footsteps and landings; anything else falls back to the plain ones
 	var old_theme: String = Sfx.get("_theme")
-	for th: String in ["gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "ascent"]:
+	for th: String in ["gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert",
+			"ascent"]:
 		Sfx.set_theme(th)
 		check(Sfx.themed("step") == "step_" + th and Sfx.themed("land") == "land_" + th,
 			"%s has its own footsteps and landings" % th)

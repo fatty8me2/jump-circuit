@@ -41,7 +41,7 @@ BED_QUALITY = 0.85    # libsndfile Vorbis compression level (0 best .. 1 smalles
 SHOT_QUALITY = 0.55
 SHOT_PEAK_DB = -3.0
 BED_CEIL = 10.0 ** (-4.0 / 20.0)   # soft-knee ceiling for beds (-4 dBFS)
-SIZE_BUDGET = 13.5e6
+SIZE_BUDGET = 18.0e6
 place = ga.place
 
 
@@ -1397,6 +1397,151 @@ def bed_volcano_crater():
     volcano_bed("amb_volcano_crater", crater=True)
 
 
+def ice_pew(r, dur, f_hi, f_lo, sr=SR):
+    """The 'pew' of ice under strain.  A crack sends flexural waves through the sheet, and ice is
+    dispersive (their speed grows with the square root of frequency), so the highs arrive first
+    and a listener hears a laser-like chirp sweeping down: f = f_hi / (1 + t / t0)^2."""
+    t = tv(dur, sr)
+    t0 = dur / (np.sqrt(f_hi / f_lo) - 1.0)
+    f = f_hi / (1.0 + t / t0) ** 2
+    return tone(f, ((1, 1.0), (2, 0.2)), sr) * ga.ad_env(t, 0.0015, dur * 0.4) * rcos_env(len(t), 0.0, 0.03, sr)
+
+
+def glacier_bed(name, storm):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    # the blizzard: wind howling over the pass (a whistling resonance that rises with the gusts),
+    # and a second, lower moan round the fortress walls on its own gust timing
+    gust = gusts(r, n, 0.1, bias=0.5 if storm else -0.1) * (0.7 + 0.3 * cbeat(n, 3, r.uniform(0, TAU)))
+    wind_layer(mix, "wind", r, gust, 110.0, 3200.0 if storm else 2600.0, howl=(420.0, 1050.0 if storm else 980.0),
+               howl_q=7.0, howl_gain=0.9 if storm else 0.45, body_gain=1.0 if storm else 0.7,
+               howl_pow=1.2 if storm else 1.5)
+    wind_layer(mix, "wind", r, np.roll(gust, int(7.3 * BSR)), 200.0, 900.0, howl=(230.0, 410.0), howl_q=6.0,
+               howl_gain=0.4, body_gain=0.2, howl_pow=2.0)
+    # blowing snow: a fine hiss of crystals driven by the gusts, and grains ticking off the ice
+    for ch in range(2):
+        g = np.roll(gust, int(ch * 0.4 * BSR))
+        hiss = cband(r.standard_normal(n), 3000.0, 8000.0, 2) * g ** 1.6
+        ticks = (r.random(n) < (1500.0 if storm else 700.0) * g ** 2 / BSR) * r.lognormal(-0.5, 0.6, n)
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(hiss) * 0.8 + rmsn(cband(ticks, 4000.0, 9000.0, 2)) * 0.35
+        mix.add_loop("snow", chans)
+    # the ice: the glacier and the fortress walls creaking and groaning as they shift, and the ice
+    # singing far out (dispersive 'pew' chirps from strain in the sheet)
+    for tb in spaced_times(r, T, 5.0, 11.0):
+        d = r.uniform(1.0, 2.5)
+        cr = stick_slip(r, d, lambda u: 6.0 + 22.0 * np.sin(np.pi * u) ** 1.4,
+                        ((r.uniform(70, 110), 0.05, 1.0), (r.uniform(180, 260), 0.035, 0.7),
+                         (r.uniform(420, 560), 0.02, 0.4), (r.uniform(900, 1200), 0.01, 0.2)),
+                        bend=r.uniform(0.85, 1.15), sr=BSR)
+        cr = unit(cr) * rcos_env(len(cr), 0.1, 0.3, BSR)
+        mix.add("ice", tb, lp(cr, 1800.0, 2, BSR), gain=r.uniform(0.3, 1.0), pan=r.uniform(-0.8, 0.8), rev=0.6)
+    for tb in r.uniform(0, T, 14):
+        s = ice_pew(r, r.uniform(0.25, 0.6), r.uniform(3000.0, 6000.0), r.uniform(250.0, 500.0), BSR)
+        mix.add("ice", tb, lp(s, 4000.0, 2, BSR), gain=r.uniform(0.1, 0.3), pan=r.uniform(-0.9, 0.9), rev=0.8)
+    # distant glacier cracks: a sharp report that booms and rolls off the peaks
+    for tb in (spaced_times(r, T, 18.0, 30.0) if storm else spaced_times(r, T, 12.0, 22.0)):
+        tt = tv(2.5, BSR)
+        m = len(tt)
+        s = noise_hit(r, 2.5, 300.0, 5000.0, 0.01, BSR)
+        s += 0.8 * tone(ga.sweep(120.0, 50.0, tt, 0.3), ((1, 1.0), (2, 0.5)), BSR) * ga.ad_env(tt, 0.003, 0.4)
+        s += 0.5 * unit(bp(r.standard_normal(m), 60.0, 400.0, 2, BSR)) * ga.ad_env(tt, 0.05, 0.8)
+        mix.add("cracks", tb, lp(s, 1500.0, 2, BSR) * rcos_env(m, 0.0, 0.4, BSR), gain=r.uniform(0.5, 1.0),
+                pan=r.uniform(-0.7, 0.7), rev=1.0)
+    # a crystalline shimmer: ice crystals tinkling in the air, very faint, more in the gusts
+    for tb in density_times(r, T, 60, gust + 0.1):
+        f = r.uniform(3500.0, 7500.0)
+        s = modal([f, f * 2.76], [1.0, 0.3], [r.uniform(0.3, 0.8), 0.2], 1.0, BSR, r=r)
+        mix.add("shimmer", tb, s, gain=r.uniform(0.2, 1.0), pan=r.uniform(-0.9, 0.9), rev=0.7)
+    if storm:
+        levels = {"wind": 0.0, "snow": -4.0, "ice": -15.0, "cracks": -17.0, "shimmer": -24.0}
+    else:
+        levels = {"wind": 0.0, "snow": -6.0, "ice": -11.0, "cracks": -14.0, "shimmer": -20.0}
+    mix.render(BEDS[name][1], levels, t60=2.2, damp=2500.0, wet=0.35, predelay=0.03, hp_hz=40.0, lp_hz=8500.0)
+
+
+@bed("amb_glacier", -25.0)
+def bed_glacier():
+    glacier_bed("amb_glacier", storm=False)
+
+
+@bed("amb_glacier_storm", -24.0)
+def bed_glacier_storm():
+    glacier_bed("amb_glacier_storm", storm=True)
+
+
+def desert_bed(name, storm):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    # hot, dry wind over the dunes: a soft body with only a low, breathy moan
+    gust = gusts(r, n, 0.08, bias=0.25 if storm else -0.3) * (0.7 + 0.3 * cbeat(n, 2, r.uniform(0, TAU)))
+    wind_layer(mix, "wind", r, gust, 120.0, 2000.0, howl=(260.0, 520.0), howl_q=4.0,
+               howl_gain=0.4 if storm else 0.25, body_gain=0.8, howl_pow=2.0)
+    # sand skipping over the dunes (saltation): a dense granular hiss that rises steeply with the
+    # gusts, over a softer ripple
+    for ch in range(2):
+        g = np.roll(gust, int(ch * 0.5 * BSR))
+        rate = (2500.0 if storm else 1200.0) * g ** 2.2
+        gr = (r.random(n) < rate / BSR) * r.lognormal(-0.5, 0.6, n) * np.sign(r.standard_normal(n))
+        ripple = cband(r.standard_normal(n), 600.0, 2500.0, 2) * g ** 2
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(cband(gr, 1800.0, 8500.0, 2)) + rmsn(ripple) * 0.3
+        mix.add_loop("sand", chans)
+    # the sandstorm: a far roar that surges slowly (nearer and brighter in the storm layer)
+    surge = 0.6 + 0.4 * gusts(r, n, 0.05, bias=0.3 if storm else -0.3)
+    for ch in range(2):
+        roar = cband(pink(r, n, BSR, slope=-0.6), 70.0, 1800.0 if storm else 900.0, 2) * np.roll(surge, int(ch * 0.6 * BSR))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(roar)
+        mix.add_loop("storm", chans, rev=0.2)
+    # the temple: its halls resonate faintly in the wind (noise through fixed hall modes), and now
+    # and then a far knock or a trickle of sand echoes inside
+    for ch in range(2):
+        def gain(tt, f):
+            return (resonance(118.0, f, 4.0) + 0.7 * resonance(191.0, f, 5.0) + 0.5 * resonance(287.0, f, 6.0) +
+                    0.3 * resonance(412.0, f, 7.0))
+        hollow = stft_shape(r.standard_normal(n), gain) * (0.5 + 0.5 * np.roll(gust, int(3.0 * BSR)))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(cband(hollow, 70.0, 800.0, 2)) * 0.5
+        mix.add_loop("temple", chans, rev=0.8)
+    for tb in spaced_times(r, T, 8.0, 15.0):
+        if r.random() < 0.5:
+            f0 = r.uniform(180.0, 400.0)
+            s = modal([f0, f0 * 1.7, f0 * 2.6], [1.0, 0.5, 0.3], [0.03, 0.02, 0.012], 0.3, BSR, r=r)
+            s = unit(s) + 0.5 * noise_hit(r, 0.3, 300.0, 3000.0, 0.004, BSR)
+        else:
+            d = r.uniform(0.8, 1.6)
+            m = int(d * BSR)
+            s = bp((r.random(m) < 1500.0 / BSR) * r.lognormal(0.0, 0.5, m), 1500.0, 7000.0, 2, BSR) * \
+                np.sin(np.pi * np.arange(m) / m) ** 2
+        mix.add("temple", tb, lp(s, 3000.0, 2, BSR), gain=r.uniform(0.3, 0.7), pan=r.uniform(-0.8, 0.8), rev=1.0)
+    levels = {"wind": 0.0, "sand": -3.0, "storm": -2.0, "temple": -18.0}
+    if not storm:
+        # cicadas in the afternoon heat: a few far buzzing drones, each singing in stretches
+        for _ in range(3):
+            f = r.uniform(4200.0, 6500.0)
+            pulse = np.maximum(csine(r.uniform(120.0, 200.0), n), 0.0) ** 4
+            on = cbeat(n, int(r.integers(2, 5)), r.uniform(0, TAU)) ** 6
+            buzz = cband(r.standard_normal(n), f * 0.85, f * 1.15, 3) * pulse * on
+            mix.add_loop("cicadas", st(rmsn(buzz), r.uniform(-0.9, 0.9)), rev=0.3)
+        levels = {"wind": 0.0, "sand": -5.0, "storm": -8.0, "temple": -14.0, "cicadas": -19.0}
+    mix.render(BEDS[name][1], levels, t60=1.6, damp=3000.0, wet=0.35, predelay=0.02, hp_hz=40.0, lp_hz=8000.0)
+
+
+@bed("amb_desert", -26.0)
+def bed_desert():
+    desert_bed("amb_desert", storm=False)
+
+
+@bed("amb_desert_storm", -25.0)
+def bed_desert_storm():
+    desert_bed("amb_desert_storm", storm=True)
+
+
 # ==========================================================================
 # the one-shots
 # ==========================================================================
@@ -2408,6 +2553,312 @@ def shot_volcano_crack(r, i):
         hs = tv(0.8)
         place(x, t0, unit(bp(r.standard_normal(len(hs)), 1800.0, 7000.0)) * ga.ad_env(hs, 0.05, 0.25), SR, 0.15)
     return trim(far(x, r, 6000.0, 1.2, 0.3, damp=2500.0))
+
+
+# ---- glacier ---------------------------------------------------------------
+@shots("amb_glacier_crack", 3)
+def shot_glacier_crack(r, i):
+    x = zeros(4.0)
+    if i == 0:
+        # a sharp crack out on the ice, its 'pew' running away through the sheet, and a groan
+        place(x, 0.02, noise_hit(r, 0.3, 400.0, 9000.0, 0.006), SR)
+        f0 = r.uniform(1500.0, 2200.0)
+        place(x, 0.02, unit(modal([f0, f0 * 1.62, f0 * 2.4], [1.0, 0.6, 0.3], [0.03, 0.02, 0.012], 0.3, r=r)), SR, 0.5)
+        place(x, 0.06, ice_pew(r, 0.45, r.uniform(4000.0, 6000.0), 350.0), SR, 0.5)
+        cr = stick_slip(r, 0.9, lambda u: 10.0 + 18.0 * np.sin(np.pi * u), ((90.0, 0.05, 1.0), (230.0, 0.03, 0.6),
+                                                                          (520.0, 0.018, 0.3)), bend=0.9)
+        place(x, 0.25, unit(cr) * rcos_env(len(cr), 0.1, 0.3), SR, 0.25)
+    elif i == 1:
+        # the ice singing: a run of pews from strain far across the sheet
+        t0 = 0.02
+        for _ in range(int(r.integers(4, 8))):
+            place(x, t0, ice_pew(r, r.uniform(0.25, 0.6), r.uniform(3000.0, 6500.0), r.uniform(250.0, 500.0)), SR,
+                  r.uniform(0.4, 1.0))
+            t0 += r.uniform(0.15, 0.5)
+            if t0 > 3.0:
+                break
+    else:
+        # a big, deep crack: the report, a boom and a roll, with pews
+        tt = tv(3.5)
+        place(x, 0.02, noise_hit(r, 0.5, 250.0, 8000.0, 0.012), SR)
+        place(x, 0.02, 0.9 * tone(ga.sweep(140.0, 45.0, tt, 0.4), ((1, 1.0), (2, 0.4))) * ga.ad_env(tt, 0.003, 0.5), SR)
+        place(x, 0.02, 0.6 * unit(bp(r.standard_normal(len(tt)), 60.0, 800.0)) * ga.ad_env(tt, 0.05, 1.0), SR)
+        for _ in range(3):
+            place(x, r.uniform(0.05, 0.4), ice_pew(r, r.uniform(0.3, 0.5), r.uniform(3000.0, 5000.0), 300.0), SR, 0.35)
+    return trim(far(hp(x, 40.0), r, 6000.0, 2.4, 0.4, damp=2000.0))
+
+
+@shots("amb_glacier_avalanche", 2)
+def shot_glacier_avalanche(r, i):
+    # an avalanche far off across the valley: a roar of tumbling snow that swells and dies away,
+    # blocks thudding inside it, the hiss of the powder cloud; the second starts with the crack of
+    # the slab letting go
+    dur = 6.0
+    n = int(dur * SR)
+    e = pts_env([(0, 0), (0.15, 0.5), (0.45, 1.0), (0.75, 0.6), (1, 0)], n) ** 1.2
+    roar = bp(pink(r, n, SR, slope=-0.8), 45.0, 900.0) * e * (0.7 + 0.3 * np.abs(smooth(r, n, 6.0)))
+    hiss = bp(r.standard_normal(n), 800.0, 4000.0) * e ** 2
+    thumps = np.zeros(n)
+    tt = tv(0.4)
+    for tb in r.uniform(0.3, dur - 0.5, int(r.integers(20, 40))):
+        th = tone(ga.sweep(r.uniform(80.0, 110.0), 45.0, tt, 0.1)) * ga.ad_env(tt, 0.004, 0.08)
+        th += 0.6 * noise_hit(r, 0.4, 80.0, 500.0, 0.05)
+        place(thumps, tb, th, SR, e[int(tb * SR)] * r.uniform(0.4, 1.0))
+    x = unit(roar) + 0.15 * unit(hiss) + 0.4 * unit(thumps)
+    if i == 1:
+        place(x, 0.0, noise_hit(r, 0.4, 300.0, 6000.0, 0.01), SR, 0.8)
+    return trim(far(hp(x, 35.0), r, 1500.0, 3.0, 0.5, damp=900.0, predelay=0.08))
+
+
+@shots("amb_glacier_gust", 3)
+def shot_glacier_gust(r, i):
+    # a gust howling round the walls: the wind swelling and dying away, a howl riding it (a narrow
+    # resonance whose pitch rises with the gust, and its overtone), and snow hissing in it
+    dur = r.uniform(2.6, 3.6)
+    n = int(dur * SR)
+    e = pts_env([(0, 0), (r.uniform(0.3, 0.5), 1.0), (1, 0)], n) ** 1.5 * (0.85 + 0.15 * smooth(r, n, 3.0))
+    body = bp(pink(r, n, SR), 150.0, 3000.0) * e
+    fc = r.uniform(380.0, 520.0) * (1.0 + 0.8 * e)
+    howl = ga.svf_bandpass(r.standard_normal(n), fc, 12.0, SR)
+    howl2 = ga.svf_bandpass(r.standard_normal(n), fc * 1.52, 14.0, SR)
+    snow = bp(r.standard_normal(n), 3500.0, 9000.0) * e ** 1.5
+    x = 0.7 * unit(body) + 0.8 * unit(howl) * e ** 1.3 + 0.25 * unit(howl2) * e ** 1.5 + 0.2 * unit(snow)
+    return trim(far(x, r, 8000.0, 1.2, 0.2, damp=3000.0))
+
+
+def ice_rod(r, f, dur, tau=0.6):
+    """A thin ice rod (an icicle) struck: free-bar partials 1 : 2.76 : 5.40, each a detuned pair;
+    ice rings shorter than glass."""
+    t = tv(dur)
+    out = np.zeros(len(t))
+    for q, a, ts in ((1.0, 1.0, 1.0), (2.756, 0.5, 0.5), (5.404, 0.25, 0.25)):
+        if f * q > 16000.0:
+            continue
+        beat = r.uniform(0.5, 3.0)
+        for d in (-beat / 2, beat / 2):
+            out += 0.5 * a * np.sin(TAU * (f * q + d) * t + r.uniform(0, TAU)) * np.exp(-t / (tau * ts))
+    k = int(0.002 * SR)
+    out[:k] += 0.15 * r.standard_normal(k) * np.linspace(1.0, 0.0, k)
+    return out * np.minimum(t / 0.0005, 1.0) * rcos_env(len(t), 0.0, min(0.3 * dur, 0.3))
+
+
+@shots("amb_glacier_icicle", 3)
+def shot_glacier_icicle(r, i):
+    # icicles knocking together in the wind; in the last, a small one snaps and tinkles down
+    x = zeros(3.0)
+    rods = [r.uniform(1800.0, 3200.0) for _ in range(5)]
+    for _ in range(int(r.integers(5, 12))):
+        t0 = r.beta(1.5, 3.0) * 2.0
+        place(x, t0, ice_rod(r, rods[int(r.integers(0, 5))], 3.0 - t0, r.uniform(0.4, 0.9)), SR, r.uniform(0.3, 1.0) ** 1.5)
+    if i == 2:
+        t0, gap, g = 0.9, 0.22, 0.8
+        place(x, t0 - 0.02, noise_hit(r, 0.05, 2500.0, 11000.0, 0.001), SR, 0.6)
+        while gap > 0.02 and t0 < 2.6:
+            place(x, t0, ice_rod(r, r.uniform(3500.0, 6000.0), 0.4, 0.15), SR, g)
+            t0 += gap
+            gap *= 0.62
+            g *= 0.7
+    return trim(reverb(x, r, 1.2, 5000.0, 0.25))
+
+
+@shots("amb_glacier_howl", 2)
+def shot_glacier_howl(r, i):
+    # a wolf-like howl far down the pass: a smooth voice (few harmonics through an 'oo' formant)
+    # rising to a long held note that wavers and falls away; in the second, another answers
+    x = zeros(5.0)
+    k = r.uniform(0.9, 1.1)
+    if i == 0:
+        v = xeno_voice(r, [(0, 330 * k), (0.12, 520 * k), (0.25, 560 * k), (0.8, 540 * k), (1, 380 * k)], 3.2,
+                       [(0, 650), (1, 600)], [(0, 1100), (1, 950)], vib=(5.0, 0.008), top=8)
+        place(x, 0.05, v, SR)
+    else:
+        v = xeno_voice(r, [(0, 380 * k), (0.15, 640 * k), (0.7, 620 * k), (1, 470 * k)], 2.6,
+                       [(0, 700), (1, 620)], [(0, 1200), (1, 1000)], vib=(5.5, 0.01), top=8)
+        place(x, 0.05, v, SR)
+        v2 = xeno_voice(r, [(0, 450 * k), (0.2, 760 * k), (0.75, 740 * k), (1, 560 * k)], 2.2,
+                        [(0, 750), (1, 650)], [(0, 1300), (1, 1050)], vib=(6.0, 0.012), top=8)
+        place(x, 1.4, v2, SR, 0.6)
+    breath = bp(r.standard_normal(len(x)), 500.0, 2500.0) * np.maximum(lp(np.abs(x), 20.0), 0.0)
+    x = unit(x) + 0.04 * unit(breath)
+    return trim(far(x, r, 3500.0, 2.8, 0.5, damp=1500.0, predelay=0.05))
+
+
+@shots("amb_glacier_snowslide", 2)
+def shot_glacier_snowslide(r, i):
+    # a slab of snow sliding off a ledge: the soft 'whumpf' as it lets go, a hissing slide that
+    # swells and settles, and lumps thudding down
+    dur = r.uniform(2.0, 2.8)
+    x = zeros(dur + 0.5)
+    n = len(x)
+    tt = tv(0.5)
+    place(x, 0.02, tone(ga.sweep(110.0, 55.0, tt, 0.15)) * ga.ad_env(tt, 0.004, 0.12), SR, 0.8)
+    place(x, 0.02, noise_hit(r, 0.5, 80.0, 600.0, 0.1), SR, 0.6)
+    slide = bp(r.standard_normal(n), 250.0, 3500.0) * pts_env([(0, 0), (0.1, 1), (0.6, 0.7), (1, 0)], n) * \
+        (0.7 + 0.3 * np.abs(smooth(r, n, 15.0)))
+    x += 0.6 * unit(slide)
+    lt = tv(0.3)
+    for _ in range(int(r.integers(6, 13))):
+        lump = tone(ga.sweep(150.0, 70.0, lt, 0.05)) * ga.ad_env(lt, 0.002, 0.04) + 0.6 * noise_hit(r, 0.3, 100.0, 900.0, 0.03)
+        place(x, r.uniform(0.3, dur), lump, SR, r.uniform(0.2, 0.6))
+    return trim(far(x, r, 5000.0, 1.6, 0.3, damp=2500.0))
+
+
+# ---- desert ----------------------------------------------------------------
+def hawk_scream(r, pts, dur, rasp=0.5):
+    """A raptor's scream: a harmonic voice gliding down (the red-tail's 'keee-eeer') with a breathy
+    rasp (fast amplitude roughness and noise that follows the pitch)."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    f = contour(pts, n, SR, 0.01) * (1.0 + 0.01 * smooth(r, n, 60.0))
+    ph = TAU * np.cumsum(f) / SR
+    s = np.zeros(n)
+    for k in range(1, 7):
+        s += np.sin(k * ph) / k ** 0.8 * (k * f < 0.45 * SR)
+    s = unit(s) * (1.0 + rasp * 0.5 * np.sin(TAU * r.uniform(70.0, 110.0) * t))
+    s += rasp * 0.7 * unit(ga.svf_bandpass(r.standard_normal(n), f, 4.0, SR))
+    return s * pts_env([(0, 0), (0.08, 1), (0.7, 0.8), (1, 0)], n) * rcos_env(n, 0.01, 0.03)
+
+
+@shots("amb_desert_hawk", 3)
+def shot_desert_hawk(r, i):
+    x = zeros(3.4)
+    k = r.uniform(0.93, 1.07)
+    if i == 0:
+        place(x, 0.02, hawk_scream(r, [(0, 2800 * k), (0.15, 3200 * k), (1, 1700 * k)], 1.4, 0.6), SR)
+    elif i == 1:
+        place(x, 0.02, hawk_scream(r, [(0, 3000 * k), (1, 2000 * k)], 0.6, 0.5), SR)
+        place(x, r.uniform(0.8, 1.1), hawk_scream(r, [(0, 3100 * k), (1, 1900 * k)], 0.7, 0.55), SR, 0.8)
+    else:
+        # a kite's whistle: a clean 'wee-ooo', repeated
+        t0 = 0.02
+        for _ in range(int(r.integers(2, 4))):
+            place(x, t0, hawk_scream(r, [(0, 1800 * k), (0.3, 2600 * k), (1, 1500 * k)], 0.8, 0.1), SR)
+            t0 += r.uniform(0.85, 1.0)
+    return trim(far(hp(x, 700.0), r, 8000.0, 1.2, 0.2, damp=4000.0))
+
+
+@shots("amb_desert_sand", 3)
+def shot_desert_sand(r, i):
+    # sand pouring from a crack in the temple: a dry granular hiss, a softer pouring body and the
+    # patter of it landing, starting, running and trickling out, in the hall
+    dur = r.uniform(1.8, 3.0)
+    x = zeros(dur + 0.3)
+    n = len(x)
+    e = pts_env([(0, 0), (0.08, 1), (0.7, 0.8), (1, 0)], n)
+    k = np.exp(-np.arange(24) / 5.0)
+    gr = np.convolve((r.random(n) < 3000.0 * e / SR) * r.lognormal(0.0, 0.5, n), k)[:n]
+    body = bp(r.standard_normal(n), 300.0, 2000.0) * e * (0.8 + 0.2 * smooth(r, n, 10.0))
+    pat = np.convolve((r.random(n) < 60.0 * e / SR) * r.lognormal(0.0, 0.5, n), np.exp(-np.arange(200) / 40.0))[:n]
+    x = unit(bp(gr, 1500.0, 8000.0)) + 0.4 * unit(body) + 0.3 * unit(bp(pat, 150.0, 800.0))
+    return trim(far(x, r, 7000.0, 1.6, 0.35, damp=2500.0))
+
+
+@shots("amb_desert_grind", 2)
+def shot_desert_grind(r, i):
+    # a stone block sliding somewhere in the temple: stone grinding on stone (stick-slip through the
+    # block's dead resonances and a rough scrape), ending with a heavy clunk, in a big hall
+    dur = r.uniform(1.4, 2.2)
+    cr = stick_slip(r, dur, lambda u: 25.0 + 30.0 * np.sin(np.pi * u) ** 0.8,
+                    ((r.uniform(90, 130), 0.03, 1.0), (r.uniform(230, 300), 0.02, 0.7), (r.uniform(520, 650), 0.012, 0.45),
+                     (r.uniform(1100, 1400), 0.006, 0.25)), bend=r.uniform(0.95, 1.05))
+    n = len(cr)
+    rough = bp(r.standard_normal(n), 200.0, 3000.0) * (0.4 + 0.6 * np.abs(smooth(r, n, 30.0)))
+    x = np.concatenate([(unit(cr) + 0.4 * unit(rough)) * rcos_env(n, 0.15, 0.1), np.zeros(int(0.6 * SR))])
+    tt = tv(0.4)
+    clunk = tone(ga.sweep(150.0, 70.0, tt, 0.05)) * ga.ad_env(tt, 0.002, 0.06) + 0.5 * noise_hit(r, 0.4, 200.0, 3000.0, 0.01)
+    place(x, dur - 0.05, clunk, SR, 0.9)
+    return trim(far(x, r, 5000.0, 2.4, 0.45, damp=2000.0))
+
+
+@shots("amb_desert_gong", 2)
+def shot_desert_gong(r, i):
+    x = zeros(5.5)
+    if i == 0:
+        # a ceremonial gong: inharmonic partials whose upper modes bloom a moment after the strike,
+        # the fundamental gliding up a little as it rings (gongs do), and the mallet's thump
+        f0 = r.uniform(110.0, 140.0)
+        t = tv(5.4)
+        g = np.zeros(len(t))
+        for q, a, tau, bloom in ((1.0, 1.0, 3.5, 0.0), (1.52, 0.6, 2.8, 0.1), (2.03, 0.5, 2.4, 0.2), (2.61, 0.45, 2.0, 0.3),
+                                 (3.15, 0.35, 1.6, 0.35), (3.72, 0.3, 1.3, 0.4), (4.44, 0.22, 1.0, 0.45), (5.2, 0.15, 0.8, 0.5)):
+            f = f0 * q * (1.0 + 0.015 * (1.0 - np.exp(-t / 0.6)))
+            g += a * np.sin(TAU * np.cumsum(f) / SR + r.uniform(0, TAU)) * np.exp(-t / tau) * \
+                (1.0 - np.exp(-t / bloom) if bloom else 1.0)
+        g *= np.minimum(t / 0.003, 1.0) * rcos_env(len(t), 0.0, 0.5)
+        tt = tv(0.3)
+        place(x, 0.02, unit(g), SR)
+        place(x, 0.02, tone(ga.sweep(90.0, 60.0, tt, 0.05)) * ga.ad_env(tt, 0.003, 0.05), SR, 0.4)
+    else:
+        # ceremonial drums: a big frame drum (membrane modes 1 : 1.59 : 2.14 : 2.30, the pitch
+        # dropping as the skin relaxes) in a slow pattern
+        f0 = r.uniform(70.0, 90.0)
+        t0 = 0.02
+        for j, gap in enumerate((0.9, 0.45, 0.9, 0.45, 0.45)):
+            tt = tv(1.2)
+            d = np.zeros(len(tt))
+            for q, a, tau in ((1.0, 1.0, 0.3), (1.59, 0.5, 0.2), (2.14, 0.35, 0.15), (2.30, 0.25, 0.12)):
+                d += a * tone(f0 * q * (1.0 + 0.08 * np.exp(-tt / 0.05))) * np.exp(-tt / tau)
+            d = unit(d) * np.minimum(tt / 0.002, 1.0) + 0.3 * noise_hit(r, 1.2, 200.0, 2000.0, 0.01)
+            place(x, t0, d * rcos_env(len(tt), 0.0, 0.3), SR, (1.0, 0.7, 0.9, 0.6, 0.8)[j])
+            t0 += gap
+    return trim(far(hp(x, 40.0), r, 2500.0, 2.8, 0.5, damp=1200.0, predelay=0.06))
+
+
+@shots("amb_desert_scarab", 3)
+def shot_desert_scarab(r, i):
+    # scarabs: chitin clicks - bursts of fast stridulation (a rasp of tiny clicks), single clicks,
+    # and in the last a short wing buzz as one takes off
+    x = zeros(1.6)
+    t0 = 0.02
+    for _ in range(int(r.integers(2, 5))):
+        rate = r.uniform(150.0, 300.0)
+        f1, f2 = r.uniform(2000.0, 4000.0), r.uniform(5000.0, 7000.0)
+        for j in range(int(r.integers(8, 26))):
+            c = modal([f1 * r.uniform(0.97, 1.03), f2], [1.0, 0.5], [0.002, 0.001], 0.012, r=r)
+            place(x, t0 + j / rate, unit(c) + 0.3 * noise_hit(r, 0.012, 2000.0, 9000.0, 0.0005), SR, r.uniform(0.5, 1.0))
+        t0 += r.uniform(0.2, 0.4)
+        if t0 > 1.2:
+            break
+    if i == 2:
+        tt = tv(0.4)
+        f = r.uniform(150.0, 190.0) * (1.0 + 0.05 * np.sin(TAU * 7.0 * tt))
+        buzz = tone(f, [(k, 1.0 / k) for k in range(1, 16)]) * np.sin(np.pi * tt / 0.4) ** 2
+        place(x, min(t0, 1.1), lp(buzz, 3000.0), SR, 0.5)
+    return trim(far(x, r, 9000.0, 0.6, 0.15, damp=4000.0))
+
+
+@shots("amb_desert_torch", 2)
+def shot_desert_torch(r, i):
+    # a torch on the wall: the flame's soft fluttering roar and its crackle - snaps and small pops
+    dur = r.uniform(2.2, 3.0)
+    n = int(dur * SR)
+    roar = bp(pink(r, n, SR, slope=-0.7), 80.0, 1200.0) * (0.6 + 0.4 * np.abs(smooth(r, n, 8.0)))
+    x = 0.5 * unit(roar)
+    for _ in range(int(r.integers(30, 60))):
+        if r.random() < 0.7:
+            place(x, r.uniform(0.0, dur - 0.05), noise_hit(r, 0.02, 1500.0, 9000.0, r.uniform(0.0008, 0.002)), SR,
+                  r.uniform(0.2, 1.0) ** 2)
+        else:
+            place(x, r.uniform(0.0, dur - 0.05), noise_hit(r, 0.04, 400.0, 2000.0, 0.004), SR, r.uniform(0.2, 0.6))
+    return trim(far(x * rcos_env(n, 0.3, 0.5), r, 9000.0, 1.2, 0.25, damp=3500.0))
+
+
+@shots("amb_desert_pebbles", 3)
+def shot_desert_pebbles(r, i):
+    # a few pebbles falling and bouncing on stone (each bounce sooner and softer), with a trickle of sand
+    x = zeros(2.0)
+    for _ in range(int(r.integers(2, 6))):
+        t0, gap, g = r.uniform(0.0, 0.5), r.uniform(0.2, 0.35), r.uniform(0.6, 1.0)
+        size = r.uniform(0.15, 0.4)
+        while gap > 0.02 and t0 < 1.8:
+            place(x, t0, rock_hit(r, size, 0.1), SR, g)
+            t0 += gap
+            gap *= 0.65
+            g *= 0.6
+    n = len(x)
+    tr = np.convolve((r.random(n) < 400.0 * np.exp(-np.arange(n) / (0.8 * SR)) / SR) * 1.0, np.exp(-np.arange(20) / 4.0))[:n]
+    x = unit(x) + 0.15 * unit(bp(tr, 2000.0, 8000.0) + 1e-9)
+    return trim(far(x, r, 8000.0, 1.8, 0.35, damp=3000.0))
 
 
 # ==========================================================================

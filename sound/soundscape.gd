@@ -2,8 +2,9 @@ class_name Soundscape
 extends Node
 ## A map's ambient soundscape (docs/AUDIO_AMBIENCE.md): a looping bed on the "Ambience" bus,
 ## optionally crossfading into a second bed as the course goes on (Coral Depths darkens into
-## the deep, Xeno Wilds grows wilder, Cinder Peak roars nearer the crater, the Final Ascent's
-## wind picks up near the summit), plus one-shots - birds, gulls,
+## the deep, Xeno Wilds grows wilder, Cinder Peak roars nearer the crater, the blizzard over
+## Frostbite Pass and the sandstorm over Scarab Sands close in, the Final Ascent's wind picks up
+## near the summit), plus one-shots - birds, gulls,
 ## far-off clanks, whale song - scheduled at random and placed in 3D around the listener.
 ## Clips come from tools/gen_ambience.py. The beds keep playing while the game is paused (so
 ## the pause muffle on the Ambience bus is heard); the one-shot schedule pauses with the tree.
@@ -171,6 +172,45 @@ const THEMES: Dictionary = {
 				"dist": Vector2(150.0, 300.0), "height": Vector2(80.0, 200.0), "chance": Vector2(0.6, 1.0)},
 			{"clip": "amb_volcano_boom", "every": Vector2(25.0, 55.0), "db": Vector2(-16.0, -10.0), "pitch": 0.04,
 				"dist": Vector2(200.0, 400.0), "height": Vector2(50.0, 150.0), "chance": Vector2(0.5, 1.0)},
+		],
+	},
+	"glacier": {
+		"bed": "amb_glacier", "bed_db": 0.0,
+		"layer": "amb_glacier_storm", "from": 0.25, "to": 0.9,
+		"events": [
+			{"clip": "amb_glacier_gust", "every": Vector2(6.0, 14.0), "db": Vector2(-18.0, -11.0), "pitch": 0.08,
+				"dist": Vector2(10.0, 30.0), "height": Vector2(0.0, 15.0), "travel": 20.0},
+			{"clip": "amb_glacier_icicle", "every": Vector2(9.0, 20.0), "db": Vector2(-22.0, -15.0), "pitch": 0.05,
+				"dist": Vector2(5.0, 15.0), "height": Vector2(2.0, 8.0)},
+			{"clip": "amb_glacier_crack", "every": Vector2(10.0, 24.0), "db": Vector2(-18.0, -11.0), "pitch": 0.08,
+				"dist": Vector2(20.0, 60.0), "height": Vector2(-20.0, 0.0)},
+			{"clip": "amb_glacier_snowslide", "every": Vector2(18.0, 40.0), "db": Vector2(-20.0, -13.0), "pitch": 0.08,
+				"dist": Vector2(15.0, 40.0), "height": Vector2(0.0, 20.0)},
+			{"clip": "amb_glacier_howl", "every": Vector2(40.0, 90.0), "db": Vector2(-18.0, -12.0), "pitch": 0.05,
+				"dist": Vector2(100.0, 200.0), "height": Vector2(-10.0, 40.0), "answer": 0.4, "chance": Vector2(0.8, 0.3)},
+			{"clip": "amb_glacier_avalanche", "every": Vector2(50.0, 110.0), "db": Vector2(-16.0, -10.0), "pitch": 0.05,
+				"dist": Vector2(200.0, 400.0), "height": Vector2(50.0, 200.0), "chance": Vector2(0.5, 1.0)},
+		],
+	},
+	"desert": {
+		"bed": "amb_desert", "bed_db": 0.0,
+		"layer": "amb_desert_storm", "from": 0.3, "to": 0.95,
+		"events": [
+			{"clip": "amb_desert_sand", "every": Vector2(6.0, 14.0), "db": Vector2(-20.0, -13.0), "pitch": 0.1,
+				"dist": Vector2(6.0, 20.0), "height": Vector2(-2.0, 8.0)},
+			{"clip": "amb_desert_scarab", "every": Vector2(7.0, 16.0), "db": Vector2(-22.0, -15.0), "pitch": 0.1,
+				"dist": Vector2(2.0, 8.0), "height": Vector2(-1.0, 1.0)},
+			{"clip": "amb_desert_torch", "every": Vector2(10.0, 22.0), "db": Vector2(-22.0, -16.0), "pitch": 0.08,
+				"dist": Vector2(3.0, 10.0), "height": Vector2(1.0, 4.0)},
+			{"clip": "amb_desert_pebbles", "every": Vector2(12.0, 26.0), "db": Vector2(-20.0, -14.0), "pitch": 0.1,
+				"dist": Vector2(6.0, 20.0), "height": Vector2(2.0, 12.0)},
+			{"clip": "amb_desert_hawk", "every": Vector2(14.0, 32.0), "db": Vector2(-16.0, -10.0), "pitch": 0.05,
+				"dist": Vector2(40.0, 90.0), "height": Vector2(25.0, 70.0), "travel": 25.0, "answer": 0.2,
+				"chance": Vector2(1.0, 0.3)},
+			{"clip": "amb_desert_grind", "every": Vector2(25.0, 55.0), "db": Vector2(-18.0, -12.0), "pitch": 0.06,
+				"dist": Vector2(15.0, 40.0), "height": Vector2(-5.0, 10.0)},
+			{"clip": "amb_desert_gong", "every": Vector2(45.0, 100.0), "db": Vector2(-18.0, -12.0), "pitch": 0.02,
+				"dist": Vector2(60.0, 120.0), "height": Vector2(-10.0, 20.0)},
 		],
 	},
 	"ascent": {
