@@ -35,6 +35,8 @@ var _cables: Array[MeshInstance3D] = []
 var _wheel_sparks: Array[GPUParticles3D] = []
 var _thud: Array[GPUParticles3D] = []
 var _was_at_stop: bool = true
+# sound (side effect only): chain over the pulleys while it moves, a thud at the end stops
+var _chain: AudioStreamPlayer3D
 
 
 class Car extends AnimatableBody3D:
@@ -113,6 +115,9 @@ func _ready() -> void:
 		add_child(c)
 		_cables.append(c)
 	_apply()
+	_chain = WorldAudio.loop("pulley_rattle", self, -40.0, 26.0, 5.0, false)
+	if _chain != null:
+		_chain.position = mid + Vector3(0, gantry_height * 0.6, 0)
 
 
 func _make_car(top: Vector3, perp: Vector3) -> Car:
@@ -180,6 +185,17 @@ func _apply() -> void:
 		_cables[i].transform = Transform3D(Basis(Vector3.RIGHT, Vector3.UP * d.length(), Vector3.BACK), (a + b) * 0.5)
 
 
+## Sound only: the chain running over the pulleys, and a cage bottoming out.
+func _sound(moving: bool, stopped_car: Car) -> void:
+	if stopped_car != null:
+		WorldAudio.at(self, "counterweight_thud", stopped_car.global_position, 0.7, 35.0)
+	if _chain != null:
+		var k: float = clampf(absf(_v) / rate, 0.0, 1.0)
+		WorldAudio.set_active(_chain, moving)
+		_chain.volume_db = -10.0 + linear_to_db(maxf(k, 0.05))
+		_chain.pitch_scale = 0.8 + 0.3 * k
+
+
 func _physics_process(dt: float) -> void:
 	var la: bool = car_a.is_loaded()
 	var lb: bool = car_b.is_loaded()
@@ -197,12 +213,15 @@ func _physics_process(dt: float) -> void:
 	if absf(_s) >= 1.0:
 		_v = 0.0
 	var at_stop: bool = absf(_s) > 0.985
+	var stopped: Car = null
 	if at_stop and not _was_at_stop:
 		var car: Car = car_a if _s > 0.0 else car_b
 		_thud[0 if _s > 0.0 else 1].global_position = car.global_position - Vector3(0, car_size.y * 0.5 + 0.8, 0)
 		_thud[0 if _s > 0.0 else 1].restart()
+		stopped = car
 	_was_at_stop = at_stop
 	var moving: bool = absf(_v) > 0.2
+	_sound(absf(_v) > 0.05, stopped)
 	for sp: GPUParticles3D in _wheel_sparks:
 		if sp.emitting != moving:
 			sp.emitting = moving

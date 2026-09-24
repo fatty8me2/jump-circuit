@@ -51,6 +51,14 @@ func _ready() -> void:
 	position = _origin + offset_at(Game.course_time)
 	reset_physics_interpolation()
 	add_to_group("course_clock")
+	if _hums():
+		# the thruster pods' soft hover hum (only heard close up)
+		WorldAudio.loop("motor_hum", self, -21.0, 11.0, 3.0)
+
+
+## Whether this mover hums (a clockwork pallet ticks instead).
+func _hums() -> bool:
+	return true
 
 
 ## restart_run() winds the clock back in place: take the new pose now, without a streak.

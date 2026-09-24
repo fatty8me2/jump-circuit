@@ -17,6 +17,8 @@ extends Node3D
 
 var gate: LaserGate
 var _origin: Vector3
+# sound (side effect only): the carriage's servo, louder the faster it runs (the beam hums itself)
+var _servo: AudioStreamPlayer3D
 
 
 func _ready() -> void:
@@ -52,6 +54,9 @@ func _ready() -> void:
 	position = _origin + offset_at(Game.course_time)
 	reset_physics_interpolation()
 	add_to_group("course_clock")
+	_servo = WorldAudio.loop("scanner_servo", self, -40.0, 24.0, 4.0)
+	if _servo != null:
+		_servo.position = Vector3(0, rail_height, 0)
 
 
 func snap_to_clock() -> void:
@@ -82,3 +87,8 @@ func beam_at(time: float) -> Vector3:
 
 func _physics_process(_dt: float) -> void:
 	position = _origin + offset_at(Game.course_time)
+	if _servo != null:
+		var t: float = Game.course_time
+		var k: float = clampf((offset_at(t + 0.05) - offset_at(t)).length() / 0.05 / 5.0, 0.0, 1.0)
+		_servo.volume_db = -14.0 + linear_to_db(maxf(k, 0.02))
+		_servo.pitch_scale = 0.8 + 0.35 * k

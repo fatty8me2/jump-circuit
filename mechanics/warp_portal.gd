@@ -51,6 +51,12 @@ func _ready() -> void:
 	_exit.global_transform = Transform3D(Basis(Vector3.UP, deg_to_rad(exit_yaw_deg)), exit_pos)
 	_swirl.append(_ring(_exit, EXIT_COLOR))
 	_build_fx()
+	# both rings hum while they wait (the exit a little higher, like its cooler colour)
+	for ring: Node3D in [self, _exit]:
+		var hum: AudioStreamPlayer3D = WorldAudio.loop("warp_hum", ring, -16.0, 14.0, 3.0)
+		if hum != null:
+			hum.position = Vector3(0, RING_RADIUS + 0.1, 0)
+			hum.pitch_scale = 1.0 if ring == self else 1.12
 
 
 func _build_fx() -> void:
@@ -204,6 +210,7 @@ func _physics_process(dt: float) -> void:
 			if lvl != null and (lvl as LevelBase).camera != null:
 				(lvl as LevelBase).camera.face(b * Vector3.FORWARD)
 			_cool = 0.5
-			Sfx.play_at("go", exit_pos, 0.05, 0.7)
+			# the warp is the runner's own experience: heard flat, not from where the exit is
+			Sfx.play("warp_whoosh", 0.03, 0.75)
 			_warp_fx()
 			return

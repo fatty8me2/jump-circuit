@@ -22,6 +22,9 @@ var _screen: Node3D
 var _dust: GPUParticles3D
 var _pop: GPUParticles3D
 var _was_on: bool = true
+# sound (side effect only): the neon buzz while it's lit, a glitch on every flicker, on / off zaps
+var _buzz: AudioStreamPlayer3D
+var _was_show: bool = true
 
 
 func _ready() -> void:
@@ -36,6 +39,7 @@ func _ready() -> void:
 	_was_on = is_on_at(Game.course_time)
 	_apply(Game.course_time)
 	add_to_group("course_clock")
+	_buzz = WorldAudio.loop("billboard_buzz", self, -17.0, 20.0, 4.0, _was_on)
 
 
 ## The screen: a translucent magenta-blue sheet on both faces with the ad slides on it.
@@ -192,6 +196,13 @@ func _apply(t: float) -> void:
 	if on != _was_on:
 		_was_on = on
 		_pop.restart()
+		if _buzz != null:
+			WorldAudio.at(self, "billboard_on" if on else "billboard_off", global_position, 0.6, 30.0)
+	if _buzz != null:
+		WorldAudio.set_active(_buzz, show)
+		if glitch and show != _was_show and not show and WorldAudio.once("billboard_glitch", 0.07):
+			WorldAudio.at(self, "billboard_glitch", global_position, 0.3, 25.0, 0.1)
+	_was_show = show
 
 
 func _physics_process(_dt: float) -> void:

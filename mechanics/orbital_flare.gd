@@ -34,12 +34,20 @@ var _embers: GPUParticles3D
 var _prev_rel: float = 0.0
 var _prev_p: Vector3 = Vector3.ZERO
 var _prev_sweep: int = -1
+# sound (side effect only): the gate's klaxon in time with its strobe, the launch, the front's roar
+var _roar: AudioStreamPlayer3D
+var _snd_strobe: bool = false
+var _snd_sweep: bool = false
 
 
 func _ready() -> void:
 	_build_visual()
 	add_to_group("course_clock")
 	snap_to_clock()
+	_snd_sweep = is_sweeping_at(Game.course_time)
+	_roar = WorldAudio.loop("flare_roar", _front, -3.0, 45.0, 8.0, _snd_sweep)
+	if _roar != null:
+		_roar.position = Vector3(0, height * 0.4, 0)
 
 
 func add_shelter(local_center: Vector3, size: Vector3) -> void:
@@ -132,6 +140,19 @@ func _apply(t: float) -> void:
 	if not is_equal_approx(_gate_mat.emission_energy_multiplier, glow):
 		_gate_mat.emission_energy_multiplier = glow
 	_gate_light.light_energy = glow * 0.9
+	if _roar != null:
+		_sound(s < sweep, until < warn and s >= sweep and fmod(until, 0.2) > 0.1)
+
+
+## Sound only: a klaxon beep on every strobe of the warning, the launch, the roaring front.
+func _sound(sweeping: bool, strobe: bool) -> void:
+	if strobe and not _snd_strobe:
+		WorldAudio.at(self, "flare_alarm", _gate_light.global_position, 0.7, 70.0, 0.0)
+	_snd_strobe = strobe
+	if sweeping and not _snd_sweep:
+		WorldAudio.at(self, "flare_launch", _gate_light.global_position, 1.0, 70.0)
+	_snd_sweep = sweeping
+	WorldAudio.set_active(_roar, sweeping)
 
 
 func _push_shelters() -> void:

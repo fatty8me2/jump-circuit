@@ -18,6 +18,11 @@ var _cool: float = 0.0
 var _smear: GPUParticles3D
 var _swooshes: Array[Swoosh] = []
 var _rims: Array[Node3D] = []
+# sound (side effect only): seconds until the head next passes the bottom of its swing
+var _eta: float = -1.0
+
+## The whoosh starts this long before the head passes the bottom (the clip peaks ~0.35 s in).
+const WHOOSH_LEAD: float = 0.34
 
 
 func _ready() -> void:
@@ -69,6 +74,13 @@ func _process(dt: float) -> void:
 	var fast: bool = w > 0.35
 	for i: int in _swooshes.size():
 		_swooshes[i].feed(_rims[i].global_position, fast, dt)
+	if WorldAudio.enabled():
+		# the head passes the bottom twice a period; whoosh as it comes through
+		var half: float = period * 0.5
+		var eta: float = half - fposmod(Game.course_time + phase * period, half)
+		if _eta > WHOOSH_LEAD and eta <= WHOOSH_LEAD:
+			WorldAudio.at(self, "pendulum_whoosh", global_position - global_basis.y * length, 0.8, 30.0, 0.06)
+		_eta = eta
 
 
 ## restart_run() winds the clock back in place: take the new pose now, without a streak.

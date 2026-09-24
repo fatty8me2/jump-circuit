@@ -18,6 +18,9 @@ signal mantled
 
 @export var tuning: MovementTuning
 
+## Landing speed (m/s) above which the heavy impact layers under the landing sound.
+const HEAVY_LANDING: float = 24.0
+
 ## Set by the orbit camera every frame; movement is relative to it.
 var camera_yaw: float = 0.0
 ## False during countdowns / finish: gravity still applies, input is ignored.
@@ -39,6 +42,8 @@ var facing_dir: Vector3 = Vector3.FORWARD
 ## Stick / key magnitude this tick (0 while control is off). Read only by feedback
 ## (footsteps), never by movement.
 var move_input: float = 0.0
+## The pad that launched us last (feedback picks its sound); never read by movement.
+var last_pad: Object = null
 ## Party-mode power-ups scale movement through these; the main mode never touches them
 ## (1.0 = the tuned game). speed: run speed; jump: takeoff speed; gravity: both gravities.
 var speed_mult: float = 1.0
@@ -391,6 +396,7 @@ func _try_bounce(pad: Object, normal: Vector3) -> bool:
 	grounded = false
 	_begin_flight_stats()
 	pad.call("on_bounced", self)
+	last_pad = pad
 	bounced.emit(v.length())
 	return true
 
@@ -700,32 +706,51 @@ func connect_feedback() -> void:
 		Sfx.play("jump", 0.06))
 	landed.connect(func(impact: float) -> void:
 		visual.on_land(impact)
-		Sfx.play("land", 0.08, clampf(impact / 20.0, 0.25, 1.0)))
+		# the map's own floor (grass, grating, glass...); a big drop adds a heavy body blow
+		Sfx.play(Sfx.themed("land"), 0.06, clampf(impact / 20.0, 0.25, 1.0))
+		if impact > HEAVY_LANDING:
+			Sfx.play("land_heavy", 0.05, clampf((impact - HEAVY_LANDING) / 12.0 + 0.35, 0.35, 1.0)))
 	bounced.connect(func(strength: float) -> void:
 		visual.on_bounce(strength)
-		Sfx.play("bounce", 0.04, 1.0, clampf(1.25 - strength / 60.0, 0.75, 1.2)))
+		# a pad can have its own voice (the reef's jellyfish bloop)
+		var clip: String = "bounce"
+		if last_pad != null and is_instance_valid(last_pad) and last_pad.has_method("bounce_clip"):
+			clip = String(last_pad.call("bounce_clip"))
+		Sfx.play(clip, 0.04, 1.0, clampf(1.25 - strength / 60.0, 0.75, 1.2)))
 	# the hazard plays its own positional hit sound
 	knocked.connect(func(v: Vector3) -> void: visual.on_knock(v))
 	wall_run_started.connect(func(n: Vector3) -> void:
 		visual.on_wall_run(n)
-		Sfx.play("step", 0.08, 0.45, 1.35))
-	wall_jumped.connect(func() -> void: visual.on_wall_jump())
+		Sfx.play("wallrun_latch", 0.05, 0.6))
+	wall_jumped.connect(func() -> void:
+		visual.on_wall_jump()
+		Sfx.play("wallkick", 0.05, 0.75))
 	mantled.connect(func() -> void:
 		visual.on_mantle()
 		# the lip is ~0.55 m out from where the climb ends, at its height (read-only)
 		visual.on_mantle_grab(_mantle_to - _mantle_dir * 0.55, _mantle_dir)
-		Sfx.play("step", 0.05, 0.5, 0.8))
+		Sfx.play("mantle", 0.05, 0.7))
 	teleported.connect(func() -> void:
 		visual.on_respawn()
 		visual.snap_facing(facing_dir))
 	visual.footstep.connect(_on_footstep)
+	# the continuous ones (air rush, wall scrape, ice slide, boost zing) - not in headless runs
+	if WorldAudio.enabled():
+		var pa := PlayerAudio.new()
+		add_child(pa)
+		pa.setup(self)
 
 
-## Quiet, pitch-varied tick per foot plant - only while actually walking: coasting on
-## ice, riding a conveyor or sliding down a tilt board with the stick released is silent.
+## Quiet, pitch-varied footstep per foot plant, on the map's own floor (step_<theme>_N,
+## falling back to the plain tick) or on the wall-run panel - only while actually walking:
+## coasting on ice, riding a conveyor or sliding down a tilt board with the stick released
+## is silent. On slick surfaces the steps go up in pitch.
 func _on_footstep(speed: float) -> void:
 	if move_input < 0.2:
 		return
+	if is_wall_running():
+		Sfx.play("wallstep", 0.06, clampf(speed / 14.0, 0.25, 0.45))
+		return
 	var fb: Object = floor_body if (floor_body != null and is_instance_valid(floor_body)) else null
 	var slick: bool = fb != null and fb.has_method("grip") and float(fb.call("grip")) < 1.0
-	Sfx.play("step", 0.1, clampf(speed / 14.0, 0.15, 0.35), 1.3 if slick else 1.0)
+	Sfx.play(Sfx.themed("step"), 0.08, clampf(speed / 14.0, 0.15, 0.35), 1.3 if slick else 1.0)

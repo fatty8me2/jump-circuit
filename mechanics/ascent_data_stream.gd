@@ -29,6 +29,9 @@ var _count: int = 0
 var _cycle: float = 0.0
 var _packets: Array[Node3D] = []
 var _areas: Array[Area3D] = []
+# sound (side effect only): a chirp as each packet spawns upstream, a zip as one passes the runner
+var _audio: bool = false
+var _rel: Array[float] = []
 
 
 func _ready() -> void:
@@ -76,6 +79,7 @@ func _ready() -> void:
 		_areas.append(area)
 	_apply()
 	add_to_group("course_clock")
+	_audio = WorldAudio.enabled()
 
 
 ## Local X range a lane covers.
@@ -165,13 +169,37 @@ func _apply() -> void:
 		p.position = Vector3(0, height, z)
 		if jump:
 			p.reset_physics_interpolation()
+			# a fresh packet at the upstream end (not a restart re-placing the train)
+			if _audio and z < -length * 0.5 + 1.0:
+				WorldAudio.at(self, "data_chirp", p.global_position, 0.45, 30.0, 0.02)
 		var edge: float = length * 0.5 - absf(z)
 		var s: float = clampf(edge / FADE, 0.02, 1.0)
 		p.scale = Vector3(s, s, s)
 
 
+## Sound only: a zip as a lit packet goes past the runner in its lane.
+func _zip_past_player() -> void:
+	var pl: Node3D = WorldAudio.local_player(self)
+	_rel.resize(_count)
+	if pl == null:
+		return
+	var l: Vector3 = to_local(pl.global_position)
+	var on_belt: bool = absf(l.x) < width * 0.5 + 1.0 and l.y > -1.0 and l.y < 3.0
+	for k: int in _count:
+		var z: float = packet_z(k, Game.course_time)
+		var rel: float = z - l.z
+		if on_belt and _lit(z) and _rel[k] < 0.0 and rel >= 0.0 and rel - _rel[k] < 1.0:
+			var span: Vector2 = _span(pattern[k % pattern.size()])
+			var near: float = 0.0 if (l.x > span.x and l.x < span.y) else minf(absf(l.x - span.x), absf(l.x - span.y))
+			if near < 1.5:
+				WorldAudio.at(self, "data_zip", _packets[k].global_position, 0.6, 20.0, 0.04)
+		_rel[k] = rel
+
+
 func _physics_process(_dt: float) -> void:
 	_apply()
+	if _audio:
+		_zip_past_player()
 	var t: float = Game.course_time
 	for k: int in _count:
 		if not _lit(packet_z(k, t)):
