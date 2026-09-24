@@ -26,7 +26,6 @@ $ErrorActionPreference = "Stop"
 $stage = Join-Path $env:TEMP ("JumpCircuit-update-" + [guid]::NewGuid().ToString("N"))
 $backup = Join-Path $stage "backup"
 $files = @("JumpCircuit.pck", "LICENSES.md", "JumpCircuit.exe")
-$backedUp = @()
 try {
     try { Wait-Process -Id $WaitForPid -ErrorAction Stop } catch { }
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
@@ -41,7 +40,6 @@ try {
         $destination = Join-Path $InstallDir $name
         if (Test-Path -LiteralPath $destination -PathType Leaf) {
             Copy-Item -LiteralPath $destination -Destination (Join-Path $backup $name) -Force
-            $backedUp += $name
         }
     }
     try {
@@ -53,11 +51,13 @@ try {
         foreach ($name in $files) {
             $destination = Join-Path $InstallDir $name
             $oldFile = Join-Path $backup $name
-            if (Test-Path -LiteralPath $oldFile -PathType Leaf) {
-                Copy-Item -LiteralPath $oldFile -Destination $destination -Force
-            } elseif (Test-Path -LiteralPath $destination -PathType Leaf) {
-                Remove-Item -LiteralPath $destination -Force
-            }
+            try {
+                if (Test-Path -LiteralPath $oldFile -PathType Leaf) {
+                    Copy-Item -LiteralPath $oldFile -Destination $destination -Force
+                } elseif (Test-Path -LiteralPath $destination -PathType Leaf) {
+                    Remove-Item -LiteralPath $destination -Force
+                }
+            } catch { }
         }
         throw
     }
@@ -69,6 +69,8 @@ try {
         Add-Type -AssemblyName System.Windows.Forms
         [System.Windows.Forms.MessageBox]::Show($message, "Jump Circuit Update", "OK", "Error") | Out-Null
     } catch { }
+    Remove-Item -LiteralPath $ZipPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path -LiteralPath $GamePath -PathType Leaf) {
         Start-Process -FilePath $GamePath -WorkingDirectory $InstallDir
     }

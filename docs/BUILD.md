@@ -51,6 +51,10 @@ client, then launches the new version. *Remind Me Later* asks again next launch,
 Version* stays quiet until an even newer release. Offline or rate-limited update checks are skipped;
 the game never waits on them.
 
+Players on versions before **1.2.2** need to install that version once from its release ZIP. Those
+older clients only know how to open the release page; after 1.2.2 is installed, later updates install
+from inside the game.
+
 To ship an update:
 1. Bump `config/version` in `project.godot` (e.g. `1.1.0` -> `1.2.0`).
 2. Build (`tools\make_build.bat`) and zip `JumpCircuit.exe`, `JumpCircuit.pck`, and `LICENSES.md`
