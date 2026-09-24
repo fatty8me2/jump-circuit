@@ -1751,9 +1751,9 @@ func test_zb4a_pad_ring_and_music() -> void:
 	# music: rapid track changes crossfade without stranding a player
 	Sfx.music("title")
 	await ticks(12)
-	Sfx.music("a")
+	Sfx.music("gardens")
 	await ticks(12)
-	Sfx.music("b")
+	Sfx.music("foundry")
 	await seconds(1.2)
 	var players: Array = Sfx.get("_music_players")
 	var audible: int = 0
@@ -1769,6 +1769,87 @@ func test_zb4a_pad_ring_and_music() -> void:
 		if m.playing:
 			audible += 1
 	check(audible == 0, "music('') fades the bed out and stops it")
+
+
+# ---- the score: map music with progress layers, fanfares, chimes, the pause muffle ------------
+
+func test_zb4b_scores_and_layers() -> void:
+	# every map has a two-layer score whose layers are the same length (they play locked together)
+	for info: Dictionary in Game.LEVELS:
+		var id: String = info["id"]
+		var base: AudioStream = load("res://audio/music_%s.ogg" % id) if ResourceLoader.exists("res://audio/music_%s.ogg" % id) else null
+		var hi: AudioStream = load("res://audio/music_%s_hi.ogg" % id) if ResourceLoader.exists("res://audio/music_%s_hi.ogg" % id) else null
+		check(base != null and hi != null, "%s has both score layers" % id)
+		if base != null and hi != null:
+			near(hi.get_length(), base.get_length(), 0.01, "%s layers are the same length" % id)
+		check(Sfx.has_clip("fanfare_" + id), "%s has a course fanfare" % id)
+		check(Sfx.has_clip("checkpoint_" + id), "%s has a checkpoint chime" % id)
+	for track: String in ["title", "lobby", "results", "victory"]:
+		check(ResourceLoader.exists("res://audio/music_%s.ogg" % track), "the %s music exists" % track)
+	check(Sfx.has_clip("new_best"), "the new-best sparkle exists")
+	# the title screens pick their music
+	var title_script: GDScript = load("res://ui/title.gd")
+	check(title_script.call("screen_music", "main") == "title" and title_script.call("screen_music", "lobby") == "lobby"
+		and title_script.call("screen_music", "practice") == "lobby" and title_script.call("screen_music", "victory") == "victory",
+		"title screens map to title / lobby / victory music")
+	# themed clips: the map's own chime, and the plain one elsewhere
+	Sfx.set_theme("reef")
+	check(Sfx.themed("checkpoint") == "checkpoint_reef", "themed() prefers the map's own clip")
+	Sfx.set_theme("nowhere")
+	check(Sfx.themed("checkpoint") == "checkpoint", "themed() falls back to the plain clip")
+	Sfx.set_theme("")
+	# layers: a map score is a synchronized pair; progress swells the second layer in and out
+	Sfx.music("")
+	await seconds(0.8)
+	Sfx.music("gardens")
+	var cur: AudioStreamPlayer = Sfx.get("_music")
+	check(cur.stream is AudioStreamSynchronized, "a map score plays both layers locked together")
+	check(is_equal_approx(Sfx.music_layer_mix(), 0.0), "the second layer starts out")
+	Sfx.music_progress(0.1)
+	await seconds(0.5)
+	check(is_equal_approx(Sfx.music_layer_mix(), 0.0), "early stages keep it out")
+	Sfx.music_progress(1.0)
+	await seconds(Sfx.LAYER_FADE + 0.6)
+	near(Sfx.music_layer_mix(), 1.0, 0.001, "the last stage brings the second layer fully in")
+	Sfx.music_progress(0.0)
+	await seconds(Sfx.LAYER_FADE + 0.6)
+	near(Sfx.music_layer_mix(), 0.0, 0.001, "a restart takes it back out")
+	# a fanfare ducks the score, then hands over to the results music
+	check(Sfx.fanfare("fanfare_gardens", "results"), "the course fanfare plays")
+	await seconds(0.4)
+	var duck: AudioEffectAmplify = null
+	var bi: int = AudioServer.get_bus_index("Ducked")
+	for i: int in AudioServer.get_bus_effect_count(bi):
+		if AudioServer.get_bus_effect(bi, i) is AudioEffectAmplify:
+			duck = AudioServer.get_bus_effect(bi, i)
+	check(duck != null and duck.volume_db < -20.0, "the score ducks under the fanfare")
+	var ff: AudioStream = load("res://audio/fanfare_gardens.ogg")
+	await seconds(ff.get_length())
+	check(Sfx.current_music() == "results" and duck != null and duck.volume_db > -1.0,
+		"after the fanfare the results music takes over, un-ducked (%s)" % Sfx.current_music())
+	# re-entering a level during a fanfare cancels the hand-over
+	Sfx.music("gardens")
+	await seconds(1.0)
+	Sfx.fanfare("fanfare_gardens", "results")
+	await seconds(0.3)
+	Sfx.music("gardens")
+	await seconds(ff.get_length() + 0.5)
+	check(Sfx.current_music() == "gardens" and duck.volume_db > -1.0, "a restart during the fanfare keeps the map's score")
+	# the pause muffle
+	var lp: AudioEffectLowPassFilter = null
+	for i: int in AudioServer.get_bus_effect_count(bi):
+		if AudioServer.get_bus_effect(bi, i) is AudioEffectLowPassFilter:
+			lp = AudioServer.get_bus_effect(bi, i)
+	Sfx.muffle(true)
+	await seconds(0.6)
+	check(lp != null and lp.cutoff_hz < 1500.0 and Sfx.is_muffled(), "pausing muffles the score")
+	Sfx.muffle(false)
+	await seconds(0.9)
+	check(lp != null and lp.cutoff_hz > 15000.0 and not Sfx.is_muffled(), "resuming clears the muffle")
+	check(AudioServer.get_bus_index("Ambience") >= 0, "the ambience bus exists")
+	Sfx.checkpoint_chime(3)
+	Sfx.music("")
+	await seconds(0.8)
 
 
 ## Where the route resumes after a "checkpoint" step: the first static route point

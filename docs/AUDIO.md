@@ -73,37 +73,116 @@ under the effects) and this keeps stereo loops inside the size budget.
 
 ## Music
 
-All three tracks are forward loops. They are rendered into **circular buffers**:
-every note is mixed in with its sample index taken modulo the loop length, so
-release tails that run past the end wrap round to the start. The ping-pong delay
-and the reverb (six parallel damped feedback combs per channel followed by three
-all-passes) are evaluated exactly in the FFT domain over the whole loop, which
-makes them circular too - the echo and reverb tail of the last bar is already
-present under the first bar. The only processing after that is a global gain and
-a memoryless soft knee, neither of which can create a discontinuity, so the loop
-point is inaudible. Each file is a whole number of bars.
+Every map has its own score, and all of them grow from one leitmotif, the **JUMP theme**. It is a
+triplet run-up (5-6-7) into a leap from the tonic up to the fifth, a falling answer, and a
+bVI - bVII - I lift (the "Mario cadence") at the end of its A phrase. Its B phrase is a rising
+sequence in the relative minor. Each map quotes the theme in its own key, meter and
+orchestration, and the finale gathers them all up. `tools/gen_music.py` holds the score;
+`tools/music_engine.py` is the synthesiser, notation and mixer.
 
-Voices: `v_pad` (two detuned sine pairs panned left/right, weak 2nd/3rd
-harmonics, slow LFO, raised-cosine attack/release), `v_pluck` (five harmonics,
-higher ones decay faster), `v_bass` (sine + two harmonics through gentle tanh
-saturation), `v_lead` (soft sine with odd harmonics and delayed vibrato),
-`v_bell`, and filtered-noise percussion (`v_noise_hit`, `v_clap`), a sine-drop
-`v_kick` and a short two-partial "cog" ping.
+```
+python tools/gen_music.py                  # every piece + stingers, then verify
+python tools/gen_music.py gardens stingers # only some
+python tools/gen_music.py --verify
+```
 
-| File | Length | Description |
-|------|--------|-------------|
-| `music_a.wav` | 57.6 s (24 bars, 100 bpm) | Light and optimistic, D major / lydian (Dmaj9, E/D, Bm7, Gmaj7, Aadd9, F#m7, Asus4). Wide pads, plucked eighth-note arpeggio with dotted-eighth ping-pong delay, soft bass. Three 8-bar sections: sparse intro, fuller arpeggio with long bell notes and an off-beat shaker, then a bell melody. |
-| `music_b.wav` | 49.66 s (24 bars, 116 bpm) | More driven and mechanical, D dorian (Dm9, G7, Fmaj7, Am7, Em7, C). Pulsing eighth-note bass with octave jumps, soft kick, sixteenth-note ticks made from high-passed noise with an accent pattern, metallic "cog" pings on fixed steps, noise claps, a masked sixteenth-note pluck arpeggio, and a soft lead melody from bar 9 (doubled by an octave bell in the last section). |
-| `music_title.wav` | 40.0 s (12 bars, 72 bpm) | Calm and spacious menu piece: slow pads (Fmaj9, Cmaj7/E, Dm9, Bbmaj7#11, Gm9, Csus4add9), a sub pad, sparse bell notes with a long delay and a long dark reverb. |
+Requires numpy and `soundfile` (for Ogg Vorbis). It is deterministic: every piece seeds its RNG
+from its name. A piece takes 25-90 s to render. Pieces are independent, so they can be rendered
+as parallel processes.
 
-In game, `Sfx.music()` crossfades on a track change (the old bed fades out over
-0.6 s while the new one fades in over 0.9 s); restarting a level keeps the
-current track playing.
+### Engine
 
-## Godot import settings
+* **Bowed, blown and sung parts** (string sections, solo fiddle / cello, horn / trumpet /
+  trombone / tuba, flute / piccolo / whistle / ocarina / clarinet / oboe / bassoon, accordion,
+  choir). These are band-limited PolyBLEP oscillators with per-voice detune, delayed vibrato and
+  slow pitch drift. Each is shaped in the FFT domain by an instrument "body" (formant bumps and a
+  brightness low-pass). Sections are several independent voices spread across the stereo field,
+  entering a few milliseconds apart. Brass brightness follows its envelope: dark and bright
+  renderings are crossfaded by loudness. The choir runs its voices through vowel formants
+  (a / o / u / e / hum). Woodwinds add breath (pitched and airy noise) and a tongued "chiff".
+  Legato lines glide between notes.
+* **Plucked and struck parts** (harp, nylon / steel guitar, pizzicato, upright bass,
+  harpsichord with a 4' choir and jack thunk, two-string piano with inharmonic partials and a
+  two-stage decay, marimba, xylophone, vibraphone with motor tremolo, glockenspiel, celesta,
+  music box, kalimba, tubular and church bells). These are additive: a pluck-position comb, and
+  each partial with its own ratio, amplitude and decay.
+* **FM and synth parts:** FM electric piano and bells, supersaw pads, analogue-style plucks and
+  basses with swept filters (a bank of static filters interpolated per sample), square and saw
+  leads, sub bass, and glassy sine pads.
+* **Percussion:** kicks (soft / punch / 808 / concert), snares (acoustic, march, piccolo, gated,
+  brush, rim), claps, hats, cymbals and swells, toms, timpani and rolls, taiko (odaiko, nagado,
+  shime, rim), frame drum, cajon, shaker, tambourine, triangle, woodblock, claves, castanets,
+  clock tick / tock, anvil, struck steel, gong, bubbles, drops, risers and booms.
+* **Notation:** melodies are strings like `C5h G5h | A5q. G5e E5q C5q |`. Durations are
+  w/h/q/e/s, t/x for triplet eighths and quarters, and `.` for dotted. `~` ties, `!` accents,
+  `?` ghosts, `>N` transposes, and `[C4E4G4]q` is a chord. Every bar is length-checked, and a
+  pickup bar is allowed. Chord symbols (`Bbmaj7#11`, `D/F#`, `G7sus4` ...) are voiced
+  automatically with voice-leading from the previous chord. Helpers write pads, bass lines,
+  arpeggios, guitar strums, waltz accompaniment, chord stabs and drum grids.
+* **Mixing:** every Track is a set of circular stereo buffers. Notes are mixed with their index
+  taken modulo the loop length, so the loop point is seamless by construction. Each bus has
+  circular EQ, drive, chorus and side-chain pumping from the kick times. Sends go to
+  **convolution reverbs with synthesised room impulses** (early reflections plus decorrelated
+  noise with a per-band decay time: open air, stone tower, foundry hall, underwater cave, space)
+  and to a circular ping-pong delay. The master is a circular look-ahead limiter plus a soft
+  clip, normalised to a K-weighted loudness target. Tempos are nudged by well under 0.5 % so each
+  loop length factors into small primes, which keeps the whole-loop FFTs fast. Repeated notes
+  (strums, arpeggios, ostinati) reuse a few cached, seeded takes.
 
-The three music `.import` files have `edit/loop_mode=2` (Forward) so the
-imported `AudioStreamWAV` loops over the whole file. As a fallback the WAVs also
-carry a standard `smpl` chunk describing the same whole-file forward loop, which
-Godot's default "Detect From WAV" mode picks up if an `.import` file is ever
-recreated. Effects use the default import settings (no loop).
+### Layers and how the game plays them
+
+Each map score is two files of identical length: `music_<map>.ogg` (the base) and
+`music_<map>_hi.ogg`. `Sfx.music()` locks them together in an `AudioStreamSynchronized`, and
+`Sfx.music_progress()` (called by `LevelBase` on every checkpoint) moves the second layer:
+
+* "add" maps: the hi layer (drums, counter-lines, brass, choir) swells in between 30 % and 50 %
+  of the course. The music builds as you climb.
+* Coral Depths is a "cross" map: its two layers are complete arrangements, the sunlit shallows and
+  the deep. They crossfade at equal power between 35 % and 75 % of the course, so the music
+  darkens as the water does.
+* Party Mode plays the full score from the start. A restart takes the layer back out.
+
+On the finish, `Sfx.fanfare("fanfare_<map>", "results")` ducks the score under the map's own
+fanfare, then hands over to the results music. A new personal best adds the `new_best` sparkle.
+Checkpoints play `checkpoint_<map>`, stepped up the map's scale (`Sfx.checkpoint_chime`) so the
+chime is always in the score's key. While the game is paused, the score and the ambience are
+low-passed and dipped (`Sfx.muffle`). Menus: the main theme on the title screens, the lobby
+groove for Race / Party / Practice and the playground, and the victory reprise when every course
+is beaten.
+
+Buses: score players -> `Ducked` (fanfare duck and pause muffle) -> `Music` (the slider);
+fanfares go straight to `Music`; ambience has its own `Ambience` bus and slider.
+
+### The pieces
+
+| File | Key / meter / tempo | Length | Character |
+|------|------|------|-----------|
+| `music_title` | Bb major, 4/4, 84 | 36 bars, 1:43 | Overture. A dawn intro where celesta hints the run-up; the JUMP theme on horns; the B phrase on violins with a cello answer; a tutti reprise (trumpets, snare, timpani, cymbals); a hushed coda with music box and clarinet that leads back round. |
+| `music_lobby` | F major, 4/4 swung, 108 | 32 bars, 1:11 | Funk warm-up: punchy kit, octave synth bass, e-piano comping, muted guitar chicks, trumpet stabs, a vibes riff, the JUMP theme syncopated on a muted square lead, and a clap break with vibes licks. Also the playground's music. |
+| `music_gardens` | G major, 4/4, 132 | 56 bars, 1:42 | Launch Gardens: a sunny pastoral march. Flute tune over strummed nylon guitar, pizzicato bass, shaker and glockenspiel; an ocarina bridge that turns to Eb; the JUMP theme on clarinet over G - C - Am - D - G - Eb - F - G. **hi:** piccolo, violin counter-line, full strings, horns, light kit and tambourine, timpani runs, cymbal swells. |
+| `music_foundry` | D minor (phrygian), 4/4, 138 | 48 bars, 1:24 | Bounce Foundry: a forge. Marcato cello ostinato over a growling synth bass, anvils on the off-beats tuned to D and A, struck-steel clangs, and a taiko groove. A trombone and tuba march; the JUMP theme turned minor; a Bb - C - D major lift "through the pour"; a taiko breakdown with a timpani roll and riser. **hi:** full taiko ensemble (nagado, shime), snare, horns and trumpets an octave up, tremolo strings, choir chant, gongs. |
+| `music_balance` | D mixolydian, 6/8, 104 | 64 bars, 1:14 | Balance Works: a sea shanty. Accordion tune over guitar "oom-pa-pa", upright bass and bodhran; a tin-whistle chorus; the JUMP theme rolling in compound time with a Bb - C - D lift; a whistle break. **hi:** fiddle doubling, stomp-clap and tambourine, a "ho!" crew, strings, a marimba sea-sparkle. |
+| `music_clockwork` | E minor, 3/4 waltz, 168 | 80 bars, 1:26 | Clockwork Heights: the clock ticks every beat (tick / tock, with an escapement clunk each bar). Pizzicato and harpsichord oom-pah-pah; a music-box waltz; a warmer G major strain on clarinet and bassoon; the JUMP theme as a waltz on celesta; church bells strike the hour before the reprise. **hi:** a string waltz (cello, violas and violins), horns, triangle, tubular-bell chimes, timpani. |
+| `music_reef` | F lydian, 4/4, 80 | 32 bars, 1:36 | Coral Depths, two full arrangements. **Shallows:** chorused e-piano, harp ripples, vibraphone tune, marimba, bubbles, glass pad, flute, the JUMP theme in augmentation. **Deep:** "oo" choir, low cellos, a dark filtered pulse, kalimba, celesta, whale-song glides, a church bell in a 5.5 s abyss reverb. |
+| `music_orbital` | C lydian, 4/4, 100 | 48 bars, 1:55 | Orbital Drift: a delayed square-wave arpeggio, glass pads, strings and harp. A horn "station" theme climbs straight into the JUMP theme; an A minor "flare"; the B phrase on strings. **hi:** a space opera, with trumpets and trombones, snare march with triplet rolls, timpani, cymbals, choir, and driving spiccato cellos. |
+| `music_ascent` | B minor to D major, 4/4, 128 | 56 bars, 1:45 | The Final Ascent: synthwave. Side-chained supersaws, octave bass, arps and gated snare under a climbing saw lead. A **medley** quotes every map in turn: the gardens run-up on flute, the foundry march with anvils, the clockwork music box, the reef vibes, the orbital horn. Then the JUMP theme at full height in D major, and a breakdown with a riser. **hi:** strings, choir, trombones, tom fills, trumpets and horns on the theme, booms and timpani. |
+| `music_results` | C major, 4/4 swung, 92 | 16 bars, 0:42 | Course clear: piano sings the B phrase and then the A phrase over soft strings, pizzicato and brushes. |
+| `music_victory` | C major, 4/4, 88 | 24 bars, 1:05 | Every course beaten: the whole JUMP theme for orchestra and choir. A on horns and violins, B on choir and strings, then A tutti with trumpets, snare, timpani, crashes and tubular bells. |
+
+### Stingers
+
+| File | Bus | Content |
+|------|-----|---------|
+| `fanfare_gardens` | Music | Flute run-up and leap, a horn chord, timpani, a glockenspiel and harp sparkle (G). |
+| `fanfare_foundry` | Music | Trombone march phrase into a D major horn chord; taiko, anvils, gong. |
+| `fanfare_balance` | Music | Accordion and fiddle run-up in 6/8, guitar chord, frame drum and claps (D). |
+| `fanfare_clockwork` | Music | Music box turns E minor into E major; three bell strokes, celesta, ticking. |
+| `fanfare_reef` | Music | Harp glissando, vibraphone chord, "oo" choir, rising bubbles (F). |
+| `fanfare_orbital` | Music | Trumpet run-up and leap, brass chord, timpani, crash, FM-bell sparkle (C). |
+| `fanfare_ascent` | Music | Scored to the beacon: a 2.7 s riser, a timpani roll and choir crescendo land as the crystal ignites on a D major tutti (brass, supersaws, strings, boom, crash) with the JUMP leap on top. It replaces the old `beacon` riser. |
+| `checkpoint_<map>` | SFX | A two- or three-note tonic figure in each map's own timbre: glockenspiel and harp, anvil and trombone, marimba and whistle, music box, tick and bell, vibraphone and bubbles, FM bells, synth plucks. |
+| `new_best` | SFX | A rising glockenspiel and harp arpeggio over a string chord. |
+
+Scores are 32 kHz stereo Ogg Vorbis; stingers are 32 kHz stereo Ogg. The verifier checks that
+every file exists, that layers match in length, peak levels, and loop-seam continuity (the step
+across the wrap must look like an ordinary step inside the file).

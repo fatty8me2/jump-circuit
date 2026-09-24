@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """Jump Circuit - procedural audio generator.
 
-Synthesises every sound effect and music loop used by the game and writes
+Synthesises the core sound effects used by the game (the score is tools/gen_music.py) and writes
 them as 16-bit PCM WAV files into <project>/audio/.  Everything is original
 and generated from maths + seeded noise, so no third-party assets are used.
 
 Usage (from anywhere):
     python tools/gen_audio.py            # generate everything, then verify
     python tools/gen_audio.py --verify   # only verify the files on disk
-    python tools/gen_audio.py --sfx      # only effects
-    python tools/gen_audio.py --music    # only music
+    (music: tools/gen_music.py; the circular Track helpers below remain for loop generators)
 
 Deterministic: every sound uses its own RNG seeded from SEED + its name, so
 re-running gives bit-identical files.  Requires numpy.
@@ -607,187 +606,12 @@ def v_cog():
 
 
 # --------------------------------------------------------------------------
-# music_a : light, airy, D lydian / major, 100 bpm, 24 bars (57.6 s)
-# --------------------------------------------------------------------------
-def music_a():
-    beat = 60.0 / 100.0
-    bar = 4 * beat
-    tr = Track("music_a", 24 * bar)
-    r = tr.rng
-    chords = [  # (bass, pad notes) - two bars each
-        (38, (50, 57, 61, 64, 66)),   # Dmaj9
-        (38, (50, 56, 59, 64, 68)),   # E/D   (lydian colour)
-        (38, (50, 57, 61, 66, 69)),   # Dmaj7
-        (35, (47, 54, 57, 62, 66)),   # Bm7
-        (43, (55, 59, 62, 66, 69)),   # Gmaj7
-        (45, (57, 61, 64, 71)),       # Aadd9
-        (42, (54, 57, 61, 64, 69)),   # F#m7
-        (43, (55, 59, 62, 66, 69)),   # Gmaj7
-        (38, (50, 57, 61, 64, 66)),   # Dmaj9
-        (38, (50, 56, 59, 64, 68)),   # E/D
-        (43, (55, 59, 62, 66, 69)),   # Gmaj7
-        (45, (57, 62, 64, 69)),       # Asus4
-    ]
-    melody = {
-        4: ((0, 71, 3), (4, 74, 3)),
-        5: ((0, 73, 3), (4, 76, 3)),
-        6: ((0, 69, 3), (4, 73, 3)),
-        7: ((0, 71, 2), (2, 74, 2), (4, 78, 4)),
-        8: ((0, 78, 1.5), (1.5, 81, 0.5), (2, 76, 2), (4, 78, 1), (5, 76, 1), (6, 73, 2)),
-        9: ((0, 71, 1.5), (1.5, 76, 0.5), (2, 80, 2), (4, 78, 1), (5, 76, 1), (6, 71, 2)),
-        10: ((0, 74, 1.5), (1.5, 78, 0.5), (2, 81, 2), (4, 83, 1), (5, 81, 1), (6, 78, 2)),
-        11: ((0, 76, 2), (2, 74, 1), (3, 76, 1), (4, 81, 3)),
-    }
-    arp_order = (0, 2, 4, 3, 5, 3, 4, 2, 1, 3, 5, 4, 6, 4, 3, 2)
-    sparse = (1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 0)
-    shaker = [v_noise_hit(r, 0.09, 3000.0, 8500.0, 0.025, attack=0.01) for _ in range(4)]
-    for ci, (bass, pad) in enumerate(chords):
-        t0 = ci * 2 * bar
-        section = ci // 4
-        for m in pad:
-            tr.add("pad", t0, v_pad(r, mtof(m), 2 * bar), gain=0.085, rev=0.6)
-        tones = sorted(set([m + 12 for m in pad] + [m + 24 for m in pad[:2]]))
-        for step in range(16):
-            if section == 0 and not sparse[step]:
-                continue
-            m = tones[arp_order[step] % len(tones)]
-            vel = (1.0 if step % 4 == 0 else 0.72) * r.uniform(0.85, 1.0)
-            tr.add("arp", t0 + step * beat / 2, v_pluck(mtof(m), 0.9, tau=0.4), gain=0.26 * vel,
-                   pan=0.45 * np.sin(step * 1.3 + ci), rev=0.35, dly=0.35)
-        if section == 0:
-            for b in range(2):
-                tr.add("bass", t0 + b * bar, v_bass(mtof(bass), 3.5 * beat, 0.3), gain=0.3)
-        else:
-            for b in range(2):
-                for bt, off, ln in ((0.0, 0, 1.4), (1.5, 0, 0.9), (2.5, 7, 1.3)):
-                    tr.add("bass", t0 + b * bar + bt * beat, v_bass(mtof(bass + off), ln * beat, 0.45), gain=0.3)
-            for e in range(16):
-                if e % 2 == 1:
-                    tr.add("shaker", t0 + e * beat / 2, shaker[int(r.integers(0, 4))],
-                           gain=0.18 * r.uniform(0.7, 1.0), pan=0.25, rev=0.2)
-        for bt, m, ln in melody.get(ci, ()):
-            tr.add("lead", t0 + bt * beat, v_bell(mtof(m), ln * beat + 1.2, 0.55 + 0.2 * ln), gain=0.22,
-                   pan=-0.15, rev=0.5, dly=0.4)
-    tr.render(delay_s=beat * 0.75, delay_fb=0.42, rev_fb=0.78, rev_gain=0.55)
-
-
-# --------------------------------------------------------------------------
-# music_b : driven / mechanical, D dorian, 116 bpm, 24 bars (~49.7 s)
-# --------------------------------------------------------------------------
-def music_b():
-    beat = 60.0 / 116.0
-    bar = 4 * beat
-    six = beat / 4
-    tr = Track("music_b", 24 * bar)
-    r = tr.rng
-    chords = [
-        (38, (50, 57, 60, 64, 65)),  # Dm9
-        (43, (55, 59, 62, 65)),      # G7   (dorian major IV)
-        (41, (53, 57, 60, 64)),      # Fmaj7
-        (45, (57, 60, 64, 67)),      # Am7
-        (38, (50, 57, 60, 64, 65)),  # Dm9
-        (43, (55, 59, 62, 65)),      # G7
-        (40, (52, 55, 59, 62)),      # Em7
-        (45, (57, 60, 64, 67)),      # Am7
-        (38, (50, 57, 60, 64, 65)),  # Dm9
-        (36, (48, 55, 60, 64)),      # C
-        (43, (55, 59, 62, 65)),      # G7
-        (45, (57, 60, 64, 67)),      # Am7
-    ]
-    motifs = {
-        "Dm": ((0, 69, 1), (1, 74, .5), (1.5, 76, .5), (2, 77, 1.5), (3.5, 76, .5), (4, 74, 1), (5, 72, 1), (6, 69, 2)),
-        "G": ((0, 71, 1), (1, 74, .5), (1.5, 77, .5), (2, 79, 1.5), (3.5, 77, .5), (4, 74, 1), (5, 71, 1), (6, 67, 2)),
-        "F": ((0, 69, 1), (1, 72, .5), (1.5, 76, .5), (2, 77, 1.5), (3.5, 76, .5), (4, 72, 1), (5, 69, 1), (6, 72, 2)),
-        "Am": ((0, 76, 1.5), (1.5, 74, .5), (2, 72, 1), (3, 71, 1), (4, 69, 2), (6, 72, 1), (7, 76, 1)),
-        "Em": ((0, 67, 1), (1, 71, .5), (1.5, 74, .5), (2, 76, 1.5), (3.5, 74, .5), (4, 71, 1), (5, 67, 1), (6, 71, 2)),
-        "C": ((0, 67, 1), (1, 72, .5), (1.5, 76, .5), (2, 79, 1.5), (3.5, 76, .5), (4, 74, 1), (5, 72, 1), (6, 76, 2)),
-    }
-    names = ("Dm", "G", "F", "Am", "Dm", "G", "Em", "Am", "Dm", "C", "G", "Am")
-    bass_pat = (0, 0, 12, 0, 0, 0, 12, 7)
-    arp_mask = (1, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1)
-    hat_acc = (1.0, 0.35, 0.6, 0.35)
-    cog_steps = (3, 6, 11, 14)
-    hats = [v_noise_hit(r, 0.05, 5200.0, None, 0.011) for _ in range(6)]
-    claps = [v_clap(r) for _ in range(3)]
-    kick = v_kick()
-    cog = v_cog()
-    for ci, (bass, pad) in enumerate(chords):
-        t0 = ci * 2 * bar
-        section = ci // 4
-        for m in pad:
-            tr.add("pad", t0, v_pad(r, mtof(m), 2 * bar, att=0.6, rel=1.2, bright=0.3), gain=0.045, rev=0.5)
-        tones = sorted(set([m + 12 for m in pad] + [pad[0] + 24]))
-        k = 0
-        for b in range(2):
-            tb = t0 + b * bar
-            for e in range(8):
-                vel = 1.0 if e % 2 == 0 else 0.8
-                tr.add("bass", tb + e * beat / 2, v_bass(mtof(bass + bass_pat[e]), beat * 0.36, 0.6), gain=0.3 * vel)
-            for s in range(16):
-                ts = tb + s * six
-                tr.add("hat", ts, hats[int(r.integers(0, 6))], gain=0.16 * hat_acc[s % 4] * r.uniform(0.8, 1.0),
-                       pan=0.3, rev=0.1)
-                if s in cog_steps:
-                    tr.add("cog", ts, cog, gain=0.14, pan=-0.4, rev=0.25, dly=0.3)
-                if arp_mask[s]:
-                    m = tones[k % len(tones)] if (k // len(tones)) % 2 == 0 else tones[-1 - (k % len(tones))]
-                    k += 1
-                    tr.add("arp", ts, v_pluck(mtof(m), 0.5, tau=0.22, bright=0.6), gain=0.15 * r.uniform(0.8, 1.0),
-                           pan=0.5 * np.sin(s * 0.9), rev=0.25, dly=0.45)
-            kicks = [0.0, 2.0] + ([3.5] if b == 1 else [])
-            for kb in kicks:
-                tr.add("kick", tb + kb * beat, kick, gain=0.42)
-            if section > 0:
-                for cb in (1.0, 3.0):
-                    tr.add("clap", tb + cb * beat, claps[int(r.integers(0, 3))], gain=0.4, pan=0.1, rev=0.35)
-        if section > 0:
-            for bt, m, ln in motifs[names[ci]]:
-                tr.add("lead", t0 + bt * beat, v_lead(mtof(m), ln * beat * 0.92), gain=0.12, pan=-0.1, rev=0.45, dly=0.35)
-                if section == 2:  # octave shimmer on the last pass
-                    tr.add("lead", t0 + bt * beat, v_bell(mtof(m + 12), ln * beat + 0.6, 0.35), gain=0.05,
-                           pan=0.3, rev=0.5, dly=0.3)
-    tr.render(delay_s=beat * 0.75, delay_fb=0.38, rev_fb=0.7, rev_gain=0.4)
-
-
-# --------------------------------------------------------------------------
-# music_title : calm, spacious, F lydian-ish pads, 72 bpm, 12 bars (40.0 s)
-# --------------------------------------------------------------------------
-def music_title():
-    beat = 60.0 / 72.0
-    bar = 4 * beat
-    tr = Track("music_title", 12 * bar)
-    r = tr.rng
-    chords = [
-        (41, (53, 60, 64, 67, 69)),  # Fmaj9
-        (40, (52, 55, 59, 64, 67)),  # Cmaj7/E
-        (38, (50, 57, 60, 64, 65)),  # Dm9
-        (46, (58, 62, 64, 65, 69)),  # Bbmaj7#11
-        (43, (55, 58, 62, 65, 69)),  # Gm9
-        (48, (55, 60, 62, 65, 67)),  # Csus4 add9
-    ]
-    bell_beats = ((0.0, 2.5, 5.0, 6.5), (1.0, 3.0, 5.5), (0.0, 2.0, 4.5, 7.0))
-    for ci, (bass, pad) in enumerate(chords):
-        t0 = ci * 2 * bar
-        for m in pad:
-            tr.add("pad", t0, v_pad(r, mtof(m), 2 * bar, att=2.2, rel=3.0, bright=0.18), gain=0.09, rev=0.7)
-        tr.add("pad", t0, v_pad(r, mtof(pad[-1] + 12), 2 * bar, att=3.0, rel=3.0, bright=0.05), gain=0.025, rev=0.8)
-        sub = v_pad(r, mtof(bass), 2 * bar, att=1.0, rel=2.0, bright=0.1)
-        tr.add("bass", t0, sub, gain=0.11)
-        tones = [m + 12 for m in pad] + [pad[1] + 24, pad[2] + 24]
-        for bt in bell_beats[ci % 3]:
-            m = tones[int(r.integers(0, len(tones)))]
-            tr.add("bell", t0 + bt * beat, v_bell(mtof(m), 3.5, 0.9), gain=0.11 * r.uniform(0.7, 1.0),
-                   pan=r.uniform(-0.5, 0.5), rev=0.7, dly=0.5)
-    tr.render(delay_s=beat * 1.5, delay_fb=0.5, rev_fb=0.86, rev_gain=0.75, rev_damp=2600.0)
-
-
-# --------------------------------------------------------------------------
 # verification
 # --------------------------------------------------------------------------
 SFX_SPEC = {"jump": 0.18, "land": 0.2, "bounce": 0.45, "checkpoint": 0.7, "crumble": 0.7, "collapse": 0.9,
             "creak": 0.35, "finish": 2.2, "respawn": 0.3, "tick": 0.12, "go": 0.5, "ui": 0.06, "beacon": 4.0,
             "whack": 0.3, "step": 0.07}
-MUSIC = ("music_a", "music_b", "music_title")
+MUSIC = ()  # the score lives in tools/gen_music.py now
 
 
 def read_wav(name):
@@ -853,11 +677,6 @@ def main():
             for fn in (sfx_jump, sfx_land, sfx_whack, sfx_bounce, sfx_checkpoint, sfx_crumble, sfx_collapse,
                        sfx_creak, sfx_finish, sfx_respawn, sfx_tick, sfx_go, sfx_ui, sfx_beacon, sfx_step):
                 fn()
-        if "--sfx" not in args:
-            print("music:")
-            music_a()
-            music_b()
-            music_title()
     sys.exit(0 if verify() else 1)
 
 
