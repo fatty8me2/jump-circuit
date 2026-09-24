@@ -1712,3 +1712,19 @@ static func frost_patch(parent: Node, pos: Vector3, radius: float, life: float =
 		"flatness": 0.9, "speed": Vector2(0.4, 1.2), "damping": Vector2(0.4, 0.8), "curve": "puff", "angle": Vector2(0, 360),
 		"explosiveness": 0.5, "color": Color(0.92, 0.97, 1.0, 0.45), "fade": PackedFloat32Array([0.0, 0.8, 0.5, 0.0]),
 		"box_aabb": radius * 3.0}, pos + up * 0.2)
+
+
+## A small jagged electric arc between two points (no light, no sparks): a white core in a
+## coloured glow that flickers out over `time`.
+static func arc_between(parent: Node, a: Vector3, b: Vector3, color: Color, time: float = 0.1, segs: int = 5) -> void:
+	var prev: Vector3 = a
+	var d: Vector3 = b - a
+	var jit: float = d.length() * 0.12
+	for i: int in range(1, segs + 1):
+		var k: float = float(i) / float(segs)
+		var p: Vector3 = a + d * k
+		if i < segs:
+			p += Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)) * jit
+		beam(parent, prev, p, Color(1.0, 1.0, 1.0).lerp(color, 0.3), 0.025, time, 4.0)
+		beam(parent, prev, p, Color(color.r, color.g, color.b, 0.3), 0.09, time * 0.8, 1.6)
+		prev = p

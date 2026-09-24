@@ -132,7 +132,7 @@ func _process(dt: float) -> void:
 		if _magnet != null and _magnet.visible and randf() < 0.5:
 			var l: Vector3 = _magnet.global_transform * Vector3(-0.36, -0.5, 0)
 			var r: Vector3 = _magnet.global_transform * Vector3(0.36, -0.5, 0)
-			PartyFx.bolt(world(), l, r, Color(1.2, 0.7, 1.0), randi(), 0.1)
+			PartyFx.arc_between(world(), l, r, Color(1.2, 0.7, 1.0), 0.1)
 	_tether_t -= dt
 	if _tether_t <= 0.0 and is_inside_tree() and layer != null and not ended:
 		_tether_t = 0.12

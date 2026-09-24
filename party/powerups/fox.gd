@@ -116,7 +116,8 @@ func build_look() -> void:
 	_rig.add_child(embers)
 	# a trail of fire off the feet while running flat out: roaring tongues, a burning smear on
 	# the ground and a column of dark smoke behind
-	var ff: Dictionary = {"amount": 40, "lifetime": 0.38, "shape": "box", "extents": Vector3(0.24, 0.06, 0.12),
+	# (short-lived, so the streak stays near the feet and never fills our own camera's view)
+	var ff: Dictionary = {"amount": 36, "lifetime": 0.3, "shape": "box", "extents": Vector3(0.24, 0.06, 0.12),
 		"dir": Vector3.UP, "spread": 22.0, "speed": Vector2(0.8, 2.4), "gravity": Vector3(0, 3.0, 0),
 		"curve": "shrink", "scale": Vector2(0.7, 1.3), "fixed_fps": 0, "emitting": false, "box_aabb": 10.0,
 		"colors": PackedColorArray([Color(2.2, 1.5, 0.5, 0.95), Color(1.9, 0.5, 0.05, 0.8), Color(0.7, 0.06, 0.0, 0.4), Color(0.2, 0.05, 0.03, 0.0)])}
