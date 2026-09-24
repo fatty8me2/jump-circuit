@@ -86,6 +86,10 @@ var _shove_was: bool = false
 var _cycle_was: bool = false
 var _attack_held: float = -1.0
 var _ready_done: bool = false
+## Dizzy stars over our own head for a plain stun (a status effect shows its own look).
+var _stun_fx: PartyStatusFx
+## Racer id -> clock of the last KO burst drawn for them (so one KO shows one burst).
+var _ko_fx_at: Dictionary = {}
 
 
 func setup(p_level: LevelBase) -> void:
@@ -520,11 +524,31 @@ func hit(t: Dictionary, kb: Vector3, o: Dictionary = {}) -> void:
 		var msg: Dictionary = {"k": "hit", "kb": PowerUp.arr(kb), "st": float(o.get("st", 0.0)), "ko": bool(o.get("ko", false)),
 			"e": str(o.get("e", "")), "ed": float(o.get("ed", 0.0)), "s": src, "add": bool(o.get("add", false))}
 		Net.send_party(msg, int(t["id"]))
-	if not bool(o.get("quiet", false)):
-		PartyFx.burst(self, c, Color(1.0, 0.95, 0.7), 18, 5.0, 0.22, 0.4)
-		PartyFx.sparks(self, c, Color(1.0, 0.85, 0.4), 14, 7.0, kb.normalized() if kb.length() > 0.1 else Vector3.UP, 60.0)
+	if bool(o.get("ko", false)):
+		_ko_fx_at[int(t["id"])] = clock
+		PartyFx.ko_burst(self, c)
+		PartyFx.shake(level, 0.35)
+	elif not bool(o.get("quiet", false)):
+		hit_fx(c, kb)
 		sfx.play_at("hit", c, 0.9, 1.0 + randf_range(-0.1, 0.1))
+	# a rival we stunned gets dizzy stars on our screen at once (their own status message
+	# follows for real effects) - unless a Balloon Shield is about to soak it
+	var stun: float = float(o.get("st", 0.0))
+	if stun >= 0.4 and not bool(t.get("dummy", false)) and not bool(o.get("ko", false)):
+		var per: Dictionary = remote_powers.get(int(t["id"]), {})
+		if not per.has("balloon"):
+			_show_ghost_status(int(t["id"]), "stun", stun)
 	hit_landed.emit(int(t["id"]), src)
+
+
+## The shared "that connected" pop: a white impact flash, a burst, sparks along the blow
+## and a ring of cartoon stars around it.
+func hit_fx(c: Vector3, kb: Vector3) -> void:
+	var dir: Vector3 = kb.normalized() if kb.length() > 0.1 else Vector3.UP
+	PartyFx.orb_pulse(self, c, Color(1, 1, 1, 0.5), 0.15, 0.7, 0.1, 2.0)
+	PartyFx.burst(self, c, Color(1.0, 0.95, 0.7), 18, 5.0, 0.22, 0.4)
+	PartyFx.sparks(self, c, Color(1.0, 0.85, 0.4), 14, 7.0, dir, 60.0)
+	PartyFx.star_ring(self, c, Color(1.0, 0.9, 0.4), 7, 5.0, 0.36, dir)
 
 
 ## Could `id`'s attacks / hazards hurt us? (Never ourselves, never a teammate.)
@@ -627,6 +651,7 @@ func do_shove() -> void:
 	PartyFx.arc(self, origin + dir * 0.5, basis, 1.1, -0.9, 0.9, Color(1.0, 0.9, 0.6), 0.25, 0.18)
 	PartyFx.one_shot(self, origin + dir * 0.6, {"amount": 14, "lifetime": 0.3, "size": 0.3, "color": Color(1, 1, 1, 0.8),
 		"dir": dir, "spread": 25.0, "vmin": 6.0, "vmax": 10.0, "damping": 20.0})
+	_shove_dust(self, origin, dir)
 	sfx.play("whoosh", 0.7, 1.1)
 	send_fx("shove", "swing", {"o": PowerUp.arr(origin), "d": PowerUp.arr(dir)})
 	for t: Dictionary in targets_in_cone(origin, dir, 2.3, 0.35):
@@ -647,7 +672,17 @@ static func remote_fx_shove(layer_ref: PartyLayer, _from_id: int, _a: String, d:
 	if dir.length() < 0.1:
 		return
 	PartyFx.arc(layer_ref, o + dir * 0.5, PartyFx.facing(dir), 1.1, -0.9, 0.9, Color(1.0, 0.9, 0.6), 0.25, 0.18)
+	_shove_dust(layer_ref, o, dir)
 	layer_ref.sfx.play_at("whoosh", o, 0.7, 1.1)
+
+
+## The lunge kicks up a puff of dust at the feet and leaves a few speed lines.
+static func _shove_dust(parent: Node, o: Vector3, dir: Vector3) -> void:
+	PartyFx.one_shot(parent, o - Vector3(0, 0.7, 0) - dir * 0.2, {"amount": 10, "lifetime": 0.5, "size": 0.45,
+		"color": Color(0.85, 0.82, 0.75, 0.5), "additive": false, "tex": "smoke", "dir": -dir + Vector3(0, 0.4, 0),
+		"spread": 40.0, "vmin": 1.0, "vmax": 3.0, "damping": 4.0, "grow": true, "angle": true,
+		"colors": [Color(1, 1, 1, 0.8), Color(1, 1, 1, 0)]})
+	PartyFx.speed_lines(parent, o - dir * 0.6, o + dir * 1.4, Color(1.3, 1.3, 1.3, 0.5), 8, 0.4)
 
 
 # ---- being hit (victim side) ----------------------------------------------------------------
@@ -667,7 +702,9 @@ func _on_hit(from_id: int, m: Dictionary) -> void:
 	hit_taken.emit(from_id, src)
 	if bool(m.get("ko", false)):
 		var c: Vector3 = player.global_position + Vector3(0, 0.8, 0)
-		PartyFx.explosion(self, c, Color(1.0, 0.4, 0.2), Color(1.0, 0.8, 0.3), 2.0)
+		_ko_fx_at[Net.my_id()] = clock
+		PartyFx.ko_burst(self, c)
+		PartyFx.explosion(self, c, Color(1.0, 0.4, 0.2), Color(1.0, 0.8, 0.3), 1.4)
 		sfx.play("ko", 1.0)
 		PartyFx.shake(level, 0.8)
 		level.fail("hazard")
@@ -679,6 +716,7 @@ func _on_hit(from_id: int, m: Dictionary) -> void:
 	var st: float = float(m.get("st", 0.0))
 	if st > 0.0:
 		player.party_stun = maxf(player.party_stun, st)
+		_show_local_stun(st)
 	var e: String = str(m.get("e", ""))
 	if e != "":
 		apply_status(e, float(m.get("ed", 1.0)))
@@ -686,6 +724,16 @@ func _on_hit(from_id: int, m: Dictionary) -> void:
 		sfx.play("hit", 0.9)
 		PartyFx.shake(level, clampf(kb.length() / 30.0, 0.2, 0.7))
 		PartyFx.burst(self, player.global_position + Vector3(0, 0.8, 0), Color(1, 0.9, 0.6), 16, 4.0)
+		PartyFx.star_ring(self, player.global_position + Vector3(0, 0.8, 0), Color(1.0, 0.9, 0.4), 6, 4.0, 0.32, kb.normalized())
+
+
+## Dizzy stars over our head for a plain stun (not when a status already shows its look).
+func _show_local_stun(st: float) -> void:
+	if st < 0.4 or statuses.has("stun") or statuses.has("spin") or statuses.has("freeze") or statuses.has("float"):
+		return
+	if _stun_fx == null or not is_instance_valid(_stun_fx):
+		_stun_fx = PartyStatusFx.create("stun")
+		player.add_child(_stun_fx)
 
 
 ## Puts a status effect on our own Player and shows it everywhere.
@@ -707,10 +755,20 @@ func apply_status(e: String, dur: float) -> void:
 
 
 func _tick_statuses(dt: float) -> void:
+	if _stun_fx != null:
+		if not is_instance_valid(_stun_fx):
+			_stun_fx = null
+		elif player.party_stun <= 0.0:
+			PartyStatus.retire(_stun_fx)
+			_stun_fx = null
+		else:
+			PartyStatus.feed(_stun_fx, player.party_stun)
 	for e: String in statuses.keys():
 		statuses[e] = float(statuses[e]) - dt
 		if float(statuses[e]) <= 0.0:
 			_clear_status(e)
+		elif _status_fx.has(e):
+			PartyStatus.feed(_status_fx[e], float(statuses[e]))
 
 
 func _clear_status(e: String) -> void:
@@ -719,9 +777,8 @@ func _clear_status(e: String) -> void:
 		var v: Node3D = _status_fx[e]
 		if is_instance_valid(v):
 			if e == "freeze":
-				PartyFx.burst(self, player.global_position + Vector3(0, 0.8, 0), Color(0.75, 0.95, 1.0), 30, 6.0, 0.22)
 				sfx.play("clank", 0.7, 1.4)
-			v.queue_free()
+			PartyStatus.retire(v)
 		_status_fx.erase(e)
 
 
@@ -752,9 +809,9 @@ func _tick_ghost_status(dt: float) -> void:
 	for key: String in _ghost_status.keys():
 		var s: Array = _ghost_status[key]
 		s[1] = float(s[1]) - dt
+		PartyStatus.feed(s[0], float(s[1]))
 		if float(s[1]) <= 0.0:
-			if s[0] != null and is_instance_valid(s[0]):
-				(s[0] as Node3D).queue_free()
+			PartyStatus.retire(s[0])
 			if str(s[3]) == "shrink" and level._ghosts.has(int(s[2])):
 				(level._ghosts[int(s[2])] as RemoteRacer).visual().scale = Vector3.ONE
 			_ghost_status.erase(key)
@@ -778,6 +835,12 @@ func _on_player_respawned() -> void:
 func _apply_ko(by: int, victim: int) -> void:
 	kos[by] = int(kos.get(by, 0)) + 1
 	ko_scored.emit(by, victim)
+	# the KO burst where the victim went down (once: a claw KO already showed one)
+	if clock - float(_ko_fx_at.get(victim, -99.0)) > 2.0:
+		_ko_fx_at[victim] = clock
+		var g: RemoteRacer = ghost(victim)
+		if g != null and is_instance_valid(g) and g.global_position.y > level.kill_y + 3.0:
+			PartyFx.ko_burst(self, g.global_position + Vector3(0, 0.8, 0))
 	hud.feed("%s KO'd %s   +%d" % [racer_name(by), racer_name(victim), PartyRules.KO_POINTS], team_color_of(by))
 	if by == Net.my_id():
 		hud.announce("KO!  +%d" % PartyRules.KO_POINTS, Color(1.0, 0.45, 0.3))
@@ -876,8 +939,10 @@ func _on_swap(from_id: int, pos: Vector3) -> void:
 	last_hit_by = from_id
 	last_hit_at = clock
 	PartyFx.implode(self, player.global_position + Vector3(0, 0.8, 0), Color(0.4, 1.0, 0.85), 2.0)
+	PartyFx.portal(self, player.global_position + Vector3(0, 0.9, 0), Vector3.UP.cross(Basis(Vector3.UP, player.camera_yaw).x), Color(0.4, 1.0, 0.85), 1.1, 0.6)
 	player.teleport(Transform3D(Basis(Vector3.UP, player.camera_yaw), pos + Vector3(0, 0.1, 0)))
 	PartyFx.burst(self, pos + Vector3(0, 0.8, 0), Color(0.4, 1.0, 0.85), 40, 6.0)
+	PartyFx.portal(self, pos + Vector3(0, 0.9, 0), Vector3.UP.cross(Basis(Vector3.UP, player.camera_yaw).x), Color(0.4, 1.0, 0.85), 1.1, 0.6)
 	sfx.play("warp", 1.0)
 	hud.announce("SWAPPED!", Color(0.4, 1.0, 0.85))
 	hit_taken.emit(from_id, "swap")

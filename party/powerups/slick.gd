@@ -16,17 +16,19 @@ func begin() -> void:
 	if not g.is_empty():
 		at = g["position"]
 	var key: String = layer.new_key()
-	_drop(layer, key, owner_id, at)
+	_drop(layer, key, owner_id, at, chest())
 	layer.sfx.play("pop", 0.9, 0.6)
 	fx("drop", {"k": key, "pos": arr(at)})
 	finish()
 
 
-static func _drop(layer_ref: PartyLayer, key: String, owner: int, at: Vector3) -> SlickPuddle:
+## `from`: where the glob of slick is flung from (cosmetic; INF = it just appears).
+static func _drop(layer_ref: PartyLayer, key: String, owner: int, at: Vector3, from: Vector3 = Vector3.INF) -> SlickPuddle:
 	var pd := SlickPuddle.new()
 	pd.layer = layer_ref
 	pd.owner_id = owner
 	pd.key = key
+	pd.thrown_from = from
 	layer_ref.add_child(pd)
 	pd.global_position = at
 	return pd
@@ -34,5 +36,7 @@ static func _drop(layer_ref: PartyLayer, key: String, owner: int, at: Vector3) -
 
 static func remote_fx(layer_ref: PartyLayer, from_id: int, action: String, d: Dictionary) -> void:
 	if action == "drop":
-		_drop(layer_ref, str(d.get("k", "")), from_id, PowerUp.v3(d.get("pos", [])))
+		var g: RemoteRacer = layer_ref.ghost(from_id)
+		var from: Vector3 = g.global_position + Vector3(0, 0.8, 0) if g != null else Vector3.INF
+		_drop(layer_ref, str(d.get("k", "")), from_id, PowerUp.v3(d.get("pos", [])), from)
 		layer_ref.sfx.play_at("pop", PowerUp.v3(d.get("pos", [])), 0.8, 0.6)
