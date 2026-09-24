@@ -1028,9 +1028,13 @@ func test_x_update_check_and_prompt() -> void:
 	check(Updater.version_from_tag("jump-circuit-multiplayer-keepalive-2026-09-23") == "", "tags without a version are ignored")
 	check(Updater.compare_versions("1.10.0", "1.9.3") == 1 and Updater.compare_versions("1.1.0", "1.1.0") == 0 and Updater.compare_versions("1.0.9", "1.1.0") == -1, "versions compare numerically")
 	check(Updater.parse_release({"tag_name": "v9.0.0", "prerelease": true}).is_empty() and Updater.parse_release({"tag_name": "v9.0.0", "draft": true}).is_empty(), "drafts and pre-releases never prompt")
-	var rel: Dictionary = Updater.parse_release({"tag_name": "v9.0.0", "html_url": "https://example.invalid/r", "body": "New levels"})
-	check(rel.get("version", "") == "9.0.0" and rel.get("url", "") == "https://example.invalid/r", "a release yields its version and page")
-	# a newer release: the main menu asks once, focused on Download; Esc / B backs out to main
+	var rel: Dictionary = Updater.parse_release({"tag_name": "v9.0.0", "html_url": "https://example.invalid/r", "body": "New levels", "assets": [{
+		"name": "JumpCircuit-v9.0.0.zip",
+		"browser_download_url": "https://github.com/fatty8me2/jump-circuit/releases/download/v9.0.0/JumpCircuit-v9.0.0.zip",
+		"size": 1024,
+	}]})
+	check(rel.get("version", "") == "9.0.0" and rel.get("url", "") == "https://example.invalid/r" and rel.get("asset_name", "") == "JumpCircuit-v9.0.0.zip", "a release yields version and downloadable asset")
+	# a newer release: the main menu asks once, focused on Install & Restart; Esc / B backs out to main
 	Updater.available = rel
 	Updater.prompted = false
 	Game.title_screen = "main"
@@ -1038,7 +1042,7 @@ func test_x_update_check_and_prompt() -> void:
 	add_child(title)
 	await ticks(3)
 	var focus: Control = get_viewport().gui_get_focus_owner()
-	check(Game.title_screen == "update" and focus is Button and (focus as Button).text == "Download", "the update prompt opens with Download focused")
+	check(Game.title_screen == "update" and focus is Button and (focus as Button).text == "Install & Restart", "the update prompt opens with Install & Restart focused")
 	get_viewport().push_input(_key(KEY_ESCAPE))
 	get_viewport().push_input(_key(KEY_ESCAPE, false))
 	await ticks(3)

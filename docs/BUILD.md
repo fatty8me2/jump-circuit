@@ -45,14 +45,18 @@ Zip the `build/` folder. Everyone runs `JumpCircuit.exe`; see the README for hos
 On launch the game asks GitHub for the latest release of `fatty8me2/jump-circuit`
 (`autoload/updater.gd`). If that release's tag is a higher version than the running build's
 `application/config/version` (in `project.godot`), the main menu shows an **Update available**
-prompt with the release notes: *Download* opens the release page, *Remind Me Later* asks again next
-launch, *Skip This Version* stays quiet until an even newer release. Offline or rate-limited: silently
-skipped, the game never waits on it.
+prompt with the release notes. *Install & Restart* downloads the versioned Windows ZIP directly,
+checks its size and GitHub SHA-256 digest, installs the executable and game data beside the running
+client, then launches the new version. *Remind Me Later* asks again next launch, and *Skip This
+Version* stays quiet until an even newer release. Offline or rate-limited update checks are skipped;
+the game never waits on them.
 
 To ship an update:
 1. Bump `config/version` in `project.godot` (e.g. `1.1.0` -> `1.2.0`).
-2. Build (`tools\make_build.bat`) and zip the `build\` folder.
-3. Publish a release whose tag is that version with a `v` prefix, attaching the zip; the release
+2. Build (`tools\make_build.bat`) and zip `JumpCircuit.exe`, `JumpCircuit.pck`, and `LICENSES.md`
+   at the root of the archive. Name it `JumpCircuit-vVERSION.zip` (for example,
+   `JumpCircuit-v1.2.0.zip`).
+3. Publish a release whose tag is that version with a `v` prefix, attaching the zip. The release
    body becomes the "what's new" text in the prompt:
    ```
    gh release create v1.2.0 JumpCircuit-v1.2.0.zip --title "Jump Circuit 1.2.0" --notes "What changed..."

@@ -22,6 +22,9 @@ var _prev_screen: String = ""
 var _controls_hint: Label
 ## Lobby: the game mode and its blurb (+ Party Cup progress).
 var _mode_label: Label
+var _update_status: Label
+var _update_button: Button
+var _update_secondary_buttons: Array[Button] = []
 
 
 func _ready() -> void:
@@ -49,6 +52,9 @@ func _ready() -> void:
 	Updater.update_available.connect(func(_info: Dictionary) -> void:
 		if Game.title_screen == "main":
 			show_screen("main"))   # redirects to the update prompt (see show_screen)
+	Updater.install_status_changed.connect(_on_update_status_changed)
+	Updater.install_progress.connect(_on_update_progress)
+	Updater.install_failed.connect(_on_update_failed)
 	var want: String = Game.title_screen
 	if (want == "lobby" and not Net.active) or want == "update":
 		want = "main"
@@ -236,7 +242,7 @@ func _main_screen() -> Control:
 		box.add_child(UiKit.button("Playground (dev)", func() -> void: Game.play_playground(), 380))
 	box.add_child(UiKit.button("Quit", func() -> void: Sfx.quit(), 380))
 	if not Updater.available.is_empty():
-		box.add_child(UiKit.button("Get update  -  v%s" % Updater.available["version"], func() -> void: Updater.open_download(), 380))
+		box.add_child(UiKit.button("Get update  -  v%s" % Updater.available["version"], func() -> void: show_screen("update"), 380))
 	if Game.title_message != "":
 		box.add_child(UiKit.shadowed(UiKit.label(Game.title_message, 18, Color(1, 0.6, 0.5))))
 		Game.title_message = ""
@@ -249,10 +255,13 @@ func _main_screen() -> Control:
 	return _left_column(box)
 
 
-## Newer release on GitHub: what's new, and a button that opens its download page.
+## Newer release: what's new and a direct download/install action.
 func _update_screen() -> Control:
 	Updater.prompted = true
 	var info: Dictionary = Updater.available
+	_update_status = null
+	_update_button = null
+	_update_secondary_buttons.clear()
 	var box: VBoxContainer = UiKit.vbox(12)
 	box.add_child(UiKit.shadowed(UiKit.label("UPDATE AVAILABLE", 40, UiKit.GOLD), 8))
 	box.add_child(UiKit.shadowed(UiKit.label("Jump Circuit v%s is out  -  you have v%s." % [info.get("version", "?"), Updater.current_version()], 22, Color.WHITE), 6))
@@ -264,18 +273,59 @@ func _update_screen() -> Control:
 		var panel: PanelContainer = UiKit.panel()
 		panel.add_child(notes)
 		box.add_child(panel)
-	box.add_child(UiKit.shadowed(UiKit.label("Download opens the release page: grab the new zip and replace your game folder.
-Your progress and settings are kept.", 16, Color(1, 1, 1, 0.75)), 5))
-	var download: Button = UiKit.button("Download", func() -> void:
-		Updater.open_download()
-		show_screen("main"), 380)
-	box.add_child(download)
-	box.add_child(UiKit.button("Remind Me Later", func() -> void: show_screen("main"), 380))
-	box.add_child(UiKit.button("Skip This Version", func() -> void:
+	var instructions: Label = UiKit.shadowed(UiKit.label("The game will download and install the update, then restart automatically.
+Your progress and settings are kept.", 16, Color(1, 1, 1, 0.75)), 5)
+	instructions.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	instructions.custom_minimum_size = Vector2(520, 0)
+	box.add_child(instructions)
+	_update_status = UiKit.label("Ready to install.", 16, UiKit.SOFT)
+	_update_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_update_status.custom_minimum_size = Vector2(520, 0)
+	box.add_child(_update_status)
+	_update_button = UiKit.button("Install & Restart", func() -> void:
+		if _update_button != null:
+			_update_button.disabled = true
+		for button: Button in _update_secondary_buttons:
+			button.disabled = true
+		Updater.install_update(), 380)
+	box.add_child(_update_button)
+	var remind_button: Button = UiKit.button("Remind Me Later", func() -> void: show_screen("main"), 380)
+	_update_secondary_buttons.append(remind_button)
+	box.add_child(remind_button)
+	var skip_button: Button = UiKit.button("Skip This Version", func() -> void:
 		Updater.skip_version()
-		show_screen("main"), 380))
-	_focus_pref = download
+		show_screen("main"), 380)
+	_update_secondary_buttons.append(skip_button)
+	box.add_child(skip_button)
+	_focus_pref = _update_button
 	return _left_column(box, 560.0)
+
+
+func _on_update_status_changed(message: String) -> void:
+	if _update_status != null and is_instance_valid(_update_status):
+		_update_status.text = message
+
+
+func _on_update_progress(downloaded_bytes: int, total_bytes: int) -> void:
+	if _update_status == null or not is_instance_valid(_update_status):
+		return
+	var downloaded_mb: float = float(downloaded_bytes) / 1048576.0
+	if total_bytes > 0:
+		var total_mb: float = float(total_bytes) / 1048576.0
+		var percentage: int = int(100.0 * downloaded_bytes / total_bytes)
+		_update_status.text = "Downloading update... %d%% (%.1f / %.1f MB)" % [percentage, downloaded_mb, total_mb]
+	else:
+		_update_status.text = "Downloading update... %.1f MB" % downloaded_mb
+
+
+func _on_update_failed(message: String) -> void:
+	if _update_button != null and is_instance_valid(_update_button):
+		_update_button.disabled = false
+		_update_button.text = "Retry Update"
+	for button: Button in _update_secondary_buttons:
+		if is_instance_valid(button):
+			button.disabled = false
+	_on_update_status_changed(message)
 
 
 func _levels_screen() -> Control:
