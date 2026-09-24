@@ -25,67 +25,41 @@ static func mods(effect: String) -> Vector3:
 
 
 ## Visual for an effect, to parent under the racer's root (feet at the origin). null = none.
+## Each is a self-animating PartyStatusFx (see party_status_fx.gd).
 static func make(effect: String) -> Node3D:
 	match effect:
-		"freeze":
-			return ice_block()
-		"float":
-			return float_bubble()
-		"stun", "spin":
-			return dizzy_stars()
-		"slow":
-			return storm_static()
+		"freeze", "float", "stun", "spin", "slow", "shrink":
+			return PartyStatusFx.create(effect)
 	return null
 
 
+## Tells a status visual how long it has left (it warns in its last moments).
+static func feed(v: Variant, seconds_left: float) -> void:
+	if v is PartyStatusFx and is_instance_valid(v):
+		(v as PartyStatusFx).left = seconds_left
+
+
+## Removes a status visual with its end effect (the ice shatters, the bubble pops...).
+static func retire(v: Variant) -> void:
+	if v == null or not is_instance_valid(v):
+		return
+	if v is PartyStatusFx:
+		(v as PartyStatusFx).retire()
+	else:
+		(v as Node).queue_free()
+
+
 static func ice_block() -> Node3D:
-	var root := Node3D.new()
-	var mat: StandardMaterial3D = PartyFx.solid_mat(Color(0.7, 0.93, 1.0, 0.5), 0.6, 0.05, 0.2)
-	mat.rim_enabled = true
-	mat.rim = 1.0
-	var block: MeshInstance3D = PartyFx.part(root, PartyFx.box_mesh(Vector3(1.2, 1.7, 1.2)), mat, Vector3(0, 0.85, 0))
-	block.rotation_degrees = Vector3(0, 12, 0)
-	# frosty shards around the base
-	for i: int in 6:
-		var a: float = TAU * float(i) / 6.0
-		PartyFx.part(root, PartyFx.cone_mesh(0.12, 0.5, 5), mat, Vector3(cos(a) * 0.7, 0.2, sin(a) * 0.7), Vector3.ONE, Vector3(randf_range(-30, 30), 0, randf_range(-30, 30)))
-	root.add_child(PartyFx.emitter({"amount": 14, "lifetime": 1.2, "size": 0.12, "color": Color(0.8, 0.97, 1.0),
-		"shape": "box", "extents": Vector3(0.6, 0.85, 0.6), "vmin": 0.05, "vmax": 0.3, "dir": Vector3.DOWN,
-		"spread": 40.0, "gravity": Vector3(0, -0.6, 0), "spark": true, "aabb": 2.0}))
-	root.scale = Vector3.ONE * 0.2
-	root.create_tween().tween_property(root, "scale", Vector3.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	return root
+	return PartyStatusFx.create("freeze")
 
 
 static func float_bubble() -> Node3D:
-	var root := Node3D.new()
-	var mat: StandardMaterial3D = PartyFx.solid_mat(Color(0.7, 0.45, 1.0, 0.28), 1.2, 0.05, 0.1)
-	mat.rim_enabled = true
-	mat.rim = 1.0
-	mat.rim_tint = 0.8
-	PartyFx.part(root, PartyFx.sphere_mesh(0.95, 24), mat, Vector3(0, 0.8, 0))
-	root.add_child(PartyFx.emitter({"amount": 20, "lifetime": 1.0, "size": 0.16, "color": Color(0.75, 0.5, 1.0),
-		"shape": "shell", "radius": 1.0, "vmin": 0.0, "vmax": 0.1, "tangential": 3.0, "aabb": 2.5,
-		"local": true}))
-	var e: GPUParticles3D = root.get_child(root.get_child_count() - 1) as GPUParticles3D
-	e.position = Vector3(0, 0.8, 0)
-	return root
+	return PartyStatusFx.create("float")
 
 
 static func dizzy_stars() -> Node3D:
-	var root := Node3D.new()
-	var e: GPUParticles3D = PartyFx.emitter({"amount": 10, "lifetime": 0.8, "size": 0.22, "color": Color(1.0, 0.95, 0.4),
-		"shape": "ring", "radius": 0.45, "inner": 0.4, "vmin": 0.0, "vmax": 0.1, "tangential": 6.0, "spark": true,
-		"local": true, "aabb": 1.5, "shrink": false, "colors": [Color(1, 1, 1, 0), Color(1, 1, 1, 1), Color(1, 1, 1, 0)]})
-	e.position = Vector3(0, 1.35, 0)
-	root.add_child(e)
-	return root
+	return PartyStatusFx.create("stun")
 
 
 static func storm_static() -> Node3D:
-	var root := Node3D.new()
-	var e: GPUParticles3D = PartyFx.emitter({"amount": 18, "lifetime": 0.25, "size": 0.14, "color": Color(0.65, 0.75, 1.0),
-		"shape": "sphere", "radius": 0.55, "vmin": 1.0, "vmax": 3.0, "spark": true, "aabb": 1.5})
-	e.position = Vector3(0, 0.7, 0)
-	root.add_child(e)
-	return root
+	return PartyStatusFx.create("slow")

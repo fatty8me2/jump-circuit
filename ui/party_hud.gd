@@ -29,6 +29,10 @@ var _panel_host: Control
 var _hint: Label
 var _last_count: int = -1
 var _finish_bar: PanelContainer
+## Item roulette: seconds of icon-flicking left before the slot lands on the real item
+## (cosmetic - the item is usable at once).
+var _roll_left: float = 0.0
+var _roll_tick: float = 0.0
 
 
 func _ready() -> void:
@@ -148,13 +152,33 @@ func _fade_later(c: CanvasItem, after: float, to_alpha: float = 0.0) -> void:
 	tw.tween_property(c, "modulate:a", to_alpha, 1.0)
 
 
-func _process(_dt: float) -> void:
+func _process(dt: float) -> void:
 	if party == null:
 		return
 	var pad: bool = Game.using_pad
-	# item slot
-	_slot_icon.item_id = party.item
-	if party.item != "":
+	# item slot (flicking through items for a moment after a pickup)
+	if _roll_left > 0.0 and party.item != "":
+		_roll_left -= dt
+		_roll_tick -= dt
+		if _roll_left <= 0.0:
+			_land_roll()
+		elif _roll_tick <= 0.0:
+			_roll_tick = 0.05 + (0.6 - _roll_left) * 0.12
+			var ids: Array[String] = PartyItems.ids()
+			var pick: String = ids[randi() % ids.size()]
+			if pick == _slot_icon.item_id:
+				pick = ids[(ids.find(pick) + 1) % ids.size()]
+			_slot_icon.item_id = pick
+			_slot_icon.pivot_offset = _slot_icon.size * 0.5
+			_slot_icon.scale = Vector2.ONE * 1.12
+			create_tween().tween_property(_slot_icon, "scale", Vector2.ONE, 0.05)
+	else:
+		_roll_left = 0.0
+		_slot_icon.item_id = party.item
+	if _roll_left > 0.0:
+		_slot_name.text = "? ? ?"
+		_slot_name.add_theme_color_override("font_color", UiKit.GOLD)
+	elif party.item != "":
 		_slot_name.text = PartyNames.item_name(party.item)
 		_slot_name.add_theme_color_override("font_color", PartyNames.item_color(party.item).lightened(0.3))
 		_slot_hint.text = "%s  use" % Game.prompt("use_item")
@@ -179,6 +203,9 @@ func _process(_dt: float) -> void:
 		_power_name.text = PartyNames.item_name(show.item_id).to_upper()
 		_power_name.add_theme_color_override("font_color", PartyNames.item_color(show.item_id).lightened(0.25))
 		var frac: float = clampf(show.time_left / maxf(show.duration, 0.01), 0.0, 1.0)
+		# running out: the timer blinks faster and faster over its last two seconds
+		var left: float = show.time_left - (0.0 if show.local else 1.0)
+		_power_box.modulate.a = 1.0 if PartyFx.blink_on(left, 2.0) else 0.5
 		_power_fill.size.x = 400.0 * frac
 		_power_fill.color = PartyNames.item_color(show.item_id).lerp(Color(1, 0.3, 0.3), 1.0 - frac if frac < 0.3 else 0.0)
 		var status: String = show.hud_status()
@@ -241,15 +268,26 @@ func announce(text: String, color: Color = UiKit.GOLD) -> void:
 	_announce_tw.tween_property(_announce, "modulate:a", 0.0, 0.4)
 
 
-## The slot filled: the icon pops.
+## The slot filled: a quick roulette of icons, then it lands on the item with a pop.
 func item_rolled(id: String) -> void:
-	_slot_icon.pivot_offset = _slot_icon.size * 0.5
-	_slot_icon.scale = Vector2.ONE * 1.6
-	create_tween().tween_property(_slot_icon, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	_roll_left = 0.6
+	_roll_tick = 0.0
 	if party != null and party.practice:
 		_hint.text = "%s  -  %s" % [PartyNames.item_name(id), PartyNames.item_desc(id)]
 		_hint.modulate.a = 1.0
 		_fade_later(_hint, 5.0)
+
+
+## The roulette stops on the real item: the icon slams in with a white flash.
+func _land_roll() -> void:
+	_roll_left = 0.0
+	_slot_icon.item_id = party.item if party != null else ""
+	_slot_icon.pivot_offset = _slot_icon.size * 0.5
+	_slot_icon.scale = Vector2.ONE * 1.6
+	_slot_icon.modulate = Color(2.2, 2.2, 2.2)
+	var tw: Tween = create_tween().set_parallel(true)
+	tw.tween_property(_slot_icon, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(_slot_icon, "modulate", Color.WHITE, 0.3)
 
 
 ## Kill feed line (fades after a few seconds; newest at the bottom, 5 kept).
