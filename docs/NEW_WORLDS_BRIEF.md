@@ -1,4 +1,4 @@
-# NEW WORLDS brief - levels 7 Xeno Wilds and 8 Cinder Peak (read after docs/LEVEL_BRIEF.md, docs/HARD_MODE_BRIEF.md and docs/EXTENSION_BRIEF.md - this overrides them where they differ)
+# NEW WORLDS brief - levels 7 Xeno Wilds, 8 Cinder Peak, 9 Frostbite Pass and 10 Scarab Sands (read after docs/LEVEL_BRIEF.md, docs/HARD_MODE_BRIEF.md and docs/EXTENSION_BRIEF.md - this overrides them where they differ)
 
 The owner's request (2026-09-24): **"implement 2 more unique maps. I really really like the space station and the coral
 map. Maybe do some type of alien planet map and something else crazy you can think of, maybe a crazy volcano map with a
@@ -9,9 +9,12 @@ because the whole world is restyled (sky, fog, light, huge custom scenery, dense
 theme-specific machines. Read both scripts end to end before you start - reuse their patterns (local stage frames,
 `_cp_world`, decor helpers, course-clock bursts, route variants).
 
+Later the same day the owner added: **"build level 9 and 10 as well with 2 different unique untouched themes"** - the
+lead chose Frostbite Pass (a frozen ice fortress) and Scarab Sands (a desert sun temple); see their sections below.
+
 New order (0-based index): 0 gardens, 1 foundry, 2 balance, 3 clockwork, 4 reef, 5 orbital, **6 xeno**, **7 volcano**,
-8 ascent. The Final Ascent stays the finale (its files are now `levels/level_9_ascent.*`). Placeholders exist:
-`levels/level_7_xeno.gd` / `level_8_volcano.gd` (+ .tscn), their `Look.THEMES` entries, their `Game.LEVELS` lines,
+**8 glacier**, **9 desert**, 10 ascent. The Final Ascent stays the finale (its files are now `levels/level_11_ascent.*`).
+Placeholders exist: `levels/level_7_xeno.gd` / `level_8_volcano.gd` / `level_9_glacier.gd` / `level_10_desert.gd` (+ .tscn), their `Look.THEMES` entries, their `Game.LEVELS` lines,
 `SaveData.LAYOUT_REV` entries, and their music tracks (`music_track` is already set - the lead is scoring both maps).
 
 Project root (main checkout): `C:\Users\fatty\Desktop\PlatformerJumpPuzzle`. You work in your own git worktree.
@@ -75,11 +78,58 @@ Theme mechanics (build 2-3 as `mechanics/volcano_*.gd`, deterministic from `Game
 - **Crust plates** - cooled lava crust that cracks and breaks shortly after you land on it.
 End at the crater rim under the eruption, with a finish that goes off (the fountain surges, a burst of fire and embers).
 
+## Level 9 - FROSTBITE PASS (`theme_id = "glacier"`, `music_track = "glacier"`)
+**A frozen mountain pass and an ice fortress in a blizzard, under the northern lights.** Polar dusk turning to night:
+a deep-blue sky with aurora curtains, snow-laden peaks, glaciers with blue crevasses, a frozen waterfall the height of
+a cathedral, an ice fortress of translucent walls and spires lit from inside, and snow blowing sideways. It must feel
+cold: a blue-white palette, glassy translucent ice (refraction, rim light, emission), soft snow and frost sparkle.
+Keep it distinct from Xeno Wilds' alien sky: these are green-violet aurora curtains high in a clear polar sky.
+Theme mechanics (build 2-3 as `mechanics/glacier_*.gd`, deterministic from `Game.course_time`):
+- **Falling icicles:** icicles hanging from overhangs shiver, then drop on the course clock. A frost ring on the floor
+  warns where each will land. They are deadly while falling, and the shattered ice melts away.
+- **Blizzard gusts:** a readable gust front (snow streaks) sweeps across a stage on a rhythm and shoves you sideways
+  (horizontal `kit.wind` pulses). Time your jumps between gusts, or use them.
+- **Cracking ice bridges / thin ice:** glassy panels that crack when stood on and break a moment later (show the cracks
+  spreading). Also **ice slides**: slick ramps that fling you across crevasses.
+- **Set piece: the avalanche.** A wall of snow thunders down a long slope on the course clock, and you race across or
+  down the slope ahead of it, or duck into shelters between waves. This is the wow moment of the level: huge snow
+  particles and a rumble. Or bring your own better idea.
+Also welcome: a frozen-waterfall wall-run chimney, snowball rollers, an ice cave with glowing crystals, a frozen-lake
+slide under the aurora, fortress drawbridges (movers), snow cannons (pistons).
+Sound hooks (`WorldAudio`; the lead will provide these clips): `icicle_crack`, `icicle_fall`, `icicle_shatter`,
+`gust_whoosh`, `ice_crack`, `ice_break`, `avalanche_roar` (loop), `avalanche_rumble`, `snow_thump`.
+
+## Level 10 - SCARAB SANDS (`theme_id = "desert"`, `music_track = "desert"`)
+**An ancient desert sun temple.** The setting:
+- A blazing afternoon sun, low toward golden hour, over towering dunes with wind-blown sand.
+- Colossal pyramids and half-buried statues on the horizon, a sandstorm wall rolling in far away, and heat shimmer.
+- An oasis with palms and turquoise water at checkpoints.
+- The temple itself: sandstone blocks carved with glyphs, gold and turquoise inlay, torches, sunbeams slanting through
+  dusty halls, and a great sun-disc over the finish.
+- A warm gold / ochre / turquoise palette, hard shadows, and dust motes in the light.
+Theme mechanics (build 2-3 as `mechanics/desert_*.gd`, deterministic from `Game.course_time`):
+- **Spike traps:** floor plates whose spikes thrust up on a rhythm; a glyph glows before they fire.
+- **Sand falls / quicksand:** curtains of sand pouring from the ceiling on a rhythm (timing gates), and sinking sand
+  that drags you down if you stand in it too long.
+- **Dust devils:** small whirlwinds wandering on a path that lift you (moving updrafts). Ride them up to high ledges.
+- **Mirage platforms:** shimmering platforms that fade in and out with the heat (a blink variant with a readable
+  shimmer build-up).
+- **Set piece: the boulder run.** A giant stone ball is released on the course clock and rolls down a long temple
+  corridor or ramp behind you. Outrun it through a gauntlet and dive into a side alcove, or leap a gap it falls into.
+  This is the wow moment of the level. It is deterministic from the clock: a checkpoint restart re-arms it. Design it so
+  a fluent run just escapes.
+Also welcome: swinging blade pendulums, dart lasers from glyph walls, collapsing sandstone, a rotating sun-dial
+platform, scarab swarms (sweepers), and a hidden tomb shortcut behind a sliding wall (a portal).
+Sound hooks (the lead will provide these clips): `spike_trap`, `spike_retract`, `sandfall_loop` (loop),
+`quicksand_sink`, `dustdevil_loop` (loop), `mirage_shimmer`, `boulder_roll` (loop), `boulder_impact`, `stone_grind`.
+
+Difficulty order: Xeno Wilds < Cinder Peak < Frostbite Pass < Scarab Sands < The Final Ascent.
+
 ---
 
-## Both levels: what "done" means
+## All four levels: what "done" means
 1. **17-20 stages**, each ending on a checkpoint facing the next stage. Difficulty sits between Orbital Drift (6) and
-   The Final Ascent (9); Cinder Peak (8) is harder than Xeno Wilds (7).
+   The Final Ascent (9); each new level is harder than the one before (see the difficulty order above).
 2. **A super unique environment** built from your level script: in `_build()` restyle the `WorldEnvironment` /
    `DirectionalLight3D` that `Look.build_environment` added (fog, sky, glow, light, ambient), add a custom sky if needed
    (see `visual/reef_sky.gdshader`, `visual/orbital_sky.gd`), large far scenery, and dense set dressing. You own your
@@ -126,8 +176,8 @@ End at the crater rim under the eruption, with a finish that goes off (the fount
 G=/c/Users/fatty/Desktop/PlatformerJumpPuzzle/tools/Godot_v4.7.1-stable_win64.exe
 W=<your worktree root>
 timeout 600 $G --headless --path $W --import
-timeout 900 $G --headless --path $W res://tests/run_tests.tscn -- --only=test_m --level=<6 or 7>
-timeout 3600 $G --headless --path $W res://tests/run_tests.tscn -- --only=test_n --level=<6 or 7> --route=all
+timeout 900 $G --headless --path $W res://tests/run_tests.tscn -- --only=test_m --level=<6, 7, 8 or 9>
+timeout 3600 $G --headless --path $W res://tests/run_tests.tscn -- --only=test_n --level=<6, 7, 8 or 9> --route=all
 ```
 Targets: test_m hardest jump <= 95 %; test_n finishes EVERY route variant with <= 30 respawns each. Also run the
 quick groups (`--only=test_a`, `test_b`, ...) that load every level, to make sure yours builds cleanly with no errors or
