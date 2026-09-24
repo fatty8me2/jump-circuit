@@ -26,6 +26,7 @@ var _mode_label: Label
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	DisplayServer.window_set_title("Jump Circuit v%s" % Updater.current_version())
 	_build_diorama()
 	var layer := CanvasLayer.new()
 	add_child(layer)
@@ -242,6 +243,7 @@ func _main_screen() -> Control:
 	_controls_hint = UiKit.shadowed(UiKit.label("", 16, Color(1, 1, 1, 0.75)), 5)
 	box.add_child(_controls_hint)
 	_update_controls_hint(Game.using_pad)
+	box.add_child(UiKit.shadowed(UiKit.label("v%s" % Updater.current_version(), 15, UiKit.SOFT), 4))
 	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn, "practice": practice_btn}
 	_focus_pref = openers.get(_prev_screen, play)
 	return _left_column(box)
