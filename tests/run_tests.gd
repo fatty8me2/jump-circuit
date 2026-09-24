@@ -2896,3 +2896,63 @@ func test_zp_party_finish_bar() -> void:
 	await ticks(2)
 	check(p.hud.find_child("FinishBar", true, false) == null or (p.hud.find_child("FinishBar", true, false) as Node).is_queued_for_deletion(), "the bar goes when the round ends")
 	Game.party = null
+
+
+# ---- soundscapes --------------------------------------------------------------------------------
+
+## Every map's ambience (sound/soundscape.gd): its bed (and second layer) load as looping Ogg and
+## play on the Ambience bus through the pause, every scheduled one-shot has clips and plays in 3D
+## on the Ambience bus, and the reef's deep bed takes over as the course runs out.
+func test_zs_soundscapes() -> void:
+	await new_world()
+	var cam := Camera3D.new()
+	world.add_child(cam)
+	cam.current = true
+	for theme: String in Soundscape.THEMES:
+		var spec: Dictionary = Soundscape.THEMES[theme]
+		var s: Soundscape = Soundscape.make(theme)
+		s.progress_override = 0.0
+		world.add_child(s)
+		await ticks(2)
+		var beds: Array[AudioStreamPlayer] = [s.bed_player()]
+		if spec.has("layer"):
+			beds.append(s.layer_player())
+		for bed: AudioStreamPlayer in beds:
+			var ogg: AudioStreamOggVorbis = bed.stream as AudioStreamOggVorbis if bed != null else null
+			check(ogg != null and ogg.loop and ogg.get_length() >= 45.0, "%s: bed %s loads as a looping Ogg of 45 s or more" % [theme, bed.name if bed != null else "?"])
+			check(bed != null and bed.playing and bed.bus == &"Ambience" and bed.process_mode == Node.PROCESS_MODE_ALWAYS, "%s: bed %s plays on the Ambience bus and keeps playing while paused" % [theme, bed.name if bed != null else "?"])
+		var events: Array = spec["events"]
+		for i: int in events.size():
+			check(s.play_event(i, false), "%s: one-shot %s has clips and plays" % [theme, events[i]["clip"]])
+		var on_bus: int = 0
+		for n: Node in s.get_children():
+			if n is AudioStreamPlayer3D and (n as AudioStreamPlayer3D).playing and (n as AudioStreamPlayer3D).bus == &"Ambience":
+				on_bus += 1
+		check(on_bus == mini(events.size(), Soundscape.POOL_SIZE) and s.active_one_shots() == on_bus, "%s: the one-shots sound in 3D on the Ambience bus (%d)" % [theme, on_bus])
+		check(s.process_mode == Node.PROCESS_MODE_INHERIT, "%s: the one-shot schedule pauses with the game" % theme)
+		if theme == "reef":
+			s.set("_fade", 1.0)
+			s.progress = 1.0
+			s.progress_override = 1.0
+			await get_tree().process_frame   # (the mix follows in _process)
+			await get_tree().process_frame
+			check(s.layer_player().volume_db > -1.0 and s.bed_player().volume_db <= Soundscape.SILENT_DB + 0.1, "reef: at the end of the course the deep bed has taken over (%.1f / %.1f dB)" % [s.bed_player().volume_db, s.layer_player().volume_db])
+		s.queue_free()
+		await ticks(1)
+	var none: Soundscape = Soundscape.make("no_such_theme")
+	world.add_child(none)
+	await ticks(2)
+	check(none.bed_player() == null and not none.play_event(0), "an unknown theme builds a silent soundscape")
+	none.queue_free()
+	cam.queue_free()
+	# in a level, the layer follows checkpoint progress (levels only add it outside headless runs)
+	for i: int in Game.LEVELS.size():
+		if Game.LEVELS[i]["id"] != "reef":
+			continue
+		var lvl: LevelBase = await load_level(i)
+		var rs: Soundscape = Soundscape.make(lvl.theme_id)
+		lvl.add_child(rs)
+		lvl.current_checkpoint = lvl.checkpoints.size()
+		await get_tree().process_frame
+		await get_tree().process_frame
+		check(lvl.theme_id == "reef" and not lvl.checkpoints.is_empty() and rs.progress > 0.0 and rs.progress < 0.2, "reef: reaching the last checkpoint starts easing the deep bed in (progress %.3f)" % rs.progress)

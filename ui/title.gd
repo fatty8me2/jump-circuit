@@ -95,6 +95,7 @@ func _build_diorama() -> void:
 	_cam.far = 900.0
 	add_child(_cam)
 	_cam.current = true
+	add_child(Soundscape.make("title"))
 
 
 func _process(dt: float) -> void:
