@@ -736,3 +736,64 @@ static func screen_flash(host: Node, color: Color, alpha: float = 0.45, time: fl
 	var tw: Tween = cl.create_tween()
 	tw.tween_property(r, "color:a", 0.0, time).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
 	tw.tween_callback(cl.queue_free)
+
+
+# ---- chains ---------------------------------------------------------------------------------
+
+## A chain of interlocking metal links (one MultiMesh) with a hook head, stretched from `a`
+## toward `b`; `k` 0..1 is how far it has shot out. Top-level: call set_ends every frame.
+class Chain extends Node3D:
+	const LINK: float = 0.13
+	const MAX_LINKS: int = 170
+	var _mm := MultiMesh.new()
+	var _mmi: MultiMeshInstance3D
+	var _head: Node3D
+
+	func _init() -> void:
+		top_level = true
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.035
+		tm.outer_radius = 0.06
+		tm.rings = 10
+		tm.ring_segments = 6
+		_mm.transform_format = MultiMesh.TRANSFORM_3D
+		_mm.mesh = tm
+		_mm.instance_count = MAX_LINKS
+		_mm.visible_instance_count = 0
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = _mm
+		mmi.material_override = PartyFx.solid_mat(Color(0.78, 0.8, 0.86), 0.25, 0.3, 0.9)
+		mmi.layers = HeroFx.LAYER
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mmi.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		add_child(mmi)
+		_mmi = mmi
+		_head = Node3D.new()
+		add_child(_head)
+		var steel: StandardMaterial3D = PartyFx.solid_mat(Color(0.8, 0.82, 0.9), 0.4, 0.25, 0.9)
+		PartyFx.part(_head, PartyFx.cone_mesh(0.1, 0.28, 8), steel, Vector3(0, 0.1, 0))
+		for sx: float in [-1.0, 1.0]:
+			PartyFx.part(_head, PartyFx.cone_mesh(0.035, 0.2, 6), steel, Vector3(sx * 0.1, -0.02, 0), Vector3.ONE, Vector3(0, 0, sx * 140.0))
+		PartyFx.part(_head, PartyFx.sphere_mesh(0.07, 8), PartyFx.glow_mat(Color(1.0, 0.85, 0.4), 2.0), Vector3(0, -0.06, 0))
+
+	func set_ends(a: Vector3, b: Vector3, k: float = 1.0) -> void:
+		global_transform = Transform3D.IDENTITY
+		var d: Vector3 = b - a
+		var length: float = d.length() * clampf(k, 0.0, 1.0)
+		if length < 0.02:
+			_mm.visible_instance_count = 0
+			_head.visible = false
+			return
+		var y: Vector3 = d.normalized()
+		var x: Vector3 = y.cross(Vector3.UP if absf(y.y) < 0.95 else Vector3.RIGHT).normalized()
+		var z: Vector3 = x.cross(y)
+		var n: int = mini(int(length / LINK), MAX_LINKS)
+		for i: int in n:
+			# alternate link orientation so they read as interlocking
+			var bb: Basis = Basis(x, z, -y) if i % 2 == 0 else Basis(z, x, y)
+			_mm.set_instance_transform(i, Transform3D(bb.scaled(Vector3(1.0, 1.0, 1.6)), a + y * (float(i) + 0.5) * LINK))
+		_mm.visible_instance_count = n
+		var lo: Vector3 = a.min(b)
+		_mmi.custom_aabb = AABB(lo, a.max(b) - lo).grow(0.5)
+		_head.visible = true
+		_head.global_transform = Transform3D(Basis(x, y, x.cross(y)), a + y * length)
