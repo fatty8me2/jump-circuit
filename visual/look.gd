@@ -78,14 +78,16 @@ const THEMES: Dictionary = {
 		"decor": Color(0.26, 0.16, 0.40), "decor2": Color(0.45, 1.0, 0.75), "metal": Color(0.38, 0.30, 0.46),
 		"cloud_light": Color(0.80, 0.60, 1.0), "cloud_shade": Color(0.25, 0.15, 0.45),
 	},
+	# Cinder Peak: a night climb up an erupting volcano - basalt and cooled crust, lava-lit trims,
+	# a red-black sky. (levels/level_8_volcano.gd swaps in its own sky, rock shader and eruption.)
 	"volcano": {
-		"sky_top": Color(0.04, 0.02, 0.03), "sky_horizon": Color(0.45, 0.10, 0.04), "sky_bottom": Color(0.12, 0.03, 0.02),
-		"sun": Color(1.0, 0.55, 0.30), "sun_energy": 1.0, "sun_rot": Vector3(-30, 200, 0),
-		"ambient": Color(0.70, 0.30, 0.20), "ambient_energy": 0.7, "fog": Color(0.18, 0.06, 0.04), "fog_density": 0.005,
-		"top": Color(0.34, 0.30, 0.30), "side": Color(0.14, 0.12, 0.13), "trim": Color(1.0, 0.45, 0.10),
-		"alt_top": Color(0.46, 0.36, 0.30), "accent": Color(1.0, 0.45, 0.10), "accent2": Color(1.0, 0.85, 0.30),
-		"decor": Color(0.10, 0.08, 0.09), "decor2": Color(1.0, 0.40, 0.08), "metal": Color(0.45, 0.42, 0.44),
-		"cloud_light": Color(0.60, 0.30, 0.25), "cloud_shade": Color(0.12, 0.06, 0.06),
+		"sky_top": Color(0.02, 0.01, 0.015), "sky_horizon": Color(0.40, 0.09, 0.04), "sky_bottom": Color(0.08, 0.02, 0.015),
+		"sun": Color(1.0, 0.48, 0.20), "sun_energy": 1.2, "sun_rot": Vector3(-34, 0, 0),
+		"ambient": Color(0.62, 0.30, 0.22), "ambient_energy": 0.8, "fog": Color(0.12, 0.04, 0.03), "fog_density": 0.0042,
+		"top": Color(0.50, 0.44, 0.41), "side": Color(0.15, 0.13, 0.13), "trim": Color(1.0, 0.46, 0.12),
+		"alt_top": Color(0.58, 0.45, 0.36), "accent": Color(1.0, 0.36, 0.08), "accent2": Color(1.0, 0.80, 0.30),
+		"decor": Color(0.10, 0.08, 0.08), "decor2": Color(1.0, 0.40, 0.08), "metal": Color(0.30, 0.27, 0.27),
+		"cloud_light": Color(0.60, 0.28, 0.20), "cloud_shade": Color(0.12, 0.06, 0.05),
 	},
 	"glacier": {
 		"sky_top": Color(0.02, 0.04, 0.12), "sky_horizon": Color(0.30, 0.55, 0.70), "sky_bottom": Color(0.60, 0.72, 0.82),
