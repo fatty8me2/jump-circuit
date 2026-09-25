@@ -351,22 +351,32 @@ func _stage_3() -> Vector3:
 		var bc: Vector3 = blocks[i]["c"]
 		ics.append(_icicle(bc, drop, 3.0, -0.3 * float(i), 1.0))
 		deco.overhang(_w(bc + Vector3(2.4 - bc.x * 0.5, drop + 1.8, 0)), Vector3(7.2 - bc.x, 1.4, 3.6), _yaw)
-	var m1: Dictionary = _ledge(Vector3(1.6, 5.1, -31.8), Vector3(3.2, 7.0, 3.2), "alt")
-	var ic5: GlacierIcicle = _icicle(Vector3(1.6, 5.1, -31.2), drop, 3.0, -1.2, 1.0)
-	deco.overhang(_w(Vector3(3.2, 5.1 + drop + 1.8, -31.6)), Vector3(5.6, 1.4, 4.0), _yaw)
+	var m1: Dictionary = _ledge(Vector3(1.6, 4.7, -31.8), Vector3(3.2, 7.0, 3.2), "alt")
+	var ic5: GlacierIcicle = _icicle(Vector3(1.6, 4.7, -31.2), drop, 3.0, 0.43, 1.0)
+	deco.overhang(_w(Vector3(3.2, 4.7 + drop + 1.8, -31.6)), Vector3(5.6, 1.4, 4.0), _yaw)
 	# the ice cliff the overhangs grow from
 	var cliff := Look.box(_sz(Vector3(3.0, 40.0, 34.0)), GlacierFx.glass_mat(0.8, 0.5, 0.95), _w(Vector3(6.0, -8.0, -20.0)))
 	add_child(cliff)
-	var cp: Dictionary = _cp(Vector3(1.0, 5.1, -41.0))
+	var cp: Dictionary = _cp(Vector3(1.0, 4.7, -41.0))
+	# SHORTCUT: the ice cliff's face is runnable - from the first block run it past the whole cascade
+	# and catch the ledge out of the kick (a wall run into a mantle, under the last icicle)
+	_panel(4.25, 1.8, -11.5, -27.5, 6.5)
 	var prev: Dictionary = cp0
 	for i: int in blocks.size():
 		var ic: GlacierIcicle = ics[i]
 		r_walk(_w(_edge(prev, blocks[i]["c"], 0.9)))
+		if route_variant == 2:
+			_wait(func() -> bool: return _ice_ok([ic], 0.3, 1.8) and _ice_ok([ic5], 2.2, 3.4))
+			_hop(prev, blocks[i], Vector3(0.4, 0, 0.3))
+			break
 		_wait(func() -> bool: return _ice_ok([ic], 0.3, 1.9))
 		_hop(prev, blocks[i])
 		prev = blocks[i]
-	_wait(func() -> bool: return _ice_ok([ic5], 0.3, 1.9))
-	r_mantle(_w(_edge(prev, m1["c"])), _w((m1["c"] as Vector3) + Vector3(0, 0, 0.3)))
+	if route_variant == 2:
+		r_wallrun(_w(Vector3(0.9, 0, -9.25)), _w(Vector3(3.65, 1.4, -14.5)), _w(Vector3(3.65, 1.4, -24.5)), _w((m1["c"] as Vector3) + Vector3(0, 0, 0.6)))
+	else:
+		_wait(func() -> bool: return _ice_ok([ic5], 0.3, 1.9))
+		r_mantle(_w(_edge(prev, m1["c"])), _w((m1["c"] as Vector3) + Vector3(0, 0, 0.3)))
 	_hop(m1, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	return cp["c"]
@@ -898,30 +908,30 @@ func _courtyard(c: Vector3) -> void:
 
 func _stage_14() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
-	var pc: Array[Vector3] = [Vector3(0, 0, -8.2), Vector3(1.6, 0.3, -13.9), Vector3(-0.2, 0.6, -19.6), Vector3(1.4, 0.9, -25.3), Vector3(0, 1.2, -31.0)]
+	var pc: Array[Vector3] = [Vector3(0, 0, -8.6), Vector3(1.6, 0.3, -14.8), Vector3(-0.2, 0.6, -21.0), Vector3(1.4, 0.9, -27.2), Vector3(0, 1.2, -33.4)]
 	var panes: Array[Dictionary] = []
 	for p: Vector3 in pc:
-		panes.append(_thin(p, 2.0, 2.0, 0.55, 2.4))
-	_crevasse(Vector3(0.6, -1.0, -19.5), 12.0, 27.0)
-	_blk(Vector3(0, 1.2, -40.2), 1.2, 9.0, "accent", 0.6)
-	var beams: Array[LaserGate] = [_frost_beam(Vector3(0, 1.2, -38.0), 2.8, 2.2, 0.5, 0.0), _frost_beam(Vector3(0, 1.2, -42.4), 2.8, 2.2, 0.5, -0.22)]
-	var gate_floor: Dictionary = _blk(Vector3(0, 1.2, -48.6), 4.0, 4.0, "alt", 1.0)
-	var cp_c := Vector3(0, 9.2, -60.0)
+		panes.append(_thin(p, 1.8, 1.8, 0.55, 2.4))
+	_crevasse(Vector3(0.6, -1.0, -21.0), 12.0, 29.0)
+	_blk(Vector3(0, 1.2, -42.6), 1.2, 9.0, "accent", 0.6)
+	var beams: Array[LaserGate] = [_frost_beam(Vector3(0, 1.2, -40.4), 2.8, 2.2, 0.5, 0.0), _frost_beam(Vector3(0, 1.2, -44.8), 2.8, 2.2, 0.5, -0.22)]
+	var gate_floor: Dictionary = _blk(Vector3(0, 1.2, -51.0), 4.0, 4.0, "alt", 1.0)
+	var cp_c := Vector3(0, 9.2, -62.4)
 	var cp: Dictionary = _cp(cp_c)
-	var entry := Vector3(0, 1.2, -49.4)
+	var entry := Vector3(0, 1.2, -51.8)
 	var exit_c := cp_c + Vector3(0, 0, 2.2)
 	kit.portal(_w(entry), _yaw, _w(exit_c), _yaw, 3.0)
 	_gate_dressing(entry, exit_c)
-	_hall(Vector3(0, 1.2, -27.0), 58.0)
+	_hall(Vector3(0, 1.2, -29.4), 62.0)
 	var prev: Dictionary = cp0
 	for i: int in panes.size():
 		_hop(prev, panes[i])
 		prev = panes[i]
-	r_jump(_w(_edge(prev, Vector3(0, 1.2, -35.7))), _w(Vector3(0, 1.2, -36.2)))
-	r_walk(_w(Vector3(0, 1.2, -36.4)))
+	r_jump(_w(_edge(prev, Vector3(0, 1.2, -38.6))), _w(Vector3(0, 1.2, -38.6)))
+	r_walk(_w(Vector3(0, 1.2, -38.8)))
 	_wait(func() -> bool: return _beams_pass(beams, [0.25, 0.75], 0.3))
-	r_walk(_w(Vector3(0, 1.2, -44.5)))
-	r_jump(_w(Vector3(0, 1.2, -44.4)), _w(Vector3(0, 1.2, -47.0)))
+	r_walk(_w(Vector3(0, 1.2, -46.9)))
+	r_jump(_w(Vector3(0, 1.2, -46.8)), _w(Vector3(0, 1.2, -49.4)))
 	r_portal(_w(entry), _w(exit_c))
 	r_walk(_w(cp_c))
 	r_checkpoint()
@@ -1026,22 +1036,22 @@ func _stage_16() -> Vector3:
 	var y: float = -7.0
 	var a: Dictionary = _ridge_block(Vector3(0, y, -31.0), 5.0, 6.0)
 	# gully 1
-	var g1: GlacierAvalanche = _couloir(-42.1, 16.0, y, 4.2, 0.0)
-	var k1: Dictionary = _stone(Vector3(0.4, y, -39.4), 2.0)
-	var k2: Dictionary = _stone(Vector3(-0.4, y, -45.8), 2.0)
-	var b: Dictionary = _ridge_block(Vector3(0, y, -54.2), 4.0, 6.0)
+	var g1: GlacierAvalanche = _couloir(-43.0, 18.0, y, 4.2, 0.0)
+	var k1: Dictionary = _stone(Vector3(0.4, y, -39.7), 1.8)
+	var k2: Dictionary = _stone(Vector3(-0.4, y, -46.3), 1.8)
+	var b: Dictionary = _ridge_block(Vector3(0, y, -55.0), 4.0, 6.0)
 	# gully 2
-	var g2: GlacierAvalanche = _couloir(-65.3, 16.0, y, 4.2, 0.45)
-	var k3: Dictionary = _stone(Vector3(0.5, y, -62.6), 2.0)
-	var k4: Dictionary = _stone(Vector3(-0.3, y, -69.0), 1.8)
-	var c: Dictionary = _ridge_block(Vector3(0, y, -77.4), 4.0, 6.0)
+	var g2: GlacierAvalanche = _couloir(-67.0, 18.0, y, 4.2, 0.45)
+	var k3: Dictionary = _stone(Vector3(0.5, y, -63.7), 1.8)
+	var k4: Dictionary = _stone(Vector3(-0.3, y, -70.3), 1.8)
+	var c: Dictionary = _ridge_block(Vector3(0, y, -79.0), 4.0, 6.0)
 	# gully 3: the widest - an ice cave in the middle to duck into while a slide goes over
-	var g3: GlacierAvalanche = _couloir(-92.4, 24.0, y, 3.4, 0.2)
-	var k5: Dictionary = _stone(Vector3(0.4, y, -85.8), 2.0)
-	var cave: Dictionary = _stone(Vector3(0, y, -92.4), 4.0)
-	_ice_cave(g3, Vector3(0, y, -92.4))
-	var k6: Dictionary = _stone(Vector3(-0.4, y, -99.0), 2.0)
-	var cp: Dictionary = _cp(Vector3(0, y, -107.4))
+	var g3: GlacierAvalanche = _couloir(-95.4, 26.8, y, 3.4, 0.2)
+	var k5: Dictionary = _stone(Vector3(0.4, y, -87.7), 1.8)
+	var cave: Dictionary = _stone(Vector3(0, y, -95.4), 4.0)
+	_ice_cave(g3, Vector3(0, y, -95.4))
+	var k6: Dictionary = _stone(Vector3(-0.4, y, -103.1), 1.8)
+	var cp: Dictionary = _cp(Vector3(0, y, -111.8))
 	# down the chute and off the lip onto the first ridge
 	r_walk(_w(Vector3(0, 0, -2.2)))
 	r_jump(_w(lip + Vector3(0, 0, 0.6)), _w((a["c"] as Vector3) + Vector3(0, 0, 0.8)))
@@ -1143,23 +1153,24 @@ func _stage_17() -> Vector3:
 
 func _stage_18() -> void:
 	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
-	var b0: Dictionary = _blk(Vector3(0, 0.6, -8.2), 2.2, 2.2)
-	var p1: Dictionary = _thin(Vector3(1.6, 1.2, -13.9), 2.0, 2.0, 0.55, 2.4)
-	var p2: Dictionary = _thin(Vector3(-0.2, 1.8, -19.6), 2.0, 2.0, 0.55, 2.4)
-	var b1: Dictionary = _blk(Vector3(1.4, 2.4, -25.4), 2.2, 2.2, "alt")
-	var ic: GlacierIcicle = _icicle(Vector3(1.4, 2.4, -25.4), 5.6, 3.2, 0.0, 1.1)
-	deco.overhang(_w(Vector3(2.8, 2.4 + 5.6 + 1.8, -25.4)), Vector3(6.0, 1.4, 4.0), _yaw)
-	add_child(Look.box(_sz(Vector3(3.0, 40.0, 5.0)), GlacierFx.rock_mat(0.05), _w(Vector3(6.4, -9.0, -25.4))))
-	var b2: Dictionary = _blk(Vector3(-0.6, 3.0, -31.2), 1.6, 1.6)
-	var b3: Dictionary = _blk(Vector3(1.2, 3.6, -36.8), 2.4, 3.0, "alt")
-	var gust: GlacierGust = _gust(Vector3(1.0, 5.0, -31.0), Vector3(14.0, 10.0, 8.6), Vector3(30, 0, 0), 3.2, 0.3, 0.8, 0.4)
-	_panel(3.5, 4.8, -39.8, -55.8, 6.5)
-	var l: Dictionary = _blk(Vector3(0.8, 3.6, -60.8), 3.6, 5.0, "alt")
-	var m: Dictionary = _ledge(Vector3(0.8, 6.9, -67.0), Vector3(4.0, 7.0, 3.4))
-	var fin: Dictionary = _blk(Vector3(0, 6.9, -77.5), 12.0, 12.0, "main", 1.6)
-	kit.finish(_w(Vector3(0, 6.9, -78.0)), _yaw)
-	_finish_pos = _w(Vector3(0, 6.9, -78.0))
-	_summit(Vector3(0, 6.9, -77.5))
+	var b0: Dictionary = _blk(Vector3(0, 0.6, -8.6), 2.0, 2.0)
+	var p1: Dictionary = _thin(Vector3(1.6, 1.2, -14.6), 1.8, 1.8, 0.55, 2.4)
+	var p2: Dictionary = _thin(Vector3(-0.2, 1.8, -20.6), 1.8, 1.8, 0.55, 2.4)
+	var b1: Dictionary = _blk(Vector3(1.4, 2.4, -26.6), 2.0, 2.0, "alt")
+	var ic: GlacierIcicle = _icicle(Vector3(1.4, 2.4, -26.6), 5.6, 3.2, 0.0, 1.1)
+	deco.overhang(_w(Vector3(2.8, 2.4 + 5.6 + 1.8, -26.6)), Vector3(6.0, 1.4, 4.0), _yaw)
+	add_child(Look.box(_sz(Vector3(3.0, 40.0, 5.0)), GlacierFx.rock_mat(0.05), _w(Vector3(6.4, -9.0, -26.6))))
+	var b2: Dictionary = _blk(Vector3(-0.6, 3.0, -32.8), 1.5, 1.5)
+	var b3: Dictionary = _blk(Vector3(1.2, 3.6, -38.6), 2.4, 3.0, "alt")
+	var gust: GlacierGust = _gust(Vector3(1.0, 5.0, -32.6), Vector3(14.0, 10.0, 8.8), Vector3(30, 0, 0), 3.2, 0.3, 0.8, 0.4)
+	var dz: float = -1.8
+	_panel(3.5, 4.8, -39.8 + dz, -55.8 + dz, 6.5)
+	var l: Dictionary = _blk(Vector3(0.8, 3.6, -60.8 + dz), 3.6, 5.0, "alt")
+	var m: Dictionary = _ledge(Vector3(0.8, 6.9, -67.0 + dz), Vector3(4.0, 7.0, 3.4))
+	var fin: Dictionary = _blk(Vector3(0, 6.9, -77.5 + dz), 12.0, 12.0, "main", 1.6)
+	kit.finish(_w(Vector3(0, 6.9, -78.0 + dz)), _yaw)
+	_finish_pos = _w(Vector3(0, 6.9, -78.0 + dz))
+	_summit(Vector3(0, 6.9, -77.5 + dz))
 	_hop(cp0, b0)
 	_wait(func() -> bool: return _ice_ok([ic], 1.2, 3.0))
 	_hop(b0, p1)
@@ -1171,10 +1182,10 @@ func _stage_18() -> void:
 		r_walk(_w(_edge(a, b["c"], 0.9)))
 		_wait(func() -> bool: return gust.is_calm_for(Game.course_time, 1.0))
 		_hop(a, b)
-	r_wallrun(_w(Vector3(1.5, 3.6, -37.95)), _w(Vector3(3.0, 5.0, -41.9)), _w(Vector3(3.0, 5.0, -52.8)), _w(Vector3(0.8, 3.6, -60.1)))
+	r_wallrun(_w(Vector3(1.5, 3.6, -37.95 + dz)), _w(Vector3(3.0, 5.0, -41.9 + dz)), _w(Vector3(3.0, 5.0, -52.8 + dz)), _w(Vector3(0.8, 3.6, -60.1 + dz)))
 	r_mantle(_w(_edge(l, m["c"])), _w((m["c"] as Vector3) + Vector3(0, 0, 0.3)))
 	_hop(m, fin, Vector3(0, 0, 4.5))
-	r_walk(_w(Vector3(0, 6.9, -78.0)))
+	r_walk(_w(Vector3(0, 6.9, -78.0 + dz)))
 	b3.clear()
 
 

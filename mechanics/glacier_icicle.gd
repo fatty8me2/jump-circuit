@@ -134,7 +134,7 @@ func _physics_process(_dt: float) -> void:
 		# the body (feet .. head) overlaps the falling spike
 		if d < radius + BODY and lp.y < tip + length and lp.y + 1.7 > tip:
 			level.call_deferred("fail", "hazard")
-	elif d < splash and lp.y > -0.6 and lp.y < 1.2:
+	elif d < splash and lp.y > -0.6 and lp.y < 0.8:
 		level.call_deferred("fail", "hazard")
 
 
