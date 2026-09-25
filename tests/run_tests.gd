@@ -2925,6 +2925,93 @@ func test_zp_relay_party_tunnel() -> void:
 		Net.roster.erase(5)
 
 
+## A dropped relay link mid-race must not end the session: the game keeps its roster and race,
+## reconnects into its old slot (role=rejoin + the session token), and the room is told who is
+## away / back. (The relay side is exercised against `wrangler dev`, see docs/RELAY.md.)
+func test_zp_relay_resume() -> void:
+	Net.leave()
+	# the game's own handler would leave for the title screen (freeing this test scene)
+	var game_handlers: Array = []
+	for c: Dictionary in Net.left_session.get_connections():
+		game_handlers.append(c["callable"])
+		Net.left_session.disconnect(c["callable"])
+	# a relay session in progress: we are player 3 in room ABCDEFGH, mid-race
+	Net.set("_relay_mode", true)
+	Net.set("_relay_host", false)
+	Net.set("_relay_peer_id", 3)
+	Net.set("_relay_ready", true)
+	Net.set("_relay_session", "abcdef0123456789abcdef01")
+	Net.active = true
+	Net.in_race = true
+	Net.room_code = "ABCDEFGH"
+	Net.roster = {1: {"name": "Host", "color": 0, "cp": 2, "finished": -1.0}, 3: {"name": "Me", "color": 1, "cp": 1, "finished": -1.0}}
+	var seen: Array = [0, 0, []]
+	var on_int := func(_d: String) -> void: seen[0] += 1
+	var on_back := func() -> void: seen[1] += 1
+	var on_note := func(text: String) -> void: (seen[2] as Array).append(text)
+	Net.connection_interrupted.connect(on_int)
+	Net.connection_restored.connect(on_back)
+	Net.relay_notice.connect(on_note)
+	Net.call("_begin_resume", "close code 1006")
+	check(Net.is_reconnecting() and Net.active and Net.in_race and Net.roster.size() == 2 and int(seen[0]) == 1,
+		"a dropped link starts reconnecting and keeps the session (roster, race)")
+	# the relay welcomes us back into the same slot: nothing is reset, no re-register
+	Net.call("_handle_relay_packet", JSON.stringify({"type": "welcome", "id": 3, "room": "ABCDEFGH", "resumed": true}))
+	check(not Net.is_reconnecting() and bool(Net.get("_relay_ready")) and Net.my_id() == 3 and Net.roster.size() == 2
+		and int(Net.roster[1]["cp"]) == 2 and int(seen[1]) == 1, "the welcome back restores the link without resetting anything")
+	# others dropping / returning are announced by name
+	Net.call("_handle_relay_packet", JSON.stringify({"type": "host_away"}))
+	Net.call("_handle_relay_packet", JSON.stringify({"type": "host_back"}))
+	check((seen[2] as Array).size() == 2 and str((seen[2] as Array)[0]).contains("host"), "the host dropping and returning is announced")
+	# a rejoin the relay refuses ends the session with a clear reason
+	var left: Array = [""]
+	var on_left := func(reason: String) -> void: left[0] = reason
+	Net.left_session.connect(on_left)
+	Net.call("_begin_resume", "close code 1006")
+	Net.call("_handle_relay_packet", JSON.stringify({"type": "error", "reason": "Could not resume that session."}))
+	check(not Net.active and str(left[0]).contains("could not rejoin"), "a refused rejoin leaves the session with the reason")
+	# the resume window running out gives up the same way
+	Net.set("_relay_mode", true)
+	Net.set("_relay_ready", true)
+	Net.active = true
+	left[0] = ""
+	Net.call("_begin_resume", "no reply from the relay for 45 s")
+	Net.set("_relay_resume_left", 0.01)
+	Net.call("_process_relay", 0.05)
+	check(not Net.active and str(left[0]).contains("could not reconnect"), "an expired resume window leaves the session")
+	check(str(Net.get("_relay_session")) == "", "leaving forgets the session token")
+	Net.connection_interrupted.disconnect(on_int)
+	Net.connection_restored.disconnect(on_back)
+	Net.relay_notice.disconnect(on_note)
+	Net.left_session.disconnect(on_left)
+	# the pose stream: at most 15 a second, and only a heartbeat while standing still
+	Net.set("_pose_last_at", -100.0)
+	Net.set("_pose_last_seq", -1)
+	var sent: Array = [0]
+	var t0: float = Net.call("_local_time")
+	var pos := Vector3.ZERO
+	while float(Net.call("_local_time")) - t0 < 1.0:
+		var before: float = Net.get("_pose_last_at")
+		pos += Vector3(0.1, 0, 0)
+		Net.send_pose(pos, Vector3(6, 0, 0), true)
+		if float(Net.get("_pose_last_at")) != before:
+			sent[0] += 1
+		await get_tree().process_frame
+	check(int(sent[0]) >= 12 and int(sent[0]) <= 16, "a moving racer sends about 15 poses a second (%d)" % int(sent[0]))
+	sent[0] = 0
+	t0 = Net.call("_local_time")
+	while float(Net.call("_local_time")) - t0 < 1.5:
+		var before2: float = Net.get("_pose_last_at")
+		Net.send_pose(pos, Vector3.ZERO, true)
+		if float(Net.get("_pose_last_at")) != before2:
+			sent[0] += 1
+		await get_tree().process_frame
+	check(int(sent[0]) <= 3, "a racer standing still only sends a heartbeat (%d in 1.5 s)" % int(sent[0]))
+	Net.leave()
+	for cb: Callable in game_handlers:
+		Net.left_session.connect(cb)
+
+
 func test_zp_party_finish_bar() -> void:
 	Game.party = PartyRules.new("party")
 	var lvl: LevelBase = await load_level(0)

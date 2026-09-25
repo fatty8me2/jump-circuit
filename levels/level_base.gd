@@ -179,6 +179,16 @@ func _setup_race() -> void:
 			hud.toast("%s finished - %s" % [Net.roster[id]["name"], SaveData.format_time(time)])
 			if id == spectating_id:
 				_spectate_moved_on())
+	# a dropped relay link reconnects on its own; the race carries on meanwhile
+	Net.connection_interrupted.connect(func(_detail: String) -> void:
+		if is_inside_tree():
+			hud.toast("Connection lost - reconnecting..."))
+	Net.connection_restored.connect(func() -> void:
+		if is_inside_tree():
+			hud.toast("Reconnected"))
+	Net.relay_notice.connect(func(text: String) -> void:
+		if is_inside_tree():
+			hud.toast(text))
 	hud.start_countdown()
 
 
