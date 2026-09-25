@@ -867,15 +867,13 @@ func _stage_17() -> Vector3:
 	var cp: Dictionary = _cp(Vector3(0.8, 11.6, -48.0))
 	_lava(Vector3(0, -3.0, -24.0), Vector2(16.0, 44.0), Vector2(0.0, 0.3), 0.5)
 	_lava(Vector3(-0.6, 4.0, -26.0), Vector2(8.0, 10.0), Vector2(0.2, 0.1), 0.45)
-	# SHORTCUT: a 1 m knob out past the checkpoint's corner hides an obsidian gate to the top ledge
-	var kn: Dictionary = _spike(Vector3(6.4, 0.4, -7.2))
-	var gate: WarpPortal = _gate(Vector3(6.4, 0.4, -7.2), Vector3(0.4, 4.6, -32.4))
+	# SHORTCUT: a 1 m knob out past the checkpoint's corner hides an obsidian gate onto the upper shelf
+	var kn: Dictionary = _spike(Vector3(6.2, 0.4, -7.0))
+	var gate: WarpPortal = _gate(Vector3(6.2, 0.4, -7.0), Vector3(-2.2, 6.8, -20.6))
 	if route_variant == 2:
 		r_jump(_w(_edge(cp0, kn["c"])), _w(kn["c"]))
-		r_portal(_w(Vector3(6.4, 0.4, -7.4)), gate.exit_point())
-		r_walk(_w(Vector3(0.4, 4.6, -33.2)))
-		_wait(func() -> bool: return _venting(v2, 1.1))
-		_fly(_w((top["c"] as Vector3) + Vector3(0, 0, 0.4)))
+		r_portal(_w(Vector3(6.2, 0.4, -7.2)), gate.exit_point())
+		r_walk(_w(Vector3(-2.2, 6.8, -21.6)))
 	else:
 		_hop(cp0, v1f, Vector3(0, 0, 1.4))
 		r_walk(_w(Vector3(0, 0, -7.6)))
@@ -884,11 +882,11 @@ func _stage_17() -> Vector3:
 		_fly(_w(Vector3(0, 0, -9.6)), func() -> bool: return player.global_position.y > sy + 1.2)
 		_fly(_w(s1["c"]))
 		_hop(s1, h1)
-		r_jump(_w(_edge(h1, h2c)), _w(h2c))
-		r_jump(_w(h2c + (Vector3(0.4, 0, -34.0) - h2c).normalized() * 0.7), _w((v2f["c"] as Vector3) + Vector3(0, 0, 1.4)))
-		r_walk(_w(Vector3(0.4, 4.6, -33.2)))
-		_wait(func() -> bool: return _venting(v2, 1.1))
-		_fly(_w((top["c"] as Vector3) + Vector3(0, 0, 0.4)))
+	r_jump(_w(_edge(h1, h2c)), _w(h2c))
+	r_jump(_w(h2c + (Vector3(0.4, 0, -34.0) - h2c).normalized() * 0.7), _w((v2f["c"] as Vector3) + Vector3(0, 0, 1.4)))
+	r_walk(_w(Vector3(0.4, 4.6, -33.2)))
+	_wait(func() -> bool: return _venting(v2, 1.1))
+	_fly(_w((top["c"] as Vector3) + Vector3(0, 0, 0.4)))
 	_hop(top, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	return cp["c"]
