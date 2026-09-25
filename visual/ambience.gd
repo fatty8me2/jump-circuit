@@ -227,6 +227,32 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"pick": PackedColorArray([Color(0.8, 1.2, 2.6, 0.5), Color(1.8, 0.8, 2.4, 0.5)]),
 					"speed": Vector2(0.2, 0.6), "spread": 180.0, "curve": "pop"},
 			]
+		"xeno":
+			return [
+				# near: spores drifting up in the low gravity, the odd blinking firefly
+				{"depth": "near", "amount": 200, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.09,
+					"pick": PackedColorArray([Color(1.6, 0.9, 2.2, 0.9), Color(0.7, 2.0, 1.9, 0.9), Color(2.0, 0.8, 1.6, 0.9)]),
+					"speed": Vector2(0.05, 0.3), "dir": Vector3.UP, "spread": 60.0, "gravity": Vector3(0.05, 0.2, 0.0),
+					"turbulence": 0.8, "turbulence_scale": 5.0, "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0]), "scale": Vector2(0.5, 1.3)},
+				{"depth": "near", "amount": 60, "lifetime": 2.0, "tex": Fx.Tex.DOT, "size": 0.16,
+					"pick": PackedColorArray([Color(1.8, 2.6, 0.5), Color(0.6, 2.4, 2.6)]), "speed": Vector2(0.2, 0.8),
+					"spread": 180.0, "turbulence": 2.0, "turbulence_scale": 3.0, "fade": PackedFloat32Array([0.0, 1.0, 0.1, 1.0, 0.0])},
+				# mid: seed parachutes tumbling slowly past, and big soft spore puffs
+				{"depth": "mid", "amount": 90, "lifetime": 7.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.34,
+					"pick": PackedColorArray([Color(0.85, 0.6, 1.0), Color(0.55, 1.0, 0.9), Color(1.0, 0.55, 0.85)]),
+					"speed": Vector2(0.2, 0.5), "spread": 180.0, "gravity": Vector3(0.4, 0.12, 0.2), "turbulence": 1.0,
+					"angle": Vector2(0, 360), "spin": Vector2(-90, 90), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 100, "lifetime": 6.0, "tex": Fx.Tex.DOT, "size": 0.45,
+					"pick": PackedColorArray([Color(1.4, 0.7, 2.4), Color(0.6, 2.2, 2.0)]), "speed": Vector2(0.2, 0.6),
+					"dir": Vector3.UP, "spread": 40.0, "turbulence": 1.2, "curve": "pop", "fade": PackedFloat32Array([0.0, 1.0, 0.0])},
+				# far: a slow updraft of huge glowing motes round the skyline, and falling stars
+				{"depth": "far", "amount": 100, "lifetime": 9.0, "tex": Fx.Tex.DOT, "size": 2.2, "radius": 70.0,
+					"pick": PackedColorArray([Color(1.2, 0.6, 2.2, 0.5), Color(0.5, 1.8, 1.6, 0.5), Color(1.8, 1.5, 0.6, 0.45)]),
+					"speed": Vector2(0.4, 1.2), "dir": Vector3.UP, "spread": 30.0, "curve": "pop", "fade": PackedFloat32Array([0.0, 0.7, 0.0])},
+				{"depth": "far", "amount": 6, "lifetime": 1.4, "facing": "velocity", "tex": Fx.Tex.SPARK,
+					"size": Vector2(0.3, 8.0), "radius": 120.0, "color": Color(1.6, 2.6, 2.4), "dir": Vector3(0.6, -0.4, -0.3),
+					"spread": 15.0, "speed": Vector2(45.0, 70.0), "fade": PackedFloat32Array([0.0, 1.0, 0.0])},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking

@@ -67,12 +67,15 @@ const THEMES: Dictionary = {
 	},
 	# placeholders: the new-worlds agents restyle these (docs/NEW_WORLDS_BRIEF.md)
 	"xeno": {
-		"sky_top": Color(0.10, 0.03, 0.22), "sky_horizon": Color(0.20, 0.55, 0.62), "sky_bottom": Color(0.08, 0.14, 0.20),
-		"sun": Color(0.70, 1.0, 0.92), "sun_energy": 1.3, "sun_rot": Vector3(-24, 70, 0),
-		"ambient": Color(0.55, 0.40, 0.85), "ambient_energy": 0.8, "fog": Color(0.18, 0.12, 0.32), "fog_density": 0.004,
-		"top": Color(0.36, 0.78, 0.66), "side": Color(0.22, 0.14, 0.34), "trim": Color(0.45, 1.0, 0.75),
-		"alt_top": Color(0.62, 0.42, 0.90), "accent": Color(1.0, 0.35, 0.80), "accent2": Color(0.40, 1.0, 0.85),
-		"decor": Color(0.26, 0.16, 0.40), "decor2": Color(0.45, 1.0, 0.75), "metal": Color(0.55, 0.62, 0.78),
+		# Xeno Wilds: a bioluminescent jungle on a low-gravity moon under a ringed gas giant - teal moss
+		# on violet rock, acid-lime trims, magenta and teal glow; a low teal primary sun and an amber
+		# companion. (levels/level_7_xeno.gd swaps in its own sky, second sun and ground shader.)
+		"sky_top": Color(0.07, 0.02, 0.17), "sky_horizon": Color(0.16, 0.52, 0.56), "sky_bottom": Color(0.04, 0.08, 0.12),
+		"sun": Color(0.72, 1.0, 0.95), "sun_energy": 1.2, "sun_rot": Vector3(-28, 139.5, 0),
+		"ambient": Color(0.50, 0.42, 0.85), "ambient_energy": 0.85, "fog": Color(0.20, 0.26, 0.42), "fog_density": 0.004,
+		"top": Color(0.28, 0.62, 0.56), "side": Color(0.26, 0.15, 0.36), "trim": Color(0.75, 1.0, 0.30),
+		"alt_top": Color(0.56, 0.40, 0.80), "accent": Color(1.0, 0.35, 0.80), "accent2": Color(0.35, 1.0, 0.85),
+		"decor": Color(0.26, 0.16, 0.40), "decor2": Color(0.45, 1.0, 0.75), "metal": Color(0.38, 0.30, 0.46),
 		"cloud_light": Color(0.80, 0.60, 1.0), "cloud_shade": Color(0.25, 0.15, 0.45),
 	},
 	"volcano": {
