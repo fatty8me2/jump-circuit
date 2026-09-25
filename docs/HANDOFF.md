@@ -16,25 +16,14 @@ Read this first when picking the work up (new session, other account, or after a
   which runs the real installer on spaced paths. Clients on 1.2.2 / 1.3.0 must install 1.3.1 **once by
   hand**; the release notes say so.
 
-## In flight (not merged)
-### 1. Relay resume - branch `fix/relay-resume` (commit e61ef77), ready, needs deploy + release
-Owner report: "relay connection closed" kicks people **mid-race** while the lobby sometimes survives.
-The fix, all tested:
-- **Relay (`relay/src/index.js`):** session tokens, a grace period on unclean drops (20 s racer, 30 s
-  host), `role=rejoin`, and `peer_away/peer_back/host_away/host_back` messages. A Durable Object alarm
-  expires lost slots, and a reconcile step covers Cloudflare restarting the room.
-- **Game (`autoload/net.gd`):** auto-reconnect into the same slot, dead-link detection (45 s silent),
-  HUD / lobby notices, `[relay]` lines in the log, and poses at 15 Hz with a 1 s idle heartbeat
-  (much lower relay request volume).
-- **Verified against `wrangler dev`:** a joiner drop and a host drop both reconnect in about 0.2 s,
-  grace expiry works for racers and for the host, and a clean leave is immediate. The
-  `test_zp_relay_resume` headless test passes (10/10 in the `test_zp_relay` group).
-- **Remaining:**
-  - (a) Owner's OK, then `npx wrangler deploy` in `relay/` (wrangler is logged in on this PC).
-    Older game builds keep working against the new relay.
-  - (b) Full suite.
-  - (c) Merge to main, bump to 1.3.2, release (see the release steps below).
-- The deployed relay URL is `wss://jump-circuit-relay.jumpcircuit.workers.dev`.
+## In flight
+### 1. Relay resume - SHIPPED (v1.3.2, relay deployed 2026-09-24)
+Owner report: "relay connection closed" kicked people mid-race. The fix: session tokens, a grace
+period on unclean drops (20 s for a racer, 30 s for the host), `role=rejoin`, and auto-reconnect into
+the same slot. Poses dropped to 15 Hz with an idle heartbeat. It was verified locally and on the live
+relay (`health` reports `resume: true`); the full suite passed with 630/630. The details are in
+docs/RELAY.md. If a drop is ever reported again, ask for the `[relay]` lines in the owner's
+`godot.log`.
 
 ### 2. Four new worlds - branch `new-worlds` + one branch per level (agents were mid-build)
 Owner asked: "2 more unique maps" (an alien planet, a volcano with a cool eruption in the background),
