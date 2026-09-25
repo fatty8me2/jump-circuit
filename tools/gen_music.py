@@ -481,15 +481,16 @@ def piece_title():
         sends=H, vel=0.6)
     pad(T, "base", "strings", a2, I(me.strings, att=0.15, rel=0.5, bright=0.6, tremolo=0.35), center=65, count=4,
         gain=0.2, sends=H, vel=0.85)
-    arp(T, "base", "harp", intro + a1 + bb + coda, [0, 1, 2, 3, 4, 3, 2, 1], 0.5, M_HARP, lo=46, hi=77, gain=0.3,
-        sends={"hall": 0.4}, vels=(0.75, 0.5, 0.55, 0.5))
-    arp(T, "base", "harp", a2, [0, 2, 4, 5, 6, 5, 4, 2], 0.5, M_HARP, lo=50, hi=84, gain=0.28, sends={"hall": 0.4})
+    # the harp is accompaniment: well under the tune (it was the loudest part of the mix, and grated)
+    arp(T, "base", "harp", intro + a1 + bb + coda, [0, 1, 2, 3, 4, 3, 2, 1], 0.5, M_HARP, lo=46, hi=77, gain=0.13,
+        sends={"hall": 0.45}, vels=(0.7, 0.45, 0.5, 0.45))
+    arp(T, "base", "harp", a2, [0, 2, 4, 5, 6, 5, 4, 2], 0.5, M_HARP, lo=50, hi=79, gain=0.12, sends={"hall": 0.45})
     bass(T, "base", "bass", a1 + bb + a2, [(0, 0, 2, 0.8), (2, 0, 2, 0.6)], I(me.strings, att=0.05, rel=0.3, voices=3,
          bright=0.35), lo=34, hi=46, gain=0.3, sends={"hall": 0.2})
     bass(T, "base", "bass", intro + coda, [(0, 0, 4, 0.6)], I(me.strings, att=0.6, rel=0.8, voices=3, bright=0.3), lo=34,
          hi=46, gain=0.25, sends={"hall": 0.2})
     # dawn: celesta hints the run-up, a flute answers
-    line(T, "base", "ww", "r h. F5t G5t A5t | Bb5h F6h | r w | r w |", 0, M_CELESTA, 0.3, {"hall": 0.5, "echo": 0.4},
+    line(T, "base", "ww", "r h. F5t G5t A5t | Bb5h F6h | r w | r w |", 0, M_CELESTA, 0.16, {"hall": 0.5, "echo": 0.2},
          legato=False)
     line(T, "base", "ww", "r w | r w | G5q. F5e Eb5q Bb4q | C5h. r q |", 0, FLUTE, 0.32, {"hall": 0.4})
     # the JUMP theme on horns (an octave down: warm), pickup on the intro's last beat
@@ -503,24 +504,25 @@ def piece_title():
          12, FLUTE, 0.2, {"hall": 0.4}, transpose=-2)
     pad(T, "base", "brass", bb, HORN, center=58, count=3, gain=0.12, sends=H, vel=0.45)
     # tutti reprise: trumpets on the tune, horns an octave below, timpani and a snare pulse
-    line(T, "base", "brass", JUMP_PICKUP + " | " + JUMP_A, 20, TRUMPETS, 0.36, {"hall": 0.4}, transpose=-2, pickup=1.0)
+    line(T, "base", "brass", JUMP_PICKUP + " | " + JUMP_A, 20, TRUMPETS, 0.24, {"hall": 0.45}, transpose=-2, pickup=1.0)
     line(T, "base", "brass", JUMP_PICKUP + " | " + JUMP_A, 20, HORNS, 0.34, {"hall": 0.45}, transpose=-14, pickup=1.0)
     pad(T, "base", "brass", a2, TROMBONES, center=55, count=3, gain=0.12, sends=H, vel=0.6)
     snr = bank("snare_march", lambda r: me.snare(r, "march"), 4)
-    kit(T, "base", "perc", range(20, 28), {"snare": (snr, "x..g..x.x.g.x...", 0.16)}, sends={"hall": 0.25})
+    kit(T, "base", "perc", range(20, 28), {"snare": (snr, "x..g..x.x.g.x...", 0.08)}, sends={"hall": 0.25})
     for bar, m in ((4, 34), (8, 34), (12, 31), (20, 34), (24, 34), (25, 30), (26, 32), (27, 34)):
         ring(T, "base", "perc", bar * 4, me.timpani(r, float(mtof(m + 12)), 0.85), 0.34, 0.0, {"hall": 0.3})
     crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
     for bar in (20, 27):
-        ring(T, "base", "perc", bar * 4, crash[bar % 2], 0.16, 0.3, {"hall": 0.3})
+        ring(T, "base", "perc", bar * 4, crash[bar % 2], 0.08, 0.3, {"hall": 0.3})
     for bar in (4, 12, 20, 28):
         swell_into(T, "base", "perc", bar, 4, 0.16, {"hall": 0.4})
     ring(T, "base", "perc", 20 * 4 - 2, me.timpani_roll(r, float(mtof(41)), 2.0, T.spb, 0.2, 0.9), 0.3, 0.0, {"hall": 0.3})
     # coda: music box / celesta echo the leap, the strings settle
-    line(T, "base", "ww", "r w | F5h Bb5h | r w | r h. F5t G5t A5t | Bb5h F6h | r w | r w | r w |", 28, M_MUSICBOX, 0.24,
-         {"hall": 0.5, "echo": 0.5}, legato=False)
+    line(T, "base", "ww", "r w | F5h Bb5h | r w | r h. F5t G5t A5t | Bb5h F6h | r w | r w | r w |", 28, M_MUSICBOX, 0.09,
+         {"hall": 0.5, "echo": 0.2}, legato=False)
     line(T, "base", "ww", "r w | r w | Eb5h. D5q | C5w | D5h. Bb4q | G4w | r w | r w |", 28, CLARINET, 0.3, H)
-    T.render(rms_db=-15.5)
+    # menus sit quieter than the courses, and a soft top end keeps the brass from biting
+    T.render(rms_db=-18.0, master_eq=lambda f: me.shelf(f, 3500.0, -3.0))
 
 
 # --------------------------------------------------------------------------
@@ -632,7 +634,7 @@ def piece_victory():
     allp = a1 + b1 + a2
     pad(T, "base", "strings", allp, I(me.strings, att=0.2, rel=0.6, bright=0.55, tremolo=0.2), center=64, count=4,
         gain=0.2, sends=H, vel=0.75)
-    arp(T, "base", "harp", allp, [0, 2, 4, 6, 5, 3, 1, 2], 0.5, M_HARP, lo=48, hi=86, gain=0.26, sends=H)
+    arp(T, "base", "harp", allp, [0, 2, 4, 6, 5, 3, 1, 2], 0.5, M_HARP, lo=48, hi=81, gain=0.13, sends=H)
     bass(T, "base", "bass", allp, [(0, 0, 2, 0.85), (2, 0, 2, 0.65)], I(me.strings, att=0.05, rel=0.3, voices=3, bright=0.4),
          lo=36, hi=48, gain=0.34)
     bass(T, "base", "bass", allp, [(0, 0, 4, 0.6)], TUBA, lo=33, hi=45, gain=0.12)
@@ -646,18 +648,18 @@ def piece_victory():
     pad(T, "base", "choir", a2, CHOIR_A, center=62, count=4, gain=0.18, sends={"hall": 0.5}, vel=0.7)
     pad(T, "base", "brass", a2, TROMBONES, center=52, count=3, gain=0.14, sends=H, vel=0.7)
     snr = bank("snare_march", lambda r: me.snare(r, "march"), 4)
-    kit(T, "base", "perc", range(16, 24), {"snare": (snr, "x..g..x.x.g.x...", 0.15)}, sends={"hall": 0.25})
+    kit(T, "base", "perc", range(16, 24), {"snare": (snr, "x..g..x.x.g.x...", 0.08)}, sends={"hall": 0.25})
     crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
     for bar in (0, 8, 16, 21, 23):
         ring(T, "base", "perc", bar * 4, me.timpani(r, float(mtof(43 if bar != 21 else 44)), 0.9), 0.36, 0.0, {"hall": 0.3})
     for bar in (0, 16, 23):
-        ring(T, "base", "perc", bar * 4, crash[bar % 2], 0.18, -0.3, {"hall": 0.3})
+        ring(T, "base", "perc", bar * 4, crash[bar % 2], 0.09, -0.3, {"hall": 0.3})
     for bar in (8, 16):
         swell_into(T, "base", "perc", bar, 4, 0.18, H)
     tb = bank("tubular", lambda r: me.bell(r, float(mtof(72)), 4.0, 0.8), 1)[0]
     for bar in (0, 16, 23):
         ring(T, "base", "perc", bar * 4, tb, 0.12, 0.4, {"hall": 0.5})
-    T.render(rms_db=-15.0)
+    T.render(rms_db=-17.0, master_eq=lambda f: me.shelf(f, 3500.0, -3.0))
 
 
 # --------------------------------------------------------------------------
