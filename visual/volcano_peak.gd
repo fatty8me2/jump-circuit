@@ -331,7 +331,8 @@ func _build_column() -> void:
 	# the anvil: flattened layers spreading downwind, underlit red, with sagging lumps beneath
 	var top: float = foot + column_h
 	_anvil_mat = _plume_material(top - 160.0, top + 140.0, 30.0, 0.004)
-	_anvil_mat.set_shader_parameter("glow", 0.8)
+	_anvil_mat.set_shader_parameter("glow", 0.5)
+	_anvil_mat.set_shader_parameter("glow_reach", 260.0)
 	var sm := SphereMesh.new()
 	sm.radius = 1.0
 	sm.height = 2.0
@@ -353,7 +354,8 @@ func _build_column() -> void:
 		add_child(n)
 	# mammatus: lumpy pouches hanging under the anvil, glowing from the fire below
 	var lump_mat: ShaderMaterial = _plume_material(top - 260.0, top - 40.0, 12.0, 0.01)
-	lump_mat.set_shader_parameter("glow", 1.2)
+	lump_mat.set_shader_parameter("glow", 0.6)
+	lump_mat.set_shader_parameter("glow_reach", 320.0)
 	for i: int in 9:
 		var off: Vector3 = WIND * _rng.randf_range(0.0, 700.0) + Vector3(-WIND.z, 0, WIND.x) * _rng.randf_range(-320.0, 320.0)
 		var n2 := Look.mesh_node(sm, lump_mat, Vector3(0, top - 90.0 - _rng.randf_range(0.0, 40.0), 0) + WIND * 120.0 + off)
@@ -557,6 +559,7 @@ func _lightning_update(t: float, surge: float) -> void:
 			flash = (1.0 if on else 0.35) * clampf(left / 0.22, 0.0, 1.0)
 	for m: ShaderMaterial in _plume_mats:
 		m.set_shader_parameter("flash", flash)
+		m.set_shader_parameter("glow_center", global_position)
 	_flash_light.visible = flash > 0.01
 	_flash_light.light_energy = flash * 5.0
 

@@ -27,6 +27,10 @@ uniform float haze_start = 350.0;
 uniform float haze_end = 1800.0;
 // billowing silhouette: vertices pushed out along their normals by rising noise (metres)
 uniform float disp = 0.0;
+// the fire lights the cloud from below only near the column: the underglow fades with
+// horizontal distance from it (otherwise the whole anvil became a bright orange ceiling)
+uniform vec3 glow_center = vec3(0.0);
+uniform float glow_reach = 100000.0;
 // per-billow fade (rising puffs fade in at the vent and out at the top)
 instance uniform float fade = 1.0;
 
@@ -87,7 +91,9 @@ void fragment() {
 	// underlit by the fountain and the lava lake
 	float low = 1.0 - clamp((wp.y - glow_base) / max(glow_top - glow_base, 1.0), 0.0, 1.0);
 	float under = pow(low, 2.2) * glow * (0.55 + 0.9 * (1.0 - bill));
-	col += under_color * under * 1.4;
+	float hd = length(wp.xz - glow_center.xz) / glow_reach;
+	under *= exp(-hd * hd);
+	col += under_color * min(under, 1.1) * 1.1;
 	// lightning inside the cloud
 	float fd = length(wp - flash_pos) / flash_radius;
 	col += flash_color * flash * exp(-fd * fd * 2.5) * (0.6 + bill) * 2.5;

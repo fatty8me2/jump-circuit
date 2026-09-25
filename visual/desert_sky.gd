@@ -43,11 +43,15 @@ float fbm(vec2 p) {
 
 void sky() {
 	vec3 d = normalize(EYEDIR);
-	vec3 L = normalize(LIGHT0_DIRECTION);
+	// LIGHT0 can be unset (zero) when the radiance map is first baked: normalize(0) is NaN, and a
+	// NaN sky blacks out every surface it lights (and glow spreads it into black blotches)
+	vec3 L = (LIGHT0_ENABLED && length(LIGHT0_DIRECTION) > 0.001) ? normalize(LIGHT0_DIRECTION) : normalize(vec3(-0.35, 0.44, 0.83));
 	float up = d.y;
 	vec2 dh = normalize(d.xz + vec2(0.0001));
 	vec2 lh = normalize(L.xz + vec2(0.0001));
-	float toward = dot(dh, lh) * 0.5 + 0.5;      // 1 under the sun, 0 opposite
+	// clamped: rounding can push the dot a hair past -1, and pow() of a negative is NaN (a NaN
+	// texel in the sky poisons its whole radiance map and blacks out every lit surface)
+	float toward = clamp(dot(dh, lh) * 0.5 + 0.5, 0.0, 1.0);      // 1 under the sun, 0 opposite
 	vec3 hor = mix(horizon_far, horizon_sun, pow(toward, 1.6));
 	vec3 col = mix(hor, upper, smoothstep(0.0, 0.28, up));
 	col = mix(col, zenith, smoothstep(0.2, 0.85, up));
@@ -75,7 +79,7 @@ void sky() {
 	float lit = 0.55 + 0.45 * noise2(d.xy * 900.0);
 	col = mix(col, vec3(0.95, 0.92, 0.9) * lit, disc * 0.55);
 	// below the horizon: hazy sand
-	col = mix(col, mix(haze, ground, smoothstep(0.0, -0.35, up)), smoothstep(0.0, -0.02, up));
+	col = mix(col, mix(haze, ground, 1.0 - smoothstep(-0.35, 0.0, up)), 1.0 - smoothstep(-0.02, 0.0, up));
 	COLOR = col;
 }
 """
