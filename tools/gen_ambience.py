@@ -41,7 +41,7 @@ BED_QUALITY = 0.85    # libsndfile Vorbis compression level (0 best .. 1 smalles
 SHOT_QUALITY = 0.55
 SHOT_PEAK_DB = -3.0
 BED_CEIL = 10.0 ** (-4.0 / 20.0)   # soft-knee ceiling for beds (-4 dBFS)
-SIZE_BUDGET = 10.0e6
+SIZE_BUDGET = 18.0e6
 place = ga.place
 
 
@@ -1050,6 +1050,499 @@ def bed_ascent_high():
 
 
 # ==========================================================================
+# xeno: the alien creatures (shared by the one-shots and the far chorus in the beds)
+# ==========================================================================
+XENO_RATIOS = (1.0, 2.32, 4.25, 6.63)   # a crystal prism's partials: inharmonic, glassy
+
+
+def edo13(base, step):
+    """A note of 13-tone equal temperament: an alien scale with no Earth intervals in it."""
+    return base * 2.0 ** (step / 13.0)
+
+
+def to_bed(x):
+    """A 44.1 kHz one-shot resampled onto the beds' 32 kHz grid (band-limited first)."""
+    y = lp(x, 9000.0, 4)
+    n = int(len(y) * BSR / SR)
+    return np.interp(np.arange(n) * (SR / BSR), np.arange(len(y)), y)
+
+
+def fm_note(f, ratio, index, idx_tau=None, att=0.002, rel=0.01, sr=SR):
+    """An FM note on a per-sample frequency array: carrier f, modulator f * ratio, the index
+    decaying over idx_tau.  An irrational ratio puts the sidebands off the harmonic series, so the
+    note rings like glass instead of whistling like a bird."""
+    n = len(f)
+    t = np.arange(n) / sr
+    idx = index * np.exp(-t / idx_tau) if idx_tau else index
+    ph = TAU * np.cumsum(f) / sr + idx * np.sin(TAU * np.cumsum(f * ratio) / sr)
+    return np.sin(ph) * rcos_env(n, att, rel, sr)
+
+
+def xeno_chitter(r):
+    """An insect-like chitter: a train of tiny glassy FM clicks, 25-45 a second, whose pitch
+    wanders and drifts while the train swells and dies."""
+    dur = r.uniform(0.6, 1.3)
+    x = zeros(dur + 0.1)
+    rate = r.uniform(25.0, 45.0)
+    f0 = r.uniform(2200.0, 3600.0)
+    ratio = (1.414, 1.618, 2.236)[int(r.integers(0, 3))]
+    wob = r.uniform(0.6, 1.8)
+    drift = r.choice([-0.12, 0.12])
+    count = int(dur * rate)
+    m = int(0.014 * SR)
+    for j in range(count):
+        u = j / max(count - 1, 1)
+        f = f0 * (1.0 + 0.12 * np.sin(TAU * wob * u + 1.0)) * (1.0 + drift * u)
+        b = fm_note(np.full(m, f), ratio, 2.0, 0.004, att=0.0008, rel=0.006)
+        place(x, j / rate + abs(r.normal(0.0, 0.002)), b, SR, np.sin(np.pi * (0.05 + 0.9 * u)) ** 0.8 * r.uniform(0.6, 1.0))
+    return x
+
+
+def xeno_ringchirp(r):
+    """Sliding whistles ring-modulated by a second tone: every note splits into two inharmonic
+    sidebands that slide apart, a two-voiced chirp no Earth bird makes."""
+    x = zeros(1.8)
+    t0 = r.uniform(0.02, 0.06)
+    mod_f = r.uniform(170.0, 380.0)
+    for j in range(int(r.integers(3, 6))):
+        d = r.uniform(0.1, 0.24)
+        lo_, hi_ = r.uniform(1300, 1900), r.uniform(2500, 3400)
+        pts = [(0, lo_), (0.55, hi_), (1, lo_ * r.uniform(1.1, 1.4))] if j % 2 == 0 else [(0, hi_), (1, lo_)]
+        s = syl(pts, d, amp=[(0, 0.3), (0.3, 1), (1, 0.4)])
+        tt = np.arange(len(s)) / SR
+        s = 0.3 * s + 0.7 * s * np.sin(TAU * mod_f * (1.0 + 0.3 * tt / d) * tt)
+        place(x, t0, s, SR, r.uniform(0.7, 1.0))
+        t0 += d + r.uniform(0.04, 0.14)
+        if t0 > 1.5:
+            break
+    return x
+
+
+def xeno_liquid(r):
+    """Liquid notes on a 13-tone scale: each drops in pitch like a falling drop and flips up at the
+    end, with a touch of glassy FM - a songbird from somewhere else."""
+    x = zeros(2.0)
+    base = r.uniform(1500.0, 2100.0)
+    t0 = 0.02
+    for s in r.integers(0, 14, int(r.integers(5, 9))):
+        d = r.uniform(0.07, 0.13)
+        f = edo13(base, int(s))
+        n = int(d * SR)
+        note = fm_note(contour([(0, f * 1.25), (0.7, f * 0.92), (1, f * 1.15)], n, SR, 0.003), 1.414, 0.8, 0.03,
+                       att=0.003, rel=0.02)
+        place(x, t0, note, SR, r.uniform(0.6, 1.0))
+        t0 += d + r.uniform(0.03, 0.12)
+        if t0 > 1.8:
+            break
+    return x
+
+
+def xeno_warble(r):
+    """Two voices trading warbles: fast vibrato (40-60 Hz) at different depths, one gliding up
+    while the other glides down, overlapping."""
+    x = zeros(2.0)
+    for v in range(2):
+        f0 = r.uniform(2000.0, 2800.0) * (1.0 if v == 0 else 1.37)
+        t0 = 0.02 + v * r.uniform(0.15, 0.3)
+        for j in range(int(r.integers(2, 4))):
+            d = r.uniform(0.18, 0.32)
+            up = (j + v) % 2 == 0
+            pts = [(0, f0 * (0.85 if up else 1.15)), (1, f0 * (1.15 if up else 0.85))]
+            s = syl(pts, d, amp=[(0, 0.3), (0.4, 1), (1, 0.3)], fm=(r.uniform(40, 60), r.uniform(0.02, 0.05)),
+                    harm=((1, 1.0), (2, 0.15), (3, 0.05)))
+            place(x, t0, s, SR, 0.8 if v == 0 else 0.55)
+            t0 += d + r.uniform(0.25, 0.45)
+    return x
+
+
+def xeno_bounce(r):
+    """A bouncing-ball call: a glassy FM note repeated faster and faster and falling in pitch,
+    like a ping-pong ball settling."""
+    x = zeros(2.0)
+    gap, f, t0, g = r.uniform(0.22, 0.3), r.uniform(2400.0, 3200.0), 0.02, 1.0
+    m = int(0.05 * SR)
+    while gap > 0.025 and t0 < 1.8:
+        place(x, t0, fm_note(np.full(m, f), 2.76, 1.2, 0.015, att=0.001, rel=0.03), SR, g)
+        t0 += gap
+        gap *= 0.8
+        f *= 0.97
+        g *= 0.94
+    return x
+
+
+XENO_SONG = (xeno_chitter, xeno_ringchirp, xeno_liquid, xeno_warble, xeno_bounce)
+
+
+def xeno_voice(r, pts, dur, f1, f2, sub=0.0, vib=(5.0, 0.01), rough=0.0, top=30):
+    """A throaty creature voice: a harmonic stack whose partials pass through two moving formants
+    (f1, f2: (u, Hz) contours), with an optional subharmonic (period doubling: a growl) and a
+    rough amplitude flutter."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    f = contour(pts, n, SR, 0.02) * (1.0 + vib[1] * np.sin(TAU * vib[0] * t))
+    F1 = contour(f1, n, SR, 0.03)
+    F2 = contour(f2, n, SR, 0.03)
+    ph = TAU * np.cumsum(f) / SR
+    s = np.zeros(n)
+    for k in range(1, top + 1):
+        fk = k * f
+        g = resonance(F1, fk, 4.0) + 0.8 * resonance(F2, fk, 6.0) + 0.03
+        s += g / k ** 0.4 * np.sin(k * ph) * (fk < 0.42 * SR)
+    s = unit(s)
+    if sub:
+        s += sub * (np.sin(0.5 * ph) * resonance(F1, 0.5 * f, 1.5) + 0.5 * np.sin(1.5 * ph) * resonance(F1, 1.5 * f, 2.0))
+    if rough:
+        s *= 1.0 + rough * np.sin(TAU * r.uniform(28.0, 40.0) * t)
+    return s * rcos_env(n, min(0.03, dur * 0.2), min(0.06, dur * 0.3))
+
+
+def crystal(r, f, dur, bow=0.0, tau0=None):
+    """A crystal prism struck (or bowed, when bow > 0: a slow swell of `bow` seconds): inharmonic
+    partials, each a slightly detuned pair so it shimmers, the upper ones dying first."""
+    t = tv(dur)
+    n = len(t)
+    tau0 = tau0 or 2.4 * (1000.0 / f) ** 0.3
+    out = np.zeros(n)
+    for q, a, ts in zip(XENO_RATIOS, (1.0, 0.5, 0.25, 0.12), (1.0, 0.5, 0.28, 0.16)):
+        fq = f * q
+        if fq > 16000.0:
+            continue
+        beat = r.uniform(0.4, 2.5)
+        for d in (-beat / 2, beat / 2):
+            out += 0.5 * a * np.sin(TAU * (fq + d) * t + r.uniform(0, TAU)) * np.exp(-np.maximum(t - bow, 0) / (tau0 * ts))
+    if bow:
+        out *= np.minimum(t / bow, 1.0) ** 2
+    else:
+        out *= np.minimum(t / 0.0006, 1.0)
+        k = int(0.003 * SR)
+        out[:k] += 0.1 * r.standard_normal(k) * np.linspace(1.0, 0.0, k)
+    return out * rcos_env(n, 0.0, min(0.3 * dur, 0.5))
+
+
+def xeno_bed(name, deep):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    # the planet's hum: two low drones on inharmonic partials a hair apart (a slow beat), weighted
+    # to the upper partials so it is a presence rather than a boom, swelling over the loop; and a
+    # low churning band under them through a resonance that wanders
+    swell = 0.7 + 0.3 * cbeat(n, 2, r.uniform(0, TAU))
+    for f0, pan, ph in ((73.0, -0.35, 0.0), (73.15, 0.35, 1.7)):
+        h = sum(a * csine(f0 * q, n, phase=ph * q) for q, a in ((1.0, 0.3), (2.01, 1.0), (2.98, 0.6), (4.13, 0.4),
+                                                                  (5.31, 0.22), (6.9, 0.1)))
+        mix.add_loop("hum", st(h * swell, pan) * 0.05, rev=0.3)
+    for ch in range(2):
+        ph0 = r.uniform(0, TAU)
+
+        def gain(tt, f, ph0=ph0):
+            fc = 240.0 * 2.0 ** (0.5 * np.sin(TAU * 2 * tt / T + ph0))
+            return 0.15 + resonance(fc, f, 3.0)
+        churn = cband(stft_shape(pink(r, n, BSR), gain), 70.0, 900.0, 2) * swell
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(churn) * (0.035 if not deep else 0.05)
+        mix.add_loop("hum", chans)
+    # wind through the fronds, and the crystal spires it bows: glassy inharmonic partials that
+    # sing when a gust reaches each spire (each partial a detuned pair), with a breathy bow noise
+    gust = gusts(r, n, 0.1, bias=-0.1) * (0.7 + 0.3 * cbeat(n, 3, r.uniform(0, TAU)))
+    wind_layer(mix, "wind", r, gust, 140.0, 1500.0, body_gain=0.6)
+    for _ in range(5 if not deep else 3):
+        base = edo13(r.uniform(430.0, 520.0), int(r.integers(0, 13)))
+        g = np.roll(gust, int(r.uniform(0, T) * BSR)) ** 4
+        sig = np.zeros(n)
+        for q, a in zip(XENO_RATIOS, (1.0, 0.45, 0.22, 0.1)):
+            for det in (0.9994, 1.0006):
+                sig += 0.5 * a * csine(base * q * det, n, phase=r.uniform(0, TAU))
+        bow = rmsn(cband(r.standard_normal(n), base * 0.94, base * 1.06, 3))
+        mix.add_loop("crystal", st((sig + 0.25 * bow) * g, r.uniform(-0.8, 0.8)), rev=0.7)
+    # the creatures: chitters, ring-modulated chirps, liquid songs, warbles and bouncing calls,
+    # busier in some stretches than others
+    dens = 0.3 + cbeat(n, 3, r.uniform(0, TAU)) * (0.4 + 0.6 * cbeat(n, 1, r.uniform(0, TAU)))
+    for tb in density_times(r, T, 55 if deep else 38, dens):
+        s = to_bed(XENO_SONG[int(r.integers(0, len(XENO_SONG)))](r))
+        s = lp(s, 4200.0 if deep else 5000.0, 2, BSR)
+        mix.add("creatures", tb, s, gain=r.uniform(0.05, 0.15) ** 1.2 * 3.0, pan=r.uniform(-0.9, 0.9), rev=0.6)
+    # acid pools somewhere below: streams of thick bubbles from one spot, and an effervescent fizz
+    for ts in spaced_times(r, T, 5.0, 10.0):
+        d = r.uniform(2.0, 5.0)
+        rate = r.uniform(4.0, 10.0)
+        pan = r.uniform(-0.8, 0.8)
+        g = r.uniform(0.1, 0.2)
+        tb = 0.0
+        while tb < d:
+            s = bubble(r, r.uniform(160.0, 520.0), r.uniform(0.012, 0.03), r.uniform(0.5, 1.0))
+            mix.add("acid", ts + tb, lp(s, 2500.0, 2, BSR), gain=g * np.sin(np.pi * tb / d) ** 0.5 * r.uniform(0.4, 1.0),
+                    pan=pan + r.uniform(-0.1, 0.1), rev=0.5)
+            tb += r.exponential(1.0 / rate)
+    for ch in range(2):
+        rate = 120.0 * (0.4 + 0.6 * gusts(r, n, 0.07))
+        clicks = (r.random(n) < rate / BSR) * r.lognormal(0.0, 0.5, n) * np.sign(r.standard_normal(n))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(cband(clicks, 2500.0, 7500.0, 2)) * 0.12
+        mix.add_loop("acid", chans, rev=0.3)
+    # a distant deep call now and then: something big, far off in the jungle
+    for tc in (spaced_times(r, T, 9.0, 16.0) if deep else spaced_times(r, T, 14.0, 24.0)):
+        d = r.uniform(2.5, 4.0)
+        f0 = r.uniform(80.0, 115.0)
+        s = xeno_voice(r, [(0, f0), (0.4, f0 * r.uniform(1.3, 1.6)), (1, f0 * 0.8)], d,
+                       [(0, 300), (0.5, 550), (1, 350)], [(0, 900), (0.5, 1300), (1, 800)], sub=0.3, vib=(3.5, 0.01))
+        mix.add("calls", tc, lp(to_bed(s), 900.0, 2, BSR), gain=r.uniform(0.6, 1.0), pan=r.uniform(-0.7, 0.7), rev=1.0)
+    if deep:
+        # deeper in, a pulsing chorus of frog-like things: inharmonic tones pulsed 5-11 times a
+        # second and ring-modulated, each singing in stretches
+        for _ in range(6):
+            f = r.uniform(280.0, 650.0)
+            pulse = np.maximum(csine(r.uniform(5.0, 11.0), n, phase=r.uniform(0, TAU)), 0.0) ** 3
+            on = cbeat(n, int(r.integers(2, 5)), r.uniform(0, TAU)) ** 4
+            sig = (csine(f, n) + 0.4 * csine(f * 2.41, n)) * (0.4 + 0.6 * csine(r.uniform(40.0, 90.0), n)) * pulse * on
+            mix.add_loop("chorus", st(cband(sig, None, 3000.0, 2), r.uniform(-0.85, 0.85)), rev=0.5)
+        levels = {"hum": -5.0, "wind": -8.0, "crystal": -13.0, "creatures": -8.0, "chorus": -13.0, "acid": -15.0,
+                  "calls": -10.0}
+    else:
+        levels = {"hum": -7.0, "wind": -5.0, "crystal": -9.0, "creatures": -9.0, "acid": -14.0, "calls": -13.0}
+    mix.render(BEDS[name][1], levels, t60=1.8 if not deep else 2.4, damp=3000.0, wet=0.45, predelay=0.02,
+               hp_hz=40.0, lp_hz=8000.0)
+
+
+@bed("amb_xeno", -26.0)
+def bed_xeno():
+    xeno_bed("amb_xeno", deep=False)
+
+
+@bed("amb_xeno_deep", -26.0)
+def bed_xeno_deep():
+    xeno_bed("amb_xeno_deep", deep=True)
+
+
+def volcano_bed(name, crater):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    # the mountain's deep rumble: dark noise band-limited to 45-220 Hz, swelling slowly, and kept
+    # well under the roar so it is felt without masking anything
+    swell = 0.7 + 0.3 * cbeat(n, 3, r.uniform(0, TAU))
+    for ch in range(2):
+        rum = cband(pink(r, n, BSR, slope=-0.8), 45.0, 220.0, 2) * swell
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(rum)
+        mix.add_loop("rumble", chans)
+    # the eruption: a roaring jet of gas and fountaining lava, reddish noise that surges and tears
+    surge = 0.55 + 0.45 * gusts(r, n, 0.07, bias=0.2 if crater else -0.2)
+    for ch in range(2):
+        g = np.roll(surge, int(ch * 0.3 * BSR))
+        tear = 0.75 + 0.25 * np.tanh(smooth(r, n, 9.0, BSR))
+        roar = cband(pink(r, n, BSR, slope=-0.6), 90.0, 2400.0 if crater else 1300.0, 2) * g * tear
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(roar)
+        mix.add_loop("roar", chans, rev=0.2)
+    # the lava fountain gushing (loud at the crater, a murmur down the flank): each gush a swelling
+    # whoosh of gas and spatter
+    for tb in spaced_times(r, T, 1.2, 3.2):
+        d = r.uniform(0.9, 2.2)
+        m = int(d * BSR)
+        tt = np.arange(m) / BSR
+        s = bp(r.standard_normal(m), 250.0, 3000.0 if crater else 1600.0, 2, BSR) * np.sin(np.pi * tt / d) ** 2 * \
+            np.exp(-tt / (d * 0.8))
+        mix.add("fountain", tb, rmsn(s), gain=r.uniform(0.5, 1.0), pan=r.uniform(-0.4, 0.4), rev=0.5)
+    # lava crackling: a carpet of sharp ticks whose density drifts, with small pops and spits
+    for ch in range(2):
+        rate = (140.0 if crater else 70.0) * (0.4 + 0.6 * gusts(r, n, 0.1))
+        clicks = (r.random(n) < rate / BSR) * r.lognormal(0.0, 0.7, n) * np.sign(r.standard_normal(n))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(cband(clicks, 1200.0, 6500.0, 2))
+        mix.add_loop("lava", chans, rev=0.3)
+    for tb in r.uniform(0, T, 60 if crater else 35):
+        pop = noise_hit(r, 0.06, 250.0, 2200.0, r.uniform(0.004, 0.012), BSR)
+        mix.add("lava", tb, pop, gain=r.uniform(0.3, 1.0), pan=r.uniform(-0.8, 0.8), rev=0.4)
+    # fumaroles hissing nearby, each breathing slowly
+    for _ in range(3):
+        hiss = cband(r.standard_normal(n), r.uniform(1800.0, 2600.0), r.uniform(5500.0, 7500.0), 2)
+        breathe = 0.5 + 0.5 * gusts(r, n, 0.05, bias=0.3)
+        mix.add_loop("vents", st(rmsn(hiss) * breathe, r.uniform(-0.8, 0.8)) * 0.4, rev=0.4)
+    # wind off the summit, carrying ash: gusts with a low moan, and a fine patter of ash and grit
+    gust = gusts(r, n, 0.08, bias=0.1 if crater else -0.2) * (0.7 + 0.3 * cbeat(n, 2, r.uniform(0, TAU)))
+    wind_layer(mix, "wind", r, gust, 120.0, 1800.0, howl=(280.0, 560.0), howl_q=5.0, howl_gain=0.35, body_gain=0.7)
+    for ch in range(2):
+        g = np.roll(gust, int(ch * 0.45 * BSR))
+        pat = (r.random(n) < 900.0 / BSR) * r.lognormal(-0.5, 0.6, n)
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(cband(pat, 2500.0, 8000.0, 2)) * g ** 2
+        mix.add_loop("ash", chans)
+    # far eruption booms (the one-shots bring the big ones): soft, deep and rolling
+    for tb in (spaced_times(r, T, 9.0, 16.0) if crater else spaced_times(r, T, 14.0, 24.0)):
+        d = 3.0
+        tt = tv(d, BSR)
+        m = len(tt)
+        boom = tone(ga.sweep(90.0, 45.0, tt, 0.4), ((1, 1.0), (2, 0.6), (3, 0.3)), BSR) * ga.ad_env(tt, 0.01, 0.5)
+        roll = bp(r.standard_normal(m), 60.0, 500.0, 2, BSR) * ga.ad_env(tt, 0.05, 0.9)
+        s = lp(unit(boom) * 0.4 + unit(roll) * 0.7, 600.0, 2, BSR) * rcos_env(m, 0.0, 0.5, BSR)
+        mix.add("booms", tb, s, gain=r.uniform(0.6, 1.0), pan=r.uniform(-0.5, 0.5), rev=1.0)
+    if crater:
+        levels = {"roar": 0.0, "fountain": -6.0, "rumble": -8.0, "lava": -9.0, "vents": -12.0, "wind": -6.0,
+                  "ash": -14.0, "booms": -9.0}
+    else:
+        levels = {"roar": -3.0, "fountain": -12.0, "rumble": -8.0, "lava": -12.0, "vents": -13.0, "wind": -3.0,
+                  "ash": -16.0, "booms": -11.0}
+    mix.render(BEDS[name][1], levels, t60=2.6, damp=1600.0, wet=0.4, predelay=0.03, hp_hz=40.0, lp_hz=7500.0)
+
+
+@bed("amb_volcano", -25.0)
+def bed_volcano():
+    volcano_bed("amb_volcano", crater=False)
+
+
+@bed("amb_volcano_crater", -25.0)
+def bed_volcano_crater():
+    volcano_bed("amb_volcano_crater", crater=True)
+
+
+def ice_pew(r, dur, f_hi, f_lo, sr=SR):
+    """The 'pew' of ice under strain.  A crack sends flexural waves through the sheet, and ice is
+    dispersive (their speed grows with the square root of frequency), so the highs arrive first
+    and a listener hears a laser-like chirp sweeping down: f = f_hi / (1 + t / t0)^2."""
+    t = tv(dur, sr)
+    t0 = dur / (np.sqrt(f_hi / f_lo) - 1.0)
+    f = f_hi / (1.0 + t / t0) ** 2
+    return tone(f, ((1, 1.0), (2, 0.2)), sr) * ga.ad_env(t, 0.0015, dur * 0.4) * rcos_env(len(t), 0.0, 0.03, sr)
+
+
+def glacier_bed(name, storm):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    # the blizzard: wind howling over the pass (a whistling resonance that rises with the gusts),
+    # and a second, lower moan round the fortress walls on its own gust timing
+    gust = gusts(r, n, 0.1, bias=0.5 if storm else -0.1) * (0.7 + 0.3 * cbeat(n, 3, r.uniform(0, TAU)))
+    wind_layer(mix, "wind", r, gust, 110.0, 3200.0 if storm else 2600.0, howl=(420.0, 1050.0 if storm else 980.0),
+               howl_q=7.0, howl_gain=0.9 if storm else 0.45, body_gain=1.0 if storm else 0.7,
+               howl_pow=1.2 if storm else 1.5)
+    wind_layer(mix, "wind", r, np.roll(gust, int(7.3 * BSR)), 200.0, 900.0, howl=(230.0, 410.0), howl_q=6.0,
+               howl_gain=0.4, body_gain=0.2, howl_pow=2.0)
+    # blowing snow: a fine hiss of crystals driven by the gusts, and grains ticking off the ice
+    for ch in range(2):
+        g = np.roll(gust, int(ch * 0.4 * BSR))
+        hiss = cband(r.standard_normal(n), 3000.0, 8000.0, 2) * g ** 1.6
+        ticks = (r.random(n) < (1500.0 if storm else 700.0) * g ** 2 / BSR) * r.lognormal(-0.5, 0.6, n)
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(hiss) * 0.8 + rmsn(cband(ticks, 4000.0, 9000.0, 2)) * 0.35
+        mix.add_loop("snow", chans)
+    # the ice: the glacier and the fortress walls creaking and groaning as they shift, and the ice
+    # singing far out (dispersive 'pew' chirps from strain in the sheet)
+    for tb in spaced_times(r, T, 5.0, 11.0):
+        d = r.uniform(1.0, 2.5)
+        cr = stick_slip(r, d, lambda u: 6.0 + 22.0 * np.sin(np.pi * u) ** 1.4,
+                        ((r.uniform(70, 110), 0.05, 1.0), (r.uniform(180, 260), 0.035, 0.7),
+                         (r.uniform(420, 560), 0.02, 0.4), (r.uniform(900, 1200), 0.01, 0.2)),
+                        bend=r.uniform(0.85, 1.15), sr=BSR)
+        cr = unit(cr) * rcos_env(len(cr), 0.1, 0.3, BSR)
+        mix.add("ice", tb, lp(cr, 1800.0, 2, BSR), gain=r.uniform(0.3, 1.0), pan=r.uniform(-0.8, 0.8), rev=0.6)
+    for tb in r.uniform(0, T, 14):
+        s = ice_pew(r, r.uniform(0.25, 0.6), r.uniform(3000.0, 6000.0), r.uniform(250.0, 500.0), BSR)
+        mix.add("ice", tb, lp(s, 4000.0, 2, BSR), gain=r.uniform(0.1, 0.3), pan=r.uniform(-0.9, 0.9), rev=0.8)
+    # distant glacier cracks: a sharp report that booms and rolls off the peaks
+    for tb in (spaced_times(r, T, 18.0, 30.0) if storm else spaced_times(r, T, 12.0, 22.0)):
+        tt = tv(2.5, BSR)
+        m = len(tt)
+        s = noise_hit(r, 2.5, 300.0, 5000.0, 0.01, BSR)
+        s += 0.8 * tone(ga.sweep(120.0, 50.0, tt, 0.3), ((1, 1.0), (2, 0.5)), BSR) * ga.ad_env(tt, 0.003, 0.4)
+        s += 0.5 * unit(bp(r.standard_normal(m), 60.0, 400.0, 2, BSR)) * ga.ad_env(tt, 0.05, 0.8)
+        mix.add("cracks", tb, lp(s, 1500.0, 2, BSR) * rcos_env(m, 0.0, 0.4, BSR), gain=r.uniform(0.5, 1.0),
+                pan=r.uniform(-0.7, 0.7), rev=1.0)
+    # a crystalline shimmer: ice crystals tinkling in the air, very faint, more in the gusts
+    for tb in density_times(r, T, 60, gust + 0.1):
+        f = r.uniform(3500.0, 7500.0)
+        s = modal([f, f * 2.76], [1.0, 0.3], [r.uniform(0.3, 0.8), 0.2], 1.0, BSR, r=r)
+        mix.add("shimmer", tb, s, gain=r.uniform(0.2, 1.0), pan=r.uniform(-0.9, 0.9), rev=0.7)
+    if storm:
+        levels = {"wind": 0.0, "snow": -4.0, "ice": -15.0, "cracks": -17.0, "shimmer": -24.0}
+    else:
+        levels = {"wind": 0.0, "snow": -6.0, "ice": -11.0, "cracks": -14.0, "shimmer": -20.0}
+    mix.render(BEDS[name][1], levels, t60=2.2, damp=2500.0, wet=0.35, predelay=0.03, hp_hz=40.0, lp_hz=8500.0)
+
+
+@bed("amb_glacier", -25.0)
+def bed_glacier():
+    glacier_bed("amb_glacier", storm=False)
+
+
+@bed("amb_glacier_storm", -24.0)
+def bed_glacier_storm():
+    glacier_bed("amb_glacier_storm", storm=True)
+
+
+def desert_bed(name, storm):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    # hot, dry wind over the dunes: a soft body with only a low, breathy moan
+    gust = gusts(r, n, 0.08, bias=0.25 if storm else -0.3) * (0.7 + 0.3 * cbeat(n, 2, r.uniform(0, TAU)))
+    wind_layer(mix, "wind", r, gust, 120.0, 2000.0, howl=(260.0, 520.0), howl_q=4.0,
+               howl_gain=0.4 if storm else 0.25, body_gain=0.8, howl_pow=2.0)
+    # sand skipping over the dunes (saltation): a dense granular hiss that rises steeply with the
+    # gusts, over a softer ripple
+    for ch in range(2):
+        g = np.roll(gust, int(ch * 0.5 * BSR))
+        rate = (2500.0 if storm else 1200.0) * g ** 2.2
+        gr = (r.random(n) < rate / BSR) * r.lognormal(-0.5, 0.6, n) * np.sign(r.standard_normal(n))
+        ripple = cband(r.standard_normal(n), 600.0, 2500.0, 2) * g ** 2
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(cband(gr, 1800.0, 8500.0, 2)) + rmsn(ripple) * 0.3
+        mix.add_loop("sand", chans)
+    # the sandstorm: a far roar that surges slowly (nearer and brighter in the storm layer)
+    surge = 0.6 + 0.4 * gusts(r, n, 0.05, bias=0.3 if storm else -0.3)
+    for ch in range(2):
+        roar = cband(pink(r, n, BSR, slope=-0.6), 70.0, 1800.0 if storm else 900.0, 2) * np.roll(surge, int(ch * 0.6 * BSR))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(roar)
+        mix.add_loop("storm", chans, rev=0.2)
+    # the temple: its halls resonate faintly in the wind (noise through fixed hall modes), and now
+    # and then a far knock or a trickle of sand echoes inside
+    for ch in range(2):
+        def gain(tt, f):
+            return (resonance(118.0, f, 4.0) + 0.7 * resonance(191.0, f, 5.0) + 0.5 * resonance(287.0, f, 6.0) +
+                    0.3 * resonance(412.0, f, 7.0))
+        hollow = stft_shape(r.standard_normal(n), gain) * (0.5 + 0.5 * np.roll(gust, int(3.0 * BSR)))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(cband(hollow, 70.0, 800.0, 2)) * 0.5
+        mix.add_loop("temple", chans, rev=0.8)
+    for tb in spaced_times(r, T, 8.0, 15.0):
+        if r.random() < 0.5:
+            f0 = r.uniform(180.0, 400.0)
+            s = modal([f0, f0 * 1.7, f0 * 2.6], [1.0, 0.5, 0.3], [0.03, 0.02, 0.012], 0.3, BSR, r=r)
+            s = unit(s) + 0.5 * noise_hit(r, 0.3, 300.0, 3000.0, 0.004, BSR)
+        else:
+            d = r.uniform(0.8, 1.6)
+            m = int(d * BSR)
+            s = bp((r.random(m) < 1500.0 / BSR) * r.lognormal(0.0, 0.5, m), 1500.0, 7000.0, 2, BSR) * \
+                np.sin(np.pi * np.arange(m) / m) ** 2
+        mix.add("temple", tb, lp(s, 3000.0, 2, BSR), gain=r.uniform(0.3, 0.7), pan=r.uniform(-0.8, 0.8), rev=1.0)
+    levels = {"wind": 0.0, "sand": -3.0, "storm": -2.0, "temple": -18.0}
+    if not storm:
+        # cicadas in the afternoon heat: a few far buzzing drones, each singing in stretches
+        for _ in range(3):
+            f = r.uniform(4200.0, 6500.0)
+            pulse = np.maximum(csine(r.uniform(120.0, 200.0), n), 0.0) ** 4
+            on = cbeat(n, int(r.integers(2, 5)), r.uniform(0, TAU)) ** 6
+            buzz = cband(r.standard_normal(n), f * 0.85, f * 1.15, 3) * pulse * on
+            mix.add_loop("cicadas", st(rmsn(buzz), r.uniform(-0.9, 0.9)), rev=0.3)
+        levels = {"wind": 0.0, "sand": -5.0, "storm": -8.0, "temple": -14.0, "cicadas": -19.0}
+    mix.render(BEDS[name][1], levels, t60=1.6, damp=3000.0, wet=0.35, predelay=0.02, hp_hz=40.0, lp_hz=8000.0)
+
+
+@bed("amb_desert", -26.0)
+def bed_desert():
+    desert_bed("amb_desert", storm=False)
+
+
+@bed("amb_desert_storm", -25.0)
+def bed_desert_storm():
+    desert_bed("amb_desert_storm", storm=True)
+
+
+# ==========================================================================
 # the one-shots
 # ==========================================================================
 SHOTS = {}   # name -> (function(r, i), variants)
@@ -1715,6 +2208,657 @@ def shot_drone(r, i):
     dark = lp(y, 1200.0)
     y = dark + (y - dark) * close
     return trim(reverb(y * rcos_env(n, 0.5, 0.7), r, 1.2, 3000.0, 0.2))
+
+
+# ---- xeno ------------------------------------------------------------------
+@shots("amb_xeno_trill", 4)
+def shot_xeno_trill(r, i):
+    x = (xeno_ringchirp, xeno_liquid, xeno_warble, xeno_bounce)[i](r)
+    if i == 0:
+        # a chitter answers the chirp from the same branch
+        ch = xeno_chitter(r)[:int(0.7 * SR)]
+        place(x, r.uniform(0.9, 1.2), ch * rcos_env(len(ch), 0.0, 0.15), SR, 0.45)
+    return far(hp(x, 900.0), r, 9000.0, 0.7, 0.14, damp=5000.0)
+
+
+@shots("amb_xeno_creature", 3)
+def shot_xeno_creature(r, i):
+    x = zeros(2.6)
+    k = r.uniform(0.92, 1.08)
+    if i == 0:
+        # "whee-oo ... ruk": a rising, formant-swept call and a growled answer (period doubling)
+        place(x, 0.02, xeno_voice(r, [(0, 380 * k), (0.35, 720 * k), (1, 300 * k)], 0.7,
+                                  [(0, 500), (1, 700)], [(0, 2200), (0.5, 1500), (1, 900)]), SR)
+        place(x, 0.85, xeno_voice(r, [(0, 170 * k), (1, 130 * k)], 0.26, [(0, 450), (1, 380)], [(0, 1100), (1, 900)],
+                                  sub=0.7, rough=0.5), SR, 0.8)
+    elif i == 1:
+        # clicking chatter through a mouth that opens (a formant sweeping up), then a whistle
+        m = int(1.1 * SR)
+        tm = np.arange(m) / SR
+        imp = np.zeros(m)
+        t0 = 0.0
+        while t0 < 0.95:
+            imp[int(t0 * SR)] = r.uniform(0.5, 1.0)
+            t0 += 1.0 / (18.0 + 40.0 * (t0 / 0.95) ** 1.5) * r.uniform(0.85, 1.15)
+        clicks = np.convolve(imp, np.exp(-np.arange(int(0.002 * SR)) / (0.0004 * SR)))[:m]
+        chat = ga.svf_bandpass(clicks + 0.02 * r.standard_normal(m), ga.sweep(800.0, 2600.0, tm, 0.9), 6.0, SR)
+        place(x, 0.02, unit(chat) * rcos_env(m, 0.05, 0.1), SR)
+        place(x, 1.2, syl([(0, 1900 * k), (0.7, 3100 * k), (1, 2800 * k)], 0.35, amp=[(0, 0.3), (0.5, 1), (1, 0.2)],
+                          fm=(55.0, 0.02)), SR, 0.5)
+    else:
+        # "hoo-hoo-hee": hoots from a throat sac, ring-modulated into something stranger
+        t0 = 0.02
+        for f, d in ((280 * k, 0.28), (275 * k, 0.28), (410 * k, 0.45)):
+            v = xeno_voice(r, [(0, f * 0.9), (0.3, f), (1, f * 0.95)], d, [(0, 350), (1, 380)], [(0, 800), (1, 900)],
+                           vib=(6.0, 0.012), top=12)
+            tt = np.arange(len(v)) / SR
+            v = 0.5 * v + 0.5 * v * np.sin(TAU * 67.0 * tt)
+            place(x, t0, v, SR)
+            t0 += d + r.uniform(0.12, 0.2)
+    return trim(far(x, r, 6000.0, 1.0, 0.2, damp=3500.0))
+
+
+@shots("amb_xeno_chime", 3)
+def shot_xeno_chime(r, i):
+    x = zeros(5.0)
+    if i == 0:
+        # a gust knocks through a cluster of crystal prisms
+        prisms = [edo13(r.uniform(900.0, 1100.0), s) for s in (0, 3, 5, 8, 11)]
+        for _ in range(int(r.integers(6, 11))):
+            t0 = r.beta(1.6, 2.6) * 2.4
+            place(x, t0, crystal(r, prisms[int(r.integers(0, 5))], 5.0 - t0), SR, r.uniform(0.3, 1.0) ** 1.5)
+    elif i == 1:
+        # one spire bowed by the wind: it swells up and sings, its neighbours answering faintly
+        f = r.uniform(600.0, 760.0)
+        place(x, 0.02, crystal(r, f, 4.9, bow=0.7, tau0=1.6), SR)
+        place(x, 0.4, crystal(r, f * 2.0 ** (5 / 13), 4.5, bow=0.9, tau0=1.3), SR, 0.3)
+    else:
+        # a shower of shards tinkling down off a spire, each a smaller, higher crystal
+        t0 = 0.02
+        for j in range(int(r.integers(14, 24))):
+            f = r.uniform(1800.0, 4200.0)
+            place(x, t0, crystal(r, f, 1.2, tau0=0.4), SR, r.uniform(0.3, 1.0) * np.exp(-j * 0.08))
+            t0 += r.exponential(0.07)
+            if t0 > 3.0:
+                break
+    return trim(reverb(x, r, 1.4, 5000.0, 0.25))
+
+
+@shots("amb_xeno_spore", 3)
+def shot_xeno_spore(r, i):
+    # a spore pod bursting: a soft membrane pop, a breathy puff of air pushed out through the pod's
+    # mouth (a band sweeping down), and the spore cloud drifting off as a faint, fine glitter
+    x = zeros(2.4)
+    t0 = 0.02
+    for j in range(1 if i < 2 else 3):
+        tt = tv(0.3)
+        pop = tone(ga.sweep(r.uniform(320, 420), 150.0, tt, 0.04)) * ga.ad_env(tt, 0.002, 0.025)
+        place(x, t0, pop, SR, 0.35 * 0.8 ** j)
+        m = int(0.5 * SR)
+        tm = np.arange(m) / SR
+        puff = ga.svf_bandpass(r.standard_normal(m), ga.sweep(r.uniform(2300, 2900), 600.0, tm, 0.35), 1.1, SR)
+        place(x, t0, unit(puff) * ga.ad_env(tm, 0.015, 0.12), SR, 0.7 * 0.8 ** j)
+        for _ in range(int(r.integers(70, 120))):
+            tg = t0 + 0.08 + r.gamma(1.5, 0.35)
+            place(x, tg, noise_hit(r, 0.01, 5000.0, 11000.0, r.uniform(0.0006, 0.002)), SR,
+                  0.2 * r.uniform(0.2, 1.0) ** 2 * np.exp(-(tg - t0) / 0.8))
+        t0 += r.uniform(0.18, 0.4)
+    return trim(far(x, r, 9000.0, 0.8, 0.2, damp=4000.0))
+
+
+@shots("amb_xeno_acid", 3)
+def shot_xeno_acid(r, i):
+    # acid bubbling up through a pool: thick, slow bubbles swelling and bursting (some with a wet
+    # pop) over an effervescent fizz that swells and settles
+    x = zeros(2.0)
+    for _ in range(int(r.integers(6, 13))):
+        t0 = min(r.gamma(1.8, 0.2), 1.3)
+        f0 = r.uniform(140.0, 420.0)
+        b = bubble(r, f0, r.uniform(0.02, 0.05), r.uniform(0.6, 1.2), SR)
+        place(x, t0, b, SR, r.uniform(0.4, 1.0))
+        if r.random() < 0.5:
+            place(x, t0 + len(b) / SR * 0.35, noise_hit(r, 0.03, 600.0, 3000.0, 0.003), SR, 0.2)
+    n = len(x)
+    tt = np.arange(n) / SR
+    rate = 900.0 * np.exp(-((tt - 0.6) / 0.5) ** 2)
+    fizz = (r.random(n) < rate / SR) * r.lognormal(0.0, 0.6, n) * np.sign(r.standard_normal(n))
+    x = unit(x) + 0.3 * unit(bp(np.convolve(fizz, np.exp(-np.arange(20) / 4.0))[:n], 2500.0, 9000.0))
+    return trim(far(x, r, 7000.0, 0.6, 0.15, damp=4000.0))
+
+
+@shots("amb_xeno_leviathan", 2)
+def shot_xeno_leviathan(r, i):
+    # a leviathan, miles off in the sky: a vast body resonating - a deep moan through slowly moving
+    # formants with a subharmonic growl, a higher gliding overtone song above it, a faint ring-
+    # modulated sheen, and miles of air (dull, in a huge open reverb)
+    x = zeros(5.6)
+    k = r.uniform(0.92, 1.08)
+    if i == 0:
+        moan = xeno_voice(r, [(0, 58 * k), (0.3, 74 * k), (0.7, 68 * k), (1, 50 * k)], 4.6,
+                          [(0, 250), (0.5, 480), (1, 300)], [(0, 700), (0.5, 1100), (1, 650)], sub=0.3,
+                          vib=(3.0, 0.012), rough=0.06, top=20)
+        song = xeno_voice(r, [(0, 300 * k), (0.5, 520 * k), (1, 380 * k)], 2.6, [(0, 800), (1, 900)],
+                          [(0, 2000), (1, 1600)], vib=(5.5, 0.02), top=10)
+        at_song = 1.4
+    else:
+        moan = xeno_voice(r, [(0, 82 * k), (0.4, 62 * k), (1, 52 * k)], 4.6, [(0, 420), (0.6, 280), (1, 330)],
+                          [(0, 1200), (0.5, 800), (1, 700)], sub=0.35, vib=(2.5, 0.015), rough=0.08, top=20)
+        song = xeno_voice(r, [(0, 620 * k), (0.4, 470 * k), (1, 560 * k)], 2.0, [(0, 900), (1, 800)],
+                          [(0, 2200), (1, 1900)], vib=(6.0, 0.025), top=10)
+        at_song = 2.2
+    tt = np.arange(len(moan)) / SR
+    moan = 0.9 * moan + 0.1 * moan * np.sin(TAU * 23.0 * tt)
+    place(x, 0.05, moan, SR)
+    place(x, at_song, song, SR, 0.4)
+    breath = bp(r.standard_normal(len(x)), 150.0, 900.0) * pts_env([(0, 0), (0.1, 1), (0.6, 0.6), (0.75, 0), (1, 0)], len(x))
+    x = unit(x) + 0.04 * unit(breath)
+    return trim(far(hp(x, 40.0), r, 1600.0, 3.6, 0.6, damp=900.0, predelay=0.1), db_floor=-55.0)
+
+
+# ---- volcano ---------------------------------------------------------------
+def rock_hit(r, size, dur=0.25):
+    """A rock striking rock: four low-Q stone modes (a bigger rock is lower and duller) and a click."""
+    f0 = float(np.clip(700.0 / size, 150.0, 2600.0))
+    fr = [f0 * q * r.uniform(0.95, 1.05) for q in (1.0, 1.71, 2.63, 3.94)]
+    taus = [0.012 * size ** 0.4 / (k + 1) ** 0.7 for k in range(4)]
+    s = modal(fr, [1.0, 0.6, 0.4, 0.2], taus, dur, r=r)
+    body = noise_hit(r, dur, f0 * 0.6, f0 * 2.5, 0.008 * size ** 0.5)
+    return 0.6 * unit(s) + 0.7 * body + 0.5 * noise_hit(r, dur, f0 * 0.8, min(f0 * 7.0, 12000.0), 0.0025)
+
+
+def eruption_blast(r, dur, f0):
+    """An eruption blast: a deep boom gliding down, a pressure wave of dark noise, a rolling rumble
+    that breathes, and the crackle of ejecta raining back."""
+    t = tv(dur)
+    n = len(t)
+    boom = tone(ga.sweep(f0 * 1.8, f0 * 0.6, t, 0.35), ((1, 1.0), (2, 0.5), (3, 0.25))) * ga.ad_env(t, 0.004, 0.4)
+    blast = lp(pink(r, n, SR, slope=-0.7), 1400.0) * ga.ad_env(t, 0.004, 0.22)
+    roll = bp(r.standard_normal(n), 45.0, 500.0) * ga.ad_env(t, 0.12, 1.3) * (0.6 + 0.4 * np.abs(smooth(r, n, 5.0)))
+    crk = np.zeros(n)
+    for _ in range(int(r.integers(40, 90))):
+        t0 = r.gamma(1.5, 0.35)
+        place(crk, t0, noise_hit(r, 0.02, 1000.0, 6000.0, 0.002), SR, r.uniform(0.2, 1.0) ** 2 * np.exp(-t0 / 1.2))
+    return 0.8 * unit(boom) + 0.9 * unit(blast) + 0.9 * unit(roll) + 0.25 * unit(crk)
+
+
+@shots("amb_volcano_boom", 3)
+def shot_volcano_boom(r, i):
+    x = zeros(5.5)
+    b = eruption_blast(r, 3.6, r.uniform(55.0, 70.0))
+    place(x, 0.02, b, SR)
+    if i == 2:
+        # a double blast: the vent clears, then goes again
+        place(x, r.uniform(1.0, 1.4), eruption_blast(r, 3.6, r.uniform(60.0, 75.0)), SR, 0.7)
+    # the boom comes back off the slopes round about
+    for dly, g in ((r.uniform(0.5, 0.9), 0.32), (r.uniform(1.4, 2.1), 0.16)):
+        place(x, 0.02 + dly, lp(b, 700.0), SR, g)
+    return trim(far(hp(x, 40.0), r, 2000.0, 2.8, 0.5, damp=900.0, predelay=0.06))
+
+
+def thunder(r, dur, dist, height, restrike=0.0):
+    """Thunder from lightning in the ash cloud.  The channel is a crooked chain of short segments;
+    each sends out an N-wave (a sharp pressure rise and fall) that reaches the listener after its
+    own distance / 343 m/s, quieter and duller the further it has come.  Segments broadside to the
+    listener arrive together (the crack); the rest string out into the roll.  `restrike` > 0 sends
+    a second stroke down the same channel that many seconds later."""
+    n = int(dur * SR)
+    head = r.uniform(0, TAU)
+    p = np.array([dist, 0.0, height])
+    pts = [p.copy()]
+    for _ in range(400):
+        head += r.normal(0.0, 0.2)
+        p = p + r.uniform(6.0, 16.0) * np.array([np.cos(head), np.sin(head), r.normal(0.0, 0.4)])
+        pts.append(p.copy())
+    pts = np.array(pts)
+    seg = pts[1:] - pts[:-1]
+    mid = 0.5 * (pts[1:] + pts[:-1])
+    dm = np.linalg.norm(mid, axis=1)
+    ln = np.linalg.norm(seg, axis=1)
+    cosang = np.abs(np.sum(seg * mid, axis=1)) / (ln * dm)
+    arrive = (dm - dm.min()) / 343.0 + 0.05
+    amp = ln / dm * (0.25 + (1.0 - cosang) ** 1.5)
+    x = np.zeros(n)
+    edges = np.quantile(dm, np.linspace(0.0, 1.0, 7))
+    for b in range(6):
+        sel = (dm >= edges[b]) & (dm <= edges[b + 1])
+        buf = np.zeros(n)
+        for ta, a, l in zip(arrive[sel], amp[sel], ln[sel]):
+            w = int(max(0.0015, l / 343.0 * 0.25) * SR)
+            nwave = np.linspace(1.0, -1.0, w)
+            place(buf, ta, nwave, SR, a)
+            if restrike:
+                place(buf, ta + restrike, nwave, SR, a * 0.7)
+        d = 0.5 * (edges[b] + edges[b + 1])
+        x += lp(buf, 6000.0 * (dm.min() / d) ** 1.5 + 150.0)
+    return x * rcos_env(n, 0.0, 1.2)
+
+
+@shots("amb_volcano_thunder", 3)
+def shot_volcano_thunder(r, i):
+    if i == 0:
+        x = thunder(r, 7.5, r.uniform(450.0, 600.0), r.uniform(250.0, 350.0))
+    elif i == 1:
+        x = thunder(r, 7.5, r.uniform(1200.0, 1500.0), r.uniform(500.0, 700.0))
+    else:
+        x = thunder(r, 7.5, r.uniform(700.0, 900.0), r.uniform(350.0, 450.0), restrike=r.uniform(0.18, 0.3))
+    return trim(reverb(hp(lp(x, 5000.0), 55.0), r, 2.2, 1000.0, 0.45, predelay=0.05), db_floor=-55.0)
+
+
+@shots("amb_volcano_rockfall", 3)
+def shot_volcano_rockfall(r, i):
+    # a slide of rocks and cinder down the slope: impacts swell and thin out, big rocks low and
+    # dull, small ones bright, some bouncing on (hits coming sooner and softer), over the hiss of
+    # sliding gravel
+    dur = r.uniform(2.2, 3.0)
+    x = zeros(dur + 0.8)
+    for _ in range(int(r.integers(26, 44))):
+        t0 = r.beta(2.0, 3.0) * dur
+        size = float(np.exp(r.normal(0.0, 0.6)))
+        g = min(size, 2.5) ** 0.8 * r.uniform(0.5, 1.0)
+        place(x, t0, rock_hit(r, size), SR, g)
+        if r.random() < 0.35:
+            gap, tb, gb = r.uniform(0.15, 0.3), t0, g
+            for _ in range(int(r.integers(1, 4))):
+                tb += gap
+                gap *= 0.7
+                gb *= 0.55
+                place(x, tb, rock_hit(r, size), SR, gb)
+    m = len(x)
+    tt = np.arange(m) / SR
+    slide = bp(r.standard_normal(m), 300.0, 3200.0) * np.exp(-((tt - dur * 0.4) / (dur * 0.35)) ** 2) * \
+        (0.6 + 0.4 * np.abs(smooth(r, m, 20.0)))
+    x = unit(x) + 0.15 * unit(slide)
+    return trim(far(x, r, 3500.0, 1.4, 0.3, damp=1800.0))
+
+
+@shots("amb_volcano_whistle", 3)
+def shot_volcano_whistle(r, i):
+    # a lava bomb passing far off: a tumbling, glowing rock tearing through the air (a whistle of
+    # rushing air, a wider roar, a tumbling flutter and a fizzing smoke trail) flown past by the
+    # Doppler model, so the whistle drops as it goes by; most end in a distant thud
+    dur = 4.5
+    n = int(dur * SR)
+    e = np.arange(n) / SR
+    tumble = 0.6 + 0.4 * np.sin(TAU * r.uniform(7.0, 12.0) * e + 2.0 * smooth(r, n, 1.0))
+    fc = r.uniform(900.0, 1300.0) * (1.0 + 0.05 * smooth(r, n, 2.0))
+    whistle = ga.svf_bandpass(r.standard_normal(n), fc, 12.0, SR)
+    roar = bp(r.standard_normal(n), 200.0, 2500.0)
+    src = (unit(whistle) + 0.5 * unit(roar)) * tumble + 0.1 * unit(bp(r.standard_normal(n), 3000.0, 9000.0))
+    t_close = dur * r.uniform(0.4, 0.5)
+    y, close = doppler_pass(src, SR, r.uniform(70.0, 95.0), r.uniform(35.0, 70.0), t_close)
+    dark = lp(y, 1000.0)
+    y = (dark + (y - dark) * close ** 2) * rcos_env(n, 0.6, 0.8)
+    y = np.concatenate([y, np.zeros(int(1.5 * SR))])
+    if i != 1:
+        thump = rock_hit(r, 3.0, 0.4) + 1.5 * tone(ga.sweep(110.0, 45.0, tv(0.4), 0.1)) * ga.ad_env(tv(0.4), 0.003, 0.08)
+        place(y, t_close + r.uniform(1.4, 2.0), lp(thump, 600.0), SR, 0.25)
+    return trim(far(y, r, 5000.0, 1.6, 0.3, damp=2000.0))
+
+
+@shots("amb_volcano_steam", 3)
+def shot_volcano_steam(r, i):
+    s = steam(r, r.uniform(1.2, 2.2), body=0.4, bright=0.85)
+    if i == 2:
+        # a chuffing vent: the gas comes in pulses
+        tt = np.arange(len(s)) / SR
+        s = s * (0.45 + 0.55 * np.maximum(np.sin(TAU * r.uniform(3.5, 5.5) * tt), 0.0) ** 1.5)
+    return trim(far(s, r, 5500.0, 1.8, 0.35, damp=2200.0))
+
+
+@shots("amb_volcano_blorp", 3)
+def shot_volcano_blorp(r, i):
+    # a lava blorp: a big, slow, viscous bubble bulging (a low tone gliding up as it swells, with a
+    # lazy wobble), bursting with a heavy pop and a falling ring, gas hissing out of the burst skin
+    # and fat spatter falling back
+    x = zeros(1.6)
+    grow = r.uniform(0.25, 0.45)
+    tt = tv(grow)
+    f = r.uniform(55.0, 80.0) * (1.0 + 1.2 * (tt / grow) ** 1.8) * (1.0 + 0.06 * np.sin(TAU * r.uniform(6.0, 10.0) * tt))
+    body = tone(f, ((1, 1.0), (2, 0.7), (3, 0.45), (4, 0.25), (5, 0.12))) * np.minimum(tt / (grow * 0.7), 1.0) ** 2
+    place(x, 0.02, lp(body, 700.0), SR)
+    pop_t = 0.02 + grow
+    place(x, pop_t, lp(noise_hit(r, 0.15, 120.0, 1200.0, 0.03), 2000.0), SR, 0.55)
+    pt = tv(0.2)
+    place(x, pop_t, tone(ga.sweep(260.0, 90.0, pt, 0.08)) * ga.ad_env(pt, 0.001, 0.05), SR, 0.6)
+    hs = tv(0.5)
+    place(x, pop_t, unit(bp(r.standard_normal(len(hs)), 1500.0, 6000.0)) * ga.ad_env(hs, 0.01, 0.12), SR, 0.08)
+    for _ in range(int(r.integers(4, 8))):
+        place(x, pop_t + r.uniform(0.12, 0.6), bubble(r, r.uniform(150.0, 400.0), r.uniform(0.02, 0.04), 0.3, SR), SR,
+              r.uniform(0.15, 0.35))
+    return trim(far(x, r, 3000.0, 1.6, 0.3, damp=1800.0))
+
+
+@shots("amb_volcano_crack", 3)
+def shot_volcano_crack(r, i):
+    # cooling crust cracking out on the flow: brittle snaps running away through it (each a click
+    # exciting stony modes), speeding up then dying out, over a low groan of the plate settling
+    x = zeros(2.2)
+    t0, gap, g = 0.02, r.uniform(0.08, 0.16), 1.0
+    count = int(r.integers(6, 12))
+    for j in range(count):
+        f0 = r.uniform(600.0, 2200.0)
+        snap = unit(modal([f0, f0 * 1.63, f0 * 2.41, f0 * 3.3], [1.0, 0.6, 0.35, 0.2], [0.012, 0.008, 0.005, 0.003],
+                          0.08, r=r)) + noise_hit(r, 0.08, 1200.0, 10000.0, 0.0012)
+        place(x, t0, snap, SR, g * r.uniform(0.6, 1.0))
+        t0 += gap * r.uniform(0.6, 1.3)
+        gap *= 0.8 if j < count // 2 else 1.3
+        g *= 0.88
+    groan = stick_slip(r, 0.7, lambda u: 12.0 + 16.0 * np.sin(np.pi * u),
+                       ((90.0, 0.04, 1.0), (210.0, 0.025, 0.7), (480.0, 0.014, 0.4), (1000.0, 0.007, 0.2)), bend=0.92)
+    place(x, 0.05, unit(groan), SR, 0.2)
+    if i == 2:
+        # and a slab gives way: a crumble of fragments and a breath of steam from the lava under it
+        for _ in range(18):
+            place(x, t0 + r.gamma(1.5, 0.08), rock_hit(r, r.uniform(0.3, 0.9), 0.12), SR, r.uniform(0.1, 0.35))
+        hs = tv(0.8)
+        place(x, t0, unit(bp(r.standard_normal(len(hs)), 1800.0, 7000.0)) * ga.ad_env(hs, 0.05, 0.25), SR, 0.15)
+    return trim(far(x, r, 6000.0, 1.2, 0.3, damp=2500.0))
+
+
+# ---- glacier ---------------------------------------------------------------
+@shots("amb_glacier_crack", 3)
+def shot_glacier_crack(r, i):
+    x = zeros(4.0)
+    if i == 0:
+        # a sharp crack out on the ice, its 'pew' running away through the sheet, and a groan
+        place(x, 0.02, noise_hit(r, 0.3, 400.0, 9000.0, 0.006), SR)
+        f0 = r.uniform(1500.0, 2200.0)
+        place(x, 0.02, unit(modal([f0, f0 * 1.62, f0 * 2.4], [1.0, 0.6, 0.3], [0.03, 0.02, 0.012], 0.3, r=r)), SR, 0.5)
+        place(x, 0.06, ice_pew(r, 0.45, r.uniform(4000.0, 6000.0), 350.0), SR, 0.5)
+        cr = stick_slip(r, 0.9, lambda u: 10.0 + 18.0 * np.sin(np.pi * u), ((90.0, 0.05, 1.0), (230.0, 0.03, 0.6),
+                                                                          (520.0, 0.018, 0.3)), bend=0.9)
+        place(x, 0.25, unit(cr) * rcos_env(len(cr), 0.1, 0.3), SR, 0.25)
+    elif i == 1:
+        # the ice singing: a run of pews from strain far across the sheet
+        t0 = 0.02
+        for _ in range(int(r.integers(4, 8))):
+            place(x, t0, ice_pew(r, r.uniform(0.25, 0.6), r.uniform(3000.0, 6500.0), r.uniform(250.0, 500.0)), SR,
+                  r.uniform(0.4, 1.0))
+            t0 += r.uniform(0.15, 0.5)
+            if t0 > 3.0:
+                break
+    else:
+        # a big, deep crack: the report, a boom and a roll, with pews
+        tt = tv(3.5)
+        place(x, 0.02, noise_hit(r, 0.5, 250.0, 8000.0, 0.012), SR)
+        place(x, 0.02, 0.9 * tone(ga.sweep(140.0, 45.0, tt, 0.4), ((1, 1.0), (2, 0.4))) * ga.ad_env(tt, 0.003, 0.5), SR)
+        place(x, 0.02, 0.6 * unit(bp(r.standard_normal(len(tt)), 60.0, 800.0)) * ga.ad_env(tt, 0.05, 1.0), SR)
+        for _ in range(3):
+            place(x, r.uniform(0.05, 0.4), ice_pew(r, r.uniform(0.3, 0.5), r.uniform(3000.0, 5000.0), 300.0), SR, 0.35)
+    return trim(far(hp(x, 40.0), r, 6000.0, 2.4, 0.4, damp=2000.0))
+
+
+@shots("amb_glacier_avalanche", 2)
+def shot_glacier_avalanche(r, i):
+    # an avalanche far off across the valley: a roar of tumbling snow that swells and dies away,
+    # blocks thudding inside it, the hiss of the powder cloud; the second starts with the crack of
+    # the slab letting go
+    dur = 6.0
+    n = int(dur * SR)
+    e = pts_env([(0, 0), (0.15, 0.5), (0.45, 1.0), (0.75, 0.6), (1, 0)], n) ** 1.2
+    roar = bp(pink(r, n, SR, slope=-0.8), 45.0, 900.0) * e * (0.7 + 0.3 * np.abs(smooth(r, n, 6.0)))
+    hiss = bp(r.standard_normal(n), 800.0, 4000.0) * e ** 2
+    thumps = np.zeros(n)
+    tt = tv(0.4)
+    for tb in r.uniform(0.3, dur - 0.5, int(r.integers(20, 40))):
+        th = tone(ga.sweep(r.uniform(80.0, 110.0), 45.0, tt, 0.1)) * ga.ad_env(tt, 0.004, 0.08)
+        th += 0.6 * noise_hit(r, 0.4, 80.0, 500.0, 0.05)
+        place(thumps, tb, th, SR, e[int(tb * SR)] * r.uniform(0.4, 1.0))
+    x = unit(roar) + 0.15 * unit(hiss) + 0.4 * unit(thumps)
+    if i == 1:
+        place(x, 0.0, noise_hit(r, 0.4, 300.0, 6000.0, 0.01), SR, 0.8)
+    return trim(far(hp(x, 35.0), r, 1500.0, 3.0, 0.5, damp=900.0, predelay=0.08))
+
+
+@shots("amb_glacier_gust", 3)
+def shot_glacier_gust(r, i):
+    # a gust howling round the walls: the wind swelling and dying away, a howl riding it (a narrow
+    # resonance whose pitch rises with the gust, and its overtone), and snow hissing in it
+    dur = r.uniform(2.6, 3.6)
+    n = int(dur * SR)
+    e = pts_env([(0, 0), (r.uniform(0.3, 0.5), 1.0), (1, 0)], n) ** 1.5 * (0.85 + 0.15 * smooth(r, n, 3.0))
+    body = bp(pink(r, n, SR), 150.0, 3000.0) * e
+    fc = r.uniform(380.0, 520.0) * (1.0 + 0.8 * e)
+    howl = ga.svf_bandpass(r.standard_normal(n), fc, 12.0, SR)
+    howl2 = ga.svf_bandpass(r.standard_normal(n), fc * 1.52, 14.0, SR)
+    snow = bp(r.standard_normal(n), 3500.0, 9000.0) * e ** 1.5
+    x = 0.7 * unit(body) + 0.8 * unit(howl) * e ** 1.3 + 0.25 * unit(howl2) * e ** 1.5 + 0.2 * unit(snow)
+    return trim(far(x, r, 8000.0, 1.2, 0.2, damp=3000.0))
+
+
+def ice_rod(r, f, dur, tau=0.6):
+    """A thin ice rod (an icicle) struck: free-bar partials 1 : 2.76 : 5.40, each a detuned pair;
+    ice rings shorter than glass."""
+    t = tv(dur)
+    out = np.zeros(len(t))
+    for q, a, ts in ((1.0, 1.0, 1.0), (2.756, 0.5, 0.5), (5.404, 0.25, 0.25)):
+        if f * q > 16000.0:
+            continue
+        beat = r.uniform(0.5, 3.0)
+        for d in (-beat / 2, beat / 2):
+            out += 0.5 * a * np.sin(TAU * (f * q + d) * t + r.uniform(0, TAU)) * np.exp(-t / (tau * ts))
+    k = int(0.002 * SR)
+    out[:k] += 0.15 * r.standard_normal(k) * np.linspace(1.0, 0.0, k)
+    return out * np.minimum(t / 0.0005, 1.0) * rcos_env(len(t), 0.0, min(0.3 * dur, 0.3))
+
+
+@shots("amb_glacier_icicle", 3)
+def shot_glacier_icicle(r, i):
+    # icicles knocking together in the wind; in the last, a small one snaps and tinkles down
+    x = zeros(3.0)
+    rods = [r.uniform(1800.0, 3200.0) for _ in range(5)]
+    for _ in range(int(r.integers(5, 12))):
+        t0 = r.beta(1.5, 3.0) * 2.0
+        place(x, t0, ice_rod(r, rods[int(r.integers(0, 5))], 3.0 - t0, r.uniform(0.4, 0.9)), SR, r.uniform(0.3, 1.0) ** 1.5)
+    if i == 2:
+        t0, gap, g = 0.9, 0.22, 0.8
+        place(x, t0 - 0.02, noise_hit(r, 0.05, 2500.0, 11000.0, 0.001), SR, 0.6)
+        while gap > 0.02 and t0 < 2.6:
+            place(x, t0, ice_rod(r, r.uniform(3500.0, 6000.0), 0.4, 0.15), SR, g)
+            t0 += gap
+            gap *= 0.62
+            g *= 0.7
+    return trim(reverb(x, r, 1.2, 5000.0, 0.25))
+
+
+@shots("amb_glacier_howl", 2)
+def shot_glacier_howl(r, i):
+    # a wolf-like howl far down the pass: a smooth voice (few harmonics through an 'oo' formant)
+    # rising to a long held note that wavers and falls away; in the second, another answers
+    x = zeros(5.0)
+    k = r.uniform(0.9, 1.1)
+    if i == 0:
+        v = xeno_voice(r, [(0, 330 * k), (0.12, 520 * k), (0.25, 560 * k), (0.8, 540 * k), (1, 380 * k)], 3.2,
+                       [(0, 650), (1, 600)], [(0, 1100), (1, 950)], vib=(5.0, 0.008), top=8)
+        place(x, 0.05, v, SR)
+    else:
+        v = xeno_voice(r, [(0, 380 * k), (0.15, 640 * k), (0.7, 620 * k), (1, 470 * k)], 2.6,
+                       [(0, 700), (1, 620)], [(0, 1200), (1, 1000)], vib=(5.5, 0.01), top=8)
+        place(x, 0.05, v, SR)
+        v2 = xeno_voice(r, [(0, 450 * k), (0.2, 760 * k), (0.75, 740 * k), (1, 560 * k)], 2.2,
+                        [(0, 750), (1, 650)], [(0, 1300), (1, 1050)], vib=(6.0, 0.012), top=8)
+        place(x, 1.4, v2, SR, 0.6)
+    breath = bp(r.standard_normal(len(x)), 500.0, 2500.0) * np.maximum(lp(np.abs(x), 20.0), 0.0)
+    x = unit(x) + 0.04 * unit(breath)
+    return trim(far(x, r, 3500.0, 2.8, 0.5, damp=1500.0, predelay=0.05))
+
+
+@shots("amb_glacier_snowslide", 2)
+def shot_glacier_snowslide(r, i):
+    # a slab of snow sliding off a ledge: the soft 'whumpf' as it lets go, a hissing slide that
+    # swells and settles, and lumps thudding down
+    dur = r.uniform(2.0, 2.8)
+    x = zeros(dur + 0.5)
+    n = len(x)
+    tt = tv(0.5)
+    place(x, 0.02, tone(ga.sweep(110.0, 55.0, tt, 0.15)) * ga.ad_env(tt, 0.004, 0.12), SR, 0.8)
+    place(x, 0.02, noise_hit(r, 0.5, 80.0, 600.0, 0.1), SR, 0.6)
+    slide = bp(r.standard_normal(n), 250.0, 3500.0) * pts_env([(0, 0), (0.1, 1), (0.6, 0.7), (1, 0)], n) * \
+        (0.7 + 0.3 * np.abs(smooth(r, n, 15.0)))
+    x += 0.6 * unit(slide)
+    lt = tv(0.3)
+    for _ in range(int(r.integers(6, 13))):
+        lump = tone(ga.sweep(150.0, 70.0, lt, 0.05)) * ga.ad_env(lt, 0.002, 0.04) + 0.6 * noise_hit(r, 0.3, 100.0, 900.0, 0.03)
+        place(x, r.uniform(0.3, dur), lump, SR, r.uniform(0.2, 0.6))
+    return trim(far(x, r, 5000.0, 1.6, 0.3, damp=2500.0))
+
+
+# ---- desert ----------------------------------------------------------------
+def hawk_scream(r, pts, dur, rasp=0.5):
+    """A raptor's scream: a harmonic voice gliding down (the red-tail's 'keee-eeer') with a breathy
+    rasp (fast amplitude roughness and noise that follows the pitch)."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    f = contour(pts, n, SR, 0.01) * (1.0 + 0.01 * smooth(r, n, 60.0))
+    ph = TAU * np.cumsum(f) / SR
+    s = np.zeros(n)
+    for k in range(1, 7):
+        s += np.sin(k * ph) / k ** 0.8 * (k * f < 0.45 * SR)
+    s = unit(s) * (1.0 + rasp * 0.5 * np.sin(TAU * r.uniform(70.0, 110.0) * t))
+    s += rasp * 0.7 * unit(ga.svf_bandpass(r.standard_normal(n), f, 4.0, SR))
+    return s * pts_env([(0, 0), (0.08, 1), (0.7, 0.8), (1, 0)], n) * rcos_env(n, 0.01, 0.03)
+
+
+@shots("amb_desert_hawk", 3)
+def shot_desert_hawk(r, i):
+    x = zeros(3.4)
+    k = r.uniform(0.93, 1.07)
+    if i == 0:
+        place(x, 0.02, hawk_scream(r, [(0, 2800 * k), (0.15, 3200 * k), (1, 1700 * k)], 1.4, 0.6), SR)
+    elif i == 1:
+        place(x, 0.02, hawk_scream(r, [(0, 3000 * k), (1, 2000 * k)], 0.6, 0.5), SR)
+        place(x, r.uniform(0.8, 1.1), hawk_scream(r, [(0, 3100 * k), (1, 1900 * k)], 0.7, 0.55), SR, 0.8)
+    else:
+        # a kite's whistle: a clean 'wee-ooo', repeated
+        t0 = 0.02
+        for _ in range(int(r.integers(2, 4))):
+            place(x, t0, hawk_scream(r, [(0, 1800 * k), (0.3, 2600 * k), (1, 1500 * k)], 0.8, 0.1), SR)
+            t0 += r.uniform(0.85, 1.0)
+    return trim(far(hp(x, 700.0), r, 8000.0, 1.2, 0.2, damp=4000.0))
+
+
+@shots("amb_desert_sand", 3)
+def shot_desert_sand(r, i):
+    # sand pouring from a crack in the temple: a dry granular hiss, a softer pouring body and the
+    # patter of it landing, starting, running and trickling out, in the hall
+    dur = r.uniform(1.8, 3.0)
+    x = zeros(dur + 0.3)
+    n = len(x)
+    e = pts_env([(0, 0), (0.08, 1), (0.7, 0.8), (1, 0)], n)
+    k = np.exp(-np.arange(24) / 5.0)
+    gr = np.convolve((r.random(n) < 3000.0 * e / SR) * r.lognormal(0.0, 0.5, n), k)[:n]
+    body = bp(r.standard_normal(n), 300.0, 2000.0) * e * (0.8 + 0.2 * smooth(r, n, 10.0))
+    pat = np.convolve((r.random(n) < 60.0 * e / SR) * r.lognormal(0.0, 0.5, n), np.exp(-np.arange(200) / 40.0))[:n]
+    x = unit(bp(gr, 1500.0, 8000.0)) + 0.4 * unit(body) + 0.3 * unit(bp(pat, 150.0, 800.0))
+    return trim(far(x, r, 7000.0, 1.6, 0.35, damp=2500.0))
+
+
+@shots("amb_desert_grind", 2)
+def shot_desert_grind(r, i):
+    # a stone block sliding somewhere in the temple: stone grinding on stone (stick-slip through the
+    # block's dead resonances and a rough scrape), ending with a heavy clunk, in a big hall
+    dur = r.uniform(1.4, 2.2)
+    cr = stick_slip(r, dur, lambda u: 25.0 + 30.0 * np.sin(np.pi * u) ** 0.8,
+                    ((r.uniform(90, 130), 0.03, 1.0), (r.uniform(230, 300), 0.02, 0.7), (r.uniform(520, 650), 0.012, 0.45),
+                     (r.uniform(1100, 1400), 0.006, 0.25)), bend=r.uniform(0.95, 1.05))
+    n = len(cr)
+    rough = bp(r.standard_normal(n), 200.0, 3000.0) * (0.4 + 0.6 * np.abs(smooth(r, n, 30.0)))
+    x = np.concatenate([(unit(cr) + 0.4 * unit(rough)) * rcos_env(n, 0.15, 0.1), np.zeros(int(0.6 * SR))])
+    tt = tv(0.4)
+    clunk = tone(ga.sweep(150.0, 70.0, tt, 0.05)) * ga.ad_env(tt, 0.002, 0.06) + 0.5 * noise_hit(r, 0.4, 200.0, 3000.0, 0.01)
+    place(x, dur - 0.05, clunk, SR, 0.9)
+    return trim(far(x, r, 5000.0, 2.4, 0.45, damp=2000.0))
+
+
+@shots("amb_desert_gong", 2)
+def shot_desert_gong(r, i):
+    x = zeros(5.5)
+    if i == 0:
+        # a ceremonial gong: inharmonic partials whose upper modes bloom a moment after the strike,
+        # the fundamental gliding up a little as it rings (gongs do), and the mallet's thump
+        f0 = r.uniform(110.0, 140.0)
+        t = tv(5.4)
+        g = np.zeros(len(t))
+        for q, a, tau, bloom in ((1.0, 1.0, 3.5, 0.0), (1.52, 0.6, 2.8, 0.1), (2.03, 0.5, 2.4, 0.2), (2.61, 0.45, 2.0, 0.3),
+                                 (3.15, 0.35, 1.6, 0.35), (3.72, 0.3, 1.3, 0.4), (4.44, 0.22, 1.0, 0.45), (5.2, 0.15, 0.8, 0.5)):
+            f = f0 * q * (1.0 + 0.015 * (1.0 - np.exp(-t / 0.6)))
+            g += a * np.sin(TAU * np.cumsum(f) / SR + r.uniform(0, TAU)) * np.exp(-t / tau) * \
+                (1.0 - np.exp(-t / bloom) if bloom else 1.0)
+        g *= np.minimum(t / 0.003, 1.0) * rcos_env(len(t), 0.0, 0.5)
+        tt = tv(0.3)
+        place(x, 0.02, unit(g), SR)
+        place(x, 0.02, tone(ga.sweep(90.0, 60.0, tt, 0.05)) * ga.ad_env(tt, 0.003, 0.05), SR, 0.4)
+    else:
+        # ceremonial drums: a big frame drum (membrane modes 1 : 1.59 : 2.14 : 2.30, the pitch
+        # dropping as the skin relaxes) in a slow pattern
+        f0 = r.uniform(70.0, 90.0)
+        t0 = 0.02
+        for j, gap in enumerate((0.9, 0.45, 0.9, 0.45, 0.45)):
+            tt = tv(1.2)
+            d = np.zeros(len(tt))
+            for q, a, tau in ((1.0, 1.0, 0.3), (1.59, 0.5, 0.2), (2.14, 0.35, 0.15), (2.30, 0.25, 0.12)):
+                d += a * tone(f0 * q * (1.0 + 0.08 * np.exp(-tt / 0.05))) * np.exp(-tt / tau)
+            d = unit(d) * np.minimum(tt / 0.002, 1.0) + 0.3 * noise_hit(r, 1.2, 200.0, 2000.0, 0.01)
+            place(x, t0, d * rcos_env(len(tt), 0.0, 0.3), SR, (1.0, 0.7, 0.9, 0.6, 0.8)[j])
+            t0 += gap
+    return trim(far(hp(x, 40.0), r, 2500.0, 2.8, 0.5, damp=1200.0, predelay=0.06))
+
+
+@shots("amb_desert_scarab", 3)
+def shot_desert_scarab(r, i):
+    # scarabs: chitin clicks - bursts of fast stridulation (a rasp of tiny clicks), single clicks,
+    # and in the last a short wing buzz as one takes off
+    x = zeros(1.6)
+    t0 = 0.02
+    for _ in range(int(r.integers(2, 5))):
+        rate = r.uniform(150.0, 300.0)
+        f1, f2 = r.uniform(2000.0, 4000.0), r.uniform(5000.0, 7000.0)
+        for j in range(int(r.integers(8, 26))):
+            c = modal([f1 * r.uniform(0.97, 1.03), f2], [1.0, 0.5], [0.002, 0.001], 0.012, r=r)
+            place(x, t0 + j / rate, unit(c) + 0.3 * noise_hit(r, 0.012, 2000.0, 9000.0, 0.0005), SR, r.uniform(0.5, 1.0))
+        t0 += r.uniform(0.2, 0.4)
+        if t0 > 1.2:
+            break
+    if i == 2:
+        tt = tv(0.4)
+        f = r.uniform(150.0, 190.0) * (1.0 + 0.05 * np.sin(TAU * 7.0 * tt))
+        buzz = tone(f, [(k, 1.0 / k) for k in range(1, 16)]) * np.sin(np.pi * tt / 0.4) ** 2
+        place(x, min(t0, 1.1), lp(buzz, 3000.0), SR, 0.5)
+    return trim(far(x, r, 9000.0, 0.6, 0.15, damp=4000.0))
+
+
+@shots("amb_desert_torch", 2)
+def shot_desert_torch(r, i):
+    # a torch on the wall: the flame's soft fluttering roar and its crackle - snaps and small pops
+    dur = r.uniform(2.2, 3.0)
+    n = int(dur * SR)
+    roar = bp(pink(r, n, SR, slope=-0.7), 80.0, 1200.0) * (0.6 + 0.4 * np.abs(smooth(r, n, 8.0)))
+    x = 0.5 * unit(roar)
+    for _ in range(int(r.integers(30, 60))):
+        if r.random() < 0.7:
+            place(x, r.uniform(0.0, dur - 0.05), noise_hit(r, 0.02, 1500.0, 9000.0, r.uniform(0.0008, 0.002)), SR,
+                  r.uniform(0.2, 1.0) ** 2)
+        else:
+            place(x, r.uniform(0.0, dur - 0.05), noise_hit(r, 0.04, 400.0, 2000.0, 0.004), SR, r.uniform(0.2, 0.6))
+    return trim(far(x * rcos_env(n, 0.3, 0.5), r, 9000.0, 1.2, 0.25, damp=3500.0))
+
+
+@shots("amb_desert_pebbles", 3)
+def shot_desert_pebbles(r, i):
+    # a few pebbles falling and bouncing on stone (each bounce sooner and softer), with a trickle of sand
+    x = zeros(2.0)
+    for _ in range(int(r.integers(2, 6))):
+        t0, gap, g = r.uniform(0.0, 0.5), r.uniform(0.2, 0.35), r.uniform(0.6, 1.0)
+        size = r.uniform(0.15, 0.4)
+        while gap > 0.02 and t0 < 1.8:
+            place(x, t0, rock_hit(r, size, 0.1), SR, g)
+            t0 += gap
+            gap *= 0.65
+            g *= 0.6
+    n = len(x)
+    tr = np.convolve((r.random(n) < 400.0 * np.exp(-np.arange(n) / (0.8 * SR)) / SR) * 1.0, np.exp(-np.arange(20) / 4.0))[:n]
+    x = unit(x) + 0.15 * unit(bp(tr, 2000.0, 8000.0) + 1e-9)
+    return trim(far(x, r, 8000.0, 1.8, 0.35, damp=3000.0))
 
 
 # ==========================================================================

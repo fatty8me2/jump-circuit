@@ -8,11 +8,11 @@ maths and seeded noise by `tools/gen_world_sfx.py` (which borrows the helpers in
 ## Regenerating
 
 ```
-python tools/gen_world_sfx.py            # generate all 133 clips into audio/, then verify
+python tools/gen_world_sfx.py            # generate all 208 clips into audio/, then verify
 python tools/gen_world_sfx.py --verify   # only check the files on disk
 ```
 
-* Requires Python 3 and numpy. Takes about 20 s.
+* Requires Python 3 and numpy. Takes about 25 s.
 * Deterministic: each clip has its own RNG, seeded from `gen_audio.SEED` plus the
   CRC of `"world_" + name`, so re-running produces bit-identical files.
 * Afterwards run `tools/Godot_v4.7.1-stable_win64.exe --headless --path . --import`.
@@ -27,7 +27,7 @@ checks that the first and last samples are near zero. For loops it checks the se
 * the curvature (second difference) across the wrap must pass the same test;
 * the 40 ms window across the wrap must be no quieter than the quietest windows in the loop (a faded-out end would fail).
 
-It also checks the total size, which is about 6.0 MB of a 6.2 MB budget.
+It also checks the total size, which is about 11.7 MB of a 12.6 MB budget.
 
 ## Formats and levels
 
@@ -58,6 +58,9 @@ processing after that is a gain, so the seam can't click. Loops are 1 to 2.5 s l
   rises to the moment of passing, then falls (a Doppler shape). `bubble()` is a
   Minnaert bubble: a decaying sine whose pitch rises. `grains()` scatters short
   noise grains (gravel, sparks, sizzle, debris). `crackle()` makes sparse sharp ticks.
+* **Friction and voices**: `creak()` is a stick-slip. A jittered impulse train runs through damped
+  resonances (a snapjaw's hinge, basalt or sandstone grinding, a creak in the ice). `reson()` is a
+  formant gain, used for the leviathan's voice. `pew()` is the dispersive chirp of cracking ice.
 * **Rooms**: `space()` convolves with a synthetic room impulse response whose high
   band decays faster than its low band (for the foundry hall, the clock tower and
   the station interior).
@@ -113,6 +116,10 @@ model struck harder, with a heavier body, longer tails and more debris.
 | Coral Depths | `step_reef_*`, `land_reef_*` | Wet sand that sucks at the foot: noise through a band-pass sweeping down from 850-1000 to 320 Hz. Brittle 1.2-4.5 kHz coral-crunch grains, tiny bubbles in the pores, and a soft 105-125 Hz body. Everything is low-passed at 3 kHz (under water). |
 | Orbital Drift | `step_orbital_*`, `land_orbital_*` | Thin deck plate over a service void: a bright 3-13 kHz click, ten plate modes (f11 290-340 Hz) that ring for about 0.1 s, a 2.1-2.5 kHz bar "tink", a 110-125 Hz hollow boom, and a metallic station-interior reverb. The landing adds three rattles of the plate. |
 | The Final Ascent | `step_ascent_*`, `land_ascent_*` | Hard glass over a neon panel: a very sharp 2.5-15 kHz tick and high-Q glass plate modes (f11 650-760 Hz, partials to 9 kHz). A short 120 Hz-locked electric buzz is the panel answering, over a thin 170 Hz body. |
+| Xeno Wilds | `step_xeno_*`, `land_xeno_*` | Spongy alien moss over a chitin crust: a wet squelch (noise through a band rising from 260-320 Hz to about 1 kHz as the moss compresses), a soft 115-135 -> 70 Hz body, 6 to 24 brittle 1.8-6.5 kHz crunch grains with small hollow chitin pings (1.5-2.6 kHz and 3.4-4.8 kHz modes), and a faint pore hiss. The landing adds a thud and the moss springing back (a soft 70 -> 105 Hz "bwum"). |
+| Cinder Peak | `step_volcano_*`, `land_volcano_*` | Loose cinder over basalt: four dead stone modes (about 330 / 650 / 1100 / 1800 Hz, 4-12 ms), a firm 140-160 -> 80 Hz knock and a gritty scuff, 25 to 85 clinker grains (0.9-7 kHz) and a few glassy 3.5-9.5 kHz ticks of vesicular glass. The landing adds a 100 -> 55 Hz thud, four loose clinkers settling 50-200 ms later and a puff of ash. |
+| Frostbite Pass | `step_glacier_*`, `land_glacier_*` | Packed snow over hard ice: a run of 40 to 130 crunch grains (0.5-4 kHz, cold grains fracturing) with a few 0.9-1.8 kHz squeaks, over a dull 120-140 -> 70 Hz pat. The ice answers with a hard 2.5-12 kHz tick and three glassy modes (about 2 / 4.3 / 7 kHz). The landing adds a thud and a puff of powder. |
+| Scarab Sands | `step_desert_*`, `land_desert_*` | Soft sand over sandstone: a dry 0.6-5 kHz shush that swells as the sole settles, a muffled 110-130 -> 62 Hz pat, a gritty scuff and a short, dead sandstone knock (about 460 / 975 / 1750 Hz), with 25 to 85 fine grains trickling off (2.5-9 kHz). The landing adds a thud and a spray of sand. |
 
 ## Player: movement
 
@@ -184,6 +191,70 @@ All positional. Distances are the one-shot's audible radius or the loop's `max_d
 | `billboard_glitch_1..3` | 0.11 s | Digital glitch: a square tone jumping between random pitches every 5-10 ms, over crushed noise. | Each flicker while it glitches (at most one per 70 ms). |
 | `data_chirp_1..4` | 0.16 s | Three or four quick bleeps up or down a pentatonic set (sines with 3rd and 5th harmonics). | AscentDataStream: a packet spawning at the upstream end. |
 | `data_zip_1..2` | 0.25 s | A fast falling zip (2.6-3.2 kHz -> 0.5-0.7 kHz) inside a short whoosh. | A lit packet passing the runner in (or next to) its lane. |
+
+### The new worlds' machines
+
+The level scripts own the triggers. They call `WorldAudio.at()` for events and `WorldAudio.loop()` /
+`set_active()` for continuous sounds. The "Meant for" column is the hook each clip was built for
+(docs/NEW_WORLDS_BRIEF.md lists the names). For a name with `_1.._N` variants, one is picked at random.
+
+**Xeno Wilds**
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `spore_boing_1..3` | 0.6 s | A thick fleshy membrane struck from below: a 95-120 Hz "bwomp" gliding up to 2.1-2.5x as the cap tautens, with circular-membrane overtones (1 : 1.59 : 2.14 : 2.65) and a decaying 9-12 Hz wobble. A wet slap and squelch of contact, the cap puffing out spores (a breath sweeping 2.2 kHz -> 900 Hz) and a faint 4-11 kHz glitter. | A spore cap's bounce. |
+| `snapjaw_snap_1..2` | 0.55 s | The lobes swing shut (a short swish peaking at 2.3-2.9 kHz), then meet in a wet, fleshy clap (a 150-175 -> 70 Hz blow, wet 250-3000 Hz noise and a squelch sweeping 1.6 kHz -> 350 Hz). 7 to 10 chitin teeth rattle as they interlock (1.8-3.2 kHz and 4.2-6 kHz modes), and the fibrous hinge creaks. | A snapjaw closing. |
+| `snapjaw_open` | 0.7 s | Sap strings peeling apart (90 tacky 1.2-5 kHz ticks, thinning out), a wet stretch (a band rising 220 -> 700 Hz), the hinge groaning (stick-slip through 140/360/820/1500 Hz), a slow breath out and a few drips. | A snapjaw opening. |
+| `geyser_erupt` | 1.6 s | Pressure gurgling up (bubbles coming faster for 0.25 s), then the column bursting: a 100 -> 50 Hz whoomph, a roaring spray (tilted 200-9000 Hz noise with turbulence) that dies away over about 0.5 s, 420 acid fizz grains (3-10 kHz) and 30 droplets raining back. | An acid geyser erupting. |
+| `leviathan_call` | 3.6 s | The sky leviathan close by: a deep moan (a 66 -> 84 -> 58 Hz harmonic stack through two moving formants, 260-520 Hz and 750-1200 Hz, with a subharmonic growl and a faint 23 Hz ring-modulated sheen), a higher song gliding 330 -> 560 -> 410 Hz over it, breath, and a 2.2 s open-air reverb. | The leviathan set piece. |
+| `drift_hum` (loop) | 2.0 s | The drift-stone monolith: a stony, inharmonic drone (82 Hz x 1 : 1.51 : 2.27 : 3.18 : 4.4) that throbs once a second, glassy 1244/1246.5/1871/2489 Hz partials glowing between the throbs, air swirling round the stones (a band wandering round 500 Hz) and the odd grain of grit. | Drift stones / the gravity well. |
+
+**Cinder Peak**
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `bomb_launch` | 1.0 s | The vent coughing a bomb out: an 85 -> 45 Hz "thoom", a tilted blast of gas, the rush of the bomb going up (a whoosh peaking at 1.8 kHz), spatter crackle and a low rumble, with a 1.4 s slope echo. | A lava bomb launching. |
+| `bomb_whistle` | 2.0 s | An incoming bomb: a falling whistle (a narrow band, 1.9 kHz -> 650 Hz), the rush of air growing as it closes, a tumbling flutter (9 -> 15 Hz) and a fizzing smoke trail. It ends at full level, on the moment of impact. | A bomb in flight. |
+| `bomb_impact_1..3` | 1.0 s | A molten bomb landing: a 95-110 -> 50 Hz thud and a wet splat (a band falling 900 -> 200 Hz), a crack, the crust shattering (four stone modes, 40 flying chips), molten spatter and a sizzling hiss, in a short slope reverb. | A bomb hitting its target ring. |
+| `lava_rise` (loop) | 2.5 s | A flooded crater filling: a low, viscous churn (45-900 Hz, tilted dark), nine slow bubbles bulging (60-110 Hz, rising 1.8x) and bursting with a pop and a falling ring, crust crackle and a rim sizzle. | The rising lava. |
+| `basalt_sink_1..2` | 1.4 s | A basalt column settling into lava: a clunk as it gives, stone grinding on stone (a stick-slip at 24-50 per second through 110-130/260-300/540-620/1100-1300 Hz, plus a rough scrape), a 95 -> 70 Hz groan of its weight, eight thick bubbles and a sizzle. | A sinking basalt column. |
+| `fumarole_loop` (loop) | 2.0 s | A fumarole: a broad jet hiss (250-9000 Hz) with a band wandering round 1.8 kHz, surging gently, a 60-300 Hz rumble in the vent's throat and sputters of grit. | Fumarole updrafts. |
+| `lavafall_loop` (loop) | 2.0 s | A thick molten curtain pouring over a ledge: a heavy, dark roar (50-2200 Hz, -3.5 dB/oct) with a tearing 300-1400 Hz sheet, 22 low glugs, 14 heavy plops, spatter and the hiss of the cooling skin. | A lava fall. |
+| `crust_crack_1..2` | 0.5 s | Cooled crust giving under your weight: a brittle snap exciting stony plate modes (f11 380-460 Hz), a small thump, 12 fading ticks running away through the crust, a short creak and a puff of steam. | A crust plate starting to crack. |
+| `crust_break` | 1.0 s | The plate giving way: a big crack and a 120 -> 62 Hz thud, five slabs breaking off (plate modes), crumbling debris, and the lava under it: a thick 70 -> 150 Hz gloop and a burst of sizzle. | A crust plate breaking. |
+| `eruption_boom` | 2.8 s | An eruption pulse: a 72 -> 38 Hz blast with harmonics, a pressure wave of dark noise, the fountain's roar surging up and dying away, 400 ejecta crackles, a rumble, and the boom rolling back off the slopes (two echoes, 0.3-0.95 s). | The eruption pulses and the finish. |
+
+**Frostbite Pass**
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `icicle_crack` | 0.5 s | An icicle shivering loose: a run of tiny ticks quickening for 0.12 s (the ice fracturing at its root), then a sharp glassy crack, the icicle ringing (free-bar modes from 1.4-1.8 kHz) and a "pew" through the overhang. | An icicle's shiver and release. |
+| `icicle_fall` | 0.8 s | The icicle dropping: an airy whoosh rising as it gathers speed (a band sweeping 600 -> 3200 Hz) and a thin glassy ring from the tumbling rod. | An icicle falling. |
+| `icicle_shatter_1..2` | 0.9 s | The icicle exploding on the floor: a sharp crack and a thud, ice plate modes, 40 glassy shards (2.5-9 kHz, 10-40 ms) spraying and skittering, and tinkles settling, in a small bright space. | An icicle landing. |
+| `gust_whoosh` | 1.4 s | A blizzard gust front shoving past: a whoosh rising to 1.4 kHz at the pass, a howl riding it (a narrow band, 380 -> 900 -> 500 Hz), a blast of driven snow and a low buffet. | Each gust pulse. |
+| `ice_crack_1..2` | 0.6 s | Thin ice under your feet: a sharp snap, the panel's glassy plate modes (f11 500-650 Hz), two or three pews running out through the sheet, a small thump and a creak. | A thin-ice panel cracking. |
+| `ice_break` | 1.0 s | The panel giving way: a big crack and a boom with a pew, five slabs breaking off (ice plate modes), 50 shards, and chunks tumbling away into the crevasse, duller and fainter as they fall. | A thin-ice panel breaking. |
+| `avalanche_roar` (loop) | 2.5 s | The avalanche: a massive tumbling roar (45-3000 Hz, tilted dark, churning), a 200-900 Hz churn, 16 blocks of snow thudding inside it, the powder cloud's hiss and a ground rumble. | The avalanche set piece (ride it on the front). |
+| `avalanche_rumble` | 2.5 s | The snowpack letting go: a deep 95 -> 48 Hz "whumpf", a crack across the slope with a long pew, then a rumble building over two seconds as the slide gathers, with thuds coming faster. | The avalanche's warning and release. |
+| `snow_thump_1..3` | 0.4 s | A lump of snow landing: a soft 120-150 -> 62 Hz whump with a burst of muffled noise, a crumble of powder and a faint crunch. | Snowballs, snow falling off ledges. |
+
+A "pew" is the sound of ice under strain. Ice is dispersive (flexural waves travel faster the
+higher they are), so a crack reaches the ear as a laser-like chirp sweeping down,
+f = f_hi / (1 + t / t0)^2. The glacier soundscape uses the same model.
+
+**Scarab Sands**
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `spike_trap_1..2` | 0.5 s | The stone latch clunking, five bronze spikes shooting up in a quick, ragged rank (each a bright scrape sweeping 2.5 -> 7 kHz with a short ring of bar modes from 1.1-1.5 kHz), a thud at the top of their travel and a puff of sand, in the temple. | Spikes thrusting up. |
+| `spike_retract` | 0.6 s | The spikes sliding back: a slower bronze scrape falling 4.2 -> 1.4 kHz, a faint ring, the plate grinding as it resets and a clunk at 0.45 s. | Spikes going down. |
+| `sandfall_loop` (loop) | 2.0 s | A curtain of sand pouring: a dense, dry 1.8-9 kHz hiss with 900 grain ticks, a softer 250-1800 Hz pouring body, 160 low patters where it lands, and a touch of the hall (a circular room reverb). | Sand falls. |
+| `quicksand_sink` | 1.2 s | Sinking sand: a low sucking pull (a band sweeping 700 -> 150 Hz), sand shifting and pouring in round it, a low 60-300 Hz body, trickling grains, and a deep, dull gulp at 0.85 s. | Standing in quicksand. |
+| `dustdevil_loop` (loop) | 2.0 s | A whirlwind: tilted broadband wind, two bands whose centres circle up and down (round 900 Hz three times a loop, round 1.8 kHz five times), sand whipped round in pulses with the swirl, a faint 2.2 kHz whistle and a low buffet. | Dust devils. |
+| `mirage_shimmer` | 1.0 s | Heat haze: five pale, glassy tones (E6 to A7) wavering in and out of tune at 3-6 Hz, swelling and fading like the air, over a breathy band. | A mirage platform's shimmer build-up. |
+| `boulder_roll` (loop) | 2.0 s | The stone ball rolling: a 45-400 Hz rumble, knocks from five chips and flats coming round in a repeating pattern (it turns twice a loop), 400 grit crackles, crunch and dust. Pitch it with the ball's speed. | The boulder run, riding on the ball. |
+| `boulder_impact` | 1.4 s | The ball smashing into a wall or its pit: a huge 95 -> 55 Hz thud with harmonics, a crack, a burst of low noise, 30 pieces of rubble tumbling and rattling, debris and dust, in a 1.4 s temple reverb. | The boulder's end. |
+| `stone_grind_1..2` | 1.3 s | A sandstone block sliding: stone grinding on stone (a stick-slip at 26-52 per second through the block's dead resonances, plus a rough scrape), sand crunching under it, and the block settling with a knock at 1.03 s, in the temple. | Sliding walls, the hidden tomb door, turning sun-dials. |
 
 ### Deliberately silent
 
