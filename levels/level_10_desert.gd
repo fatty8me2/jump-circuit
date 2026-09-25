@@ -12,6 +12,7 @@ extends LevelBase
 ##  3 Quicksand Flats  quicksand stepping pits (short, sinking jumps), the sand river running back
 ##                     at you with a spike plate on it, MANTLE out of the flow
 ##  4 Dust Devil Mesa  ride a whirlwind up the mesa, another one across the chasm
+##                     [shortcut: two 1 m column tops beside the whirlwind's path]
 ##  5 Mirage Road      BRANCH: a wave of mirage slabs over the sand sea | MANTLE the arch foot and
 ##                     WALL RUN its flank
 ##  6 Dune Slide       the slip face flings you ~15 m over the chasm (23 m/s), a sun pad to the plateau
@@ -33,7 +34,6 @@ extends LevelBase
 ## 16 Quicksand Crypt  MANTLE out of the sinking sand, a spike plate, a whirlwind up to the ledge
 ##                     [shortcut: WALL RUN the crypt wall over the quicksand and the ledge]
 ## 17 Sandfall Stair   three MANTLES up through pouring sand, under a CRUSHER
-##                     [shortcut: WALL RUN the flank and MANTLE the top step out of the kick]
 ## 18 Sanctum of Sun   mirages over the pit, the dart gate, the last WALL RUN, MANTLE onto the altar,
 ##                     the finish under the great sun disc
 ##
@@ -446,12 +446,20 @@ func _stage_4() -> Vector3:
 	r_walk(_w(Vector3(0, 5.5, -19.0)))
 	var near_p: Vector3 = _w(Vector3(0, -3.0, -23.2))
 	var far_p: Vector3 = _w(Vector3(0, -3.0, -35.2))
-	_wait(func() -> bool: return Vector2(d2.global_position.x - near_p.x, d2.global_position.z - near_p.z).length() < 0.4)
-	var y2: float = _w(mesa2["c"]).y
-	_fly(func() -> Vector3: return d2.global_position, func() -> bool:
-		return Vector2(d2.global_position.x - far_p.x, d2.global_position.z - far_p.z).length() < 0.4 and player.global_position.y > y2 + 2.4,
-		_w(Vector3(0, 5.5, -19.85)))
-	_fly(_w((mesa2["c"] as Vector3) + Vector3(0, 0, 0.8)))
+	# SHORTCUT: two broken column tops (1 m) off to the side of the whirlwind's path - no waiting
+	var t1: Dictionary = _drum(Vector3(-3.0, 5.5, -25.8), 0.5, "accent", 0.8)
+	var t2: Dictionary = _drum(Vector3(-3.0, 5.5, -32.0), 0.5, "accent", 0.8)
+	if route_variant == 2:
+		_hop(mesa1, t1)
+		_hop(t1, t2)
+		_hop(t2, mesa2, Vector3(-1.0, 0, 0.8))
+	else:
+		_wait(func() -> bool: return Vector2(d2.global_position.x - near_p.x, d2.global_position.z - near_p.z).length() < 0.4)
+		var y2: float = _w(mesa2["c"]).y
+		_fly(func() -> Vector3: return d2.global_position, func() -> bool:
+			return Vector2(d2.global_position.x - far_p.x, d2.global_position.z - far_p.z).length() < 0.4 and player.global_position.y > y2 + 2.4,
+			_w(Vector3(0, 5.5, -19.85)))
+		_fly(_w((mesa2["c"] as Vector3) + Vector3(0, 0, 0.8)))
 	_hop(mesa2, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	return cp["c"]
@@ -659,7 +667,7 @@ func _stage_8() -> Vector3:
 	_ledge(Vector3(0, 3.3, -14.2), Vector3(6.0, 5.5, 3.4))
 	var trap: DesertSpikeTrap = _spikes(Vector3(0, 3.3, -15.05), 6.0, 1.7, 3.0, 0.4, 0.133)
 	_ledge(Vector3(0, 6.6, -17.6), Vector3(3.6, 8.8, 3.4), "alt")
-	var press: Crusher = kit.crusher(_w(Vector3(0, 6.6, -17.6)), Vector3(3.2, 1.4, 3.0), 3.4, 3.0, 0.2, _yaw)
+	var press: Crusher = _press(Vector3(0, 6.6, -17.6), Vector3(3.2, 1.4, 3.0), 3.4, 3.0, 0.2)
 	_ledge(Vector3(0, 9.9, -21.0), Vector3(3.6, 12.0, 3.4), "alt")
 	var cp: Dictionary = _cp(Vector3(0, 9.9, -27.8))
 	_hop(cp0, l0, Vector3(0, 0, 1.0))
@@ -924,16 +932,16 @@ func _stage_13() -> Vector3:
 	var dial: RotatingPlatform = _sundial(hub, 7.0, 0.0)
 	_dev_dial = dial
 	var m: Dictionary = _blk(Vector3(-3.0, 0.5, -26.0), 2.6, 2.6, "alt", 1.0, false)
-	var merge: Dictionary = _blk(Vector3(0, 0.5, -32.6), 14.0, 3.0, "main", 1.0, false)
+	var merge: Dictionary = _blk(Vector3(0, 0.5, -32.6), 14.0, 4.0, "main", 1.0, false)
 	var cp: Dictionary = _cp(Vector3(0, 0.5, -42.0))
 	# the gnomon route (right, clear of the dial's sweep): a walkway, two mantles up the gnomon's
 	# stepped base, the sun ring at the top
-	_blk(Vector3(6.25, 0, -1.5), 6.5, 3.0, "alt", 1.0, false)
+	_blk(Vector3(7.0, 0, -1.6), 8.0, 3.2, "alt", 1.0, false)
 	_ledge(Vector3(9.5, 3.3, -6.5), Vector3(3.0, 14.0, 3.0), "alt")
 	var g2: Dictionary = _blk(Vector3(9.8, 3.3, -12.8), 2.0, 2.0, "alt", 1.0, false)
 	_ledge(Vector3(9.8, 6.6, -17.6), Vector3(3.0, 17.0, 3.0), "alt")
-	var portal: WarpPortal = kit.portal(_w(Vector3(9.8, 6.6, -18.5)), _yaw, _w(Vector3(2.5, 0.5, -32.6)), _yaw, 7.0)
-	_arrival(Vector3(2.5, 0.5, -33.2), GOLD)
+	var portal: WarpPortal = kit.portal(_w(Vector3(9.8, 6.6, -18.5)), _yaw, _w(Vector3(2.5, 0.5, -30.9)), _yaw, 7.0)
+	_arrival(Vector3(2.5, 0.5, -31.5), GOLD)
 	var ring := deco.sun_disc(_w(Vector3(9.8, 12.5, -19.6)), 1.6, deg_to_rad(_yaw))
 	ring.scale = Vector3.ONE * 0.6
 	_sign(Vector3(-2.0, 0, -1.8), TURQ)
@@ -1029,8 +1037,8 @@ func _stage_14() -> Vector3:
 	# open and shut, and the tomb's portal that lets you out at the end of the rams' corridor
 	_blk(Vector3(-4.3, 0.4, -8.4), 1.2, 1.2, "accent", 0.6)
 	var door: MovingPlatform = kit.mover(_w(Vector3(-4.3, 3.4, -9.2)), _sz(Vector3(2.8, 3.0, 0.4)), [Vector3.ZERO, _d(Vector3(-3.6, 0, 0))], 4.0, 0.0)
-	kit.portal(_w(Vector3(-4.3, 0.4, -9.8)), _yaw, _w(Vector3(0, 1.8, -41.4)), _yaw, 6.0)
-	_arrival(Vector3(0, 1.8, -41.4), TURQ)
+	kit.portal(_w(Vector3(-4.3, 0.4, -9.8)), _yaw, _w(Vector3(0, 1.8, -47.0)), _yaw, 6.0)
+	_arrival(Vector3(0, 1.8, -47.4), TURQ)
 	var facade := Look.box(Vector3(6.0, 6.0, 1.0), deco.stone(DesertDecor.PALE, -1.0, 2.5, 0.6), _w(Vector3(-5.2, 3.1, -10.9)))
 	facade.rotation.y = deg_to_rad(_yaw)
 	add_child(facade)
@@ -1039,7 +1047,8 @@ func _stage_14() -> Vector3:
 		r_walk(_w(Vector3(-2.6, 0, -2.2)))
 		_wait(func() -> bool: return _door_open(door, 0.4, 1.3))
 		r_jump(_w(Vector3(-2.65, 0, -2.65)), _w(Vector3(-4.3, 0.4, -8.3)))
-		r_portal(_w(Vector3(-4.3, 0.4, -10.0)), _w(Vector3(0, 1.8, -41.4)))
+		r_portal(_w(Vector3(-4.3, 0.4, -10.0)), _w(Vector3(0, 1.8, -47.4)))
+		r_walk(_w(Vector3(0, 1.8, -49.2)))
 	else:
 		_wait(func() -> bool: return _mirage_ok(m1, 1.2, 2.2) and _mirage_ok(m2, 3.1, 4.1))
 		_hop(cp0, _area(Vector3(0, 0, -7.8), 1.1, 1.1))
@@ -1052,9 +1061,8 @@ func _stage_14() -> Vector3:
 		var r2: Piston = rams[2]
 		_wait(func() -> bool: return _ram_clear(r0, 0.0, 0.5) and _ram_clear(r1, 0.35, 0.95) and _ram_clear(r2, 0.75, 1.35), _w(Vector3(0, 1.8, -30.4)))
 		r_walk(_w(Vector3(0, 1.8, -41.4)))
-	_hop(walk, cp, Vector3(0, 0, 1.5))
+		_hop(walk, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
-	m1.set_meta("tomb", true)
 	return cp["c"]
 
 
@@ -1180,44 +1188,22 @@ func _stage_17() -> Vector3:
 		_ledge(Vector3(0, y + 3.3, faces[k] - 1.7), Vector3(5.0, 6.0 + y, 3.4), "alt" if k % 2 == 0 else "main")
 		falls.append(_sandfall(Vector3(0, y, faces[k] + 0.5), 5.0, 7.5, 3.9, 0.4, fposmod(-0.36 * float(k), 1.0), 1.0))
 	var w: Dictionary = _blk(Vector3(0, 9.9, -29.25), 3.0, 7.5, "alt", 1.0, false)
-	var press: Crusher = kit.crusher(_w(Vector3(0, 9.9, -30.0)), Vector3(3.2, 1.4, 3.0), 3.4, 2.8, 0.1, _yaw)
+	var press: Crusher = _press(Vector3(0, 9.9, -30.0), Vector3(3.2, 1.4, 3.0), 3.4, 2.8, 0.1)
 	var cp: Dictionary = _cp(Vector3(0, 9.9, -40.0))
 	_hall(-4.0, -36.0, 11.0, -11.0, 24.0)
-	# SHORTCUT: the stair's flank wall - a short run off the first step, a kick, and catch the top
-	# step's lip out of the kick (a mantle through the third curtain)
-	kit.wallrun(_w(Vector3(-3.2, 6.0, -19.6)), Vector3(8.8, 8.0, 0.6), _yaw + 90.0)
-	if route_variant == 2:
-		var f0: DesertSandfall = falls[0]
-		var f2: DesertSandfall = falls[2]
-		_hop(_area(Vector3.ZERO, 3.0, 3.0), s0, Vector3(0, 0, 0.6))
-		_wait(func() -> bool: return f0.is_clear_for(Game.course_time, 0.0, 0.9), _w(Vector3(0, 0, -8.6)))
-		r_mantle(_w(Vector3(0, 0, -9.65)), _w(Vector3(0, 3.3, -12.6)))
-		_wait(func() -> bool: return _fall_clear(f2, 0.3, 1.4, 0.0, 5.0), _w(Vector3(0, 3.3, -13.2)))
-		r_wallrun(_w(Vector3(-0.6, 3.3, -14.75)), _w(Vector3(-2.7, 5.4, -17.2)), _w(Vector3(-2.7, 5.4, -18.4)), _w(Vector3(0, 9.9, -23.4)))
-	else:
-		_hop(_area(Vector3.ZERO, 3.0, 3.0), s0, Vector3(0, 0, 0.6))
-		var fs: Array[DesertSandfall] = falls
-		_wait(func() -> bool: return fs[0].is_clear_for(Game.course_time, 0.0, 0.9), _w(Vector3(0, 0, -8.6)))
-		r_mantle(_w(Vector3(0, 0, -9.65)), _w(Vector3(0, 3.3, -12.6)))
-		_wait(func() -> bool: return fs[1].is_clear_for(Game.course_time, 0.0, 0.9), _w(Vector3(0, 3.3, -13.6)))
-		r_mantle(_w(Vector3(0, 3.3, -14.55)), _w(Vector3(0, 6.6, -17.8)))
-		_wait(func() -> bool: return fs[2].is_clear_for(Game.course_time, 0.0, 0.9), _w(Vector3(0, 6.6, -18.8)))
-		r_mantle(_w(Vector3(0, 6.6, -19.75)), _w(Vector3(0, 9.9, -23.0)))
+	_hop(_area(Vector3.ZERO, 3.0, 3.0), s0, Vector3(0, 0, 0.6))
+	var fs: Array[DesertSandfall] = falls
+	_wait(func() -> bool: return fs[0].is_clear_for(Game.course_time, 0.0, 0.9), _w(Vector3(0, 0, -8.6)))
+	r_mantle(_w(Vector3(0, 0, -9.65)), _w(Vector3(0, 3.3, -12.6)))
+	_wait(func() -> bool: return fs[1].is_clear_for(Game.course_time, 0.0, 0.9), _w(Vector3(0, 3.3, -13.6)))
+	r_mantle(_w(Vector3(0, 3.3, -14.55)), _w(Vector3(0, 6.6, -17.8)))
+	_wait(func() -> bool: return fs[2].is_clear_for(Game.course_time, 0.0, 0.9), _w(Vector3(0, 6.6, -18.8)))
+	r_mantle(_w(Vector3(0, 6.6, -19.75)), _w(Vector3(0, 9.9, -23.0)))
 	_wait(func() -> bool: return _press_ok(press, 0.0, 1.0), _w(Vector3(0, 9.9, -26.3)))
 	r_walk(_w(Vector3(0, 9.9, -32.4)))
 	_hop(w, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	return cp["c"]
-
-
-## No sand in the height band [y0, y1] of curtain `f` over [now + a, now + b].
-static func _fall_clear(f: DesertSandfall, a: float, b: float, y0: float, y1: float) -> bool:
-	var s: float = a
-	while s <= b:
-		if f.blocks_at(Game.course_time + s, y0, y1):
-			return false
-		s += 0.04
-	return true
 
 
 # ---- stage 18: Sanctum of the Sun - mirages over the pit, the dart gate, the last wall run, the altar ----
@@ -1332,6 +1318,22 @@ func _hall(z0: float, z1: float, hw: float = 11.0, floor_y: float = -11.0, top_y
 	net.position = _w(Vector3(0, floor_y + 1.5, mid))
 	add_child(net)
 	DesertFx.motes(self, _w(Vector3(0, 4.0, mid)), _sz(Vector3(hw * 0.8, 6.0, len * 0.5)), 50, Color(2.4, 1.8, 1.0))
+
+
+## A falling block: the crusher dressed as a carved temple lintel - a stepped cornice, a band of
+## gold, and a red eye glyph on both faces that glows as it shudders.
+func _press(floor_c: Vector3, size: Vector3, lift: float, period: float, phase: float) -> Crusher:
+	var cr: Crusher = kit.crusher(_w(floor_c), size, lift, period, phase, _yaw)
+	cr.add_child(Look.box(Vector3(size.x + 0.4, 0.35, size.z + 0.4), deco.stone(DesertDecor.PALE), Vector3(0, size.y * 0.5 + 0.17, 0)))
+	cr.add_child(Look.box(Vector3(size.x + 0.12, 0.18, size.z + 0.12), Look.flat(GOLD, 0.3, 0.85, 0.6), Vector3(0, size.y * 0.5 - 0.25, 0)))
+	for sz: float in [-1.0, 1.0]:
+		var q := QuadMesh.new()
+		q.size = Vector2(1.0, 1.0)
+		var g := Look.mesh_node(q, deco.glyph_mat(0.2, RED, 1.4), Vector3(0, 0.0, sz * (size.z * 0.5 + 0.03)))
+		g.rotation.y = 0.0 if sz > 0.0 else PI
+		g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		cr.add_child(g)
+	return cr
 
 
 static func _press_ok(c: Crusher, a: float, b: float) -> bool:
