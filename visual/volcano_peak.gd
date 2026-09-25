@@ -440,13 +440,13 @@ func _build_bombs() -> void:
 	for i: int in 10:
 		var n := Node3D.new()
 		n.add_child(Look.sphere(3.0, core))
-		var trail: GPUParticles3D = Fx.emitter({"amount": 60, "lifetime": 2.2, "fixed_fps": 0, "tex": Fx.Tex.SMOKE, "additive": false,
+		var trail: GPUParticles3D = Fx.emitter({"amount": 40, "lifetime": 2.2, "fixed_fps": 0, "tex": Fx.Tex.SMOKE, "additive": false,
 			"size": 9.0, "speed": Vector2(0.0, 2.0), "spread": 180.0, "curve": "puff", "angle": Vector2(0, 360),
 			"color": Color(0.16, 0.12, 0.11, 0.75), "fade": PackedFloat32Array([0.0, 0.9, 0.0]),
 			"aabb": AABB(Vector3(-700, -300, -700), Vector3(1400, 900, 1400))})
 		trail.local_coords = false
 		n.add_child(unfog(trail))
-		var sparks: GPUParticles3D = Fx.trail({"amount": 50, "lifetime": 0.8, "size": 4.0, "color": Color(3.0, 1.2, 0.3),
+		var sparks: GPUParticles3D = Fx.trail({"amount": 30, "lifetime": 0.8, "size": 4.0, "color": Color(3.0, 1.2, 0.3),
 			"emitting": true, "aabb": AABB(Vector3(-700, -300, -700), Vector3(1400, 900, 1400))})
 		sparks.local_coords = false
 		n.add_child(unfog(sparks))

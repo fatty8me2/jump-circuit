@@ -1,5 +1,47 @@
 extends LevelBase
-## 8. CINDER PEAK - WIP
+## 8. CINDER PEAK - a night climb up the flank of an erupting volcano to its crater rim. The summit
+## is dead ahead from the first step: a lava fountain roaring out of a breached crater, an ash
+## column spreading into an anvil lit red from below, lightning in the cloud, bombs lobbed on
+## smoky arcs and lava rivers racing down the flanks; every 24 s the mountain surges (the fountain
+## bursts, the sky flares, embers rain). Eighteen stages zig-zag up a gorge carved into the flank,
+## each ending on a checkpoint; the finish is on the rim under the eruption, which goes off.
+##
+##  1 Ashfall Trail     hops up basalt columns, the first SINKING BASALT (safe), MANTLE a basalt step
+##  2 Sulphur Vents     a pulsing FUMAROLE lifts you to a shelf; run and leap into a second vent that
+##                      floats you over a 12 m chasm; MANTLE
+##  3 Bomb Field        cooled slabs across a lava lake, LAVA BOMBS landing on each in turn
+##  4 Obsidian Cliff    WALL RUN the glassy cliff over the lava river, MANTLE, WALL RUN the far cliff
+##                      (no floor under it)
+##  5 Crust Flow        CRUST RAFTS that crack and founder, a FLAME JET (laser) over the gap
+##                      [shortcut: five 1 m obsidian spikes up the right bank]
+##  6 Lavafall Gorge    BRANCH: hop the gorge floor between three LAVA FALLS | MANTLE, WALL RUN the
+##                      gorge wall above them, kick onto a pillar
+##  7 Basalt Organ      five PULSING BASALT columns rising and sinking through the lava in a wave,
+##                      then a causeway swept by two basalt rams (PISTONS)
+##  8 Tephra Rain       BRANCH: three stones struck by bombs in turn | MANTLE a pillar, a sinking
+##                      column, the obsidian gate (PORTAL)
+##  9 Obsidian Chimney  three WALL RUNS zig-zag up a split fissure, MANTLE out of the last kick
+## 10 Hammer Ridge      two basalt hammers (CRUSHERS) on a knife ridge, MANTLE up under a third
+##                      [shortcut: wall-run the ridge's outer cliff past both hammers]
+## 11 THE MAGMA CHAMBER set piece: drop into the drained chamber the moment the lava falls, cross the
+##                      floor stones (a sinking column), ride the vent, WALL RUN, MANTLE out - the
+##                      RISING LAVA climbs 10.8 m behind you
+## 12 Flame Gallery     a basalt beam through two FLAME JETS, blinking crust, a vent pad up
+##                      [shortcut: two 1 m spikes beside the blinking crust]
+## 13 Lava River Run    BRANCH: a boost strip flings you 14 m over the river, a sinking column |
+##                      crust rafts and a vent pad
+## 14 Cinder Chute      a slide of loose cinders (ice) launches you over a gap, a vent pad bounce into
+##                      a MANTLE
+## 15 Bomb Ridge        a knife ridge under a barrage (bomb green wave), a hammer, WALL RUN home
+## 16 Curtain Run       WALL RUN through a lava fall's gap, MANTLE, two pulsing columns
+## 17 Caldera Steps     fumarole to a bomb-struck shelf, a sinking column, a second fumarole, MANTLE
+##                      [shortcut: a hidden obsidian gate on a 1 m knob off the checkpoint's corner]
+## 18 The Crater Rim    three pulsing columns in the caldera lake, a lava curtain, the last MANTLE
+##                      onto the rim terrace and the finish
+##
+## Own pieces: mechanics/volcano_{lava,bomb,basalt,crust,fumarole,lavafall}.gd,
+## visual/volcano_{peak,decor,fx}.gd and volcano_{rock,lava,flow,plume,terrain,sky,haze}.gdshader.
+## Route variants for the bot: 0 = main line, 1 = every alternative branch, 2 = main line + every shortcut.
 
 const ROCK_SHADER: Shader = preload("res://visual/volcano_rock.gdshader")
 const SKY_SHADER: Shader = preload("res://visual/volcano_sky.gdshader")
@@ -166,7 +208,7 @@ func _bomb_source(at: Vector3) -> Vector3:
 
 
 ## Rough summit direction for bomb sources while the course is built (refined in _surroundings).
-var _summit_guess: Vector3 = Vector3(0, 150, -600)
+var _summit_guess: Vector3 = Vector3(-67, 180, -640)
 
 
 func _basalt(c: Vector3, radius: float = 1.25, mode: VolcanoBasalt.Mode = VolcanoBasalt.Mode.SINK) -> VolcanoBasalt:
