@@ -25,7 +25,7 @@ relay (`health` reports `resume: true`); the full suite passed with 630/630. The
 docs/RELAY.md. If a drop is ever reported again, ask for the `[relay]` lines in the owner's
 `godot.log`.
 
-### 2. Four new worlds - all built, merged into `new-worlds`, screenshot-checked; not yet on main
+### 2. Four new worlds - SHIPPED (v1.4.0, merged to main 2026-09-24; full suite 803/803)
 Owner asked: "2 more unique maps" (an alien planet, a volcano with a cool eruption in the background),
 then "level 9 and 10 with 2 different unique untouched themes". The spec is `docs/NEW_WORLDS_BRIEF.md`.
 New order (0-based index): 6 Xeno Wilds (`xeno`), 7 Cinder Peak (`volcano`), 8 Frostbite Pass
