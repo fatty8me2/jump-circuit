@@ -6,7 +6,7 @@ const SKY_SHADER: Shader = preload("res://visual/glacier_sky.gdshader")
 const AURORA_SHADER: Shader = preload("res://visual/glacier_aurora.gdshader")
 
 ## Stages built so far (development: the last one ends at a temporary finish).
-const STAGES_BUILT: int = 15
+const STAGES_BUILT: int = 16
 
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
@@ -205,7 +205,7 @@ func _build() -> void:
 	set_spawn(Vector3(0, 0.1, 4), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9,
-			_stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15]
+			_stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16]
 	_frame(Vector3.ZERO, yaws[0])
 	for i: int in mini(stages.size(), STAGES_BUILT):
 		_next_yaw = yaws[i + 1]
@@ -994,22 +994,22 @@ func _stage_16() -> Vector3:
 	var y: float = -7.0
 	var a: Dictionary = _ridge_block(Vector3(0, y, -31.0), 5.0, 6.0)
 	# gully 1
-	var g1: GlacierAvalanche = _couloir(-42.1, 16.0, y, 6.0, 0.0)
+	var g1: GlacierAvalanche = _couloir(-42.1, 16.0, y, 4.2, 0.0)
 	var k1: Dictionary = _stone(Vector3(0.4, y, -39.4), 2.0)
 	var k2: Dictionary = _stone(Vector3(-0.4, y, -45.8), 2.0)
 	var b: Dictionary = _ridge_block(Vector3(0, y, -54.2), 4.0, 6.0)
 	# gully 2
-	var g2: GlacierAvalanche = _couloir(-65.3, 16.0, y, 6.0, 0.45)
+	var g2: GlacierAvalanche = _couloir(-65.3, 16.0, y, 4.2, 0.45)
 	var k3: Dictionary = _stone(Vector3(0.5, y, -62.6), 2.0)
 	var k4: Dictionary = _stone(Vector3(-0.3, y, -69.0), 1.8)
 	var c: Dictionary = _ridge_block(Vector3(0, y, -77.4), 4.0, 6.0)
 	# gully 3: the widest - an ice cave in the middle to duck into while a slide goes over
-	var g3: GlacierAvalanche = _couloir(-92.4, 24.0, y, 5.2, 0.2)
+	var g3: GlacierAvalanche = _couloir(-92.4, 24.0, y, 3.4, 0.2)
 	var k5: Dictionary = _stone(Vector3(0.4, y, -85.8), 2.0)
 	var cave: Dictionary = _stone(Vector3(0, y, -92.4), 4.0)
 	_ice_cave(g3, Vector3(0, y, -92.4))
 	var k6: Dictionary = _stone(Vector3(-0.4, y, -99.0), 2.0)
-	var cp: Dictionary = _cp(Vector3(0, y, -110.0))
+	var cp: Dictionary = _cp(Vector3(0, y, -107.4))
 	# down the chute and off the lip onto the first ridge
 	r_walk(_w(Vector3(0, 0, -2.2)))
 	r_jump(_w(lip + Vector3(0, 0, 0.6)), _w((a["c"] as Vector3) + Vector3(0, 0, 0.8)))
@@ -1060,8 +1060,8 @@ func _couloir(zc: float, width: float, path_y: float, period: float, phase: floa
 	g.depth = 6.0
 	g.period = period
 	g.phase = phase
-	g.run_time = 3.4
-	g.warn = 1.3
+	g.run_time = minf(3.4, period - 1.3)
+	g.warn = minf(1.3, period - g.run_time)
 	# the slope surface runs 3 m under the stepping stones where the path crosses
 	g.position = _w(Vector3(up, path_y - 3.0 + up * grade, zc))
 	g.rotation_degrees.y = _yaw + 90.0
@@ -1106,10 +1106,14 @@ func _ridge_block(c: Vector3, sx: float, sz: float) -> Dictionary:
 ## registered as a shelter with the avalanche (the slide goes over it).
 func _ice_cave(g: GlacierAvalanche, c: Vector3) -> void:
 	var ice: ShaderMaterial = GlacierFx.glass_mat(1.0, 0.3, 0.92)
-	add_child(Look.box(_sz(Vector3(7.0, 1.6, 5.4)), ice, _w(c + Vector3(0.6, 3.6, 0))))
+	# a roof of ice over the stone, walled on the uphill side only (the path runs through it)
+	add_child(Look.box(_sz(Vector3(7.0, 1.6, 5.4)), ice, _w(c + Vector3(0.8, 4.8, 0))))
+	add_child(Look.box(_sz(Vector3(1.4, 6.0, 5.4)), ice, _w(c + Vector3(3.6, 1.8, 0))))
 	for sz: float in [-1.0, 1.0]:
-		add_child(Look.box(_sz(Vector3(7.0, 4.4, 0.8)), ice, _w(c + Vector3(1.5, 1.4, sz * 2.9))))
-	add_child(Look.box(_sz(Vector3(1.2, 4.4, 5.4)), ice, _w(c + Vector3(3.6, 1.4, 0))))
+		add_child(Look.cylinder(0.5, 6.0, ice, _w(c + Vector3(-2.4, 1.2, sz * 2.3)), 0.4, 8))
+	for k: int in 6:
+		add_child(Look.cylinder(0.02, kit.rng.randf_range(0.5, 1.2), GlacierFx.ice_mat(GlacierFx.ICE, 0.7, 0.85),
+			_w(c + Vector3(-2.3 + float(k) * 0.9, 3.7, kit.rng.randf_range(-2.4, 2.4))), 0.12, 6))
 	var l := OmniLight3D.new()
 	l.light_color = GlacierFx.GLOW
 	l.light_energy = 1.4

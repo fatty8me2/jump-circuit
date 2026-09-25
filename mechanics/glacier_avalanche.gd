@@ -30,6 +30,8 @@ const CRACK := Color(1.0, 0.35, 0.45)
 
 ## Shelters in local space.
 var shelters: Array[AABB] = []
+## Local z where the course crosses the slope (set by the level; used by timing checks).
+var path_lz: float = 0.0
 
 var _front: Node3D
 var _balls: Array[Node3D] = []
