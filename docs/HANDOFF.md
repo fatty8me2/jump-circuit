@@ -25,39 +25,39 @@ relay (`health` reports `resume: true`); the full suite passed with 630/630. The
 docs/RELAY.md. If a drop is ever reported again, ask for the `[relay]` lines in the owner's
 `godot.log`.
 
-### 2. Four new worlds - branch `new-worlds` + one branch per level (agents were mid-build)
+### 2. Four new worlds - all built, merged into `new-worlds`, screenshot-checked; not yet on main
 Owner asked: "2 more unique maps" (an alien planet, a volcano with a cool eruption in the background),
-then "level 9 and 10 with 2 different unique untouched themes". **The spec is
-`docs/NEW_WORLDS_BRIEF.md`.**
+then "level 9 and 10 with 2 different unique untouched themes". The spec is `docs/NEW_WORLDS_BRIEF.md`.
 New order (0-based index): 6 Xeno Wilds (`xeno`), 7 Cinder Peak (`volcano`), 8 Frostbite Pass
-(`glacier`), 9 Scarab Sands (`desert`), 10 The Final Ascent (now `levels/level_11_ascent.*`, still the finale).
-- **`new-worlds` (6f5331f):** groundwork (placeholders, level list, themes, save revisions, scrolling
-  level select) plus **all four scores** with fanfares and chimes (done).
-- **`new-worlds-sound` (cf569ed):** soundscapes, footsteps, landings and every mechanic clip for all
-  four themes (done, tested). Merge it into `new-worlds`.
-- **Level branches.** Each has a worktree under `.claude/worktrees/agent-<id>`. WIP was committed when
-  the usage limit hit, then the agents were resumed:
+(`glacier`), 9 Scarab Sands (`desert`), 10 The Final Ascent (`levels/level_11_ascent.*`, still the finale).
+- **`new-worlds`** holds all of it:
+  - the groundwork and all four scores;
+  - the sound (`new-worlds-sound`);
+  - the four level branches (`xeno-wilds`, `cinder-peak`, `frostbite-pass`, `scarab-sands`);
+  - today's `main` (updater and relay fixes).
 
-| branch | worktree id | WIP commit | notes at pause |
+  The integration worktree is `.claude/worktrees/lead-new-worlds`.
+- **Per-level results** (18 stages each; bot times are for route 0):
+
+| Map | Bot result | Hardest jump | Set piece |
 |---|---|---|---|
-| `xeno-wilds` | ae2389d71321c07d4 | 10c3e87 | ~3.7k lines in; was cleaning up stray Godot processes |
-| `cinder-peak` | a8e792763a338343c | d5f8070 | all 3 route variants passed; was tightening easy stages + the stage-17 shortcut |
-| `frostbite-pass` | aba14c12c60e8960a | c7f6629 | ~3.3k lines in; early testing |
-| `scarab-sands` | a01896e0e7e926de6 | 2e1ca2b | ~4.1k lines in; was editing its Game.LEVELS line |
+| Xeno Wilds | 0 respawns on all 3 routes, 147 s | 90% | leviathan ride |
+| Cinder Peak | 0 respawns on all 3 routes, 147 s | 91% | rising-lava magma chamber |
+| Frostbite Pass | 0 respawns on all 3 routes, 179 s | 92% | avalanche race |
+| Scarab Sands | at most 4 respawns per route, 171 s | 88% | boulder run |
 
-  If an agent is gone, start a new one in that worktree with this prompt: "read
-  docs/NEW_WORLDS_BRIEF.md and your level script, verify what exists (`--import`, `test_m`,
-  `test_n --level=<i> --route=all`), then finish the remaining scope". Each branch's `git log`
-  shows its latest commit.
-- **To finish:**
-  1. Merge the four level branches and `new-worlds-sound` into `new-worlds`. Expect small conflicts in
-     `autoload/game.gd` LEVELS lines, `tests/route_bot.gd` (additive step kinds: keep all),
-     `tests/run_tests.gd` and `visual/ambience.gd` (one `match` case per theme: keep all).
-  2. `--import`, then run the full suite.
-  3. **Ask the owner for a time they are away**, then do the windowed screenshot pass. Each agent's
-     report lists the shots it wants (the owner does not want pop-up windows while playing; see
-     memory). Fix anything ugly.
-  4. Merge to main and release.
+- **Screenshot pass done** (2026-09-24, with the owner away): 39 views with zero shader errors. Two
+  real bugs were found and fixed in a5c3406:
+  - **Scarab Sands rendered black:** NaN in the sky shader from `pow()` of a negative number.
+  - **Cinder Peak's sky was washed out orange:** the anvil cloud's underglow was too strong.
+
+  The shot list is in each agent's report and in the session scratchpad `shots/list.txt`.
+- **Remaining:**
+  - (a) The full suite with `--route=all` on `new-worlds` (it was running at handoff time).
+  - (b) Owner's OK, then merge `new-worlds` into `main`, bump to 1.4.0 and release. The patch notes
+    should mention the four new maps and that The Final Ascent now unlocks after Scarab Sands.
+  - (c) Optional playtest tuning: the bot's 0 respawns reflect its precision; the owner may find some
+    stages easy.
 
 ## Release steps (quick form; full: docs/BUILD.md)
 1. Bump `config/version` in `project.godot`.
