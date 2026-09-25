@@ -13,6 +13,8 @@ const PREFS_PATH: String = "user://update.cfg"
 const CHECK_TIMEOUT_S: float = 8.0
 const DOWNLOAD_TIMEOUT_S: float = 240.0
 const REQUIRED_UPDATE_FILES: Array[String] = ["JumpCircuit.exe", "JumpCircuit.pck", "LICENSES.md"]
+## How long the game waits for the installer to report in before it gives up and stays open.
+const INSTALLER_START_TIMEOUT_S: float = 15.0
 
 const WINDOWS_INSTALLER_SCRIPT: String = """
 param(
@@ -20,9 +22,12 @@ param(
     [string]$ZipPath,
     [string]$InstallDir,
     [string]$GamePath,
-    [string]$Version
+    [string]$Version,
+    [switch]$NoLaunch
 )
 $ErrorActionPreference = "Stop"
+# tell the waiting game we are running: only then does it quit and hand over
+try { Set-Content -LiteralPath ($ZipPath + ".started") -Value $PID -ErrorAction Stop } catch { }
 $stage = Join-Path $env:TEMP ("JumpCircuit-update-" + [guid]::NewGuid().ToString("N"))
 $backup = Join-Path $stage "backup"
 $files = @("JumpCircuit.pck", "LICENSES.md", "JumpCircuit.exe")
@@ -46,7 +51,7 @@ try {
         foreach ($name in $files) {
             Copy-Item -LiteralPath (Join-Path $stage $name) -Destination (Join-Path $InstallDir $name) -Force
         }
-        Start-Process -FilePath $GamePath -WorkingDirectory $InstallDir
+        if (-not $NoLaunch) { Start-Process -FilePath $GamePath -WorkingDirectory $InstallDir }
     } catch {
         foreach ($name in $files) {
             $destination = Join-Path $InstallDir $name
@@ -62,16 +67,18 @@ try {
         throw
     }
     Remove-Item -LiteralPath $ZipPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath ($ZipPath + ".started") -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
 } catch {
     $message = "Could not install Jump Circuit v" + $Version + ": " + $_.Exception.Message + "`nThe previous version will be opened."
-    try {
+    if (-not $NoLaunch) { try {
         Add-Type -AssemblyName System.Windows.Forms
         [System.Windows.Forms.MessageBox]::Show($message, "Jump Circuit Update", "OK", "Error") | Out-Null
-    } catch { }
+    } catch { } }
     Remove-Item -LiteralPath $ZipPath -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath ($ZipPath + ".started") -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $stage -Recurse -Force -ErrorAction SilentlyContinue
-    if (Test-Path -LiteralPath $GamePath -PathType Leaf) {
+    if ((-not $NoLaunch) -and (Test-Path -LiteralPath $GamePath -PathType Leaf)) {
         Start-Process -FilePath $GamePath -WorkingDirectory $InstallDir
     }
 }
@@ -93,10 +100,25 @@ var _last_progress_bytes: int = -1
 func _ready() -> void:
 	if DisplayServer.get_name() == "headless":
 		return
+	clean_stale_downloads()
 	for argument: String in OS.get_cmdline_user_args():
 		if argument == "--no-update-check":
 			return
 	check()
+
+
+## Downloads left behind by an install that never ran (each is a whole game build) are removed at
+## launch. A running installer deletes its own zip, so anything still here is stale.
+func clean_stale_downloads(dir: String = "user://updates") -> int:
+	var removed: int = 0
+	var d: DirAccess = DirAccess.open(dir)
+	if d == null:
+		return 0
+	for f: String in d.get_files():
+		if f.ends_with(".zip") or f.ends_with(".zip.started"):
+			if d.remove(f) == OK:
+				removed += 1
+	return removed
 
 
 func _process(_delta: float) -> void:
@@ -269,8 +291,24 @@ func _on_download_completed(result: int, response_code: int, _headers: PackedStr
 		return
 	if not _start_windows_installer():
 		return
+	install_status_changed.emit("Starting the installer...")
+	if not await _installer_started(_download_path + ".started", INSTALLER_START_TIMEOUT_S):
+		_fail_install("The update installer did not start. Download the new version from the release page instead.")
+		return
 	install_status_changed.emit("Installing v%s and restarting..." % available["version"])
 	get_tree().quit()
+
+
+## Waits for the installer's "started" marker. The game must not quit before the installer is
+## really running: if its launch fails, quitting would leave the player with nothing open.
+func _installer_started(marker: String, timeout_s: float) -> bool:
+	var waited: float = 0.0
+	while waited < timeout_s:
+		if FileAccess.file_exists(marker):
+			return true
+		await get_tree().create_timer(0.1, true, false, true).timeout
+		waited += 0.1
+	return FileAccess.file_exists(marker)
 
 
 func _verify_download() -> bool:
@@ -334,26 +372,38 @@ func _start_windows_installer() -> bool:
 	script_file.store_string(WINDOWS_INSTALLER_SCRIPT)
 	script_file.close()
 	var executable: String = OS.get_executable_path()
-	var powershell: String = OS.get_environment("WINDIR").path_join("System32/WindowsPowerShell/v1.0/powershell.exe")
-	if not FileAccess.file_exists(powershell):
-		powershell = "powershell.exe"
-	var arguments := PackedStringArray([
-		"-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass",
-		"-File", _quote_windows_argument(script_path),
-		"-WaitForPid", str(OS.get_process_id()),
-		"-ZipPath", _quote_windows_argument(_download_path),
-		"-InstallDir", _quote_windows_argument(executable.get_base_dir()),
-		"-GamePath", _quote_windows_argument(executable),
-		"-Version", str(available["version"]),
-	])
-	if OS.create_process(powershell, arguments, false) <= 0:
+	DirAccess.remove_absolute(_download_path + ".started")
+	var arguments: PackedStringArray = installer_arguments(script_path, OS.get_process_id(), _download_path,
+		executable.get_base_dir(), executable, str(available["version"]))
+	if OS.create_process(powershell_path(), arguments, false) <= 0:
 		_fail_install("Could not start the Windows update installer.")
 		return false
 	return true
 
 
-func _quote_windows_argument(value: String) -> String:
-	return "\"%s\"" % value.replace("\"", "\\\"")
+static func powershell_path() -> String:
+	var powershell: String = OS.get_environment("WINDIR").path_join("System32/WindowsPowerShell/v1.0/powershell.exe")
+	return powershell if FileAccess.file_exists(powershell) else "powershell.exe"
+
+
+## The installer's command line. Arguments are passed as they are: OS.create_process quotes any
+## argument containing a space itself, so quoting here as well (as 1.2.2 - 1.3.0 did) split the
+## path at the space in "...\app_userdata\Jump Circuit\..." and PowerShell never ran the script.
+## `no_launch` (tests only) installs without starting the game or showing any window.
+static func installer_arguments(script_path: String, wait_pid: int, zip_path: String, install_dir: String,
+		game_path: String, version: String, no_launch: bool = false) -> PackedStringArray:
+	var args := PackedStringArray([
+		"-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass",
+		"-File", ProjectSettings.globalize_path(script_path),
+		"-WaitForPid", str(wait_pid),
+		"-ZipPath", ProjectSettings.globalize_path(zip_path),
+		"-InstallDir", install_dir,
+		"-GamePath", game_path,
+		"-Version", version,
+	])
+	if no_launch:
+		args.append("-NoLaunch")
+	return args
 
 
 func _fail_install(message: String) -> void:

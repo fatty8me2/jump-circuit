@@ -42,6 +42,9 @@ func _ready() -> void:
 	Net.joined_lobby.connect(func() -> void:
 		_volt.set_accent(Settings.my_color())   # the host may have assigned us a free colour
 		show_screen("lobby"))
+	Net.connection_interrupted.connect(func(_detail: String) -> void: _set_status("Connection lost - reconnecting..."))
+	Net.connection_restored.connect(func() -> void: _set_status("Reconnected."))
+	Net.relay_notice.connect(func(text: String) -> void: _set_status(text))
 	Net.connection_failed.connect(func(reason: String) -> void:
 		Game.title_message = reason
 		show_screen("race"))

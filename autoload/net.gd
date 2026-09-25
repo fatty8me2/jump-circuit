@@ -20,6 +20,12 @@ signal upnp_result(text: String)
 signal party_message(from_id: int, msg: Dictionary)
 ## A racer's checkpoint was accepted (first time they reached `index`); `at` is their session time.
 signal racer_checkpoint(id: int, index: int, at: float)
+## Our relay link dropped and the game is reconnecting to the same room (the race carries on).
+signal connection_interrupted(detail: String)
+## ... and it is back, in the same slot.
+signal connection_restored
+## Someone else's link dropped / came back ("Sam lost connection...", "The host is back").
+signal relay_notice(text: String)
 
 const PORT: int = 24565
 const MAX_PLAYERS: int = 8
@@ -28,6 +34,16 @@ const ROOM_CODE_ALPHABET: String = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 const CONNECT_TIMEOUT: float = 10.0
 ## Keep even idle lobby/result sockets active through Cloudflare's WebSocket idle timeout.
 const RELAY_KEEPALIVE_INTERVAL: float = 20.0
+## A dropped relay link is retried for this long (the relay holds our slot 20 s after the drop
+## is noticed there; the host's for 30 s) before the session is given up.
+const RELAY_RESUME_WINDOW: float = 25.0
+const RELAY_RETRY_INTERVAL: float = 1.5
+const RELAY_ATTEMPT_TIMEOUT: float = 5.0
+## Nothing at all from the relay (not even a keepalive answer) for this long = a dead link.
+const RELAY_SILENCE_LIMIT: float = 45.0
+## Pose stream: at most this often, and while standing still only this often (seconds).
+const POSE_INTERVAL: float = 1.0 / 15.0
+const POSE_IDLE_INTERVAL: float = 1.0
 
 var active: bool = false
 ## peer id -> {"name": String, "color": int, "cp": int, "finished": float (-1 = still racing),
@@ -67,6 +83,18 @@ var _relay_ready: bool = false
 var _relay_socket: WebSocketPeer
 var _relay_connect_left: float = -1.0
 var _relay_keepalive_left: float = 0.0
+## Secret per-session token: lets this game reclaim its slot after a dropped link.
+var _relay_session: String = ""
+## >= 0 while reconnecting after a drop (seconds of the resume window left).
+var _relay_resume_left: float = -1.0
+var _relay_retry_left: float = 0.0
+var _relay_attempt_left: float = 0.0
+var _relay_silence: float = 0.0
+var _relay_drop_detail: String = ""
+var _pose_last_pos: Vector3 = Vector3.INF
+var _pose_last_vel: Vector3 = Vector3.INF
+var _pose_last_seq: int = -1
+var _pose_last_at: float = -100.0
 
 
 func _ready() -> void:
@@ -79,6 +107,13 @@ func _ready() -> void:
 	multiplayer.server_disconnected.connect(func() -> void:
 		_shutdown()
 		left_session.emit("The host closed the session."))
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST and _relay_socket != null \
+			and _relay_socket.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		_relay_socket.close(1000, "Quit")
+		_relay_socket.poll()
 
 
 func my_id() -> int:
@@ -154,6 +189,8 @@ func join_room(code: String) -> Error:
 
 
 func _start_relay(url: String) -> Error:
+	_relay_resume_left = -1.0
+	_relay_silence = 0.0
 	_relay_socket = WebSocketPeer.new()
 	var err: Error = _relay_socket.connect_to_url(url)
 	if err != OK:
@@ -173,7 +210,9 @@ func _relay_url(code: String, role: String) -> String:
 	var base := str(ProjectSettings.get_setting("network/relay_url", "")).strip_edges().trim_suffix("/")
 	if base == "" or base.contains("YOUR_SUBDOMAIN"):
 		return ""
-	return "%s/ws?room=%s&role=%s" % [base, code.uri_encode(), role]
+	if _relay_session == "":
+		_relay_session = Crypto.new().generate_random_bytes(12).hex_encode()
+	return "%s/ws?room=%s&role=%s&session=%s" % [base, code.uri_encode(), role, _relay_session]
 
 
 func _new_room_code() -> String:
@@ -211,6 +250,9 @@ func _shutdown() -> void:
 	_relay_ready = false
 	_relay_connect_left = -1.0
 	_relay_keepalive_left = 0.0
+	_relay_session = ""
+	_relay_resume_left = -1.0
+	_relay_silence = 0.0
 	if multiplayer.multiplayer_peer != null:
 		multiplayer.multiplayer_peer.close()
 	multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
@@ -281,11 +323,28 @@ func _process(dt: float) -> void:
 
 
 func _process_relay(dt: float) -> void:
+	if _relay_resume_left >= 0.0:
+		_relay_resume_left -= dt
+		if _relay_resume_left <= 0.0:
+			_give_up_resume()
+			return
+		if _relay_socket == null:
+			_relay_retry_left -= dt
+			if _relay_retry_left <= 0.0:
+				_try_resume()
+			return
 	if _relay_socket == null:
 		return
 	_relay_socket.poll()
 	var state := _relay_socket.get_ready_state()
 	if state == WebSocketPeer.STATE_CONNECTING:
+		if _relay_resume_left >= 0.0:
+			_relay_attempt_left -= dt
+			if _relay_attempt_left <= 0.0:
+				_relay_socket.close()
+				_relay_socket = null
+				_relay_retry_left = RELAY_RETRY_INTERVAL
+			return
 		_relay_connect_left -= dt
 		if _relay_connect_left <= 0.0:
 			_shutdown()
@@ -293,11 +352,18 @@ func _process_relay(dt: float) -> void:
 		return
 	if state == WebSocketPeer.STATE_OPEN:
 		_relay_connect_left = -1.0
+		_relay_silence += dt
 		while _relay_socket.get_available_packet_count() > 0:
+			_relay_silence = 0.0
 			var message := _relay_socket.get_packet().get_string_from_utf8()
 			_handle_relay_packet(message)
 			if not _relay_mode or _relay_socket == null:
 				return
+		if _relay_ready and _relay_silence > RELAY_SILENCE_LIMIT:
+			# a half-open link: the socket still looks open but nothing has come back in ages
+			_relay_socket.close()
+			_begin_resume("no reply from the relay for %d s" % int(RELAY_SILENCE_LIMIT))
+			return
 		if _relay_ready:
 			_relay_keepalive_left -= dt
 			if _relay_keepalive_left <= 0.0:
@@ -315,14 +381,54 @@ func _process_relay(dt: float) -> void:
 	if state == WebSocketPeer.STATE_CLOSED and _relay_mode:
 		var reason := _relay_socket.get_close_reason()
 		var close_code := _relay_socket.get_close_code()
-		var was_ready := _relay_ready
+		var detail := "close code %d" % close_code if reason == "" else "close code %d: %s" % [close_code, reason]
+		print("[relay] socket closed (%s)%s" % [detail, " while reconnecting" if _relay_resume_left >= 0.0 else ""])
+		if _relay_resume_left >= 0.0:
+			# this attempt failed: wait a moment and try again (until the resume window runs out)
+			_relay_socket = null
+			_relay_retry_left = RELAY_RETRY_INTERVAL
+			return
+		if _relay_ready:
+			_begin_resume(detail)
+			return
 		_shutdown()
-		if was_ready:
-			var detail := " (close code %d)" % close_code if reason == "" else " (close code %d: %s)" % [close_code, reason]
-			left_session.emit("The relay connection closed%s." % detail)
-		else:
-			var detail := " (close code %d: %s)" % [close_code, reason] if reason != "" else ""
-			connection_failed.emit("Could not connect to the room%s. Check the code and try again." % detail)
+		connection_failed.emit("Could not connect to the room%s. Check the code and try again." % (" (%s)" % detail if reason != "" else ""))
+
+
+## The link dropped in the middle of a session: keep everything (roster, race, clock) and
+## reconnect to the same room, reclaiming our slot with the session token.
+func _begin_resume(detail: String) -> void:
+	print("[relay] connection lost (%s): reconnecting to room %s as player %d" % [detail, room_code, _relay_peer_id])
+	_relay_drop_detail = detail
+	_relay_ready = false
+	_relay_socket = null
+	_relay_resume_left = RELAY_RESUME_WINDOW
+	_relay_retry_left = 0.2
+	connection_interrupted.emit(detail)
+
+
+func _try_resume() -> void:
+	var base := str(ProjectSettings.get_setting("network/relay_url", "")).strip_edges().trim_suffix("/")
+	var url := "%s/ws?room=%s&role=rejoin&id=%d&session=%s" % [base, room_code.uri_encode(), _relay_peer_id, _relay_session]
+	_relay_socket = WebSocketPeer.new()
+	if _relay_socket.connect_to_url(url) != OK:
+		_relay_socket = null
+		_relay_retry_left = RELAY_RETRY_INTERVAL
+		return
+	_relay_attempt_left = RELAY_ATTEMPT_TIMEOUT
+	_relay_silence = 0.0
+
+
+func _give_up_resume() -> void:
+	var detail := _relay_drop_detail
+	print("[relay] could not reconnect (%s): leaving the session" % detail)
+	_shutdown()
+	left_session.emit("Lost the connection to the race (%s) and could not reconnect." % detail)
+
+
+## True while a dropped link is being restored.
+func is_reconnecting() -> bool:
+	return _relay_mode and _relay_resume_left >= 0.0
 
 
 func _handle_relay_packet(message: String) -> void:
@@ -333,6 +439,19 @@ func _handle_relay_packet(message: String) -> void:
 	match str(packet.get("type", "")):
 		"welcome":
 			if _relay_ready:
+				return
+			if _relay_resume_left >= 0.0:
+				# back in our old slot: the roster, race and clock carried on without us
+				_relay_ready = true
+				_relay_resume_left = -1.0
+				_relay_keepalive_left = 0.0
+				_relay_silence = 0.0
+				print("[relay] reconnected to room %s as player %d" % [room_code, _relay_peer_id])
+				if _relay_host:
+					_broadcast_roster()
+				else:
+					_begin_clock_sync()
+				connection_restored.emit()
 				return
 			_relay_peer_id = int(packet.get("id", 0))
 			if _relay_peer_id < 1 or _relay_peer_id > MAX_PLAYERS:
@@ -353,14 +472,32 @@ func _handle_relay_packet(message: String) -> void:
 				_relay_send_event("register", {"name": Settings.player_name, "color": Settings.color_index}, 1)
 		"error":
 			var error_reason := str(packet.get("reason", "The relay rejected the room connection."))
+			var resuming := _relay_resume_left >= 0.0
 			_shutdown()
-			connection_failed.emit(error_reason)
+			if resuming:
+				left_session.emit("Lost the connection to the race and could not rejoin: %s" % error_reason)
+			else:
+				connection_failed.emit(error_reason)
 		"closed":
 			var closed_reason := str(packet.get("reason", "The host closed the session."))
 			_shutdown()
 			left_session.emit(closed_reason)
 		"keepalive_ack":
 			pass
+		"host_away":
+			relay_notice.emit("The host lost connection - waiting for them to come back...")
+		"host_back":
+			relay_notice.emit("The host is back.")
+		"peer_away":
+			var away_id := int(packet.get("id", 0))
+			if roster.has(away_id):
+				relay_notice.emit("%s lost connection - waiting for them..." % str(roster[away_id].get("name", "A racer")))
+		"peer_back":
+			var back_id := int(packet.get("id", 0))
+			if roster.has(back_id):
+				relay_notice.emit("%s is back." % str(roster[back_id].get("name", "A racer")))
+			if is_host():
+				_broadcast_roster()
 		"peer_left":
 			if is_host():
 				var id := int(packet.get("id", 0))
@@ -645,6 +782,19 @@ func _return_to_lobby() -> void:
 
 
 func send_pose(pos: Vector3, vel: Vector3, grounded: bool) -> void:
+	# every relay message counts against the relay's request budget: 15 poses a second at most,
+	# and a racer standing still only sends a heartbeat (ghosts extrapolate from velocity)
+	var t := _local_time()
+	if t - _pose_last_at < POSE_INTERVAL - 0.002:
+		return
+	var moving: bool = _pose_last_seq != _pose_seq or pos.distance_to(_pose_last_pos) > 0.03 \
+		or vel.distance_to(_pose_last_vel) > 0.15
+	if not moving and t - _pose_last_at < POSE_IDLE_INTERVAL:
+		return
+	_pose_last_at = t
+	_pose_last_pos = pos
+	_pose_last_vel = vel
+	_pose_last_seq = _pose_seq
 	if _relay_mode:
 		if active and roster.size() > 1:
 			_relay_send_event("pose", {

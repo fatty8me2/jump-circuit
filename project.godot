@@ -12,7 +12,7 @@ config_version=5
 
 config/name="Jump Circuit"
 config/description="A 3D physics platformer about reading a course, building momentum and landing the jump. Solo or racing friends."
-config/version="1.3.0"
+config/version="1.3.2"
 run/main_scene="res://ui/title.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 boot_splash/bg_color=Color(0.07, 0.09, 0.14, 1)

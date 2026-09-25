@@ -1056,6 +1056,69 @@ func test_x_update_check_and_prompt() -> void:
 	await ticks(2)
 
 
+## The in-game installer, end to end on paths with spaces (the save folder is "...\Jump Circuit\..."):
+## 1.2.2 - 1.3.0 quoted the installer's arguments themselves, OS.create_process quoted them again,
+## PowerShell got a split path, never ran, and the game quit into nothing. This runs the real
+## installer script (with -NoLaunch: no game start, no window) exactly as the game launches it.
+func test_x_update_installer_runs() -> void:
+	# the handshake: the game only quits once the installer's "started" marker exists
+	var root: String = ProjectSettings.globalize_path("user://updater test run")
+	for sub: String in ["", "/install dir", "/updates dir", "/stale"]:
+		DirAccess.make_dir_recursive_absolute(root + sub)
+	var marker: String = root + "/updates dir/probe.zip.started"
+	FileAccess.open(marker, FileAccess.WRITE).store_string("1")
+	check(await Updater._installer_started(marker, 1.0), "a running installer's marker lets the game hand over")
+	DirAccess.remove_absolute(marker)
+	check(not await Updater._installer_started(marker, 0.3), "no marker: the game stays open instead of quitting into nothing")
+	# stale downloads from an install that never ran are cleared at launch
+	for f: String in ["JumpCircuit-v1.3.0-1.zip", "JumpCircuit-v1.3.0-2.zip", "JumpCircuit-v1.3.0-2.zip.started"]:
+		FileAccess.open(root + "/stale/" + f, FileAccess.WRITE).store_string("x")
+	FileAccess.open(root + "/stale/keep.txt", FileAccess.WRITE).store_string("x")
+	check(Updater.clean_stale_downloads(root + "/stale") == 3 and FileAccess.file_exists(root + "/stale/keep.txt"),
+		"leftover update downloads are removed, nothing else")
+	# arguments go to create_process unquoted (it quotes paths with spaces itself)
+	var install_dir: String = root + "/install dir"
+	var zip_path: String = root + "/updates dir/JumpCircuit-v9.9.9-1.zip"
+	var script_path: String = root + "/updates dir/install_update.ps1"
+	var args: PackedStringArray = Updater.installer_arguments(script_path, 0, zip_path, install_dir,
+		install_dir + "/JumpCircuit.exe", "9.9.9", true)
+	var prequoted: bool = false
+	for a: String in args:
+		prequoted = prequoted or a.begins_with("\"")
+	check(not prequoted and args.has(script_path) and args.has(zip_path), "installer arguments are passed unquoted")
+	if OS.get_name() != "Windows":
+		return
+	# a fake installed game and a fake update archive, then the real installer script
+	for f: String in Updater.REQUIRED_UPDATE_FILES:
+		FileAccess.open(install_dir + "/" + f, FileAccess.WRITE).store_string("old " + f)
+	var zip := ZIPPacker.new()
+	zip.open(zip_path)
+	for f: String in Updater.REQUIRED_UPDATE_FILES:
+		zip.start_file(f)
+		zip.write_file(("new " + f).to_utf8_buffer())
+		zip.close_file()
+	zip.close()
+	FileAccess.open(script_path, FileAccess.WRITE).store_string(Updater.WINDOWS_INSTALLER_SCRIPT)
+	var pid: int = OS.create_process(Updater.powershell_path(), args, false)
+	check(pid > 0, "the installer process starts")
+	var waited: float = 0.0
+	while waited < 30.0 and FileAccess.file_exists(zip_path):
+		await seconds(0.25)
+		waited += 0.25
+	var replaced: bool = true
+	for f: String in Updater.REQUIRED_UPDATE_FILES:
+		replaced = replaced and FileAccess.get_file_as_string(install_dir + "/" + f) == "new " + f
+	check(replaced and not FileAccess.file_exists(zip_path) and not FileAccess.file_exists(zip_path + ".started"),
+		"the installer ran from a path with spaces: game files replaced, download and marker cleaned up (%.1f s)" % waited)
+	# tidy up the scratch folders
+	for sub: String in ["/install dir", "/updates dir", "/stale", ""]:
+		var d: DirAccess = DirAccess.open(root + sub)
+		if d != null:
+			for f: String in d.get_files():
+				d.remove(f)
+		DirAccess.remove_absolute(root + sub)
+
+
 # ---- menus, pad bindings, settings, camera (polish pass B2) ----------------------------------
 
 func _key(code: Key, pressed: bool = true) -> InputEventKey:
@@ -2860,6 +2923,93 @@ func test_zp_relay_party_tunnel() -> void:
 	Net.party_message.disconnect(cb)
 	if not had:
 		Net.roster.erase(5)
+
+
+## A dropped relay link mid-race must not end the session: the game keeps its roster and race,
+## reconnects into its old slot (role=rejoin + the session token), and the room is told who is
+## away / back. (The relay side is exercised against `wrangler dev`, see docs/RELAY.md.)
+func test_zp_relay_resume() -> void:
+	Net.leave()
+	# the game's own handler would leave for the title screen (freeing this test scene)
+	var game_handlers: Array = []
+	for c: Dictionary in Net.left_session.get_connections():
+		game_handlers.append(c["callable"])
+		Net.left_session.disconnect(c["callable"])
+	# a relay session in progress: we are player 3 in room ABCDEFGH, mid-race
+	Net.set("_relay_mode", true)
+	Net.set("_relay_host", false)
+	Net.set("_relay_peer_id", 3)
+	Net.set("_relay_ready", true)
+	Net.set("_relay_session", "abcdef0123456789abcdef01")
+	Net.active = true
+	Net.in_race = true
+	Net.room_code = "ABCDEFGH"
+	Net.roster = {1: {"name": "Host", "color": 0, "cp": 2, "finished": -1.0}, 3: {"name": "Me", "color": 1, "cp": 1, "finished": -1.0}}
+	var seen: Array = [0, 0, []]
+	var on_int := func(_d: String) -> void: seen[0] += 1
+	var on_back := func() -> void: seen[1] += 1
+	var on_note := func(text: String) -> void: (seen[2] as Array).append(text)
+	Net.connection_interrupted.connect(on_int)
+	Net.connection_restored.connect(on_back)
+	Net.relay_notice.connect(on_note)
+	Net.call("_begin_resume", "close code 1006")
+	check(Net.is_reconnecting() and Net.active and Net.in_race and Net.roster.size() == 2 and int(seen[0]) == 1,
+		"a dropped link starts reconnecting and keeps the session (roster, race)")
+	# the relay welcomes us back into the same slot: nothing is reset, no re-register
+	Net.call("_handle_relay_packet", JSON.stringify({"type": "welcome", "id": 3, "room": "ABCDEFGH", "resumed": true}))
+	check(not Net.is_reconnecting() and bool(Net.get("_relay_ready")) and Net.my_id() == 3 and Net.roster.size() == 2
+		and int(Net.roster[1]["cp"]) == 2 and int(seen[1]) == 1, "the welcome back restores the link without resetting anything")
+	# others dropping / returning are announced by name
+	Net.call("_handle_relay_packet", JSON.stringify({"type": "host_away"}))
+	Net.call("_handle_relay_packet", JSON.stringify({"type": "host_back"}))
+	check((seen[2] as Array).size() == 2 and str((seen[2] as Array)[0]).contains("host"), "the host dropping and returning is announced")
+	# a rejoin the relay refuses ends the session with a clear reason
+	var left: Array = [""]
+	var on_left := func(reason: String) -> void: left[0] = reason
+	Net.left_session.connect(on_left)
+	Net.call("_begin_resume", "close code 1006")
+	Net.call("_handle_relay_packet", JSON.stringify({"type": "error", "reason": "Could not resume that session."}))
+	check(not Net.active and str(left[0]).contains("could not rejoin"), "a refused rejoin leaves the session with the reason")
+	# the resume window running out gives up the same way
+	Net.set("_relay_mode", true)
+	Net.set("_relay_ready", true)
+	Net.active = true
+	left[0] = ""
+	Net.call("_begin_resume", "no reply from the relay for 45 s")
+	Net.set("_relay_resume_left", 0.01)
+	Net.call("_process_relay", 0.05)
+	check(not Net.active and str(left[0]).contains("could not reconnect"), "an expired resume window leaves the session")
+	check(str(Net.get("_relay_session")) == "", "leaving forgets the session token")
+	Net.connection_interrupted.disconnect(on_int)
+	Net.connection_restored.disconnect(on_back)
+	Net.relay_notice.disconnect(on_note)
+	Net.left_session.disconnect(on_left)
+	# the pose stream: at most 15 a second, and only a heartbeat while standing still
+	Net.set("_pose_last_at", -100.0)
+	Net.set("_pose_last_seq", -1)
+	var sent: Array = [0]
+	var t0: float = Net.call("_local_time")
+	var pos := Vector3.ZERO
+	while float(Net.call("_local_time")) - t0 < 1.0:
+		var before: float = Net.get("_pose_last_at")
+		pos += Vector3(0.1, 0, 0)
+		Net.send_pose(pos, Vector3(6, 0, 0), true)
+		if float(Net.get("_pose_last_at")) != before:
+			sent[0] += 1
+		await get_tree().process_frame
+	check(int(sent[0]) >= 12 and int(sent[0]) <= 16, "a moving racer sends about 15 poses a second (%d)" % int(sent[0]))
+	sent[0] = 0
+	t0 = Net.call("_local_time")
+	while float(Net.call("_local_time")) - t0 < 1.5:
+		var before2: float = Net.get("_pose_last_at")
+		Net.send_pose(pos, Vector3.ZERO, true)
+		if float(Net.get("_pose_last_at")) != before2:
+			sent[0] += 1
+		await get_tree().process_frame
+	check(int(sent[0]) <= 3, "a racer standing still only sends a heartbeat (%d in 1.5 s)" % int(sent[0]))
+	Net.leave()
+	for cb: Callable in game_handlers:
+		Net.left_session.connect(cb)
 
 
 func test_zp_party_finish_bar() -> void:
