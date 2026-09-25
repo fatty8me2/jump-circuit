@@ -1079,7 +1079,6 @@ func _stage_15() -> Vector3:
 	_haz(Vector3(0, 0.3, -14.0), Vector3(5.0, 0.6, 0.8))
 	kit.ramp(_w(Vector3(0, -1.5, -32.25)), Vector3(5.0, 0.6, 13.83), -12.53, _yaw, "main")
 	var c: Dictionary = _blk(Vector3(0, -3.0, -43.0), 5.0, 8.0, "main", 1.0, false)
-	_haz(Vector3(0, -2.7, -43.2), Vector3(5.0, 0.6, 0.8))
 	kit.wallrun(_w(Vector3(2.3, -1.8, -56.5)), Vector3(16.0, 6.5, 0.6), _yaw + 90.0)
 	var d: Dictionary = _blk(Vector3(-0.4, -3.0, -69.5), 3.6, 5.0, "main", 1.0, false)
 	var cp: Dictionary = _cp(Vector3(0, -3.0, -79.0))
@@ -1104,8 +1103,8 @@ func _stage_15() -> Vector3:
 	b.radius = 2.4
 	b.delay = 0.5
 	b.v_start = 4.0
-	b.accel = 7.0
-	b.v_max = 11.0
+	b.accel = 6.0
+	b.v_max = 10.0
 	b.pit_time = 0.85
 	var hw: Vector3 = _w(hatch_l)
 	var pts: Array[Vector3] = []
@@ -1123,7 +1122,7 @@ func _stage_15() -> Vector3:
 	# the run: no stopping
 	r_jump(_w(Vector3(0, 0, -12.9)), _w(Vector3(0, 0, -16.2)))
 	r_jump(_w(Vector3(0, 0, -21.65)), _w(Vector3(0, -0.6, -28.0)))
-	r_jump(_w(Vector3(0, -3.0, -42.1)), _w(Vector3(0, -3.0, -44.6)))
+	r_walk(_w(Vector3(0, -3.0, -44.0)))
 	r_wallrun(_w(Vector3(0.4, -3.0, -46.65)), _w(Vector3(1.8, -1.6, -50.6)), _w(Vector3(1.8, -1.6, -61.5)), _w(Vector3(-0.4, -3.0, -68.8)))
 	_hop(d, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
@@ -1138,8 +1137,8 @@ func _stage_16() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
 	var q1: Dictionary = _quicksand(Vector3(0, -0.6, -7.6), 3.0, 3.0, 0.35, false)
 	_ledge(Vector3(0, 2.6, -12.8), Vector3(3.4, 9.0, 2.6))
-	var w1: Dictionary = _blk(Vector3(0, 2.6, -18.6), 2.4, 6.0, "alt", 1.0, false)
-	var trap: DesertSpikeTrap = _spikes(Vector3(0, 2.6, -18.6), 2.4, 2.0, 2.0, 0.4, 0.0)
+	var w1: Dictionary = _blk(Vector3(0, 2.6, -17.35), 2.4, 6.5, "alt", 1.0, false)
+	var trap: DesertSpikeTrap = _spikes(Vector3(0, 2.6, -17.8), 2.4, 2.0, 2.0, 0.4, 0.0)
 	var q2: Dictionary = _quicksand(Vector3(0.4, 2.0, -25.6), 2.6, 2.6, 0.35, false)
 	_blk(Vector3(0, -6.0, -31.0), 5.0, 5.0, "alt", 1.0, false)
 	var dd: DesertDustDevil = _devil(Vector3(0, -6.0, -31.0), 15.0, [Vector3(-0.8, 0, 0), Vector3(0.8, 0, 0)], 3.6)
@@ -1158,9 +1157,8 @@ func _stage_16() -> Vector3:
 	else:
 		_hop(cp0, q1, Vector3.ZERO)
 		r_mantle(_w(Vector3(0, -0.6, -8.4)), _w(Vector3(0, 2.6, -12.4)))
-		r_walk(_w(Vector3(0, 2.6, -14.8)))
-		_wait(func() -> bool: return _spikes_safe(trap, 0.0, 0.6), _w(Vector3(0, 2.6, -16.0)))
-		r_walk(_w(Vector3(0, 2.6, -20.6)))
+		_wait(func() -> bool: return _spikes_safe(trap, 0.0, 0.6), _w(Vector3(0, 2.6, -15.4)))
+		r_walk(_w(Vector3(0, 2.6, -19.8)))
 	_hop(w1, q2, Vector3.ZERO)
 	var y1: float = _w(h["c"]).y
 	_fly(func() -> Vector3: return dd.global_position, func() -> bool: return player.global_position.y > y1 + 2.2, _w(Vector3(0.4, 2.0, -26.5)))
@@ -1181,7 +1179,7 @@ func _stage_17() -> Vector3:
 		var y: float = 3.3 * float(k)
 		_ledge(Vector3(0, y + 3.3, faces[k] - 1.7), Vector3(5.0, 6.0 + y, 3.4), "alt" if k % 2 == 0 else "main")
 		falls.append(_sandfall(Vector3(0, y, faces[k] + 0.5), 5.0, 7.5, 3.9, 0.4, fposmod(-0.36 * float(k), 1.0), 1.0))
-	var w: Dictionary = _blk(Vector3(0, 9.9, -30.0), 3.0, 6.0, "alt", 1.0, false)
+	var w: Dictionary = _blk(Vector3(0, 9.9, -29.25), 3.0, 7.5, "alt", 1.0, false)
 	var press: Crusher = kit.crusher(_w(Vector3(0, 9.9, -30.0)), Vector3(3.2, 1.4, 3.0), 3.4, 2.8, 0.1, _yaw)
 	var cp: Dictionary = _cp(Vector3(0, 9.9, -40.0))
 	_hall(-4.0, -36.0, 11.0, -11.0, 24.0)
@@ -1205,8 +1203,7 @@ func _stage_17() -> Vector3:
 		r_mantle(_w(Vector3(0, 3.3, -14.55)), _w(Vector3(0, 6.6, -17.8)))
 		_wait(func() -> bool: return fs[2].is_clear_for(Game.course_time, 0.0, 0.9), _w(Vector3(0, 6.6, -18.8)))
 		r_mantle(_w(Vector3(0, 6.6, -19.75)), _w(Vector3(0, 9.9, -23.0)))
-	r_walk(_w(Vector3(0, 9.9, -26.2)))
-	_wait(func() -> bool: return _press_ok(press, 0.0, 0.8))
+	_wait(func() -> bool: return _press_ok(press, 0.0, 1.0), _w(Vector3(0, 9.9, -26.3)))
 	r_walk(_w(Vector3(0, 9.9, -32.4)))
 	_hop(w, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
@@ -1227,13 +1224,12 @@ static func _fall_clear(f: DesertSandfall, a: float, b: float, y0: float, y1: fl
 
 func _stage_18() -> void:
 	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
-	var mp: Array[Vector3] = [Vector3(0, 0, -8.6), Vector3(1.2, 0.6, -14.4), Vector3(-0.2, 1.2, -20.3)]
+	var mp: Array[Vector3] = [Vector3(0, 0, -8.6), Vector3(1.2, 0.6, -14.0), Vector3(-0.2, 1.2, -19.6)]
 	var ms: Array[DesertMirage] = []
 	for i: int in mp.size():
-		ms.append(_mirage(mp[i], 2.0, 2.0, 2.7, 0.5, fposmod(-0.26 * float(i), 1.0)))
-	var l1: Dictionary = _blk(Vector3(0, 1.2, -27.4), 3.0, 3.0, "main", 1.0, false)
+		ms.append(_mirage(mp[i], 2.0, 2.0, 2.7, 0.55, fposmod(-0.289 * float(i), 1.0)))
+	var l1: Dictionary = _blk(Vector3(0, 1.2, -28.85), 3.0, 7.1, "main", 1.0, false)
 	var dart: LaserGate = _dart(Vector3(0, 1.2, -29.4), 3.2, 2.0, 0.45, 0.2)
-	var l2: Dictionary = _blk(Vector3(0, 1.2, -31.2), 3.0, 2.4, "main", 1.0, false)
 	_well_panel(2.3, 2.4, -34.0, -50.0, 6.5)
 	var d: Dictionary = _blk(Vector3(-0.4, 1.2, -57.2), 3.6, 5.0, "alt", 1.0, false)
 	_ledge(Vector3(0, 4.5, -63.4), Vector3(8.0, 7.0, 3.4))
@@ -1243,20 +1239,19 @@ func _stage_18() -> void:
 	_sun_disc = deco.sun_disc(_w(Vector3(0, 21.0, -80.0)), 7.5, deg_to_rad(_yaw))
 	_hall(-4.0, -84.0, 12.0, -11.0, 30.0)
 	_sanctum(Vector3(0, 4.5, -71.1))
-	_wait(func() -> bool: return _mirage_ok(ms[0], 0.45, 1.05) and _mirage_ok(ms[1], 1.2, 1.85) and _mirage_ok(ms[2], 1.95, 2.6))
+	_wait(func() -> bool: return _mirage_ok(ms[0], 0.5, 1.6) and _mirage_ok(ms[1], 1.3, 2.4) and _mirage_ok(ms[2], 2.1, 3.1))
 	var prev: Dictionary = cp0
 	for i: int in mp.size():
 		var m: Dictionary = _area(mp[i], 1.0, 1.0)
 		_hop(prev, m)
 		prev = m
-	_hop(prev, l1)
+	_hop(prev, l1, Vector3(0, 0, 2.3))
 	_wait(func() -> bool: return _dark(dart, 0.05, 0.6), _w(Vector3(0, 1.2, -27.8)))
 	r_walk(_w(Vector3(0, 1.2, -31.0)))
 	r_wallrun(_w(Vector3(0.3, 1.2, -32.05)), _w(Vector3(1.8, 2.6, -36.0)), _w(Vector3(1.8, 2.6, -46.9)), _w(Vector3(-0.4, 1.2, -56.4)))
 	r_mantle(_w(Vector3(0, 1.2, -59.35)), _w(Vector3(0, 4.5, -62.6)))
 	r_walk(_w(Vector3(0, 4.5, -68.0)))
 	r_walk(_w(Vector3(0, 4.5, -72.4)))
-	l2.clear()
 	d.clear()
 	dais.clear()
 
