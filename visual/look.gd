@@ -89,14 +89,16 @@ const THEMES: Dictionary = {
 		"decor": Color(0.10, 0.08, 0.08), "decor2": Color(1.0, 0.40, 0.08), "metal": Color(0.30, 0.27, 0.27),
 		"cloud_light": Color(0.60, 0.28, 0.20), "cloud_shade": Color(0.12, 0.06, 0.05),
 	},
+	# Frostbite Pass: a frozen pass at polar dusk - snow tops over blue glacier ice, aurora accents.
+	# (levels/level_9_glacier.gd swaps in its own star-and-aurora sky, moonlight and ice shaders.)
 	"glacier": {
-		"sky_top": Color(0.02, 0.04, 0.12), "sky_horizon": Color(0.30, 0.55, 0.70), "sky_bottom": Color(0.60, 0.72, 0.82),
-		"sun": Color(0.80, 0.90, 1.0), "sun_energy": 1.1, "sun_rot": Vector3(-20, 30, 0),
-		"ambient": Color(0.55, 0.70, 0.95), "ambient_energy": 0.9, "fog": Color(0.62, 0.72, 0.84), "fog_density": 0.006,
-		"top": Color(0.92, 0.95, 1.0), "side": Color(0.45, 0.62, 0.80), "trim": Color(0.55, 0.90, 1.0),
-		"alt_top": Color(0.70, 0.86, 0.98), "accent": Color(0.40, 0.85, 1.0), "accent2": Color(0.60, 1.0, 0.75),
-		"decor": Color(0.30, 0.42, 0.58), "decor2": Color(0.55, 0.90, 1.0), "metal": Color(0.62, 0.70, 0.80),
-		"cloud_light": Color(0.90, 0.95, 1.0), "cloud_shade": Color(0.50, 0.60, 0.75),
+		"sky_top": Color(0.01, 0.02, 0.07), "sky_horizon": Color(0.20, 0.34, 0.50), "sky_bottom": Color(0.16, 0.22, 0.32),
+		"sun": Color(0.72, 0.84, 1.0), "sun_energy": 1.1, "sun_rot": Vector3(-34, 158, 0),
+		"ambient": Color(0.46, 0.60, 0.88), "ambient_energy": 0.9, "fog": Color(0.36, 0.46, 0.62), "fog_density": 0.0045,
+		"top": Color(0.93, 0.96, 1.0), "side": Color(0.32, 0.52, 0.80), "trim": Color(0.50, 0.92, 1.0),
+		"alt_top": Color(0.74, 0.88, 1.0), "accent": Color(0.40, 0.90, 1.0), "accent2": Color(0.45, 1.0, 0.70),
+		"decor": Color(0.26, 0.38, 0.56), "decor2": Color(0.55, 0.90, 1.0), "metal": Color(0.58, 0.66, 0.78),
+		"cloud_light": Color(0.90, 0.95, 1.0), "cloud_shade": Color(0.46, 0.56, 0.72),
 	},
 	"desert": {
 		"sky_top": Color(0.25, 0.50, 0.85), "sky_horizon": Color(0.98, 0.80, 0.55), "sky_bottom": Color(0.85, 0.65, 0.40),
