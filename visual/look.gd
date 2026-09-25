@@ -100,14 +100,16 @@ const THEMES: Dictionary = {
 		"decor": Color(0.26, 0.38, 0.56), "decor2": Color(0.55, 0.90, 1.0), "metal": Color(0.58, 0.66, 0.78),
 		"cloud_light": Color(0.90, 0.95, 1.0), "cloud_shade": Color(0.46, 0.56, 0.72),
 	},
+	# Scarab Sands: a desert sun temple at golden hour - sandstone, gold and turquoise inlay.
+	# (levels/level_10_desert.gd swaps in its own sky, sandstone surface shader and low sun.)
 	"desert": {
-		"sky_top": Color(0.25, 0.50, 0.85), "sky_horizon": Color(0.98, 0.80, 0.55), "sky_bottom": Color(0.85, 0.65, 0.40),
-		"sun": Color(1.0, 0.92, 0.75), "sun_energy": 1.9, "sun_rot": Vector3(-55, 160, 0),
-		"ambient": Color(0.95, 0.80, 0.60), "ambient_energy": 0.9, "fog": Color(0.92, 0.78, 0.55), "fog_density": 0.003,
-		"top": Color(0.92, 0.78, 0.52), "side": Color(0.70, 0.50, 0.30), "trim": Color(0.20, 0.75, 0.80),
-		"alt_top": Color(0.85, 0.66, 0.40), "accent": Color(0.20, 0.75, 0.80), "accent2": Color(1.0, 0.80, 0.25),
-		"decor": Color(0.62, 0.44, 0.26), "decor2": Color(1.0, 0.80, 0.25), "metal": Color(0.80, 0.66, 0.36),
-		"cloud_light": Color(1.0, 0.95, 0.85), "cloud_shade": Color(0.80, 0.65, 0.50),
+		"sky_top": Color(0.13, 0.30, 0.64), "sky_horizon": Color(1.0, 0.74, 0.44), "sky_bottom": Color(0.80, 0.56, 0.34),
+		"sun": Color(1.0, 0.80, 0.56), "sun_energy": 2.0, "sun_rot": Vector3(-26, 220, 0),
+		"ambient": Color(0.95, 0.76, 0.58), "ambient_energy": 0.85, "fog": Color(0.95, 0.76, 0.52), "fog_density": 0.0022,
+		"top": Color(0.93, 0.79, 0.55), "side": Color(0.74, 0.53, 0.32), "trim": Color(0.16, 0.80, 0.78),
+		"alt_top": Color(0.86, 0.66, 0.42), "accent": Color(1.0, 0.70, 0.20), "accent2": Color(0.25, 0.90, 0.85),
+		"decor": Color(0.62, 0.44, 0.26), "decor2": Color(1.0, 0.74, 0.25), "metal": Color(0.78, 0.58, 0.30),
+		"cloud_light": Color(1.0, 0.92, 0.80), "cloud_shade": Color(0.82, 0.64, 0.48),
 	},
 	"ascent": {
 		"sky_top": Color(0.02, 0.03, 0.10), "sky_horizon": Color(0.20, 0.30, 0.58), "sky_bottom": Color(0.05, 0.08, 0.20),

@@ -304,6 +304,28 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"pick": PackedColorArray([Color(0.6, 2.4, 1.4, 0.45), Color(1.6, 0.9, 2.6, 0.45)]),
 					"speed": Vector2(0.2, 0.6), "dir": Vector3.UP, "spread": 60.0, "curve": "pop"},
 			]
+		"desert":
+			return [
+				# near: fine sand skittering past on the wind, golden motes hanging in the low sun
+				{"depth": "near", "amount": 170, "lifetime": 1.1, "facing": "velocity", "tex": Fx.Tex.SPARK, "additive": false,
+					"size": Vector2(0.03, 0.34), "color": Color(0.98, 0.82, 0.58, 0.75), "dir": Vector3(1, 0.04, 0.3),
+					"spread": 8.0, "speed": Vector2(6.0, 10.0), "gravity": Vector3(0, -0.8, 0),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 110, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.09,
+					"color": Color(2.4, 1.7, 0.8), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"gravity": Vector3(0.3, 0.05, 0.1), "turbulence": 0.8, "curve": "pop"},
+				# mid: swirls of blown sand and glints of quartz catching the sun
+				{"depth": "mid", "amount": 60, "lifetime": 5.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 2.6,
+					"color": Color(0.98, 0.8, 0.56, 0.22), "dir": Vector3(1, 0.1, 0.2), "spread": 20.0,
+					"speed": Vector2(2.0, 4.5), "turbulence": 1.0, "angle": Vector2(0, 360), "spin": Vector2(-30, 30),
+					"curve": "puff", "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 90, "lifetime": 4.0, "tex": Fx.Tex.STAR, "size": 0.35,
+					"color": Color(2.6, 2.0, 1.1), "speed": Vector2(0.1, 0.4), "spread": 180.0, "curve": "pop"},
+				# far: great sheets of sand streaming along the skyline
+				{"depth": "far", "amount": 55, "lifetime": 10.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 14.0,
+					"radius": 75.0, "color": Color(0.95, 0.76, 0.52, 0.35), "speed": Vector2(3.0, 6.0), "dir": Vector3(1, 0.05, 0.25),
+					"spread": 12.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking

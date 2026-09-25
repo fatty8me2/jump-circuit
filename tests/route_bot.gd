@@ -139,6 +139,7 @@ func _physics_process(dt: float) -> void:
 		"b_mantle":
 			_do_b_mantle(step, dt)
 		"ascent_stream": _do_ascent_stream(step)
+		"desert_fly": _do_desert_fly(step)
 	# a bounce handed over by the previous step (_air_phase) is for the step that follows it: pad /
 	# x_pad / kick read it on their first tick. Left set, it made some LATER pad or kick skip its run-up.
 	if first_tick and step_index == index_before:
@@ -728,4 +729,36 @@ func _do_ascent_stream(step: Dictionary) -> void:
 		player.cmd_jump = false
 		_set_wish(_flat(to - player.global_position).normalized())
 	if _flat_dist(to) < float(step.get("tol", 0.6)) and player.grounded:
+		_next()
+
+
+# ---- scarab sands (additive) ----------------------------------------------------------------------
+#   desert_fly {to: Vector3 | Callable, until?: Callable, jump_from?: Vector3, gain?: float, damp?: float}
+#       a_fly whose target may move (a dust devil wandering on the course clock): `to` is re-read every
+#       tick when it is a Callable returning a Vector3. With `jump_from`, first run there and jump toward
+#       the target (holding jump), then fly. Ends when until.call() is true, or - without `until` - on
+#       landing after having been airborne.
+
+func _do_desert_fly(step: Dictionary) -> void:
+	var to: Vector3 = (step["to"] as Callable).call() if step["to"] is Callable else step["to"]
+	if _phase == 0 and step.has("jump_from"):
+		var from: Vector3 = step["jump_from"]
+		_steer_ground(from)
+		var dir: Vector3 = _flat(to - from).normalized()
+		var passed: bool = _flat(from - player.global_position).dot(dir) < 0.0 and _flat_dist(from) < 1.5
+		if player.grounded and (_flat_dist(from) < 0.3 or passed):
+			player.press_jump()
+			player.cmd_jump = true
+			_phase = 1
+		return
+	var off: Vector3 = _flat(to - player.global_position)
+	_set_wish(off * float(step.get("gain", 1.6)) - _flat(player.velocity) * float(step.get("damp", 0.45)))
+	if player.velocity.y <= 0.0:
+		player.cmd_jump = false
+	if not player.grounded:
+		_was_air = true
+	if step.has("until"):
+		if bool((step["until"] as Callable).call()):
+			_next()
+	elif player.grounded and _was_air:
 		_next()
