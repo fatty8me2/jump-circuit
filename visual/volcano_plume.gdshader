@@ -25,14 +25,13 @@ uniform vec3 flash_pos = vec3(0.0);
 uniform float flash_radius = 300.0;
 uniform float haze_start = 350.0;
 uniform float haze_end = 1800.0;
+// billowing silhouette: vertices pushed out along their normals by rising noise (metres)
+uniform float disp = 0.0;
+// per-billow fade (rising puffs fade in at the vent and out at the top)
+instance uniform float fade = 1.0;
 
 varying vec3 wp;
 varying vec3 op;
-
-void vertex() {
-	wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	op = VERTEX;
-}
 
 float hash13(vec3 p) {
 	p = fract(p * 0.1031);
@@ -59,6 +58,19 @@ float fbm(vec3 p) {
 	return s;
 }
 
+void vertex() {
+	vec3 w = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	if (disp > 0.0) {
+		vec3 q = w * noise_scale * 1.3;
+		q.y -= TIME * rise * noise_scale * 1.3;
+		float n = noise3(q) * 0.65 + noise3(q * 2.1 + 7.0) * 0.35;
+		VERTEX += NORMAL * (n - 0.35) * disp;
+		w = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	}
+	wp = w;
+	op = VERTEX;
+}
+
 void fragment() {
 	float t = TIME;
 	vec3 p = wp * noise_scale;
@@ -69,7 +81,7 @@ void fragment() {
 	// lumpy soft silhouette
 	float facing = clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0);
 	float body = smoothstep(0.0, 1.0, pow(facing, 0.7) * edge * (0.55 + bill));
-	float a = clamp(body * opacity, 0.0, 1.0);
+	float a = clamp(body * opacity * fade, 0.0, 1.0);
 	// self-shadowed billows: brighter tops of each roll
 	vec3 col = mix(ash_dark, ash_light, smoothstep(0.35, 0.85, bill));
 	// underlit by the fountain and the lava lake

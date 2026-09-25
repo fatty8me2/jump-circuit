@@ -270,6 +270,7 @@ func _build() -> void:
 		var end: Vector3 = stages[i].call()
 		if i + 1 < stages.size():
 			_frame(_w(end), yaws[i + 1])
+	_surroundings()
 	_volcano_materials()
 
 
@@ -964,11 +965,11 @@ static func _blink_ok(bp: BlinkPlatform, a: float, b: float) -> bool:
 ## Wall-run panel along the stage heading at local x, from z0 to z1 (z0 > z1), centred at height y,
 ## set in a face of glassy obsidian.
 func _panel(x: float, y: float, z0: float, z1: float, height: float = 7.0) -> WallRunPanel:
-	var len: float = absf(z0 - z1)
-	var p: WallRunPanel = kit.wallrun(_w(Vector3(x, y, (z0 + z1) * 0.5)), Vector3(len, height, 0.5), _yaw + 90.0)
+	var span: float = absf(z0 - z1)
+	var p: WallRunPanel = kit.wallrun(_w(Vector3(x, y, (z0 + z1) * 0.5)), Vector3(span, height, 0.5), _yaw + 90.0)
 	var side: float = signf(x)
 	var glass: StandardMaterial3D = Look.flat(Color(0.05, 0.04, 0.06), 0.12, 0.3)
-	var slab := Look.box(Vector3(1.2, height + 3.0, len + 1.6), glass)
+	var slab := Look.box(Vector3(1.2, height + 3.0, span + 1.6), glass)
 	slab.position = _w(Vector3(x + side * 0.9, y - 0.8, (z0 + z1) * 0.5))
 	slab.rotation.y = deg_to_rad(_yaw)
 	add_child(slab)
@@ -978,12 +979,38 @@ func _panel(x: float, y: float, z0: float, z1: float, height: float = 7.0) -> Wa
 ## A flame jet: a laser gate whose posts are fissure vents; it roars fire while live.
 func _flame(center: Vector3, width: float, height: float, period: float, on: float, phase: float, yaw_extra: float = 0.0) -> LaserGate:
 	var g: LaserGate = kit.laser(_w(center), Vector3(width, height, 0.25), period, on, phase, _yaw + yaw_extra)
+	# the fissure vents the jet roars out of, crusted with sulphur
+	var crust: StandardMaterial3D = Look.flat(Color(0.2, 0.16, 0.12), 0.9)
+	var mouth: StandardMaterial3D = Look.flat(Color(1.0, 0.45, 0.1), 0.4, 0.0, 2.5)
+	for sx: float in [-1.0, 1.0]:
+		var v := Look.cylinder(0.55, 0.6, crust, g.to_global(Vector3(sx * (width * 0.5 + 0.1), -height * 0.5 + 0.1, 0)), 0.35, 8)
+		add_child(v)
+		add_child(Look.cylinder(0.3, 0.05, mouth, v.position + Vector3(0, 0.31, 0), -1.0, 8))
+	# the flame sheet itself: tongues of fire licking up the whole curtain while it is live,
+	# a lazy smoulder of sparks while it is not
+	var fire: GPUParticles3D = Fx.emitter({"amount": 90, "lifetime": 0.55, "emitting": false, "shape": "box",
+		"extents": Vector3(width * 0.45, 0.15, 0.08), "dir": Vector3.UP, "spread": 10.0, "speed": Vector2(height * 1.2, height * 1.9),
+		"tex": Fx.Tex.SMOKE, "size": 0.9, "scale": Vector2(0.6, 1.3), "curve": "puff", "angle": Vector2(0, 360), "spin": Vector2(-90, 90),
+		"colors": PackedColorArray([Color(3.2, 2.2, 0.8, 0.0), Color(3.0, 1.2, 0.25, 0.9), Color(1.2, 0.2, 0.05, 0.0)]),
+		"aabb": AABB(Vector3(-width - 2.0, -height, -3.0), Vector3(width * 2.0 + 4.0, height * 3.0, 6.0))})
+	fire.position = Vector3(0, -height * 0.5, 0)
+	g.add_child(fire)
+	var smoulder: GPUParticles3D = Fx.embers({"amount": 14, "lifetime": 1.2, "extents": Vector3(width * 0.45, 0.05, 0.1),
+		"speed": Vector2(0.5, 1.6), "color": Color(3.0, 1.0, 0.3), "size": 0.12})
+	smoulder.position = Vector3(0, -height * 0.5, 0)
+	g.add_child(smoulder)
+	_jets.append({"g": g, "fire": fire})
 	return g
 
 
-## Basalt dressing on a piston ram: a hexagonal column cap riding with it.
+## Basalt dressing on a piston ram: a hexagonal column riding with it out of the cliff.
 func _ram_dress(p: Piston) -> void:
-	pass
+	var col := Look.cylinder(1.0, 1.4, Look.flat(Color(0.18, 0.15, 0.14), 0.88), Vector3(0, 0, 0.1), 1.05, 6)
+	col.rotation = Vector3(PI * 0.5, 0, 0)
+	p.add_child(col)
+	var seam := Look.cylinder(1.06, 0.08, Look.flat(Color(1.0, 0.4, 0.08), 0.4, 0.0, 2.0), Vector3(0, 0, -0.5), -1.0, 6)
+	seam.rotation = Vector3(PI * 0.5, 0, 0)
+	p.add_child(seam)
 
 
 ## An obsidian gate (portal) at local floor `entry`, exiting at local floor `exit_at` facing the stage heading.
@@ -1056,24 +1083,245 @@ func _restyle_environment() -> void:
 	var sky_mat := ShaderMaterial.new()
 	sky_mat.shader = SKY_SHADER
 	_env.sky.sky_material = sky_mat
-	_env.fog_light_color = Color(0.13, 0.045, 0.035)
-	_env.fog_density = 0.006
-	_env.fog_aerial_perspective = 0.3
+	_env.sky.radiance_size = Sky.RADIANCE_SIZE_256
+	_env.fog_light_color = FOG_COLOR
+	_env.fog_density = 0.0042
+	_env.fog_aerial_perspective = 0.25
 	_env.fog_sky_affect = 0.0
 	_env.fog_sun_scatter = 0.0
-	_env.ambient_light_color = Color(0.55, 0.26, 0.2)
-	_env.ambient_light_energy = 0.55
-	_env.glow_intensity = 1.0
-	_env.glow_bloom = 0.1
+	_env.fog_height = -20.0
+	_env.fog_height_density = 0.004
+	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	_env.ambient_light_color = AMBIENT
+	_env.ambient_light_energy = 0.62
+	_env.tonemap_exposure = 1.1
+	_env.glow_intensity = 1.05
+	_env.glow_bloom = 0.12
 	_env.glow_hdr_threshold = 0.95
-	_env.adjustment_saturation = 1.15
-	_env.adjustment_contrast = 1.1
-	_sun.light_color = Color(1.0, 0.5, 0.25)
-	_sun.light_energy = 1.3
-	_sun.rotation_degrees = Vector3(-32, 180, 0)
-	_fill.light_color = Color(0.45, 0.45, 0.9)
-	_fill.light_energy = 0.3
-	_fill.rotation_degrees = Vector3(-55, 20, 0)
+	_env.adjustment_saturation = 1.18
+	_env.adjustment_contrast = 1.12
+	# key light: the eruption's glow from the summit (aimed properly once the summit is placed)
+	_sun.light_color = Color(1.0, 0.48, 0.2)
+	_sun.light_energy = SUN_ENERGY
+	_sun.rotation_degrees = Vector3(-34, 0, 0)
+	# fill: cold moonlight through the ash from behind the climb
+	_fill.light_color = Color(0.42, 0.44, 0.9)
+	_fill.light_energy = FILL_ENERGY
+	_fill.rotation_degrees = Vector3(-55, 160, 0)
+
+
+# ---- the world round the course -------------------------------------------------------------------
+
+const FOG_COLOR := Color(0.12, 0.04, 0.03)
+const AMBIENT := Color(0.58, 0.28, 0.22)
+const SUN_ENERGY: float = 1.35
+const FILL_ENERGY: float = 0.32
+const CRATER_R: float = 75.0
+
+var peak: VolcanoPeak
+var deco: VolcanoDecor
+## Flame jets: {"g": LaserGate, "fire": GPUParticles3D} - the fire sheet runs while the jet is live.
+var _jets: Array[Dictionary] = []
+var _ember_rain: GPUParticles3D
+var _lightning_kick: float = 0.0
+var _surge_kick: float = 0.0
+
+
+## Every point the route passes (takeoffs, landings, walk targets, checkpoints).
+func _route_points() -> Array[Vector3]:
+	var pts: Array[Vector3] = []
+	for st: Dictionary in route:
+		for key: String in ["from", "to", "entry", "exit", "top"]:
+			if st.has(key) and st[key] is Vector3 and (st[key] as Vector3) != Vector3.ZERO:
+				pts.append(st[key])
+	for p: Vector3 in _cp_world:
+		pts.append(p)
+	pts.append(_finish_pos)
+	return pts
+
+
+func _clear_of(p: Vector3, pts: Array[Vector3], dist: float) -> bool:
+	for q: Vector3 in pts:
+		if Vector2(p.x - q.x, p.z - q.z).length() < dist:
+			return false
+	return true
+
+
+## The route height nearest to world XZ `p` (for placing decor relative to the course).
+func _course_y(p: Vector3, pts: Array[Vector3]) -> float:
+	var best: float = INF
+	var y: float = 0.0
+	for q: Vector3 in pts:
+		var d: float = Vector2(p.x - q.x, p.z - q.z).length_squared()
+		if d < best:
+			best = d
+			y = q.y
+	return y
+
+
+func _surroundings() -> void:
+	var pts: Array[Vector3] = _route_points()
+	deco = VolcanoDecor.new(self, kit.rng)
+	# the summit crater lies just past the finish terrace (stage 18's frame is still current)
+	var crater: Vector3 = _w(Vector3(0, 0, -55.5 - 6.0 - CRATER_R))
+	var rim: float = _finish_pos.y - 3.0
+	peak = VolcanoPeak.make(self, crater, rim, CRATER_R, pts, _finish_pos - crater)
+	peak.lightning.connect(_on_lightning)
+	peak.surged.connect(_on_surge)
+	# aim the key light from the glowing summit down across the course
+	var mid := Vector3.ZERO
+	for p: Vector3 in _cp_world:
+		mid += p
+	mid /= float(maxi(_cp_world.size(), 1))
+	var dir: Vector3 = Vector3(mid.x - crater.x, 0, mid.z - crater.z).normalized()
+	dir = (dir * cos(deg_to_rad(34.0)) + Vector3.DOWN * sin(deg_to_rad(34.0))).normalized()
+	_sun.global_transform = Transform3D(Basis.looking_at(dir, Vector3.UP), _sun.global_position)
+	var sky: ShaderMaterial = _env.sky.sky_material as ShaderMaterial
+	var to_summit: Vector3 = (crater - mid).normalized()
+	sky.set_shader_parameter("volcano_dir", to_summit)
+	# the sister volcano smoking on the horizon, off the summit's shoulder
+	var side: Vector3 = Vector3(-to_summit.z, 0, to_summit.x)
+	deco.sister(crater + to_summit * 900.0 + side * 1500.0 + Vector3(0, -260.0, 0), 620.0, 820.0)
+	_course_decor(pts)
+	_ambient_layers()
+	_ember_rain = Fx.emitter({"amount": 260, "lifetime": 3.2, "emitting": false, "shape": "box", "extents": Vector3(24, 1, 24),
+		"dir": Vector3(0.15, -1, 0.1), "spread": 12.0, "speed": Vector2(3.0, 7.0), "gravity": Vector3(0, -3.0, 0),
+		"turbulence": 1.2, "tex": Fx.Tex.DOT, "size": 0.2, "scale": Vector2(0.5, 1.3),
+		"colors": PackedColorArray([Color(3.4, 1.6, 0.4, 0.0), Color(3.2, 1.2, 0.3, 1.0), Color(1.4, 0.3, 0.05, 0.0)]),
+		"aabb": AABB(Vector3(-40, -60, -40), Vector3(80, 80, 80))})
+	_ember_rain.top_level = true
+	add_child(_ember_rain)
+
+
+## Basalt organs, obsidian blades, charred snags, sulphur vents, lava cliffs and boulders placed
+## round the route, never on it, and never tall enough in front of a checkpoint to block the view.
+func _course_decor(pts: Array[Vector3]) -> void:
+	var rng: RandomNumberGenerator = kit.rng
+	var anchors: Array[Vector3] = [Vector3.ZERO]
+	anchors.append_array(_cp_world)
+	anchors.append(_finish_pos)
+	for i: int in anchors.size() - 1:
+		var a: Vector3 = anchors[i]
+		var b: Vector3 = anchors[i + 1]
+		var along: Vector3 = Vector3(b.x - a.x, 0, b.z - a.z)
+		var len_ab: float = along.length()
+		along = along / maxf(len_ab, 0.01)
+		var across := Vector3(-along.z, 0, along.x)
+		# basalt organs flanking the stage, well out to the sides
+		for k: int in 3:
+			var p: Vector3 = a.lerp(b, rng.randf()) + across * (rng.randf_range(15.0, 28.0) * (-1.0 if rng.randf() < 0.5 else 1.0))
+			if _clear_of(p, pts, 12.0):
+				var cy: float = _course_y(p, pts)
+				deco.organ(Vector3(p.x, cy - 30.0, p.z), cy + rng.randf_range(-6.0, 5.0), rng.randf_range(2.5, 5.0), rng.randi_range(5, 9))
+		# small pieces a bit nearer: obsidian, snags, boulders, sulphur vents (on organ-top ledges)
+		for k: int in 5:
+			var p2: Vector3 = a.lerp(b, rng.randf()) + across * (rng.randf_range(9.0, 18.0) * (-1.0 if rng.randf() < 0.5 else 1.0))
+			if not _clear_of(p2, pts, 8.0):
+				continue
+			var cy2: float = _course_y(p2, pts) - rng.randf_range(1.0, 5.0)
+			deco.organ(Vector3(p2.x, cy2 - 30.0, p2.z), cy2, 1.6, 3)
+			match k % 4:
+				0:
+					deco.obsidian(Vector3(p2.x, cy2, p2.z), rng.randf_range(0.8, 1.4))
+				1:
+					deco.snag(Vector3(p2.x, cy2, p2.z), rng.randf_range(0.8, 1.2))
+				2:
+					deco.boulders(Vector3(p2.x, cy2, p2.z), rng.randf_range(0.8, 1.4))
+				_:
+					deco.sulphur_vent(Vector3(p2.x, cy2, p2.z))
+		# every few stages a lava fall pours off a cliff beside the climb
+		if i % 3 == 1:
+			var s: float = -1.0 if i % 2 == 0 else 1.0
+			var foot: Vector3 = a.lerp(b, 0.5) + across * s * 34.0
+			if _clear_of(foot, pts, 22.0):
+				var fy: float = _course_y(foot, pts) - 14.0
+				deco.lava_cliff(Vector3(foot.x, fy, foot.z), rng.randf_range(22.0, 34.0), rng.randf_range(4.0, 7.0), -across * s)
+		# a slow smoke layer drifting below the course
+		var sm: GPUParticles3D = VolcanoFx.smoke(self, a.lerp(b, 0.5) + Vector3(0, -22.0, 0), 16.0, 14.0, 6, Color(0.16, 0.09, 0.08, 0.5), 18.0)
+		(sm.process_material as ParticleProcessMaterial).gravity = VolcanoPeak.WIND * 0.8
+	# the trailhead: a gateway of basalt organs and a cairn line out of the start
+	deco.organ(Vector3(-9.0, -30.0, -4.0), 5.5, 2.4, 7)
+	deco.organ(Vector3(9.5, -30.0, -2.0), 6.5, 2.6, 8)
+	deco.snag(Vector3(-5.8, 0, 5.4), 1.2)
+	deco.sulphur_vent(Vector3(5.6, 0, 4.8))
+	deco.obsidian(Vector3(-5.9, 0, -5.2), 0.9)
+
+
+## Two layered ambient systems round every stage: ash sifting down and embers climbing, plus
+## hot glints hanging in the air; and heat haze over every lava pool the level made.
+func _ambient_layers() -> void:
+	var anchors: Array[Vector3] = [Vector3.ZERO]
+	anchors.append_array(_cp_world)
+	anchors.append(_finish_pos)
+	for i: int in anchors.size() - 1:
+		var a: Vector3 = anchors[i]
+		var b: Vector3 = anchors[i + 1]
+		var c: Vector3 = (a + b) * 0.5 + Vector3(0, 6.0, 0)
+		var ext := Vector3(absf(b.x - a.x) * 0.5 + 16.0, 11.0, absf(b.z - a.z) * 0.5 + 16.0)
+		VolcanoFx.ash(self, c + Vector3(0, 4.0, 0), ext, 60)
+		VolcanoFx.embers(self, c + Vector3(0, -8.0, 0), ext * Vector3(0.8, 0.4, 0.8), 45, 2.2)
+		add_child(_glints(c, ext))
+	for l: Node in find_children("*", "VolcanoLava", true, false):
+		var lava := l as VolcanoLava
+		if lava.rise <= 0.0 and lava.size.x * lava.size.y < 900.0:
+			VolcanoFx.haze(lava, Vector3(0, 0.1, 0), minf(lava.size.x, 12.0), 5.0, 0.004)
+
+
+func _glints(c: Vector3, ext: Vector3) -> GPUParticles3D:
+	var g: GPUParticles3D = Fx.emitter({"amount": 24, "lifetime": 4.0, "preprocess": 4.0, "shape": "box", "extents": ext * 0.8,
+		"speed": Vector2(0.05, 0.3), "spread": 180.0, "tex": Fx.Tex.STAR, "size": 0.35, "curve": "pop",
+		"color": Color(3.0, 1.6, 0.6), "aabb": AABB(-ext - Vector3.ONE * 4.0, ext * 2.0 + Vector3.ONE * 8.0)})
+	g.position = c
+	return g
+
+
+# ---- live effects: flame jets, lightning and surges answered by the sky, the finish ----------------------
+
+func _process(dt: float) -> void:
+	var t: float = Game.course_time
+	for j: Dictionary in _jets:
+		var on: bool = (j["g"] as LaserGate).is_on_at(t)
+		var fire: GPUParticles3D = j["fire"]
+		if fire.emitting != on:
+			fire.emitting = on
+	if _env == null or peak == null:
+		return
+	_lightning_kick = maxf(_lightning_kick - dt * 5.0, 0.0)
+	_surge_kick = maxf(_surge_kick - dt * 0.45, 0.0)
+	var surge: float = maxf(peak.surge_at(t), _surge_kick)
+	_fill.light_energy = FILL_ENERGY + 1.6 * _lightning_kick
+	_fill.light_color = Color(0.42, 0.44, 0.9).lerp(Color(0.8, 0.82, 1.0), _lightning_kick)
+	_sun.light_energy = SUN_ENERGY + 1.4 * surge
+	_env.ambient_light_energy = 0.62 + 0.35 * surge + 0.4 * _lightning_kick
+	_env.fog_light_color = FOG_COLOR.lerp(Color(0.32, 0.09, 0.04), surge * 0.7)
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam != null and _ember_rain != null:
+		_ember_rain.global_position = cam.global_position + Vector3(0, 16.0, 0) - cam.global_basis.z * 8.0
+		var rain: bool = surge > 0.25
+		if _ember_rain.emitting != rain:
+			_ember_rain.emitting = rain
+
+
+func _on_lightning(_pos: Vector3, strength: float) -> void:
+	_lightning_kick = maxf(_lightning_kick, strength)
+
+
+func _on_surge(strength: float) -> void:
+	_surge_kick = maxf(_surge_kick, minf(strength, 1.0))
+
+
+## The crater rim goes off: the fountain surges, a fountain of fire and embers bursts over the
+## terrace and the whole mountain flares.
+func _finish_sequence() -> void:
+	if peak != null:
+		peak.force_surge()
+	for i: int in 3:
+		var f: GPUParticles3D = VolcanoFx.fountain(self, _finish_pos + Vector3(float(i - 1) * 2.5, 0.5, 0), 90, 14.0 + 2.0 * float(i))
+		f.restart()
+	var s: GPUParticles3D = VolcanoFx.sparks(self, _finish_pos + Vector3(0, 2.0, 0), 70, 12.0)
+	s.restart()
+	Fx.flash(self, _finish_pos + Vector3(0, 3.0, 0), Color(1.0, 0.55, 0.2), 8.0, 22.0, 1.4)
+	await get_tree().create_timer(0.9).timeout
 
 
 ## Swap every walkable surface to the volcanic rock shader (same colours and trims).

@@ -227,6 +227,32 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"pick": PackedColorArray([Color(0.8, 1.2, 2.6, 0.5), Color(1.8, 0.8, 2.4, 0.5)]),
 					"speed": Vector2(0.2, 0.6), "spread": 180.0, "curve": "pop"},
 			]
+		"volcano":
+			return [
+				# near: embers riding the heat up past the lens, grey ash flakes tumbling down through them
+				{"depth": "near", "amount": 200, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1,
+					"colors": PackedColorArray([Color(3.4, 1.5, 0.35, 0.0), Color(3.2, 1.1, 0.25, 1.0), Color(1.8, 0.3, 0.06, 0.0)]),
+					"speed": Vector2(0.5, 1.6), "dir": Vector3.UP, "spread": 35.0, "gravity": Vector3(0.3, 1.0, 0.1),
+					"turbulence": 1.6, "turbulence_scale": 3.0, "scale": Vector2(0.4, 1.2)},
+				{"depth": "near", "amount": 110, "lifetime": 3.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.13,
+					"color": Color(0.3, 0.27, 0.26, 0.9), "speed": Vector2(0.2, 0.5), "dir": Vector3(0.3, -1.0, 0.1), "spread": 30.0,
+					"gravity": Vector3(0.4, -0.5, 0.1), "turbulence": 1.0, "angle": Vector2(0, 360), "spin": Vector2(-240, 240),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# mid: sparks spitting up in streaks and fat embers drifting on the updraughts
+				{"depth": "mid", "amount": 90, "lifetime": 1.8, "facing": "velocity", "tex": Fx.Tex.SPARK,
+					"size": Vector2(0.07, 0.8), "color": Color(3.6, 1.8, 0.5), "dir": Vector3.UP, "spread": 22.0,
+					"speed": Vector2(5.0, 11.0), "gravity": Vector3(0, -6.0, 0), "fade": PackedFloat32Array([0.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 100, "lifetime": 5.0, "tex": Fx.Tex.DOT, "size": 0.4,
+					"color": Color(2.8, 0.9, 0.22), "speed": Vector2(0.6, 1.8), "dir": Vector3.UP, "spread": 30.0,
+					"gravity": Vector3(0.3, 0.7, 0), "turbulence": 1.2, "curve": "pop", "fade": PackedFloat32Array([0.0, 1.0, 0.0])},
+				# far: a red-lit haze of drifting ash and big glowing embers climbing the sky
+				{"depth": "far", "amount": 70, "lifetime": 10.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 14.0, "radius": 75.0,
+					"color": Color(0.22, 0.09, 0.07, 0.45), "speed": Vector2(1.0, 2.5), "dir": Vector3(0.8, 0.2, 0.5), "spread": 15.0,
+					"angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 90, "lifetime": 8.0, "tex": Fx.Tex.DOT, "size": 2.2, "radius": 65.0,
+					"color": Color(2.6, 0.8, 0.2, 0.55), "speed": Vector2(1.5, 3.5), "dir": Vector3.UP, "spread": 30.0,
+					"curve": "pop", "fade": PackedFloat32Array([0.0, 0.7, 0.0])},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking

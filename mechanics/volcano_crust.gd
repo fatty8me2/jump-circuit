@@ -131,8 +131,8 @@ func _build_visual() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(absf(position.x * 13.0 + position.z * 7.0)) + 1
 	for i: int in 5:
-		var len: float = rng.randf_range(0.45, 0.8) * minf(size.x, size.z)
-		var c := Look.box(Vector3(len, 0.02, 0.06), _crack_mat, Vector3(rng.randf_range(-0.25, 0.25) * size.x, 0.012, rng.randf_range(-0.25, 0.25) * size.z))
+		var crack_len: float = rng.randf_range(0.45, 0.8) * minf(size.x, size.z)
+		var c := Look.box(Vector3(crack_len, 0.02, 0.06), _crack_mat, Vector3(rng.randf_range(-0.25, 0.25) * size.x, 0.012, rng.randf_range(-0.25, 0.25) * size.z))
 		c.rotation.y = rng.randf() * PI
 		c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_vis.add_child(c)
