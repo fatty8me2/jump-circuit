@@ -1,5 +1,42 @@
 extends LevelBase
-## 9. FROSTBITE PASS - (work in progress: stage list at the end of the build)
+## 9. FROSTBITE PASS - a frozen mountain pass and an ice fortress in a blizzard, under the northern lights.
+## Polar dusk turning to night (the fog darkens and the aurora curtains swell as you bank stages): up the
+## glacier, the cathedral-sized frozen falls, a crystal grotto and a black frozen lake, through the ice
+## fortress to its tower, down the avalanche slopes and up to the summit beacon. Eighteen stages, each
+## ending on a checkpoint.
+##
+##  1 Trailhead         warm-up hops, the first icicle gate          [shortcut: two 1 m ice pinnacles past the gate]
+##  2 Crevasse Field    THIN ICE panes over crevasses, a three-pane ice bridge at a run, MANTLE a serac
+##  3 Icicle Gallery    four blocks under an ice cliff, a cascade of FALLING ICICLES, MANTLE out under a fifth
+##  4 Ice Chutes        ICE SLIDE off the lip over a crevasse (drop in between two icicles), a second slide
+##                      into a bounce pad at 20 m/s                   [shortcut: wall-run the serac, skip slide 2]
+##  5 Blizzard Ridge    BRANCH: knife-edge beams between BLIZZARD GUSTS | WALL RUN the lee cornice, MANTLE
+##  6 Cathedral Falls   glare-ice stepping stones, then a chimney of three WALL RUNS up the frozen falls + MANTLE
+##  7 Crystal Grotto    a beam under two frost beams (LASERS), two aurora-crystal BLINKS, MANTLE
+##  8 Frozen Lake       BRANCH: ride drifting floes (MOVERS) | BOOST onto glare ice, bounce pad at speed
+##  9 Aurora Steps      four aurora panes (BLINK wave), the ice-blade windmill (SWEEPER)
+##                                                                  [shortcut: hidden aurora gate (PORTAL)]
+## 10 Fortress Causeway snow cannons (PISTONS) across the causeway, the drawbridge lift (MOVER)
+## 11 The Gatehouse     BRANCH: three falling portcullis blocks (CRUSHERS) + MANTLE under a fourth |
+##                      WALL RUN the gate tower's flank and MANTLE the inner wall
+## 12 Battlements       icicles off a tower eave, WALL RUN the breach, two frost beams, MANTLE the tower
+##                                                                  [shortcut: two 1 m merlons past the beams]
+## 13 Courtyard of Winds blocks between GUSTS, then stand under the great bell (PENDULUM) on purpose: it hurls
+##                      you 16 m over the well; a BOOST off the landing deck into the keep
+## 14 Hall of Ice       five THIN ICE panes over the undercroft, two frost beams, the aurora gate (PORTAL) up
+## 15 Tower of Rime     MANTLES up the tower under falling icicles, WALL RUN its face, a last MANTLE
+## 16 Avalanche Couloirs down an ICE SLIDE off the tower, across three avalanche gullies between the slides,
+##                      ducking into an ice cave in the widest
+## 17 THE AVALANCHE     the set piece: the whole slope lets go every 3.5 s. Drop in behind a wave, race the
+##                      chutes to the ice cave halfway before the next one, let it thunder over you, then the
+##                      THIN ICE bridge, the last chute and a leap over the bergschrund into the bottom cave
+## 18 Summit of the Pass thin ice to a dripping spur, stepping stones in the summit GUST, WALL RUN the summit
+##                      rock, MANTLE, and the beacon under the aurora crown
+##
+## Own mechanics: GlacierIcicle (falling icicles with frost-ring warnings), GlacierGust (blizzard gust fronts),
+## GlacierThinIce (cracking thin ice), GlacierAvalanche (the avalanche waves, with shelters). Ice slides are
+## pitched kit.slick chutes. Visuals: visual/glacier_{fx,decor,sky,aurora,glass,block,thin_ice,gust,snowwall}.
+## Route variants for the bot: 0 = main line, 1 = every alternative branch, 2 = main line + every shortcut.
 
 const BLOCK_SHADER: Shader = preload("res://visual/glacier_block.gdshader")
 const SKY_SHADER: Shader = preload("res://visual/glacier_sky.gdshader")
@@ -547,16 +584,18 @@ func _stage_8() -> Vector3:
 	var fork: Dictionary = _blk(Vector3(0, 0, -7.2), 11.0, 2.6, "main", 1.0, false)
 	# LEFT: ride two drifting floes across the black water, a pack-ice block between them
 	var fs := Vector3(2.2, 0.5, 2.2)
-	var f1: MovingPlatform = kit.mover(_w(Vector3(-3.2, 0, -13.2)), _sz(fs), [Vector3.ZERO, _d(Vector3(0, 0, -6.0))], 5.0, 0.0)
+	var f1: MovingPlatform = kit.mover(_w(Vector3(-3.2, 0, -13.2)), _sz(fs), [Vector3.ZERO, _d(Vector3(0, 0, -6.0))], 3.6, 0.0)
 	var b1: Dictionary = _blk(Vector3(-3.2, 0.4, -25.8), 2.2, 2.2, "alt")
-	var f2: MovingPlatform = kit.mover(_w(Vector3(-2.2, 0.8, -31.4)), _sz(fs), [Vector3.ZERO, _d(Vector3(0, 0, -4.0))], 4.0, 0.25)
-	var merge: Dictionary = _blk(Vector3(-1.0, 1.2, -41.5), 9.0, 3.0, "main", 1.0, false)
-	var cp: Dictionary = _cp(Vector3(0, 1.2, -50.5))
+	var f2: MovingPlatform = kit.mover(_w(Vector3(-2.2, 0.8, -31.4)), _sz(fs), [Vector3.ZERO, _d(Vector3(0, 0, -4.0))], 3.2, 0.25)
+	var merge: Dictionary = _blk(Vector3(-1.0, 1.2, -40.0), 9.0, 3.0, "main", 1.0, false)
+	var cp: Dictionary = _cp(Vector3(0, 1.2, -49.0))
 	# RIGHT: a boost strip onto a sheet of glare ice, a pad at its end: bounce at speed straight to the shore
 	kit.boost(_w(Vector3(3.2, 0, -11.7)), _sz(Vector3(2.4, 0.4, 6.4)), _yaw, 18.0)
 	kit.slick(_w(Vector3(3.2, 0, -20.5)), _sz(Vector3(3.0, 0.5, 11.0)), _yaw, 0.0)
 	_blk(Vector3(3.2, 0, -27.3), 2.8, 2.0, "alt", 0.6)
 	kit.pad(_w(Vector3(3.2, 0, -27.3)), 20.0, 0.0, _yaw, 1.3)
+	# a frost beam across the glare ice: at 18 m/s there is no stopping, so time the run-up
+	var beam: LaserGate = _frost_beam(Vector3(3.2, 0, -21.0), 3.4, 2.6, 0.45, 0.0)
 	deco.serac(_w(Vector3(3.2, -0.5, -20.0)), 1.2, 36.0)
 	for z: float in [-10.0, -17.0, -24.0]:
 		deco.crystals(_w(Vector3(5.2, 0.0, z)), 0.5, GlacierFx.GLOW)
@@ -565,16 +604,17 @@ func _stage_8() -> Vector3:
 	_hop(cp0, fork, Vector3(-3.2 if route_variant != 1 else 3.2, 0, 0.3))
 	if route_variant != 1:
 		var up := Vector3(0, 0.25, 0)
-		r_wait(f1, _w(Vector3(-3.2, -0.25, -13.2)), 0.35)
+		_wait(func() -> bool: return _floe_home(f1, 0.75))
 		r_jump_onto(_w(Vector3(-3.2, 0, -8.15)), f1, up)
 		r_jump_from_ride(f1, _w(Vector3(-3.2, -0.25, -19.2)), 0.35, _w(b1["c"]), true, up)
 		r_walk(_w(Vector3(-3.2, 0.4, -25.6)))
-		r_wait(f2, _w(Vector3(-2.2, 0.55, -31.4)), 0.35)
+		_wait(func() -> bool: return _floe_home(f2, 0.75))
 		r_jump_onto(_w(_edge(b1, Vector3(-2.2, 0.8, -31.4))), f2, up)
-		r_jump_from_ride(f2, _w(Vector3(-2.2, 0.55, -35.4)), 0.35, _w(Vector3(-1.6, 1.2, -41.2)), true, up)
+		r_jump_from_ride(f2, _w(Vector3(-2.2, 0.55, -35.4)), 0.35, _w(Vector3(-1.6, 1.2, -39.7)), true, up)
 		_hop(merge, cp, Vector3(0, 0, 1.5))
 	else:
 		r_walk(_w(Vector3(3.2, 0, -8.2)))
+		_wait(func() -> bool: return _beams_pass([beam], [1.05], 0.35))
 		r_pad(_w(Vector3(3.2, 0, -27.3)), _w((cp["c"] as Vector3) + Vector3(0, 0, 0.5)))
 		r_walk(_w(cp["c"]))
 	r_checkpoint()
@@ -732,7 +772,7 @@ func _stage_12() -> Vector3:
 	if route_variant == 2:
 		_hop(w2, m1)
 		_hop(m1, m2)
-		r_mantle(_w(_edge(m2, tower["c"])), _w((tower["c"] as Vector3) + Vector3(0.6, 0, 0.3)))
+		route.append({"kind": "b_mantle", "from": _w(_edge(m2, tower["c"])), "top": _w((tower["c"] as Vector3) + Vector3(0.6, 0, 0.3))})
 	else:
 		_hop(w2, w3, Vector3(0, 0, 3.8))
 		r_walk(_w(Vector3(0.4, 0.5, -41.4)))
@@ -1502,6 +1542,12 @@ func _gate_dressing(entry: Vector3, exit_c: Vector3) -> void:
 	_portal_bursts.append([_w(exit_c), [b]])
 
 
+## Floe `f` will be sitting at its start `lead` seconds from now (and for a moment after).
+static func _floe_home(f: MovingPlatform, lead: float) -> bool:
+	var t: float = Game.course_time
+	return f.offset_at(t + lead).length() < 0.3 and f.offset_at(t + lead + 0.3).length() < 0.6
+
+
 ## The frozen lake: black open water between the floes (catches you: a fall), rimmed with shelf ice.
 func _lake(c: Vector3, size: Vector2) -> void:
 	var water := StandardMaterial3D.new()
@@ -1704,9 +1750,11 @@ var _cannon_puffs: Array[Array] = []
 func _ready() -> void:
 	super()
 	player.teleported.connect(_on_teleported)
+	_night_step(0.0)
 
 
-func _process(_dt: float) -> void:
+func _process(dt: float) -> void:
+	_night_step(dt)
 	var t: float = Game.course_time
 	for rec: Array in _slam_puffs:
 		var down: bool = (rec[0] as Crusher).gap_at(t) < 0.15
@@ -1763,26 +1811,140 @@ func _glacier_materials() -> void:
 		m.material_override = r
 
 
+## Aurora curtain materials (their intensity swells as night falls over the pass).
+var _aurora_mats: Array[ShaderMaterial] = []
+
+
 func _surroundings() -> void:
-	# aurora curtains far out over the pass
-	var span_c: Vector3 = Vector3(0, 0, -60)
-	for i: int in 3:
+	var pts: Array[Vector3] = _cp_world.duplicate()
+	pts.append(_finish_pos)
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for p: Vector3 in pts:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	var mid: Vector3 = (lo + hi) * 0.5
+	var rng: RandomNumberGenerator = kit.rng
+	# aurora curtains hung far out round the pass: green hems, violet crowns, slowly folding
+	var cur: Array = [
+		[Vector3(mid.x - 60.0, 170.0, lo.z - 420.0), 5.0, 1000.0],
+		[Vector3(lo.x - 430.0, 190.0, mid.z - 80.0), 80.0, 900.0],
+		[Vector3(hi.x + 460.0, 160.0, mid.z + 60.0), -85.0, 900.0],
+		[Vector3(mid.x + 240.0, 230.0, lo.z - 260.0), -30.0, 700.0],
+	]
+	for i: int in cur.size():
 		var q := QuadMesh.new()
-		q.size = Vector2(700.0, 170.0)
-		q.subdivide_width = 96
+		q.size = Vector2(float(cur[i][2]), 230.0)
+		q.subdivide_width = 120
 		q.subdivide_depth = 4
 		var m := ShaderMaterial.new()
 		m.shader = AURORA_SHADER
 		m.set_shader_parameter("seed", float(i) * 3.7)
-		m.set_shader_parameter("intensity", 1.0 - float(i) * 0.2)
-		var mi := Look.mesh_node(q, m, span_c + Vector3(-120.0 + float(i) * 160.0, 150.0 + float(i) * 25.0, -420.0 + float(i) * 60.0))
-		mi.rotation.y = deg_to_rad(-15.0 + float(i) * 22.0)
-		mi.rotation.x = deg_to_rad(-12.0)
+		m.set_shader_parameter("fold", 26.0)
+		_aurora_mats.append(m)
+		var mi := Look.mesh_node(q, m, cur[i][0])
+		mi.rotation.y = deg_to_rad(float(cur[i][1]))
+		mi.rotation.x = deg_to_rad(-10.0)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.extra_cull_margin = 200.0
+		mi.extra_cull_margin = 300.0
 		add_child(mi)
-	# valley floor far below
-	var floor_mi := Look.mesh_node(PlaneMesh.new(), GlacierFx.snow_mat(0.25), Vector3(0, -46.0, -120.0))
-	(floor_mi.mesh as PlaneMesh).size = Vector2(1400, 1400)
+	# the valley floor far below: snowfields fading into the haze
+	var floor_mi := Look.mesh_node(PlaneMesh.new(), GlacierFx.snow_mat(0.22), Vector3(mid.x, -46.0, mid.z))
+	(floor_mi.mesh as PlaneMesh).size = Vector2(hi.x - lo.x + 1600.0, hi.z - lo.z + 1600.0)
 	floor_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(floor_mi)
+	# a range of snow peaks all round (a few big shared cones scaled per peak)
+	var rock: StandardMaterial3D = GlacierFx.rock_mat(0.15)
+	var snow: StandardMaterial3D = GlacierFx.snow_mat(0.06)
+	var placed: int = 0
+	var tries: int = 0
+	while placed < 34 and tries < 600:
+		tries += 1
+		var base: Vector3 = pts[rng.randi() % pts.size()]
+		var a: float = rng.randf() * TAU
+		var d: float = rng.randf_range(120.0, 230.0)
+		var p := Vector3(base.x + cos(a) * d, -46.0, base.z + sin(a) * d)
+		var ok: bool = true
+		for q2: Vector3 in pts:
+			if Vector2(p.x - q2.x, p.z - q2.z).length() < 95.0:
+				ok = false
+				break
+		if not ok:
+			continue
+		var h: float = rng.randf_range(90.0, 210.0)
+		var r: float = h * rng.randf_range(0.45, 0.7)
+		_peak(p, r, h, rock, snow, rng)
+		placed += 1
+	# the fortress skyline: spires of glowing ice beside the fortress stages
+	for i: int in range(9, mini(15, _cp_world.size())):
+		var c: Vector3 = _cp_world[i]
+		for k: int in 2:
+			var ang: float = rng.randf() * TAU
+			var sp := Vector3(c.x + cos(ang) * rng.randf_range(34.0, 55.0), c.y - 30.0, c.z + sin(ang) * rng.randf_range(34.0, 55.0))
+			deco.spire(sp, rng.randf_range(2.5, 4.5), rng.randf_range(50.0, 80.0), 0.9)
+	# ambient life along the whole route: falling snow, diamond dust, spindrift off the ridges
+	for i: int in _cp_world.size():
+		var here: Vector3 = _cp_world[i]
+		var nxt: Vector3 = _cp_world[i + 1] if i + 1 < _cp_world.size() else _finish_pos
+		var c2: Vector3 = (here + nxt) * 0.5 + Vector3(0, 6.0, 0)
+		var ext := Vector3(absf(nxt.x - here.x) + 30.0, 24.0, absf(nxt.z - here.z) + 30.0)
+		var sf: GPUParticles3D = GlacierFx.snowfall(ext, 70)
+		sf.position = c2
+		add_child(sf)
+		var gl: GPUParticles3D = GlacierFx.glitter(ext * Vector3(0.7, 0.6, 0.7), 26, [GlacierFx.GLOW, GlacierFx.AURORA_G, GlacierFx.AURORA_V][i % 3])
+		gl.position = c2 - Vector3(0, 3.0, 0)
+		add_child(gl)
+		if i % 2 == 0:
+			var sd: GPUParticles3D = GlacierFx.spindrift(ext * Vector3(0.8, 0.3, 0.8), Vector3(1, 0.1, 0.3), 10, 4.0)
+			sd.position = c2 + Vector3(0, -8.0, 0)
+			add_child(sd)
+	var start_snow: GPUParticles3D = GlacierFx.snowfall(Vector3(40, 24, 40), 80)
+	start_snow.position = Vector3(0, 8, -10)
+	add_child(start_snow)
+
+
+## A snow peak: a rock cone with a snow cap and a shoulder, all from one shared unit cone.
+func _peak(base: Vector3, r: float, h: float, rock: Material, snow: Material, rng: RandomNumberGenerator) -> void:
+	var n := Node3D.new()
+	var body := Look.cylinder(1.0, 1.0, rock, Vector3(0, 0.5, 0), 0.0, 7)
+	body.scale = Vector3(r, h, r * rng.randf_range(0.7, 1.0))
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	n.add_child(body)
+	var cap := Look.cylinder(1.0, 1.0, snow, Vector3(0, h * 0.58 + h * 0.21, 0), 0.0, 7)
+	cap.scale = Vector3(r * 0.46, h * 0.43, r * 0.46 * body.scale.z / r)
+	cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	n.add_child(cap)
+	var sh := Look.cylinder(1.0, 1.0, rock, Vector3(r * 0.55, h * 0.3, r * 0.2), 0.0, 7)
+	sh.scale = Vector3(r * 0.6, h * 0.6, r * 0.5)
+	sh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	n.add_child(sh)
+	var sh_cap := Look.cylinder(1.0, 1.0, snow, Vector3(r * 0.55, h * 0.3 + h * 0.3 * 0.5 + h * 0.06, r * 0.2), 0.0, 7)
+	sh_cap.scale = Vector3(r * 0.28, h * 0.27, r * 0.23)
+	sh_cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	n.add_child(sh_cap)
+	n.rotation.y = rng.randf() * TAU
+	n.position = base
+	add_child(n)
+
+
+# ---- dusk into night: the pass darkens and the aurora swells as you climb ------------------------------
+
+const DUSK_FOG := Color(0.36, 0.46, 0.62)
+const NIGHT_FOG := Color(0.12, 0.17, 0.3)
+var _night: float = 0.0
+
+
+func _night_step(dt: float) -> void:
+	if _env == null:
+		return
+	var target: float = clampf(float(current_checkpoint) / float(maxi(checkpoints.size(), 1)), 0.0, 1.0)
+	if is_equal_approx(_night, target) and dt > 0.0:
+		return
+	_night = move_toward(_night, target, dt * 0.06) if dt > 0.0 else target
+	_env.fog_light_color = DUSK_FOG.lerp(NIGHT_FOG, _night)
+	_env.ambient_light_energy = lerpf(0.85, 0.62, _night)
+	_env.glow_intensity = lerpf(0.8, 1.1, _night)
+	_sun.light_energy = lerpf(1.3, 0.95, _night)
+	_fill.light_energy = lerpf(0.25, 0.55, _night)
+	for m: ShaderMaterial in _aurora_mats:
+		m.set_shader_parameter("intensity", lerpf(0.55, 1.35, _night))
