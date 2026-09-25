@@ -151,7 +151,8 @@ func _physics_process(_dt: float) -> void:
 	_prev_wave = wave
 	_prev_rel = rel
 	_prev_p = p
-	if absf(p.x) > width * 0.5:
+	# above the release line (the cornice, where a course waits for its moment) is never buried
+	if absf(p.x) > width * 0.5 or p.z > 0.3:
 		return
 	var h: float = p.y - surface_y(p.z)
 	if h > height or h < -depth:

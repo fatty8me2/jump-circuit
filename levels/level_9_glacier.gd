@@ -5,9 +5,6 @@ const BLOCK_SHADER: Shader = preload("res://visual/glacier_block.gdshader")
 const SKY_SHADER: Shader = preload("res://visual/glacier_sky.gdshader")
 const AURORA_SHADER: Shader = preload("res://visual/glacier_aurora.gdshader")
 
-## Stages built so far (development: the last one ends at a temporary finish).
-const STAGES_BUILT: int = 16
-
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
 var _yaw: float = 0.0
@@ -203,20 +200,15 @@ func _build() -> void:
 	deco = GlacierDecor.new(self, kit.rng)
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 4), 0.0)
-	var yaws: Array[float] = [0.0, 0.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+	var yaws: Array[float] = [0.0, 0.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -90.0, -90.0]
 	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9,
-			_stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16]
+			_stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16, _stage_17]
 	_frame(Vector3.ZERO, yaws[0])
-	for i: int in mini(stages.size(), STAGES_BUILT):
+	for i: int in stages.size():
 		_next_yaw = yaws[i + 1]
 		var end: Vector3 = stages[i].call()
 		_frame(_w(end), yaws[i + 1])
-	if STAGES_BUILT < 18:
-		# development: a temporary finish just past the last built stage
-		kit.plat(_w(Vector3(0, 0, -6.5)), Vector3(6, 1, 7), "main", 0.0, _yaw)
-		kit.finish(_w(Vector3(0, 0, -8.0)), _yaw)
-		_finish_pos = _w(Vector3(0, 0, -8.0))
-		r_walk(_w(Vector3(0, 0, -8.0)))
+	_stage_18()
 	_surroundings()
 	_glacier_materials()
 
@@ -1036,6 +1028,230 @@ func _stage_16() -> Vector3:
 	return cp["c"]
 
 
+# ---- stage 17: THE AVALANCHE - the set piece. The whole slope below the pass lets go every few
+# seconds. Drop in behind a wave, race down the chutes to the ice cave halfway before the next one,
+# let it thunder over you, then run the thin-ice bridge and the last chute and leap the bergschrund
+# into the cave at the bottom before the one after that. --------------------------------------------------
+
+const AV_GRADE: float = 1.0 / 3.0
+const AV_TOP: float = -3.4
+
+func _stage_17() -> Vector3:
+	var ys := func(z: float) -> float: return (z - AV_TOP) * AV_GRADE
+	var pitch: float = rad_to_deg(atan(AV_GRADE))
+	var av := GlacierAvalanche.new()
+	av.length = 90.0
+	av.drop = 90.0 * AV_GRADE
+	av.width = 22.0
+	av.height = 7.5
+	av.depth = 4.0
+	av.period = 3.5
+	av.run_time = 2.8
+	av.start_frac = 0.35
+	av.warn = 0.7
+	av.thickness = 3.0
+	av.position = _w(Vector3(0, 0, AV_TOP))
+	av.rotation_degrees.y = _yaw
+	add_child(av)
+	# chute 1, the first crevasse, chute 2
+	_slide(Vector3(0, 0, AV_TOP), 16.0 / cos(deg_to_rad(pitch)), pitch, 3.2)
+	var lip1: Vector3 = _slide_end(Vector3(0, 0, AV_TOP), 16.0 / cos(deg_to_rad(pitch)), pitch)
+	var s2_top := Vector3(0, float(ys.call(-31.0)), -31.0)
+	_slide(s2_top, 21.0 / cos(deg_to_rad(pitch)), pitch, 3.2)
+	# the shelter halfway: a shelf under a lip of ice the slides pour over
+	var shelf_y: float = float(ys.call(-52.0))
+	var shelf: Dictionary = _blk(Vector3(0, shelf_y, -57.0), 4.0, 10.0, "main", 1.0, false)
+	_shelter_cave(av, Vector3(0, shelf_y, -57.0), 10.0)
+	# the thin-ice bridge over the second crevasse, run off its end onto chute 3
+	var panes: Array[Dictionary] = []
+	for i: int in 3:
+		panes.append(_thin(Vector3(0, shelf_y, -63.65 - 3.3 * float(i)), 2.4, 3.3, 0.5, 2.4))
+	var s3_top := Vector3(0, float(ys.call(-76.0)), -76.0)
+	_slide(s3_top, 14.0 / cos(deg_to_rad(pitch)), pitch, 3.2)
+	var lip3: Vector3 = _slide_end(s3_top, 14.0 / cos(deg_to_rad(pitch)), pitch)
+	# the cave at the bottom, across the bergschrund (a back wall catches an overshoot)
+	var cp_c := Vector3(0, lip3.y - 2.7, -104.0)
+	var cp: Dictionary = _cp(cp_c)
+	kit.block(_w(cp_c + Vector3(0, 3.0, -4.6)), Vector3(8.0, 8.0, 1.2), GlacierFx.ICE, true, _yaw)
+	_avalanche_slope(av, lip1.z, s2_top.z, -62.0, -76.0, lip3.z)
+	_bottom_cave(cp_c)
+	# the run: drop in right behind a wave
+	r_walk(_w(Vector3(0, 0, -2.2)))
+	_wait(func() -> bool:
+		var z: float = av.front_z_at(Game.course_time)
+		return not is_nan(z) and z < -5.5 and z > -12.0)
+	r_jump(_w(lip1 + Vector3(0, 0, 0.6)), _w(s2_top + Vector3(0, -2.0, -6.0)))
+	route[route.size() - 1]["speed"] = 20.0
+	r_walk(_w(Vector3(0, shelf_y, -56.5)))
+	# shelter: wait for the next wave to pour over, then go
+	_wait(func() -> bool:
+		var z: float = av.front_z_at(Game.course_time)
+		return not is_nan(z) and z < -64.0 and z > -80.0)
+	r_walk(_w(Vector3(0, shelf_y, -71.4)))
+	r_walk(_w(s3_top + Vector3(0, -1.5, -4.5)))
+	r_jump(_w(lip3 + Vector3(0, 0, 0.6)), _w(cp_c + Vector3(0, 0, 1.0)))
+	route[route.size() - 1]["speed"] = 20.0
+	r_walk(_w(cp_c))
+	r_checkpoint()
+	shelf.clear()
+	panes.clear()
+	return cp_c
+
+
+# ---- stage 18: Summit of the Pass - thin ice up to a dripping spur, stepping stones in the summit
+# gale, the summit rock run along its face, a last mantle, and the beacon under the aurora crown -------
+
+func _stage_18() -> void:
+	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var b0: Dictionary = _blk(Vector3(0, 0.6, -8.2), 2.2, 2.2)
+	var p1: Dictionary = _thin(Vector3(1.6, 1.2, -13.9), 2.0, 2.0, 0.55, 2.4)
+	var p2: Dictionary = _thin(Vector3(-0.2, 1.8, -19.6), 2.0, 2.0, 0.55, 2.4)
+	var b1: Dictionary = _blk(Vector3(1.4, 2.4, -25.4), 2.2, 2.2, "alt")
+	var ic: GlacierIcicle = _icicle(Vector3(1.4, 2.4, -25.4), 5.6, 3.2, 0.0, 1.1)
+	deco.overhang(_w(Vector3(2.8, 2.4 + 5.6 + 1.8, -25.4)), Vector3(6.0, 1.4, 4.0), _yaw)
+	add_child(Look.box(_sz(Vector3(3.0, 40.0, 5.0)), GlacierFx.rock_mat(0.05), _w(Vector3(6.4, -9.0, -25.4))))
+	var b2: Dictionary = _blk(Vector3(-0.6, 3.0, -31.2), 1.6, 1.6)
+	var b3: Dictionary = _blk(Vector3(1.2, 3.6, -36.8), 2.4, 3.0, "alt")
+	var gust: GlacierGust = _gust(Vector3(1.0, 5.0, -31.0), Vector3(14.0, 10.0, 8.6), Vector3(30, 0, 0), 3.2, 0.3, 0.8, 0.4)
+	_panel(3.5, 4.8, -39.8, -55.8, 6.5)
+	var l: Dictionary = _blk(Vector3(0.8, 3.6, -60.8), 3.6, 5.0, "alt")
+	var m: Dictionary = _ledge(Vector3(0.8, 6.9, -67.0), Vector3(4.0, 7.0, 3.4))
+	var fin: Dictionary = _blk(Vector3(0, 6.9, -77.5), 12.0, 12.0, "main", 1.6)
+	kit.finish(_w(Vector3(0, 6.9, -78.0)), _yaw)
+	_finish_pos = _w(Vector3(0, 6.9, -78.0))
+	_summit(Vector3(0, 6.9, -77.5))
+	_hop(cp0, b0)
+	_wait(func() -> bool: return _ice_ok([ic], 1.2, 3.0))
+	_hop(b0, p1)
+	_hop(p1, p2)
+	_hop(p2, b1)
+	for pair: Array in [[b1, b2], [b2, b3]]:
+		var a: Dictionary = pair[0]
+		var b: Dictionary = pair[1]
+		r_walk(_w(_edge(a, b["c"], 0.9)))
+		_wait(func() -> bool: return gust.is_calm_for(Game.course_time, 1.0))
+		_hop(a, b)
+	r_wallrun(_w(Vector3(1.5, 3.6, -37.95)), _w(Vector3(3.0, 5.0, -41.9)), _w(Vector3(3.0, 5.0, -52.8)), _w(Vector3(0.8, 3.6, -60.1)))
+	r_mantle(_w(_edge(l, m["c"])), _w((m["c"] as Vector3) + Vector3(0, 0, 0.3)))
+	_hop(m, fin, Vector3(0, 0, 4.5))
+	r_walk(_w(Vector3(0, 6.9, -78.0)))
+	b3.clear()
+
+
+## The summit: a plateau of wind-carved snow, the beacon - a tall obelisk of glowing ice with a crown
+## of aurora light - rime-coated cairns and prayer flags whipping in the wind, and the aurora itself
+## hanging lowest right over it.
+func _summit(c: Vector3) -> void:
+	var glass: ShaderMaterial = GlacierFx.glass_mat(1.6, 0.6, 0.9)
+	var bc: Vector3 = c + Vector3(0, 0, -4.8)
+	add_child(Look.cylinder(1.4, 14.0, glass, _w(bc + Vector3(0, 7.0, 0)), 0.6, 6))
+	add_child(Look.cylinder(0.62, 2.6, glass, _w(bc + Vector3(0, 15.3, 0)), 0.0, 6))
+	for k: int in 6:
+		var a: float = TAU * float(k) / 6.0
+		var sp := Look.cylinder(0.5, 5.0, glass, _w(bc + Vector3(cos(a) * 1.9, 2.3, sin(a) * 1.9)), 0.05, 6)
+		sp.rotation = Vector3(sin(a) * 0.3, 0, -cos(a) * 0.3)
+		add_child(sp)
+	var orb := Fx.sprite(Fx.hot(GlacierFx.AURORA_G, 2.6), 5.0, Fx.Tex.DOT)
+	orb.position = _w(bc + Vector3(0, 16.8, 0))
+	add_child(orb)
+	var beacon := OmniLight3D.new()
+	beacon.light_color = GlacierFx.AURORA_G
+	beacon.light_energy = 3.0
+	beacon.omni_range = 34.0
+	beacon.position = _w(bc + Vector3(0, 15.0, 0))
+	add_child(beacon)
+	var crown: GPUParticles3D = GlacierFx.aurora_motes(Vector3(5, 3, 5), 70)
+	crown.position = _w(bc + Vector3(0, 15.0, 0))
+	add_child(crown)
+	var column: GPUParticles3D = Fx.emitter({"amount": 60, "lifetime": 3.0, "preprocess": 3.0, "shape": "ring", "ring_radius": 2.4,
+		"ring_inner": 1.8, "dir": Vector3.UP, "spread": 5.0, "speed": Vector2(3.0, 6.0), "tex": Fx.Tex.SPARK, "facing": "velocity",
+		"size": Vector2(0.12, 1.6), "pick": PackedColorArray([Fx.hot(GlacierFx.AURORA_G, 2.4), Fx.hot(GlacierFx.AURORA_V, 2.4)]),
+		"fade": PackedFloat32Array([0.0, 1.0, 0.0]), "aabb": AABB(Vector3(-6, -1, -6), Vector3(12, 24, 12))})
+	column.position = _w(bc + Vector3(0, 0.2, 0))
+	add_child(column)
+	# cairns and flags round the plateau
+	for p: Vector3 in [Vector3(-5.0, 0, 4.6), Vector3(5.0, 0, 4.6), Vector3(-5.0, 0, -4.8), Vector3(5.0, 0, -4.8)]:
+		deco.cairn(_w(c + p), 1.3)
+	deco.flags(_w(bc + Vector3(-5.0, 1.9, 9.4)), _w(bc + Vector3(0, 12.0, 0)), 12)
+	deco.flags(_w(bc + Vector3(5.0, 1.9, 9.4)), _w(bc + Vector3(0, 12.0, 0)), 12)
+	deco.flags(_w(bc + Vector3(-5.0, 1.9, 0.0)), _w(bc + Vector3(0, 12.0, 0)), 10)
+	deco.flags(_w(bc + Vector3(5.0, 1.9, 0.0)), _w(bc + Vector3(0, 12.0, 0)), 10)
+	var gale: GPUParticles3D = GlacierFx.blizzard(_sz(Vector3(30.0, 12.0, 30.0)), _d(Vector3(1, 0, 0.2)), 90, 15.0)
+	gale.position = _w(c + Vector3(0, 5.0, 0))
+	add_child(gale)
+	# the finish burst (fired by _finish_sequence)
+	for col: Color in [GlacierFx.AURORA_G, GlacierFx.AURORA_V, GlacierFx.GLOW]:
+		var b: GPUParticles3D = GlacierFx.frost_burst(col, 70, 11.0)
+		b.position = _finish_pos + Vector3(0, 1.5, 0)
+		b.lifetime = 1.8
+		add_child(b)
+		_finish_bursts.append(b)
+	_beacon = beacon
+
+
+## The shelter halfway down: a thick lip of ice over the shelf on the uphill side, walls at the
+## sides; registered with the avalanche so the slide pours over it.
+func _shelter_cave(av: GlacierAvalanche, c: Vector3, length: float) -> void:
+	var ice: ShaderMaterial = GlacierFx.glass_mat(1.1, 0.3, 0.92)
+	# the roof slopes with the mountain: it starts at the slope uphill and overhangs the shelf
+	add_child(Look.box(_sz(Vector3(7.0, 1.4, length + 1.0)), ice, _w(c + Vector3(0, 4.6, 0))))
+	for sx: float in [-1.0, 1.0]:
+		add_child(Look.box(_sz(Vector3(1.2, 5.4, length + 1.0)), ice, _w(c + Vector3(sx * 3.2, 2.0, 0))))
+	add_child(Look.box(_sz(Vector3(7.0, 3.0, 1.6)), GlacierFx.snow_mat(), _w(c + Vector3(0, 6.2, length * 0.5 + 0.5))))
+	for k: int in 7:
+		add_child(Look.cylinder(0.02, kit.rng.randf_range(0.5, 1.1), GlacierFx.ice_mat(GlacierFx.ICE, 0.7, 0.85),
+			_w(c + Vector3(kit.rng.randf_range(-2.4, 2.4), 3.6, -length * 0.5 + float(k) * length / 6.0)), 0.12, 6))
+	for i: int in 2:
+		deco.lantern(_w(c + Vector3(1.6 * (1.0 if i == 0 else -1.0), 0, -length * 0.3 + float(i) * length * 0.5)), 1.8, i == 0)
+	kit.glow_strip(_w(c + Vector3(0, 0.03, 0)), _sz(Vector3(3.0, 0.05, length - 1.0)), Color(0.3, 0.85, 1.0))
+	var lc: Vector3 = av.to_local(_w(c + Vector3(0, 1.7, 0)))
+	av.add_shelter(lc, Vector3(4.4, 3.6, length))
+
+
+## The avalanche slope itself (decor): the snowfield between the chutes, rock ribs at its sides, the
+## crevasses as glowing slots, the cornice and release line at the top.
+func _avalanche_slope(av: GlacierAvalanche, c1a: float, c1b: float, c2a: float, c2b: float, bottom: float) -> void:
+	var pitch: float = atan(AV_GRADE)
+	var snow: StandardMaterial3D = GlacierFx.snow_mat(0.02)
+	for seg: Vector2 in [Vector2(AV_TOP, c1a), Vector2(c1b, c2a), Vector2(c2b, bottom)]:
+		var zl: float = absf(seg.y - seg.x)
+		var zc: float = (seg.x + seg.y) * 0.5
+		var along: float = zl / cos(pitch)
+		var slab := Look.box(_sz(Vector3(av.width + 6.0, 1.0, along)), snow, _w(Vector3(0, (zc - AV_TOP) * AV_GRADE - 0.9, zc)))
+		slab.rotation = Vector3(-pitch, deg_to_rad(_yaw), 0)
+		add_child(slab)
+		for sx: float in [-1.0, 1.0]:
+			var rib := Look.box(_sz(Vector3(4.0, 8.0, along)), GlacierFx.rock_mat(0.05), _w(Vector3(sx * (av.width * 0.5 + 4.0), (zc - AV_TOP) * AV_GRADE + 1.0, zc)))
+			rib.rotation = slab.rotation
+			add_child(rib)
+	for cz: Vector2 in [Vector2(c1a, c1b), Vector2(c2a, c2b), Vector2(bottom, bottom - 11.0)]:
+		_crevasse(Vector3(0, (cz.x - AV_TOP) * AV_GRADE - 3.0, (cz.x + cz.y) * 0.5), av.width + 6.0, absf(cz.y - cz.x) - 0.6)
+	# the cornice the slides break from, the pass's crest behind it
+	add_child(Look.box(_sz(Vector3(av.width + 10.0, 5.0, 6.0)), snow, _w(Vector3(0, 2.0, AV_TOP + 9.0 + 3.0))))
+	deco.overhang(_w(Vector3(-9.0, 2.5, AV_TOP + 4.0)), Vector3(7.0, 2.0, 3.0), _yaw)
+	deco.overhang(_w(Vector3(9.0, 2.5, AV_TOP + 4.0)), Vector3(7.0, 2.0, 3.0), _yaw)
+	# snow smoking off the slope between waves
+	var sp: GPUParticles3D = GlacierFx.spindrift(_sz(Vector3(av.width, 4.0, 80.0)), _d(Vector3(0.2, 0.3, -1.0)), 18, 4.0)
+	sp.position = _w(Vector3(0, -14.0, -48.0))
+	add_child(sp)
+
+
+## The cave at the foot of the slope: walls and a roof of glowing ice round the checkpoint.
+func _bottom_cave(c: Vector3) -> void:
+	var ice: ShaderMaterial = GlacierFx.glass_mat(1.2, 0.4, 0.92)
+	add_child(Look.box(_sz(Vector3(10.0, 1.6, 9.0)), ice, _w(c + Vector3(0, 6.6, -1.0))))
+	# (open on the +X side: the last stage leaves that way)
+	add_child(Look.box(_sz(Vector3(1.6, 8.0, 9.0)), ice, _w(c + Vector3(-4.2, 3.0, -1.0))))
+	deco.crystals(_w(c + Vector3(-2.6, 0, -3.4)), 1.0, GlacierFx.AURORA_V)
+	deco.crystals(_w(c + Vector3(2.6, 0, -3.4)), 1.0, GlacierFx.AURORA_G)
+	var l := OmniLight3D.new()
+	l.light_color = GlacierFx.GLOW
+	l.light_energy = 2.0
+	l.omni_range = 10.0
+	l.position = _w(c + Vector3(0, 4.0, 0))
+	add_child(l)
+
+
 ## No avalanche front crosses the path line of this gully during [now + a, now + b].
 static func _gully_clear(g: GlacierAvalanche, a: float, b: float) -> bool:
 	var s: float = a
@@ -1474,6 +1690,9 @@ func _restyle_environment() -> void:
 
 # ---- live effects -------------------------------------------------------------------------------------
 
+## The summit's finish bursts and its beacon light (fired by _finish_sequence).
+var _finish_bursts: Array[GPUParticles3D] = []
+var _beacon: OmniLight3D
 ## [exit point, [bursts]] for every aurora gate: fired when the player comes out of it.
 var _portal_bursts: Array[Array] = []
 ## [crusher, powder puff, was_down] for every portcullis: a puff of powder each time it slams.
@@ -1499,6 +1718,26 @@ func _process(_dt: float) -> void:
 		if punching and not bool(rec2[2]):
 			(rec2[1] as GPUParticles3D).restart()
 		rec2[2] = punching
+
+
+## Reaching the beacon: the aurora crown flares, a storm of green and violet glitter, a flash.
+func _finish_sequence() -> void:
+	for b: GPUParticles3D in _finish_bursts:
+		b.restart()
+		b.emitting = true
+	var flash := OmniLight3D.new()
+	flash.light_color = GlacierFx.AURORA_G
+	flash.light_energy = 7.0
+	flash.omni_range = 22.0
+	flash.position = _finish_pos + Vector3(0, 3.0, 0)
+	add_child(flash)
+	var tw: Tween = create_tween()
+	tw.tween_property(flash, "light_energy", 0.0, 1.4)
+	if _beacon != null:
+		var tw2: Tween = create_tween()
+		tw2.tween_property(_beacon, "light_energy", 9.0, 0.3)
+		tw2.tween_property(_beacon, "light_energy", 3.0, 1.2)
+	await get_tree().create_timer(0.9).timeout
 
 
 func _on_teleported() -> void:
