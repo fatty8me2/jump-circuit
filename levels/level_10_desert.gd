@@ -321,7 +321,6 @@ func _build() -> void:
 	_stage_18()
 	_surroundings()
 	_desert_materials()
-	_dev_hooks()
 
 
 # ---- stage 1: Dune Gate - drums over the sand sea, the first spike trap -------------------------
@@ -930,7 +929,6 @@ func _well_panel(x: float, y: float, z0: float, z1: float, height: float = 7.0) 
 func _stage_13() -> Vector3:
 	var hub := Vector3(-3.0, 0, -13.0)
 	var dial: RotatingPlatform = _sundial(hub, 7.0, 0.0)
-	_dev_dial = dial
 	var m: Dictionary = _blk(Vector3(-3.0, 0.5, -26.0), 2.6, 2.6, "alt", 1.0, false)
 	var merge: Dictionary = _blk(Vector3(0, 0.5, -32.6), 14.0, 4.0, "main", 1.0, false)
 	var cp: Dictionary = _cp(Vector3(0, 0.5, -42.0))
@@ -1539,85 +1537,3 @@ func _finish_sequence() -> void:
 		tw2.tween_property(_sun_disc, "scale", Vector3.ONE * 1.15, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		tw2.tween_property(_sun_disc, "scale", Vector3.ONE, 0.6)
 	await get_tree().create_timer(0.9).timeout
-
-
-# ---- dev hooks (temporary) -------------------------------------------------------------------------
-
-var _dev_was_ground: bool = true
-
-
-func _physics_process(dt: float) -> void:
-	super(dt)
-	if player != null and OS.has_environment("DESERT_SPEED"):
-		if _dev_was_ground and not player.grounded:
-			var v: Vector3 = player.velocity
-			print("TAKEOFF at %s speed %.2f vy %.2f" % [str(player.global_position.snapped(Vector3.ONE * 0.01)), Vector2(v.x, v.z).length(), v.y])
-		if not _dev_was_ground and player.grounded:
-			print("LAND at %s" % str(player.global_position.snapped(Vector3.ONE * 0.01)))
-		_dev_was_ground = player.grounded
-		if _boulder != null and not _boulder.is_armed():
-			var gap: float = player.global_position.distance_to(_boulder.to_global(_boulder.position_at(_boulder.elapsed()))) - _boulder.radius
-			if player.is_wall_running() and not _dev_boulder_said:
-				_dev_boulder_said = true
-				print("BOULDER at wall run: e %.2f gap %.2f (ball leaves track at %.2f)" % [_boulder.elapsed(), gap, _boulder.run_time()])
-			if Engine.get_physics_frames() % 30 == 0:
-				print("BOULDER e %.2f gap %.2f player %s" % [_boulder.elapsed(), gap, str(player.global_position.snapped(Vector3.ONE * 0.1))])
-		elif _boulder != null:
-			_dev_boulder_said = false
-		if _dev_dial != null and false:
-			var rel: Vector3 = player.global_position - _dev_dial.global_position
-			print("DIAL t %.2f ang %.2f rel %s floor %s gr %s pv %s v %s" % [Game.course_time, _dev_dial.angle_at(Game.course_time), str(rel.snapped(Vector3.ONE * 0.01)), str(player.floor_body), str(player.grounded), str(player.platform_velocity.snapped(Vector3.ONE * 0.01)), str(player.velocity.snapped(Vector3.ONE * 0.01))])
-
-
-var _dev_dial: RotatingPlatform
-var _dev_boulder_said: bool = false
-
-
-func _dev_hooks() -> void:
-	var from: int = int(OS.get_environment("DESERT_FROM")) if OS.has_environment("DESERT_FROM") else 0
-	if from > 1 and from - 2 < _cp_nodes.size():
-		var marks: Array[int] = []
-		for i: int in route.size():
-			if str(route[i]["kind"]) == "checkpoint":
-				marks.append(i)
-		var cp: Checkpoint = _cp_nodes[from - 2]
-		set_spawn(cp.position + Vector3(0, 0.15, 0), cp.rotation_degrees.y)
-		route = route.slice(marks[from - 2] + 1)
-	if OS.has_environment("DESERT_JUMPS"):
-		get_tree().create_timer(0.4).timeout.connect(_dev_jumps)
-
-
-func _dev_jumps() -> void:
-	var t: MovementTuning = load("res://resources/default_tuning.tres") as MovementTuning
-	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
-	var k: int = 0
-	for s: int in route.size():
-		var step: Dictionary = route[s]
-		if str(step["kind"]) == "checkpoint":
-			k += 1
-		if str(step["kind"]) != "jump" or step.has("to_node"):
-			continue
-		var from: Vector3 = step["from"]
-		var to: Vector3 = step["to"]
-		var flat := Vector3(to.x - from.x, 0, to.z - from.z)
-		var total: float = flat.length()
-		var dir: Vector3 = flat.normalized()
-		var left: bool = false
-		var d: float = 0.0
-		var need := Vector2(total, to.y - from.y)
-		while d <= total:
-			var p: Vector3 = from + dir * d
-			if not left:
-				var q := PhysicsRayQueryParameters3D.create(p + Vector3(0, 0.6, 0), p + Vector3(0, -0.7, 0), 1)
-				if space.intersect_ray(q).is_empty():
-					left = true
-			else:
-				var q2 := PhysicsRayQueryParameters3D.create(Vector3(p.x, to.y + 1.2, p.z), Vector3(p.x, to.y - 0.9, p.z), 1)
-				var hit: Dictionary = space.intersect_ray(q2)
-				if not hit.is_empty():
-					need = Vector2(d + 0.4, (hit["position"] as Vector3).y - from.y)
-					break
-			d += 0.2
-		var v: float = t.max_speed if float(step.get("speed", -1.0)) <= 0.0 else float(step["speed"])
-		var land: Vector3 = Ballistics.landing_point(t, Vector3.ZERO, Vector3(0, t.jump_velocity, -v), need.y)
-		print("JUMP stage %d step %d: need %.2f m dy %.2f -> %.0f%%" % [k + 1, s, need.x, need.y, need.x / absf(land.z) * 100.0])
