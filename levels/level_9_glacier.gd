@@ -8,8 +8,9 @@ extends LevelBase
 ##  1 Trailhead         warm-up hops, the first icicle gate          [shortcut: two 1 m ice pinnacles past the gate]
 ##  2 Crevasse Field    THIN ICE panes over crevasses, a three-pane ice bridge at a run, MANTLE a serac
 ##  3 Icicle Gallery    four blocks under an ice cliff, a cascade of FALLING ICICLES, MANTLE out under a fifth
+##                                            [shortcut: WALL RUN the cliff face past the cascade into the MANTLE]
 ##  4 Ice Chutes        ICE SLIDE off the lip over a crevasse (drop in between two icicles), a second slide
-##                      into a bounce pad at 20 m/s                   [shortcut: wall-run the serac, skip slide 2]
+##                      into a bounce pad at 20 m/s
 ##  5 Blizzard Ridge    BRANCH: knife-edge beams between BLIZZARD GUSTS | WALL RUN the lee cornice, MANTLE
 ##  6 Cathedral Falls   glare-ice stepping stones, then a chimney of three WALL RUNS up the frozen falls + MANTLE
 ##  7 Crystal Grotto    a beam under two frost beams (LASERS), two aurora-crystal BLINKS, MANTLE
@@ -651,7 +652,7 @@ func _stage_9() -> Vector3:
 	var cp: Dictionary = _cp(Vector3(0.4, 3.8, -54.2))
 	# SHORTCUT: a hidden aurora gate on a 1 m knob tucked below the checkpoint's corner (a 90% leap),
 	# out onto the landing past the last pane
-	var hk := Vector3(5.6, -1.0, -9.0)
+	var hk := Vector3(5.3, -1.0, -8.6)
 	_blk(hk, 1.0, 1.0, "accent", 0.6)
 	var exit_c := Vector3(0.4, 3.8, -29.9)
 	kit.portal(_w(hk), _yaw, _w(exit_c), _yaw, 4.0)
