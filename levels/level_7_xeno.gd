@@ -2,7 +2,7 @@ extends LevelBase
 ## 7. XENO WILDS - an alien planet. A bioluminescent jungle on a low-gravity moon: a colossal ringed
 ## gas giant fills the sky, two suns (teal and amber) sit low, auroras ribbon overhead, and the course
 ## climbs through glowing fungi, crystal caverns, acid geysers and the bones of a titan to a black
-## monolith. Eighteen stages, each ending on a checkpoint.
+## monolith. Eighteen stages: seventeen end on a checkpoint, the last at the finish.
 ##
 ##  1 Landing Site     warm-up hops, the first breathing spore cap   [shortcut: mantle the crystal pillar]
 ##  2 Spore Garden     time two breathing caps (big bounce at the swell), MANTLE the shelf fungus
@@ -473,40 +473,8 @@ func _build() -> void:
 		var end: Vector3 = stages[i].call()
 		_frame(_w(end), yaws[i + 1])
 	_stage_18()
-	if OS.has_environment("XENO_DUMP"):
-		for i: int in _cp_world.size():
-			print("XENO cp%d %s" % [i + 1, str(_cp_world[i].snapped(Vector3.ONE * 0.1))])
-		print("XENO finish %s" % str(_finish_pos))
-	_dev_start()
 	_surroundings()
 	_xeno_materials()
-	if OS.has_environment("XENO_DUMP"):
-		var parts: Array[Node] = find_children("*", "GPUParticles3D", true, false)
-		var total: int = 0
-		for p: Node in parts:
-			total += (p as GPUParticles3D).amount
-		print("XENO nodes %d meshes %d emitters %d particles %d lights %d" % [find_children("*", "", true, false).size(),
-			find_children("*", "MeshInstance3D", true, false).size(), parts.size(), total, find_children("*", "Light3D", true, false).size()])
-
-
-## Development aid (never set in normal play): XENO_FROM=<k> spawns on checkpoint k and trims the
-## bot route to start after it, so late stages can be iterated without replaying the whole course.
-func _dev_start() -> void:
-	if not OS.has_environment("XENO_FROM"):
-		return
-	var k: int = int(OS.get_environment("XENO_FROM"))
-	if k <= 0 or k > _cp_world.size():
-		return
-	var seen: int = 0
-	for i: int in route.size():
-		if str(route[i]["kind"]) == "checkpoint":
-			seen += 1
-			if seen == k:
-				route = route.slice(i + 1)
-				break
-	var cps: Array[Node] = find_children("*", "Checkpoint", true, false)
-	var yaw: float = rad_to_deg((cps[k - 1] as Node3D).rotation.y) if k - 1 < cps.size() else 0.0
-	set_spawn(_cp_world[k - 1] + Vector3(0, 0.1, 0), yaw)
 
 
 # ---- stage 1: Landing Site - warm-up hops, the first breathing spore cap ---------------------------
