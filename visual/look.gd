@@ -111,14 +111,17 @@ const THEMES: Dictionary = {
 		"decor": Color(0.62, 0.44, 0.26), "decor2": Color(1.0, 0.74, 0.25), "metal": Color(0.78, 0.58, 0.30),
 		"cloud_light": Color(1.0, 0.92, 0.80), "cloud_shade": Color(0.82, 0.64, 0.48),
 	},
+	# Phantom Manor: a haunted manor and its graveyard at midnight under a blood moon - weathered
+	# grey-violet stone, oak floorboards inside, ectoplasm-green trims, blood-red accents.
+	# (levels/level_11_manor.gd swaps in its own blood-moon sky, moonlight and stone/oak shader.)
 	"manor": {
-		"sky_top": Color(0.03, 0.02, 0.06), "sky_horizon": Color(0.30, 0.08, 0.12), "sky_bottom": Color(0.05, 0.04, 0.08),
-		"sun": Color(0.90, 0.40, 0.40), "sun_energy": 0.8, "sun_rot": Vector3(-30, 140, 0),
-		"ambient": Color(0.45, 0.40, 0.60), "ambient_energy": 0.8, "fog": Color(0.10, 0.08, 0.14), "fog_density": 0.004,
-		"top": Color(0.55, 0.52, 0.58), "side": Color(0.22, 0.18, 0.26), "trim": Color(0.60, 1.0, 0.70),
-		"alt_top": Color(0.42, 0.36, 0.48), "accent": Color(0.60, 1.0, 0.70), "accent2": Color(0.90, 0.30, 0.35),
-		"decor": Color(0.18, 0.14, 0.22), "decor2": Color(0.90, 0.85, 0.70), "metal": Color(0.6, 0.6, 0.65),
-		"cloud_light": Color(0.50, 0.45, 0.60), "cloud_shade": Color(0.12, 0.10, 0.18),
+		"sky_top": Color(0.02, 0.01, 0.04), "sky_horizon": Color(0.20, 0.08, 0.16), "sky_bottom": Color(0.035, 0.03, 0.05),
+		"sun": Color(1.0, 0.50, 0.44), "sun_energy": 1.1, "sun_rot": Vector3(-17, 163, 0),
+		"ambient": Color(0.50, 0.44, 0.70), "ambient_energy": 0.85, "fog": Color(0.20, 0.14, 0.26), "fog_density": 0.0055,
+		"top": Color(0.60, 0.56, 0.64), "side": Color(0.24, 0.20, 0.28), "trim": Color(0.55, 1.0, 0.62),
+		"alt_top": Color(0.50, 0.42, 0.56), "accent": Color(0.55, 1.0, 0.62), "accent2": Color(1.0, 0.30, 0.30),
+		"decor": Color(0.18, 0.14, 0.22), "decor2": Color(0.85, 0.80, 0.68), "metal": Color(0.50, 0.46, 0.52),
+		"cloud_light": Color(0.50, 0.30, 0.40), "cloud_shade": Color(0.10, 0.08, 0.14),
 	},
 	"armada": {
 		"sky_top": Color(0.08, 0.10, 0.16), "sky_horizon": Color(0.40, 0.44, 0.52), "sky_bottom": Color(0.20, 0.22, 0.28),
