@@ -13,7 +13,11 @@ const LEVELS: Array[Dictionary] = [
 	{"id": "volcano", "name": "Cinder Peak", "scene": "res://levels/level_8_volcano.tscn", "blurb": "The mountain is erupting. Outclimb the lava, dodge the bombs."},
 	{"id": "glacier", "name": "Frostbite Pass", "scene": "res://levels/level_9_glacier.tscn", "blurb": "An ice fortress in a blizzard. Mind the icicles, outrun the avalanche."},
 	{"id": "desert", "name": "Scarab Sands", "scene": "res://levels/level_10_desert.tscn", "blurb": "Dunes, mirages and a sun temple full of traps. When the plate clicks, run."},
-	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_11_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon."},
+	{"id": "manor", "name": "Phantom Manor", "scene": "res://levels/level_11_manor.tscn", "blurb": "A haunted mansion under a blood moon. Not everything solid stays solid."},
+	{"id": "armada", "name": "Storm Armada", "scene": "res://levels/level_12_armada.tscn", "blurb": "Ship to ship through a thunderstorm. Mind the cannons."},
+	{"id": "candy", "name": "Sugar Rush", "scene": "res://levels/level_13_candy.tscn", "blurb": "A candy dreamworld. Sweet, bouncy, merciless."},
+	{"id": "carrier", "name": "Super Carrier", "scene": "res://levels/level_14_carrier.tscn", "blurb": "Stem to stern through a supercarrier, then up the island to the top."},
+	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_15_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon."},
 ]
 const TITLE_SCENE: String = "res://ui/title.tscn"
 ## Party Mode actions and their default bindings (Settings can rebind the key / mouse and pad
