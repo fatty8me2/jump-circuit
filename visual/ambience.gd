@@ -326,6 +326,31 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"radius": 75.0, "color": Color(0.95, 0.76, 0.52, 0.35), "speed": Vector2(3.0, 6.0), "dir": Vector3(1, 0.05, 0.25),
 					"spread": 12.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
 			]
+		"carrier":
+			return [
+				# near: salt spray whipped aft on the wind over the deck, sunlit glints of spray
+				{"depth": "near", "amount": 170, "lifetime": 1.4, "facing": "velocity", "tex": Fx.Tex.SPARK, "additive": false,
+					"size": Vector2(0.025, 0.28), "color": Color(0.92, 0.96, 1.0, 0.6), "dir": Vector3(0.1, 0.05, 1.0),
+					"spread": 8.0, "speed": Vector2(6.0, 10.0), "gravity": Vector3(0, -0.6, 0),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 90, "lifetime": 2.6, "tex": Fx.Tex.DOT, "size": 0.08,
+					"color": Color(2.0, 2.1, 2.3), "speed": Vector2(0.2, 0.8), "dir": Vector3(0, 0.1, 1), "spread": 60.0,
+					"gravity": Vector3(0, 0.05, 0.6), "turbulence": 0.7, "curve": "pop"},
+				# mid: wisps of steam and haze drifting aft, and bright specks of spray
+				{"depth": "mid", "amount": 45, "lifetime": 5.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 2.8,
+					"color": Color(0.96, 0.97, 1.0, 0.16), "dir": Vector3(0.05, 0.1, 1), "spread": 18.0,
+					"speed": Vector2(3.0, 5.0), "turbulence": 0.8, "angle": Vector2(0, 360), "spin": Vector2(-25, 25),
+					"curve": "puff", "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 80, "lifetime": 3.5, "tex": Fx.Tex.STAR, "size": 0.3,
+					"color": Color(2.2, 2.3, 2.5), "speed": Vector2(0.4, 1.2), "dir": Vector3(0, 0, 1), "spread": 60.0, "curve": "pop"},
+				# far: sheets of sea haze streaming past, and seabirds wheeling far off
+				{"depth": "far", "amount": 40, "lifetime": 10.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 16.0,
+					"radius": 80.0, "color": Color(0.9, 0.94, 1.0, 0.25), "speed": Vector2(2.0, 4.0), "dir": Vector3(0.1, 0.02, 1),
+					"spread": 12.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 24, "lifetime": 9.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.9, "radius": 70.0,
+					"color": Color(0.2, 0.22, 0.25, 0.8), "speed": Vector2(2.0, 4.0), "dir": Vector3(1, 0.05, 0.3), "spread": 60.0,
+					"turbulence": 1.2, "angle": Vector2(80, 100), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking
