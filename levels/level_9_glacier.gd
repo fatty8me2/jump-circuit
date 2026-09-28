@@ -28,7 +28,7 @@ extends LevelBase
 ## 15 Tower of Rime     MANTLES up the tower under falling icicles, WALL RUN its face, a last MANTLE
 ## 16 Avalanche Couloirs down an ICE SLIDE off the tower, across three avalanche gullies between the slides,
 ##                      ducking into an ice cave in the widest
-## 17 THE AVALANCHE     the set piece: the whole slope lets go every 3.5 s. Drop in behind a wave, race the
+## 17 THE AVALANCHE     the set piece: the whole slope lets go every 6 s. Drop in behind a wave, race the
 ##                      chutes to the ice cave halfway before the next one, let it thunder over you, then the
 ##                      THIN ICE bridge, the last chute and a leap over the bergschrund into the bottom cave
 ## 18 Summit of the Pass thin ice to a dripping spur, stepping stones in the summit GUST, WALL RUN the summit
@@ -1037,21 +1037,22 @@ func _stage_16() -> Vector3:
 	var y: float = -7.0
 	var a: Dictionary = _ridge_block(Vector3(0, y, -31.0), 5.0, 6.0)
 	# gully 1
-	var g1: GlacierAvalanche = _couloir(-43.0, 18.0, y, 4.2, 0.0)
-	var k1: Dictionary = _stone(Vector3(0.4, y, -39.7), 1.8)
-	var k2: Dictionary = _stone(Vector3(-0.4, y, -46.3), 1.8)
+	# (each gully slides every 6-6.5 s, staggered, with a long cracking warning: about 5 s to cross)
+	var g1: GlacierAvalanche = _couloir(-43.0, 18.0, y, 6.5, 0.0)
+	var k1: Dictionary = _stone(Vector3(0.4, y, -39.7), 2.4)
+	var k2: Dictionary = _stone(Vector3(-0.4, y, -46.3), 2.4)
 	var b: Dictionary = _ridge_block(Vector3(0, y, -55.0), 4.0, 6.0)
 	# gully 2
-	var g2: GlacierAvalanche = _couloir(-67.0, 18.0, y, 4.2, 0.45)
-	var k3: Dictionary = _stone(Vector3(0.5, y, -63.7), 1.8)
-	var k4: Dictionary = _stone(Vector3(-0.3, y, -70.3), 1.8)
+	var g2: GlacierAvalanche = _couloir(-67.0, 18.0, y, 6.5, 0.33)
+	var k3: Dictionary = _stone(Vector3(0.5, y, -63.7), 2.4)
+	var k4: Dictionary = _stone(Vector3(-0.3, y, -70.3), 2.4)
 	var c: Dictionary = _ridge_block(Vector3(0, y, -79.0), 4.0, 6.0)
 	# gully 3: the widest - an ice cave in the middle to duck into while a slide goes over
-	var g3: GlacierAvalanche = _couloir(-95.4, 26.8, y, 3.4, 0.2)
-	var k5: Dictionary = _stone(Vector3(0.4, y, -87.7), 1.8)
+	var g3: GlacierAvalanche = _couloir(-95.4, 26.8, y, 6.0, 0.66)
+	var k5: Dictionary = _stone(Vector3(0.4, y, -87.7), 2.4)
 	var cave: Dictionary = _stone(Vector3(0, y, -95.4), 4.0)
 	_ice_cave(g3, Vector3(0, y, -95.4))
-	var k6: Dictionary = _stone(Vector3(-0.4, y, -103.1), 1.8)
+	var k6: Dictionary = _stone(Vector3(-0.4, y, -103.1), 2.4)
 	var cp: Dictionary = _cp(Vector3(0, y, -111.8))
 	# down the chute and off the lip onto the first ridge
 	r_walk(_w(Vector3(0, 0, -2.2)))
@@ -1096,10 +1097,12 @@ func _stage_17() -> Vector3:
 	av.width = 22.0
 	av.height = 7.5
 	av.depth = 4.0
-	av.period = 3.5
-	av.run_time = 2.8
-	av.start_frac = 0.35
-	av.warn = 0.7
+	# one wave every 6 s (it was 3.5 s, waves nearly back to back): a 1.6 s crack-and-rumble warning,
+	# a gentler build-up, and time to reach the shelter and the bottom cave with slack to spare
+	av.period = 6.0
+	av.run_time = 3.0
+	av.start_frac = 0.45
+	av.warn = 1.6
 	av.thickness = 3.0
 	av.position = _w(Vector3(0, 0, AV_TOP))
 	av.rotation_degrees.y = _yaw
@@ -1116,7 +1119,10 @@ func _stage_17() -> Vector3:
 	# the thin-ice bridge over the second crevasse, run off its end onto chute 3
 	var panes: Array[Dictionary] = []
 	for i: int in 3:
-		panes.append(_thin(Vector3(0, shelf_y, -63.65 - 3.3 * float(i)), 2.4, 3.3, 0.5, 2.4))
+		panes.append(_thin(Vector3(0, shelf_y, -63.65 - 3.3 * float(i)), 2.4, 3.3, 0.8, 2.4))
+	# a snow berm across the shelter's downhill end: you arrive off chute 2 at 20 m/s, and the berm
+	# stops you in the cave instead of carrying you out onto the bridge under the next wave
+	kit.plat(_w(Vector3(0, shelf_y + 0.8, -61.7)), Vector3(4.0, 0.8, 0.6), "alt", 0.0, _yaw)
 	var s3_top := Vector3(0, float(ys.call(-76.0)), -76.0)
 	_slide(s3_top, 14.0 / cos(deg_to_rad(pitch)), pitch, 3.2)
 	var lip3: Vector3 = _slide_end(s3_top, 14.0 / cos(deg_to_rad(pitch)), pitch)
@@ -1138,6 +1144,8 @@ func _stage_17() -> Vector3:
 	_wait(func() -> bool:
 		var z: float = av.front_z_at(Game.course_time)
 		return not is_nan(z) and z < -64.0 and z > -80.0)
+	r_walk(_w(Vector3(0, shelf_y, -60.9)))
+	r_jump(_w(Vector3(0, shelf_y, -60.9)), _w(Vector3(0, shelf_y, -65.2)))
 	r_walk(_w(Vector3(0, shelf_y, -71.4)))
 	r_walk(_w(s3_top + Vector3(0, -1.5, -4.5)))
 	r_jump(_w(lip3 + Vector3(0, 0, 0.6)), _w(cp_c + Vector3(0, 0, 1.0)))
@@ -1155,15 +1163,17 @@ func _stage_17() -> Vector3:
 func _stage_18() -> void:
 	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
 	var b0: Dictionary = _blk(Vector3(0, 0.6, -8.6), 2.0, 2.0)
-	var p1: Dictionary = _thin(Vector3(1.6, 1.2, -14.6), 1.8, 1.8, 0.55, 2.4)
-	var p2: Dictionary = _thin(Vector3(-0.2, 1.8, -20.6), 1.8, 1.8, 0.55, 2.4)
-	var b1: Dictionary = _blk(Vector3(1.4, 2.4, -26.6), 2.0, 2.0, "alt")
-	var ic: GlacierIcicle = _icicle(Vector3(1.4, 2.4, -26.6), 5.6, 3.2, 0.0, 1.1)
-	deco.overhang(_w(Vector3(2.8, 2.4 + 5.6 + 1.8, -26.6)), Vector3(6.0, 1.4, 4.0), _yaw)
+	var p1: Dictionary = _thin(Vector3(1.6, 1.2, -14.6), 2.2, 2.2, 0.8, 2.4)
+	var p2: Dictionary = _thin(Vector3(-0.2, 1.8, -20.6), 2.2, 2.2, 0.8, 2.4)
+	# the dripping spur: the icicle hangs over its near lip only; the far half is a safe place to
+	# wait out the summit gust (it used to drip on the whole block you had to wait on)
+	var b1: Dictionary = _blk(Vector3(1.4, 2.4, -27.2), 2.6, 3.8, "alt")
+	var ic: GlacierIcicle = _icicle(Vector3(1.4, 2.4, -26.0), 5.6, 3.2, 0.0, 0.9)
+	deco.overhang(_w(Vector3(2.8, 2.4 + 5.6 + 1.8, -26.0)), Vector3(6.0, 1.4, 3.0), _yaw)
 	add_child(Look.box(_sz(Vector3(3.0, 40.0, 5.0)), GlacierFx.rock_mat(0.05), _w(Vector3(6.4, -9.0, -26.6))))
-	var b2: Dictionary = _blk(Vector3(-0.6, 3.0, -32.8), 1.5, 1.5)
+	var b2: Dictionary = _blk(Vector3(-0.6, 3.0, -32.8), 2.2, 2.2)
 	var b3: Dictionary = _blk(Vector3(1.2, 3.6, -38.6), 2.4, 3.0, "alt")
-	var gust: GlacierGust = _gust(Vector3(1.0, 5.0, -32.6), Vector3(14.0, 10.0, 8.8), Vector3(30, 0, 0), 3.2, 0.3, 0.8, 0.4)
+	var gust: GlacierGust = _gust(Vector3(1.0, 5.0, -32.6), Vector3(14.0, 10.0, 8.8), Vector3(30, 0, 0), 4.6, 0.3, 0.8, 0.4)
 	var dz: float = -1.8
 	_panel(3.5, 4.8, -39.8 + dz, -55.8 + dz, 6.5)
 	var l: Dictionary = _blk(Vector3(0.8, 3.6, -60.8 + dz), 3.6, 5.0, "alt")
@@ -1176,7 +1186,7 @@ func _stage_18() -> void:
 	_wait(func() -> bool: return _ice_ok([ic], 1.2, 3.0))
 	_hop(b0, p1)
 	_hop(p1, p2)
-	_hop(p2, b1)
+	_hop(p2, b1, Vector3(0, 0, -1.2))
 	for pair: Array in [[b1, b2], [b2, b3]]:
 		var a: Dictionary = pair[0]
 		var b: Dictionary = pair[1]
@@ -1257,7 +1267,7 @@ func _shelter_cave(av: GlacierAvalanche, c: Vector3, length: float) -> void:
 		deco.lantern(_w(c + Vector3(1.6 * (1.0 if i == 0 else -1.0), 0, -length * 0.3 + float(i) * length * 0.5)), 1.8, i == 0)
 	kit.glow_strip(_w(c + Vector3(0, 0.03, 0)), _sz(Vector3(3.0, 0.05, length - 1.0)), Color(0.3, 0.85, 1.0))
 	var lc: Vector3 = av.to_local(_w(c + Vector3(0, 1.7, 0)))
-	av.add_shelter(lc, Vector3(4.4, 3.6, length))
+	av.add_shelter(lc, Vector3(4.4, 3.6, length), av.to_local(_w(c + Vector3(0, 6.0, 0))).y)
 
 
 ## The avalanche slope itself (decor): the snowfield between the chutes, rock ribs at its sides, the
@@ -1328,8 +1338,10 @@ func _couloir(zc: float, width: float, path_y: float, period: float, phase: floa
 	g.depth = 6.0
 	g.period = period
 	g.phase = phase
-	g.run_time = minf(3.4, period - 1.3)
-	g.warn = minf(1.3, period - g.run_time)
+	g.run_time = minf(3.0, period - 1.6)
+	g.warn = minf(1.6, period - g.run_time)
+	# the kill zone stops short of the ridges at either side (standing at a ridge's edge is safe)
+	g.width = width - 1.2
 	# the slope surface runs 3 m under the stepping stones where the path crosses
 	g.position = _w(Vector3(up, path_y - 3.0 + up * grade, zc))
 	g.rotation_degrees.y = _yaw + 90.0
@@ -1340,13 +1352,19 @@ func _couloir(zc: float, width: float, path_y: float, period: float, phase: floa
 	var sn := Look.box(Vector3(width, 1.0, slope_len), GlacierFx.snow_mat(0.04), Vector3(0, -g.drop * 0.5 - 0.5, -g.length * 0.5))
 	sn.rotation.x = -atan(grade)
 	g.add_child(sn)
-	for sx: float in [-1.0, 1.0]:
-		var fin := Look.box(Vector3(3.0, 7.0, slope_len), GlacierFx.rock_mat(0.05), Vector3(sx * (width * 0.5 + 1.5), -g.drop * 0.5 + 1.5, -g.length * 0.5))
-		fin.rotation.x = -atan(grade)
-		g.add_child(fin)
-		var cap := Look.box(Vector3(3.4, 0.6, slope_len), GlacierFx.snow_mat(), Vector3(sx * (width * 0.5 + 1.5), -g.drop * 0.5 + 5.2, -g.length * 0.5))
-		cap.rotation.x = -atan(grade)
-		g.add_child(cap)
+	# rock fins at the sides, broken where the path crosses (they stood up through the ridges
+	# and the checkpoint)
+	var slant: float = sqrt(1.0 + grade * grade)
+	for seg: Vector2 in [Vector2(0.0, -up + 4.0), Vector2(-up - 4.0, -g.length)]:
+		var fz: float = (seg.x + seg.y) * 0.5
+		var seg_len: float = (seg.x - seg.y) * slant
+		for sx: float in [-1.0, 1.0]:
+			var fin := Look.box(Vector3(3.0, 7.0, seg_len), GlacierFx.rock_mat(0.05), Vector3(sx * (width * 0.5 + 1.5), fz * grade + 1.5, fz))
+			fin.rotation.x = -atan(grade)
+			g.add_child(fin)
+			var cap := Look.box(Vector3(3.4, 0.6, seg_len), GlacierFx.snow_mat(), Vector3(sx * (width * 0.5 + 1.5), fz * grade + 5.2, fz))
+			cap.rotation.x = -atan(grade)
+			g.add_child(cap)
 	var cornice := Look.box(Vector3(width + 4.0, 3.0, 4.0), GlacierFx.snow_mat(), Vector3(0, 1.0, 2.2))
 	g.add_child(cornice)
 	g.add_child(Look.box(Vector3(width + 3.0, 1.2, 2.0), GlacierFx.glass_mat(0.9, 0.3, 0.9), Vector3(0, 0.0, 0.9)))
@@ -1388,8 +1406,9 @@ func _ice_cave(g: GlacierAvalanche, c: Vector3) -> void:
 	l.omni_range = 6.0
 	l.position = _w(c + Vector3(0, 2.0, 0))
 	add_child(l)
+	kit.glow_strip(_w(c + Vector3(0, 0.03, 0)), _sz(Vector3(3.0, 0.05, 3.0)), Color(0.3, 0.85, 1.0))
 	var lc: Vector3 = g.to_local(_w(c + Vector3(0, 1.6, 0)))
-	g.add_shelter(lc, Vector3(4.6, 3.4, 4.6))
+	g.add_shelter(lc, Vector3(4.6, 3.4, 4.6), g.to_local(_w(c + Vector3(0, 5.8, 0))).y)
 
 
 ## A portcullis block: a crusher dressed as a slab of iron-banded ice dropping in the gate

@@ -30,6 +30,8 @@ const CRACK := Color(1.0, 0.35, 0.45)
 
 ## Shelters in local space.
 var shelters: Array[AABB] = []
+## Local y of each shelter's roof top (the wave's look rides up over it instead of clipping through).
+var _roofs: Array[float] = []
 ## Local z where the course crosses the slope (set by the level; used by timing checks).
 var path_lz: float = 0.0
 
@@ -56,8 +58,21 @@ func _ready() -> void:
 	_roar = WorldAudio.loop("avalanche_roar", _front, 0.0, 70.0, 12.0, is_running_at(Game.course_time))
 
 
-func add_shelter(local_center: Vector3, size: Vector3) -> void:
+func add_shelter(local_center: Vector3, size: Vector3, roof_top: float = NAN) -> void:
 	shelters.append(AABB(local_center - size * 0.5, size))
+	_roofs.append(roof_top if not is_nan(roof_top) else local_center.y + size.y * 0.5 + 2.4)
+
+
+## Visual only: how far to lift the wall at front z so it pours over the shelter roofs.
+func _roof_lift(z: float) -> float:
+	var lift: float = 0.0
+	for i: int in shelters.size():
+		var a: AABB = shelters[i]
+		var dist: float = maxf(maxf(a.position.z - z, z - a.end.z), 0.0)
+		var w: float = clampf(1.0 - dist / 5.0, 0.0, 1.0)
+		if w > 0.0:
+			lift = maxf(lift, smoothstep(0.0, 1.0, w) * (_roofs[i] - surface_y(z) + 0.2))
+	return lift
 
 
 func snap_to_clock() -> void:
@@ -206,7 +221,7 @@ func _apply(t: float) -> void:
 	_front.visible = running
 	if running:
 		var k: float = s / run_time
-		_front.position = Vector3(0, surface_y(z), z)
+		_front.position = Vector3(0, surface_y(z) + _roof_lift(z), z)
 		# the wall grows out of the cornice in the first moments and churns faster as it speeds up
 		var grow: float = clampf(s / 0.45, 0.2, 1.0)
 		_front.scale = Vector3(1.0, grow, 1.0)
