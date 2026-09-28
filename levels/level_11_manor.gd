@@ -25,8 +25,9 @@ extends LevelBase
 ##  9 Portrait Gallery the ancestors' GAZE sweeps the gallery whenever their eyes open - cross
 ##                    while they are shut  [shortcut: MANTLE the sideboard, step through its
 ##                    MIRROR (PORTAL) to the far end]
-## 10 Dining Hall     along the table: a carousel of possessed chairs (SWEEPER), a candle
-##                    tripwire (LASER), the armoire's ram (PISTON)
+## 10 Dining Hall     along the table: a carousel of possessed chairs (SWEEPER) whirling across it -
+##                    run behind a row as it sweeps past - a candle tripwire (LASER), the armoire's
+##                    ram (PISTON)
 ## 11 The Chapel      PHANTOM PEWS over the crypt, a COFFIN LID (CRUSHER) in the nave, MANTLE the altar
 ## 12 THE GRAND BALLROOM  ride a WALTZING GHOST COUPLE round the fallen dance floor, then the
 ##                    GREAT CHANDELIER on 16 m of chain across the hall
@@ -310,6 +311,31 @@ static func _phantoms_ok(ps: Array[ManorPhantom], starts: Array[float], a: float
 	return true
 
 
+## Running from `p0` to `p1` (starting any time up to `late` s from now, at 7.5 - 9.5 m/s) stays
+## clear of every bar of sweeper `sw` (their full length, at the bar's thickness plus a margin).
+static func _sweep_clear(sw: Sweeper, p0: Vector3, p1: Vector3, late: float) -> bool:
+	var d := Vector3(p1.x - p0.x, 0, p1.z - p0.z)
+	var total: float = d.length()
+	d = d / total
+	var hub := Vector2(sw.global_position.x, sw.global_position.z)
+	var delay: float = 0.0
+	while delay <= late + 0.001:
+		for speed: float in [7.5, 9.5]:
+			var s: float = 0.0
+			while s <= delay + total / speed + 0.4:
+				var along: float = clampf(speed * (s - delay) - 0.2, 0.0, total)
+				var p := Vector2(p0.x + d.x * along, p0.z + d.z * along)
+				for i: int in sw.bar_count:
+					var a: float = sw.angle_at(Game.course_time + s) + TAU * float(i) / float(sw.bar_count)
+					var dir := Vector2(cos(a), -sin(a))
+					var near: Vector2 = Geometry2D.get_closest_point_to_segment(p, hub + dir * 0.3, hub + dir * (0.3 + sw.arm_length))
+					if near.distance_to(p) < 0.8:
+						return false
+				s += 0.02
+		delay += 0.25
+	return true
+
+
 ## The beam stays dark over the whole window [now + a, now + b].
 static func _dark(g: LaserGate, a: float, b: float) -> bool:
 	var s: float = a
@@ -335,20 +361,6 @@ static func _press_ok(c: Crusher, a: float, b: float) -> bool:
 		if c.gap_at(Game.course_time + s) < 2.0 or not c.is_clear_for(Game.course_time + s, 0.0):
 			return false
 		s += 0.04
-	return true
-
-
-## No sweeper bar comes within `min_ang` (rad) of world point `p` during [now + a, now + b].
-static func _bars_far(sw: Sweeper, p: Vector3, a: float, b: float, min_ang: float) -> bool:
-	var rel: Vector3 = p - sw.global_position
-	var me: float = atan2(-rel.z, rel.x)
-	var s: float = a
-	while s <= b:
-		for i: int in sw.bar_count:
-			var bar: float = sw.angle_at(Game.course_time + s) + TAU * float(i) / float(sw.bar_count)
-			if absf(wrapf(me - bar, -PI, PI)) < min_ang:
-				return false
-		s += 0.05
 	return true
 
 
@@ -554,11 +566,11 @@ func _stage_4() -> Vector3:
 	_hop(w2, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	# open graves either side, the dead trees
-	for i: int in 5:
+	for i: int in 4:
 		var sx: float = -1.0 if i % 2 == 0 else 1.0
-		_isle(Vector3(sx * kit.rng.randf_range(5.5, 7.5), kit.rng.randf_range(-4.0, -1.0), -5.0 - float(i) * 6.0), 1.0)
+		_isle(Vector3(sx * kit.rng.randf_range(5.5, 7.5), kit.rng.randf_range(-4.0, -1.0), -4.0 - float(i) * 5.0), 1.0)
 	deco.dead_tree(_w(Vector3(15.0, -16.0, -20.0)), 20.0, 1.2)
-	deco.dead_tree(_w(Vector3(-14.0, -14.0, -28.0)), 16.0, 2.6)
+	deco.dead_tree(_w(Vector3(-14.0, -16.0, -6.0)), 16.0, 2.6)
 	w1.clear()
 	return cp["c"]
 
@@ -658,14 +670,14 @@ func _stage_6() -> Vector3:
 	r_mantle(_w(Vector3(0, 3.3, -13.35)), _w(Vector3(0, 6.6, -16.8)))
 	r_mantle(_w(Vector3(0, 6.6, -17.0)), _w(Vector3(0, 9.9, -20.4)))
 	_hop(_area(Vector3(0, 9.9, -21.0), 1.8, 1.7), terrace, Vector3(0, 0, 2.6))
-	_wait(func() -> bool: return _ram_clear(ram, 0.0, 1.55), _w(Vector3(0, 9.9, -26.8)))
+	_wait(func() -> bool: return _ram_clear(ram, 0.0, 1.8), _w(Vector3(0, 9.9, -26.8)))
 	r_walk(_w(Vector3(0, 9.9, -32.2)))
 	_hop(terrace, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	# the cliff the stair climbs, far down in the fog, and angels at its foot
 	deco.cliff(_w(Vector3(0, -21.0, -24.0)), _sz(Vector3(22.0, 30.0, 6.0)))
 	for sx: float in [-1.0, 1.0]:
-		deco.angel(_w(Vector3(sx * 4.0, 0, -9.5)), _ry(), 0.8)
+		deco.angel(_w(Vector3(sx * 2.4, 0, -9.9)), _ry(), 0.7)
 		deco.lamp_post(_w(Vector3(sx * 2.2, 9.9, -24.9)), 3.0, sx > 0.0)
 	l0.clear()
 	return cp["c"]
@@ -703,7 +715,7 @@ func _stage_7() -> Vector3:
 	var kinds: Array[String] = ["table", "armoire", "piano", "chest"]
 	var ph: Array[ManorPhantom] = []
 	for i: int in pz.size():
-		ph.append(_phantom(pz[i], 2.3, 2.2, kinds[i], 4.0, 0.65, fposmod(-0.1875 * float(i), 1.0)))
+		ph.append(_phantom(pz[i], 2.3, 2.2, kinds[i], 4.0, 0.65, fposmod(-0.2125 * float(i), 1.0)))
 	var merge: Dictionary = _blk(Vector3(0, 1.2, -42.8), 12.0, 4.0, "main", 1.0, false)
 	# RIGHT (violet): up the grand staircase (two landings), along the rotten balcony, down
 	_ledge(Vector3(4.0, 3.3, -13.6), Vector3(3.0, 14.0, 3.2), "alt")
@@ -720,8 +732,10 @@ func _stage_7() -> Vector3:
 	_hop(cp0, fork, Vector3(0, 0, 0.6))
 	if route_variant != 1:
 		r_walk(_w(Vector3(-3.5, 0, -8.4)))
-		var starts: Array[float] = [0.6, 1.35, 2.1, 2.85]
-		_wait(func() -> bool: return _phantoms_ok(ph, starts, -0.1, 1.55))
+		# (measured: the bot lands on each piece ~0.97 / 1.81 / 2.65 / 3.53 s after it sets off, and is
+		# off it ~0.3 s later; each window covers that plus a full second of hesitation)
+		var starts: Array[float] = [0.87, 1.71, 2.55, 3.43]
+		_wait(func() -> bool: return _phantoms_ok(ph, starts, 0.0, 1.5))
 		var prev: Dictionary = _area(Vector3(-3.5, 0, -8.0), 1.5, 2.0)
 		for i: int in pz.size():
 			var m: Dictionary = _area(pz[i], 1.15, 1.1)
@@ -924,20 +938,13 @@ func _mirror(entry: Vector3, yaw_off: float, exit_l: Vector3, exit_yaw_off: floa
 		n.rotation.y = yaw
 		add_child(n)
 		var gold: StandardMaterial3D = Look.flat(Color(0.7, 0.54, 0.24), 0.3, 0.9)
-		var tm := TorusMesh.new()
-		tm.inner_radius = 1.5
-		tm.outer_radius = 1.72
-		tm.rings = 40
-		tm.ring_segments = 8
-		var frame := Look.mesh_node(tm, gold, Vector3(0, 1.5, 0.05))
-		frame.rotation.x = PI * 0.5
-		frame.scale = Vector3(1.0, 1.0, 1.25)
-		n.add_child(frame)
-		n.add_child(Look.sphere(0.2, gold, Vector3(0, 3.55, 0.05)))
-		var glass := Look.cylinder(1.5, 0.04, Look.flat(Color(0.5, 0.6, 0.8, 0.25), 0.05, 0.9), Vector3(0, 1.5, 0.16), -1.0, 32)
-		glass.rotation.x = PI * 0.5
-		glass.scale = Vector3(1.0, 1.0, 1.25)
-		n.add_child(_ns(glass))
+		for sx: float in [-1.0, 1.0]:
+			n.add_child(Look.box(Vector3(0.22, 3.4, 0.3), gold, Vector3(sx * 1.62, 1.7, 0.05)))
+			n.add_child(Look.sphere(0.16, gold, Vector3(sx * 1.62, 3.5, 0.05)))
+		n.add_child(Look.box(Vector3(3.46, 0.26, 0.3), gold, Vector3(0, 3.3, 0.05)))
+		var crest := Look.cylinder(0.5, 0.2, gold, Vector3(0, 3.62, 0.05), -1.0, 16)
+		crest.rotation.x = PI * 0.5
+		n.add_child(crest)
 		ManorFx.rising(self, _w(pos), 1.0, 3.0, VIOLET, 14)
 	_arrival(exit_l, VIOLET)
 	return p
@@ -954,19 +961,28 @@ func _arrival(at: Vector3, col: Color) -> void:
 
 func _stage_10() -> Vector3:
 	var table: Dictionary = _blk(Vector3(0, 0.6, -22.0), 3.4, 30.0, "alt", 1.0, false)
-	var sw: Sweeper = _chairs(Vector3(0, 0.6, -14.0), 3.4, 2, 3.4, 0.0)
+	# the carousel stands on a pedestal beside the table; its two rows of chairs sweep along the
+	# table away from you - let a row go by, run along behind it, and be off before the next comes
+	kit.block(_w(Vector3(3.0, 0.1, -14.0)), Vector3(1.4, 1.0, 1.4), ManorDecor.STONE_DARK, true, _yaw)
+	_pier(Vector3(3.0, -0.4, -14.0), 1.2, 1.2)
+	var sw: Sweeper = _chairs(Vector3(3.0, 0.6, -14.0), 4.6, 2, -5.0, 0.0)
 	var tw: LaserGate = _tripwire(Vector3(0, 0.6, -25.0), 2.8, 4.0, 0.4, 0.5, 2.4, true)
 	var ram: Piston = kit.piston(_w(Vector3(3.3, 1.9, -31.0)), Vector3(1.8, 1.3, 1.4), _yaw + 90.0, 3.6, 4.6, 0.2, 8.0)
 	kit.block(_w(Vector3(3.5, 0.1, -31.0)), Vector3(2.0, 1.0, 2.0), ManorDecor.STONE_DARK, true, _yaw)
 	var cp: Dictionary = _cp(Vector3(0, 0.6, -43.5))
 	_room(-43.5, -11.0, 14.0)
 	r_jump(_w(Vector3(0, 0, -2.65)), _w(Vector3(0, 0.6, -8.2)))
-	# across the carousel, round its hub (hopping every row of chairs as it comes)
-	route.append({"kind": "b_sweep", "to": _w(Vector3(-1.1, 0.6, -13.6)), "sweeper": sw, "tol": 0.5})
-	route.append({"kind": "b_sweep", "to": _w(Vector3(0, 0.6, -18.6)), "sweeper": sw, "tol": 0.5})
+	# across the carousel: wait for a row of chairs to sweep past, then run along behind it (the
+	# check allows for starting anywhere up to a second late, at any pace from 7.5 to 9.5 m/s)
+	var c0: Vector3 = _w(Vector3(0, 0.6, -9.0))
+	var c1: Vector3 = _w(Vector3(0, 0.6, -19.4))
+	r_walk(c0)
+	_wait(func() -> bool: return _sweep_clear(sw, c0, c1, 1.0), c0)
+	r_walk(c1)
+	r_walk(_w(Vector3(0, 0.6, -23.4)))
 	_wait(func() -> bool: return _dark(tw, 0.05, 1.55), _w(Vector3(0, 0.6, -23.4)))
-	r_walk(_w(Vector3(0, 0.6, -27.4)))
-	_wait(func() -> bool: return _ram_clear(ram, 0.0, 1.55), _w(Vector3(0, 0.6, -28.8)))
+	r_walk(_w(Vector3(0, 0.6, -28.8)))
+	_wait(func() -> bool: return _ram_clear(ram, 0.0, 1.8), _w(Vector3(0, 0.6, -28.8)))
 	r_walk(_w(Vector3(0, 0.6, -34.0)))
 	_hop(table, cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
@@ -1007,7 +1023,7 @@ func _stage_11() -> Vector3:
 	var mp: Array[Vector3] = [Vector3(0, 0, -8.6), Vector3(1.2, 0.6, -14.0), Vector3(-0.2, 1.2, -19.6)]
 	var pews: Array[ManorPhantom] = []
 	for i: int in mp.size():
-		pews.append(_phantom(mp[i], 2.6, 2.0, "bench", 4.2, 0.62, fposmod(-0.19 * float(i), 1.0)))
+		pews.append(_phantom(mp[i], 2.6, 2.0, "bench", 4.2, 0.62, fposmod(-0.2 * float(i), 1.0)))
 	var nave: Dictionary = _blk(Vector3(0, 1.2, -28.6), 3.0, 7.8, "main", 1.0, false)
 	var lid: Crusher = _coffin_lid(Vector3(0, 1.2, -29.4), 4.4, 0.25)
 	_ledge(Vector3(0, 4.5, -36.2), Vector3(6.0, 16.0, 3.4))
@@ -1016,7 +1032,7 @@ func _stage_11() -> Vector3:
 	var p0: ManorPhantom = pews[0]
 	var p1: ManorPhantom = pews[1]
 	var p2: ManorPhantom = pews[2]
-	_wait(func() -> bool: return p0.is_on_for(Game.course_time, 0.5, 2.6) and p1.is_on_for(Game.course_time, 1.3, 3.4) and p2.is_on_for(Game.course_time, 2.1, 4.1))
+	_wait(func() -> bool: return p0.is_on_for(Game.course_time, 1.02, 2.47) and p1.is_on_for(Game.course_time, 1.86, 3.31) and p2.is_on_for(Game.course_time, 2.69, 4.14))
 	var prev: Dictionary = cp0
 	for i: int in mp.size():
 		var m: Dictionary = _area(mp[i], 1.3, 1.0)
@@ -1136,9 +1152,8 @@ func _ballroom(centre: Vector3) -> void:
 	_hanging_chandelier(Vector3(-9.0, 12.0, -22.0), 2.2)
 	_hanging_chandelier(Vector3(9.5, 12.0, -46.0), 2.2)
 	# the orchestra's ghostly grand piano and music stands on the island
-	var piano := Look.box(Vector3(2.4, 1.0, 1.6), Look.flat(Color(0.03, 0.03, 0.04), 0.2, 0.3), _w(Vector3(2.6, 0.2, -28.6)))
-	piano.rotation.y = _ry()
-	add_child(piano)
+	var piano: Node3D = kit.block(_w(Vector3(2.6, 0.2, -28.6)), _sz(Vector3(2.4, 1.0, 1.6)), Color(0.03, 0.03, 0.04), true, 0.0)
+	piano.add_child(Look.box(Vector3(0.1, 1.2, 1.4), Look.flat(Color(0.03, 0.03, 0.04), 0.2, 0.3), Vector3(0.6, 1.1, 0)))
 
 
 # ---- stage 13: Hall of Mirrors (BRANCH) - step through the looking glass, or climb the mirror chimney ----
@@ -1434,7 +1449,7 @@ func _stage_18() -> void:
 	var mp: Array[Vector3] = [Vector3(0, 0, -8.6), Vector3(1.2, 0.6, -14.0), Vector3(-0.2, 1.2, -19.6)]
 	var ps: Array[ManorPhantom] = []
 	for i: int in mp.size():
-		ps.append(_phantom(mp[i], 2.4, 2.2, "slab", 4.2, 0.62, fposmod(-0.19 * float(i), 1.0)))
+		ps.append(_phantom(mp[i], 2.4, 2.2, "slab", 4.2, 0.62, fposmod(-0.2 * float(i), 1.0)))
 	var l1: Dictionary = _blk(Vector3(0, 1.2, -28.85), 3.0, 7.1, "main", 1.0, true)
 	var tw: LaserGate = _tripwire(Vector3(0, 1.2, -29.4), 3.2, 4.0, 0.4, 0.2, 2.4, true)
 	kit.wallrun(_w(Vector3(2.3, 2.4, -42.0)), Vector3(16.0, 6.5, 0.5), _yaw + 90.0)
@@ -1453,13 +1468,14 @@ func _stage_18() -> void:
 	var p0: ManorPhantom = ps[0]
 	var p1: ManorPhantom = ps[1]
 	var p2: ManorPhantom = ps[2]
-	_wait(func() -> bool: return p0.is_on_for(Game.course_time, 0.5, 2.6) and p1.is_on_for(Game.course_time, 1.3, 3.4) and p2.is_on_for(Game.course_time, 2.1, 4.1))
+	_wait(func() -> bool: return p0.is_on_for(Game.course_time, 1.02, 2.47) and p1.is_on_for(Game.course_time, 1.86, 3.31) and p2.is_on_for(Game.course_time, 2.69, 4.14))
 	var prev: Dictionary = cp0
 	for i: int in mp.size():
 		var m: Dictionary = _area(mp[i], 1.2, 1.1)
 		_hop(prev, m)
 		prev = m
 	_hop(prev, l1, Vector3(0, 0, 2.3))
+	r_walk(_w(Vector3(0, 1.2, -27.8)))
 	_wait(func() -> bool: return _dark(tw, 0.05, 1.6), _w(Vector3(0, 1.2, -27.8)))
 	r_walk(_w(Vector3(0, 1.2, -31.0)))
 	r_wallrun(_w(Vector3(0.3, 1.2, -32.05)), _w(Vector3(1.8, 2.6, -36.0)), _w(Vector3(1.8, 2.6, -46.9)), _w(Vector3(-0.4, 1.2, -56.4)))
