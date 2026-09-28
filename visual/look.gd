@@ -141,8 +141,8 @@ const THEMES: Dictionary = {
 		"ambient": Color(0.95, 0.85, 0.95), "ambient_energy": 0.8, "fog": Color(1.0, 0.88, 0.95), "fog_density": 0.004,
 		"top": Color(1.0, 0.90, 0.95), "side": Color(0.95, 0.55, 0.70), "trim": Color(1.0, 0.35, 0.55),
 		"alt_top": Color(0.70, 0.90, 1.0), "accent": Color(1.0, 0.35, 0.55), "accent2": Color(0.45, 0.90, 0.80),
-		"decor": Color(0.95, 0.70, 0.40), "decor2": Color(1.0, 0.90, 0.40), "metal": Color(0.6, 0.6, 0.65),
-		"cloud_light": Color(1.0, 1.0, 1.0), "cloud_shade": Color(0.95, 0.80, 0.95),
+		"decor": Color(0.95, 0.70, 0.40), "decor2": Color(1.0, 0.90, 0.40), "metal": Color(0.9, 0.74, 0.86),
+		"cloud_light": Color(1.0, 0.97, 1.0), "cloud_shade": Color(0.96, 0.76, 0.92),
 	},
 	# Super Carrier: a supercarrier at sea on a bright day - haze-grey steel, dark non-skid decks,
 	# yellow-and-black hazard trim. (levels/level_14_carrier.gd swaps in its own sky, sea and steel shader.)

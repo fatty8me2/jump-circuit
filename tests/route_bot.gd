@@ -140,6 +140,7 @@ func _physics_process(dt: float) -> void:
 			_do_b_mantle(step, dt)
 		"ascent_stream": _do_ascent_stream(step)
 		"desert_fly": _do_desert_fly(step)
+		"candy_board", "candy_ride": _do_candy(step)
 	# a bounce handed over by the previous step (_air_phase) is for the step that follows it: pad /
 	# x_pad / kick read it on their first tick. Left set, it made some LATER pad or kick skip its run-up.
 	if first_tick and step_index == index_before:
@@ -761,4 +762,75 @@ func _do_desert_fly(step: Dictionary) -> void:
 		if bool((step["until"] as Callable).call()):
 			_next()
 	elif player.grounded and _was_air:
+		_next()
+
+
+# ---- sugar rush (additive) ------------------------------------------------------------------------
+#   candy_board {from, cars: Array, reach, lead?, local?}   stand at `from` (a station edge) until any of `cars` (movers)
+#                                                          will be within `reach` (flat) of us in `lead` s, then jump
+#                                                          onto that car (local spot `local`) and steer at where it
+#                                                          will be. Done on landing.
+#   candy_ride  {until: Callable, to?: Vector3, cars?: Array, local?, stand?}
+#                                                          ride what we stand on (holding `stand`, a spot in the floor
+#                                                          body's local space) until until.call() is true, then jump
+#                                                          to `to`, or onto the nearest of `cars`. Done on landing.
+
+var _candy_pick: Node3D = null
+
+
+func _do_candy(step: Dictionary) -> void:
+	var local: Vector3 = step.get("local", Vector3(0, 0.1, 0))
+	if _phase == 0:
+		if str(step["kind"]) == "candy_board":
+			var from: Vector3 = step["from"]
+			_steer_ground(from)
+			if not player.grounded or _flat_dist(from) > 0.35:
+				return
+			player.cmd_move = Vector2.ZERO
+			var lead: float = float(step.get("lead", 0.45))
+			for c: Node3D in (step["cars"] as Array):
+				if _flat(_future(c, local, lead) - player.global_position).length() <= float(step["reach"]):
+					_candy_pick = c
+					player.press_jump()
+					player.cmd_jump = true
+					_phase = 1
+					return
+			return
+		# candy_ride: hold our spot on the car until it is time to go
+		player.cmd_move = Vector2.ZERO
+		var fb: Object = player.floor_body
+		if step.has("stand") and fb != null and is_instance_valid(fb) and fb is Node3D:
+			var spot: Vector3 = (fb as Node3D).global_transform * (step["stand"] as Vector3)
+			var off: Vector3 = _flat(spot - player.global_position)
+			if off.length() > 0.12:
+				_set_wish(off.normalized() * clampf(off.length() * 1.5, 0.15, 0.8))
+		if not player.grounded or not bool((step["until"] as Callable).call()):
+			return
+		_candy_pick = null
+		if step.has("cars"):
+			var best: float = INF
+			for c: Node3D in (step["cars"] as Array):
+				var d: float = _flat(_future(c, local, 0.4) - player.global_position).length()
+				if d < best:
+					best = d
+					_candy_pick = c
+		player.press_jump()
+		player.cmd_jump = true
+		_phase = 1
+		return
+	# airborne: steer at where the target will be when we come down on it
+	if not player.grounded:
+		_was_air = true
+	if player.velocity.y <= 0.0:
+		player.cmd_jump = false
+	var aim: Vector3
+	if _candy_pick != null and (str(step["kind"]) == "candy_board" or step.has("cars")):
+		var remaining: float = maxf(_time_to_reach(_future(_candy_pick, local, 0.0).y), 0.12)
+		aim = _future(_candy_pick, local, remaining)
+		remaining = maxf(_time_to_reach(aim.y), 0.12)
+		aim = _future(_candy_pick, local, remaining)
+		_set_wish((_flat(aim - player.global_position) / remaining - _flat(player.velocity)) * 0.6)
+	else:
+		_steer_air(step["to"])
+	if player.grounded and _was_air:
 		_next()

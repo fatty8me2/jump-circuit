@@ -402,6 +402,36 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"turbulence": 2.5, "turbulence_scale": 2.0, "angle": Vector2(0, 360), "spin": Vector2(-600, 600),
 					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
 			]
+		"candy":
+			var pastels := PackedColorArray([Color(1.0, 0.45, 0.62), Color(0.45, 0.78, 1.0), Color(1.0, 0.88, 0.35),
+					Color(0.55, 0.95, 0.6), Color(0.8, 0.55, 1.0), Color(1.0, 1.0, 1.0)])
+			return [
+				# near: a gentle rain of rainbow sprinkles tumbling down, sugar sparkles twinkling
+				{"depth": "near", "amount": 190, "lifetime": 2.6, "facing": "velocity", "tex": Fx.Tex.SPARK, "additive": false,
+					"size": Vector2(0.06, 0.24), "pick": pastels, "dir": Vector3(0.1, -1, 0.05), "spread": 12.0,
+					"speed": Vector2(1.2, 2.2), "gravity": Vector3(0.1, -0.6, 0.0), "turbulence": 0.7,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 90, "lifetime": 2.2, "tex": Fx.Tex.STAR, "size": 0.14,
+					"pick": PackedColorArray([Color(2.4, 1.6, 2.2), Color(1.6, 2.0, 2.6), Color(2.6, 2.4, 1.6)]),
+					"speed": Vector2(0.05, 0.3), "spread": 180.0, "turbulence": 0.6, "curve": "pop"},
+				# mid: pastel bubbles drifting up and wisps of candyfloss
+				{"depth": "mid", "amount": 70, "lifetime": 6.0, "tex": Fx.Tex.BUBBLE, "additive": false, "size": 0.5,
+					"scale": Vector2(0.5, 1.5), "pick": PackedColorArray([Color(1.0, 0.8, 0.95, 0.7), Color(0.8, 0.9, 1.0, 0.7), Color(1.0, 1.0, 0.85, 0.7)]),
+					"dir": Vector3.UP, "spread": 30.0, "speed": Vector2(0.3, 0.8), "turbulence": 0.6,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 40, "lifetime": 7.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 2.6,
+					"pick": PackedColorArray([Color(1.0, 0.76, 0.9, 0.22), Color(0.86, 0.82, 1.0, 0.22)]), "dir": Vector3(1, 0.1, 0.2),
+					"spread": 25.0, "speed": Vector2(0.6, 1.4), "angle": Vector2(0, 360), "spin": Vector2(-20, 20),
+					"curve": "puff", "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# far: drifting confetti and soft coloured glows over the skyline
+				{"depth": "far", "amount": 70, "lifetime": 8.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 1.1,
+					"radius": 70.0, "pick": pastels, "speed": Vector2(0.4, 1.2), "spread": 180.0,
+					"gravity": Vector3(0.2, -0.3, 0), "angle": Vector2(0, 360), "spin": Vector2(-120, 120),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "far", "amount": 50, "lifetime": 8.0, "tex": Fx.Tex.DOT, "size": 1.8, "radius": 90.0,
+					"pick": PackedColorArray([Color(2.0, 1.0, 1.6, 0.4), Color(1.0, 1.5, 2.2, 0.4), Color(2.2, 2.0, 1.0, 0.4)]),
+					"speed": Vector2(0.2, 0.6), "dir": Vector3.UP, "spread": 60.0, "curve": "pop"},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking
