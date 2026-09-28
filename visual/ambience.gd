@@ -375,6 +375,33 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 				{"depth": "far", "amount": 20, "lifetime": 0.6, "tex": Fx.Tex.DOT, "size": 9.0, "radius": 110.0,
 					"color": Color(0.7, 0.85, 1.6, 0.35), "speed": Vector2(0.0, 0.2), "spread": 180.0, "curve": "pop"},
 			]
+		"manor":
+			return [
+				# near: grave dust and cobweb motes hanging in the moonlight, the odd ghost-light blinking
+				{"depth": "near", "amount": 180, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.08, "additive": false,
+					"color": Color(0.78, 0.74, 0.86, 0.75), "speed": Vector2(0.03, 0.2), "spread": 180.0,
+					"gravity": Vector3(0.1, -0.05, 0.05), "turbulence": 0.7, "turbulence_scale": 5.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0]), "scale": Vector2(0.5, 1.3)},
+				{"depth": "near", "amount": 50, "lifetime": 2.2, "tex": Fx.Tex.DOT, "size": 0.14,
+					"pick": PackedColorArray([Color(0.8, 2.4, 1.1), Color(1.5, 0.8, 2.4)]), "speed": Vector2(0.1, 0.5),
+					"spread": 180.0, "turbulence": 1.8, "turbulence_scale": 3.0, "fade": PackedFloat32Array([0.0, 1.0, 0.1, 1.0, 0.0])},
+				# mid: dead leaves tumbling past on the night wind, will-o'-wisps drifting between the graves
+				{"depth": "mid", "amount": 90, "lifetime": 6.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.3,
+					"pick": PackedColorArray([Color(0.34, 0.2, 0.12), Color(0.48, 0.28, 0.14), Color(0.24, 0.13, 0.12)]),
+					"speed": Vector2(0.6, 1.6), "dir": Vector3(1, -0.2, 0.3), "spread": 30.0, "gravity": Vector3(0.5, -0.4, 0.2),
+					"turbulence": 1.3, "angle": Vector2(0, 360), "spin": Vector2(-240, 240), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 60, "lifetime": 6.0, "tex": Fx.Tex.DOT, "size": 0.4,
+					"pick": PackedColorArray([Color(0.7, 2.2, 1.0), Color(1.4, 0.7, 2.2)]), "speed": Vector2(0.2, 0.6),
+					"spread": 180.0, "turbulence": 1.6, "curve": "pop", "fade": PackedFloat32Array([0.0, 1.0, 0.0])},
+				# far: veils of mist rolling along the skyline, lit red by the moon, and a few bats flitting
+				{"depth": "far", "amount": 45, "lifetime": 10.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 14.0,
+					"radius": 75.0, "color": Color(0.36, 0.22, 0.34, 0.32), "speed": Vector2(1.0, 2.5), "dir": Vector3(1, 0.05, 0.2),
+					"spread": 12.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 24, "lifetime": 4.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.9, "radius": 45.0,
+					"color": Color(0.03, 0.02, 0.03, 0.95), "speed": Vector2(4.0, 7.0), "dir": Vector3(1, 0.2, 0.4), "spread": 40.0,
+					"turbulence": 2.5, "turbulence_scale": 2.0, "angle": Vector2(0, 360), "spin": Vector2(-600, 600),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking
