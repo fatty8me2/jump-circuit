@@ -3053,9 +3053,15 @@ func test_zp_party_finish_bar() -> void:
 ## Every map's ambience (sound/soundscape.gd): its bed (and second layer) load as looping Ogg and
 ## play on the Ambience bus through the pause, every scheduled one-shot has clips and plays in 3D
 ## on the Ambience bus, and every second layer (the reef's deep, the xeno jungle's depths, the
-## volcano's crater, the glacier's blizzard, the desert's sandstorm, the Ascent's summit wind) takes
-## over as the course runs out.
+## volcano's crater, the glacier's blizzard, the desert's sandstorm, the manor's bell tower, the
+## armada's flagship, the candy clouds, the carrier's island, the Ascent's summit wind) takes over
+## as the course runs out.
 func test_zs_soundscapes() -> void:
+	var unscored: Array[String] = []
+	for lv: Dictionary in Game.LEVELS:
+		if not Soundscape.THEMES.has(str(lv["id"])):
+			unscored.append(str(lv["id"]))
+	check(unscored.is_empty(), "every map has a soundscape %s" % str(unscored))
 	await new_world()
 	var cam := Camera3D.new()
 	world.add_child(cam)
@@ -3133,7 +3139,7 @@ func test_z_world_sounds() -> void:
 	# every map has its own footsteps and landings; anything else falls back to the plain ones
 	var old_theme: String = Sfx.get("_theme")
 	for th: String in ["gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert",
-			"ascent"]:
+			"manor", "armada", "candy", "carrier", "ascent"]:
 		Sfx.set_theme(th)
 		check(Sfx.themed("step") == "step_" + th and Sfx.themed("land") == "land_" + th,
 			"%s has its own footsteps and landings" % th)

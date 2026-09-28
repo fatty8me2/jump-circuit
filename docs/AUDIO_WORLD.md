@@ -8,7 +8,7 @@ maths and seeded noise by `tools/gen_world_sfx.py` (which borrows the helpers in
 ## Regenerating
 
 ```
-python tools/gen_world_sfx.py            # generate all 208 clips into audio/, then verify
+python tools/gen_world_sfx.py            # generate all 236 clips into audio/, then verify
 python tools/gen_world_sfx.py --verify   # only check the files on disk
 ```
 
@@ -27,7 +27,7 @@ checks that the first and last samples are near zero. For loops it checks the se
 * the curvature (second difference) across the wrap must pass the same test;
 * the 40 ms window across the wrap must be no quieter than the quietest windows in the loop (a faded-out end would fail).
 
-It also checks the total size, which is about 11.7 MB of a 12.6 MB budget.
+It also checks the total size, which is about 12.4 MB of a 12.6 MB budget.
 
 ## Formats and levels
 
@@ -120,6 +120,10 @@ model struck harder, with a heavier body, longer tails and more debris.
 | Cinder Peak | `step_volcano_*`, `land_volcano_*` | Loose cinder over basalt: four dead stone modes (about 330 / 650 / 1100 / 1800 Hz, 4-12 ms), a firm 140-160 -> 80 Hz knock and a gritty scuff, 25 to 85 clinker grains (0.9-7 kHz) and a few glassy 3.5-9.5 kHz ticks of vesicular glass. The landing adds a 100 -> 55 Hz thud, four loose clinkers settling 50-200 ms later and a puff of ash. |
 | Frostbite Pass | `step_glacier_*`, `land_glacier_*` | Packed snow over hard ice: a run of 40 to 130 crunch grains (0.5-4 kHz, cold grains fracturing) with a few 0.9-1.8 kHz squeaks, over a dull 120-140 -> 70 Hz pat. The ice answers with a hard 2.5-12 kHz tick and three glassy modes (about 2 / 4.3 / 7 kHz). The landing adds a thud and a puff of powder. |
 | Scarab Sands | `step_desert_*`, `land_desert_*` | Soft sand over sandstone: a dry 0.6-5 kHz shush that swells as the sole settles, a muffled 110-130 -> 62 Hz pat, a gritty scuff and a short, dead sandstone knock (about 460 / 975 / 1750 Hz), with 25 to 85 fine grains trickling off (2.5-9 kHz). The landing adds a thud and a spray of sand. |
+| Phantom Manor | `step_manor_*`, `land_manor_*` | Creaky old oak boards laid over stone: a hollow, dry knock with the loose board's low modes (about 170 / 360 / 690 / 1200 Hz, 10-40 ms), a 125-145 -> 70 Hz body and grit scuffing on the flags beneath. Most steps (and every landing) end in a short creak as the board flexes (a 60-150 per second stick-slip through 420-2000 Hz resonances), all in a 1.1 s stone hall. The landing adds a thud and dust off the boards. |
+| Storm Armada | `step_armada_*`, `land_armada_*` | A wet wooden deck in the rain: a plank knock (about 290 / 610 / 1100 / 1750 Hz), a 130-150 -> 75 Hz body, the film of water slapping (0.5-5 kHz), 12 to 52 droplets splashing away (1.5-7 kHz grains) with a few small bubbles, and a faint suck as the boot lifts. The landing adds a thud and the puddle thrown up. |
+| Sugar Rush | `step_candy_*`, `land_candy_*` | Sugar-crusted candy over something soft: a squish (noise through a band rising from 380-450 Hz to about 1.4 kHz as it squashes), a 140-165 -> 85 Hz body, a spray of 35 to 115 bright sugar-crystal grains (2-9.5 kHz) with glassy 4-11 kHz ticks, and a springy little 150 -> 190 Hz rebound with an 11 Hz wobble. The landing adds a thud and a jelly-like 85 -> 130 Hz "boing". |
+| Super Carrier | `step_carrier_*`, `land_carrier_*` | The flight deck: thick steel under a gritty non-skid coating, so it barely rings. A boot-heel click, a dense rasp of 60 to 140 tiny grit grains (1.2-7 kHz) and a sole scuff, a heavy 150-175 -> 90 Hz body and just a hint of plate modes (f11 170-200 Hz, very short). The landing adds a thud and the hull's deep answer through the deck (plate modes from 70-85 Hz). |
 
 ## Player: movement
 

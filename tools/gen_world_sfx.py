@@ -33,7 +33,8 @@ PEAK_DB = ga.SFX_PEAK_DB
 OUT = ga.OUT
 SIZE_BUDGET = 12.6e6
 
-THEMES = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent", "xeno", "volcano", "glacier", "desert")
+THEMES = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent", "xeno", "volcano", "glacier", "desert",
+          "manor", "armada", "candy", "carrier")
 
 # ---------------------------------------------------------------------------
 # clip table: name -> (seconds, loop).  The verifier checks the files against it.
@@ -635,6 +636,84 @@ def surface_hit(theme, r, k, dur):
         if k:
             place(x, 0.0, thud(t, 90, 48, 0.1, 0.08), 0.6)
             x += 0.3 * noise(r, n, 800, 6000) * env(t, 0.01, 0.12)   # sand thrown up
+    elif theme == "manor":
+        # old oak boards laid over stone: a hollow, dry knock with the board's low modes (it is loose
+        # on its joists, so it rings a little longer and lower than the clockwork's waxed oak), grit
+        # scuffing on the flags beneath, often a short creak as the board flexes, in a stone hall
+        oak = modes(t, [(r.uniform(150, 185), 1.0, 0.04), (r.uniform(330, 390), 0.75, 0.025),
+                        (r.uniform(640, 740), 0.45, 0.016), (r.uniform(1100, 1300), 0.25, 0.01)], r, 0.0)
+        body = thud(t, r.uniform(125, 145), 70, 0.04, 0.03 + 0.03 * k, harm=(0.3, 0.1))
+        grit = noise(r, n, 1200, 6000) * env(t, 0.002, 0.008)
+        both(click(r, dur, 900, 5000, 0.0015) * (0.5 + 0.3 * k) + (0.8 - 0.3 * k) * oak + (0.8 - 0.4 * k) * body
+             + (0.2 + 0.3 * k) * grit)
+        if r.random() < 0.6 + 0.4 * k:
+            cl = 0.07 + 0.12 * k
+            cr = creak(r, cl, lambda u: 60.0 + 90.0 * np.sin(np.pi * u),
+                       [(r.uniform(420, 520), 1.0, 0.012), (r.uniform(900, 1100), 0.6, 0.008),
+                        (r.uniform(1700, 2000), 0.3, 0.005)])
+            place(x, r.uniform(0.03, 0.05), cr * np.sin(np.pi * np.arange(len(cr)) / len(cr)), 0.22 + 0.1 * k)
+        if k:
+            place(x, 0.0, thud(t, 95, 48, 0.1, 0.1), 0.4)
+            grains(r, x, 14, 0.01, 0.12, 700, 3500, 0.002, 0.006, 0.1, decay=0.05)   # dust off the boards
+        x = space(r, x, 1.1 + 0.4 * k, 0.2 + 0.1 * k, 150, 5000, 0.45)
+    elif theme == "armada":
+        # a wet wooden deck in the rain: a plank knock, the film of water slapping and splashing
+        # away from the sole in droplets, and a faint suck as the boot lifts
+        plank = modes(t, [(r.uniform(260, 320), 1.0, 0.02), (r.uniform(560, 660), 0.7, 0.014),
+                          (r.uniform(1000, 1200), 0.4, 0.009), (r.uniform(1600, 1900), 0.2, 0.006)], r, 0.0)
+        body = thud(t, r.uniform(130, 150), 75, 0.035, 0.025 + 0.03 * k, harm=(0.3,))
+        slap = noise(r, n, 500, 5000) * env(t, 0.001, 0.012 + 0.015 * k)
+        both(0.6 * plank + 0.8 * body + 0.6 * slap)
+        splash = np.zeros(n)
+        grains(r, splash, int(12 + 40 * k), 0.004, 0.05 + 0.12 * k, 1500, 7000, 0.001, 0.004, 1.0, decay=0.03 + 0.05 * k)
+        for _ in range(int(3 + 8 * k)):
+            place(splash, r.uniform(0.01, 0.06 + 0.15 * k), bubble(r.uniform(1100, 3000), 0.03, 0.005, 0.8),
+                  r.uniform(0.3, 0.8))
+        x += 0.45 * unit(splash)
+        tl = tv(0.05)
+        suck = svf(r.standard_normal(len(tl)), glide(500, 1400, tl, 0.04), 3.0) * env(tl, 0.01, 0.015)
+        place(x, r.uniform(0.07, 0.09), taper(unit(suck)), 0.12)
+        x = band(x, None, 10000)
+        if k:
+            place(x, 0.0, thud(t, 100, 50, 0.1, 0.09), 0.7)
+            x += 0.2 * noise(r, n, 800, 6000) * env(t, 0.004, 0.06)   # the puddle thrown up
+    elif theme == "candy":
+        # sugar-crusted candy over something soft: the crust crunches in a spray of bright, glassy
+        # sugar crystals, the soft body under it squishes (a wet band rising as it squashes) and
+        # gives a springy little rebound
+        squish = svf(r.standard_normal(n), glide(r.uniform(380, 450), r.uniform(1300, 1600), t, 0.04 + 0.04 * k), 2.5)
+        squish = unit(squish) * env(t, 0.003 + 0.003 * k, 0.02 + 0.03 * k)
+        body = thud(t, r.uniform(140, 165), 85, 0.04, 0.025 + 0.03 * k, harm=(0.25,))
+        both(0.8 * squish + 0.7 * body)
+        crunch = np.zeros(n)
+        grains(r, crunch, int(35 + 80 * k), 0.0, 0.035 + 0.08 * k, 2000, 9500, 0.0006, 0.0025, 1.0, decay=0.02 + 0.04 * k)
+        for _ in range(int(3 + 5 * k)):
+            ping = modes(tv(0.03), [(r.uniform(4000, 7000), 1.0, 0.004), (r.uniform(8000, 11000), 0.4, 0.002)], r, 0.0)
+            place(crunch, r.uniform(0.0, 0.03 + 0.06 * k), ping, r.uniform(0.2, 0.6))
+        x += 0.7 * unit(crunch)
+        boing = taper(tone(glide(150, 190, t, 0.05)) * env(t, 0.01, 0.03 + 0.05 * k) *
+                      (1.0 + 0.3 * np.sin(TAU * 11.0 * t)))
+        place(x, 0.015, boing, 0.25 + 0.15 * k)
+        x = band(x, None, 11000)
+        if k:
+            place(x, 0.0, thud(t, 100, 55, 0.1, 0.08), 0.55)
+            place(x, 0.03, taper(tone(glide(85, 130, t, 0.12)) * env(t, 0.02, 0.08) * (1.0 + 0.4 * np.sin(TAU * 8.0 * t))), 0.4)
+    elif theme == "carrier":
+        # the flight deck: inch-thick steel under a gritty non-skid coating. It barely rings (the
+        # plate is thick and welded down), so it is a hard, dense knock: a boot-heel click, a scratchy
+        # non-skid scuff (a dense rasp of grit), and a low, heavy body with just a hint of the plate
+        plate = modes(t, plate_modes(r.uniform(170, 200), 1.8, 0.02 + 0.03 * k, 8, 0.9, r), r, 0.02, hard=2500)
+        body = thud(t, r.uniform(150, 175), 90, 0.025, 0.02 + 0.03 * k, harm=(0.35, 0.12))
+        both(click(r, dur, 2000, 10000, 0.001) * 0.45 + 0.3 * plate + 0.6 * body)
+        rasp = np.zeros(n)
+        grains(r, rasp, int(60 + 80 * k), 0.0, 0.03 + 0.05 * k, 1200, 7000, 0.0004, 0.0015, 1.0, decay=0.015 + 0.03 * k)
+        x += 0.5 * unit(rasp)
+        x += 0.3 * noise(r, n, 2000, 8000) * env(t, 0.002, 0.012 + 0.01 * k)   # the sole scuffing
+        x = band(x, None, 11000)
+        if k:
+            place(x, 0.0, thud(t, 90, 42, 0.12, 0.1, harm=(0.3,)), 0.45)
+            # the hull's deep answer through the deck
+            place(x, 0.005, modes(tv(dur - 0.005), plate_modes(r.uniform(70, 85), 2.0, 0.12, 5, 0.8, r), r, 0.02, hard=400), 0.2)
     return x
 
 
