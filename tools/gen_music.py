@@ -1689,6 +1689,213 @@ def _ff_desert(B, r, k):
 
 
 # --------------------------------------------------------------------------
+# PHANTOM MANOR - D minor, 76 bpm, 32 bars. A gothic pipe organ and a haunted "oo" choir, a
+# harpsichord minuet ticking like a clock, a theremin ghost singing the manor theme, church bells;
+# the JUMP theme turned into a waltzing danse macabre. Hi layer: tremolo strings, low brass, timpani.
+# --------------------------------------------------------------------------
+MANOR_CH = "| Dm | Dm/C | Bb | A7 | Dm | Gm/Bb | Eb | A7 |"
+MANOR_A = "A4h. D5q | F5q. E5e D5q C#5q | D5h Bb4h | A4w | A4h. D5q | G5q. F5e E5q D5q | Eb5h G5h | C#5w |"
+MANOR_B = "D6h. C6q | Bb5q. A5e G5q F5q | G5h F5h | E5w | D5h. F5q | Bb5q. A5e G5q Bb5q | A5h G5h | A5w |"
+
+
+def piece_manor():
+    T = me.Track("manor", 76, 32, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("hall", me.make_ir(r, rt60=4.2, predelay=0.04, damp=3200, er=0.6, er_span=0.09))
+    T.delay("echo", beats=0.75, fb=0.4, damp=3000, ret=0.4)
+    for b_, e in (("organ", std_eq(40, 9000)), ("keys", std_eq(150, 11000)), ("lead", std_eq(200, 9000)),
+                  ("choir", std_eq(100, 8000)), ("strings", std_eq(50, 11000)), ("brass", std_eq(60, 8000)),
+                  ("perc", std_eq(40)), ("bass", std_eq(28, 3000))):
+        T.bus(b_, eq=e)
+    H = {"hall": 0.45}
+    P = prog(MANOR_CH * 4, 4, 0)
+    pad(T, "base", "organ", P, I(me.organ, stops=(1.0, 0.5, 0.25, 0.3, 0.0), leslie=False, att=0.2, rel=0.8),
+        center=57, count=4, gain=0.1, sends=H, vel=0.55)
+    bass(T, "base", "bass", P, [(0, 0, 3.8, 0.8)], I(me.organ, stops=(1.0, 0.3, 0.0, 0.0, 0.0), leslie=False), lo=26, hi=38,
+         gain=0.14)
+    arp(T, "base", "keys", P, [0, 2, 1, 3, 2, 4, 3, 1], 0.5, M_HARPSI, lo=62, hi=81, gain=0.09, sends=H,
+        vels=(0.7, 0.45, 0.5, 0.45))
+    pad(T, "base", "choir", P, CHOIR_U, center=62, count=3, gain=0.1, sends={"hall": 0.6}, vel=0.5)
+    line(T, "base", "lead", MANOR_A, 8, I(me.theremin), 0.32, {"hall": 0.5, "echo": 0.25})
+    line(T, "base", "lead", MANOR_B, 16, I(me.theremin), 0.3, {"hall": 0.5, "echo": 0.25})
+    line(T, "base", "keys", JUMP_PICKUP + " | " + JUMP_A.replace("C6q. Bb5e Ab5q C6q", "Bb5q. A5e G5q Bb5q").replace(
+        "D6q. C6e Bb5q D6q", "C#6q. D6e E6q C#6q").replace("E6w", "D6w"), 24, M_CELESTA, 0.22, {"hall": 0.5, "echo": 0.3},
+         legato=False, pickup=1.0, transpose=2)
+    for bar in (0, 8, 16, 24):
+        ring(T, "base", "perc", bar * 4, me.bell(r, float(mtof(50)), 6.0, 0.6, kind="church"), 0.14, -0.3, {"hall": 0.6})
+    # hi
+    pad(T, "hi", "strings", prog(MANOR_CH * 3, 4, 8), I(me.strings, att=0.1, rel=0.4, bright=0.45, tremolo=0.6), center=65,
+        count=3, gain=0.12, sends=H, vel=0.7)
+    line(T, "hi", "brass", MANOR_A, 8, TROMBONES, 0.22, H, transpose=-12)
+    line(T, "hi", "choir", MANOR_B, 16, CHOIR_A, 0.2, {"hall": 0.6}, transpose=-12)
+    for bar in range(8, 32, 2):
+        ring(T, "hi", "perc", bar * 4, me.timpani(r, float(mtof(38)), 0.7), 0.24, 0.0, H)
+    T.render(rms_db=-14.5, hi_gain=1.2, master_eq=lambda f: me.shelf(f, 4000.0, -2.0))
+
+
+# --------------------------------------------------------------------------
+# STORM ARMADA - E minor, 6/8 (dotted quarter = 116), 48 bars. A swashbuckling pirate orchestra:
+# galloping low strings, a horn theme, snare rolls and cannon booms; the JUMP theme hoisted into
+# G major. Hi layer: trumpets, choir, full percussion.
+# --------------------------------------------------------------------------
+ARM_CH = "| Em | Em | C | C | D | D | B7 | B7 | Em | Em | Am | Am | C | D | B7 | Em |"
+ARM_A = ("E4q B4q | E5x D5t B4q | C5q G4q | C5x B4t A4q | D5q A4q | F#5x E5t D5q | D#5h | B4h | "
+         "E5q G5q | B5x A5t G5q | A5q E5q | C6x B5t A5q | G5q E5q | F#5x E5t D5q | D#5x E5t F#5q | E5h |")
+ARM_J_CH = "| G | C | Am | D | G | Eb | F | G |"
+ARM_J = ("D5t E5t F#5t | G5q D6q | E6x D6t B5q | C6x D6t E6q | D6h | G5q D6q | G6x F6t Eb6q | A6x G6t F6q | B6h |")
+
+
+def piece_armada():
+    T = me.Track("armada", 116, 48, 2, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("hall", me.make_ir(r, rt60=2.2, predelay=0.02, damp=4500, er=0.5))
+    for b_, e in (("strings", std_eq(40, 12000)), ("brass", std_eq(60, 9000)), ("drums", std_eq(30)),
+                  ("choir", std_eq(100, 8500)), ("lead", std_eq(150, 11000))):
+        T.bus(b_, eq=e)
+    H = {"hall": 0.35}
+    third = 1.0 / 3.0
+    P = prog(ARM_CH * 2, 2, 0) + prog(ARM_J_CH * 2, 2, 32)
+    gallop = [(0, 0, third, 1.0), (third, 0, third, 0.5), (2 * third, 0, third, 0.6), (1, 7, third, 0.9), (1 + third, 0, third, 0.5),
+              (1 + 2 * third, 12, third, 0.6)]
+    bass(T, "base", "strings", P, gallop, M_CELLO_STAC, lo=40, hi=52, gain=0.34, sends=H, period=2)
+    pad(T, "base", "strings", P, I(me.strings, att=0.2, rel=0.4, bright=0.5), center=64, count=3, gain=0.1, sends=H, vel=0.6)
+    line(T, "base", "brass", ARM_A, 0, HORNS, 0.38, H)
+    line(T, "base", "brass", ARM_A, 16, HORNS, 0.38, H)
+    line(T, "base", "lead", ARM_A, 16, FLUTE, 0.2, H, transpose=12)
+    line(T, "base", "brass", ARM_J, 32, HORNS, 0.4, H, pickup=1.0, transpose=-12)
+    line(T, "base", "brass", ARM_J, 40, HORNS, 0.4, H, pickup=1.0, transpose=-12)
+    snr = bank("snare_march", lambda r: me.snare(r, "march"), 4)
+    kit(T, "base", "drums", range(0, 48), {"snare": (snr, "x.gx.g", 0.14), "kick": (bank("kick_orch", lambda r: me.kick(r, "orch"), 2), "x.....", 0.3)},
+        step=third, sends=H)
+    boom = me.boom(me.rng_for("cannon"), 1.0, 40.0, 2.0)
+    for bar in (7, 15, 23, 31, 39, 47):
+        ring(T, "base", "drums", bar * 2 + 1, boom, 0.3, -0.4, H)
+    # hi
+    line(T, "hi", "brass", ARM_A, 16, TRUMPETS, 0.24, H, transpose=12)
+    line(T, "hi", "brass", ARM_J, 32, TRUMPETS, 0.3, H, pickup=1.0)
+    pad(T, "hi", "choir", prog(ARM_J_CH * 2, 2, 32), CHOIR_A, center=62, count=4, gain=0.16, sends={"hall": 0.5}, vel=0.8)
+    kit(T, "hi", "drums", range(0, 48), {"tamb": (TAMB, "x.xx.x", 0.1)}, step=third, sends=H)
+    for bar in range(0, 48, 4):
+        ring(T, "hi", "drums", bar * 2, me.timpani(r, float(mtof(40 if bar < 32 else 43)), 0.85), 0.3, 0.0, H)
+    T.render(rms_db=-14.5, hi_gain=1.35)
+
+
+# --------------------------------------------------------------------------
+# SUGAR RUSH - C major, 140 bpm, 40 bars. A toy-box bounce: chiptune square lead, glockenspiel and
+# marimba, pizzicato, handclaps, a boom-chick bass; the JUMP theme at full sugar. Hi layer: a
+# bright synth arp, full drums, brass stabs.
+# --------------------------------------------------------------------------
+CANDY_CH = "| C | Am | F | G | C | Am | Dm7 | G7 |"
+CANDY_A = "E5e G5e C6e G5e E5q C5q | A5e G5e E5e C5e A4h | F5e A5e C6e A5e F5q C5q | D5q. E5e D5h | " \
+          "E5e G5e C6e G5e E5q G5q | A5q. G5e E5q C5q | D5e E5e F5e A5e G5q F5q | E5q D5q C5h |"
+
+
+def piece_candy():
+    T = me.Track("candy", 140, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("room", me.make_ir(r, rt60=1.2, predelay=0.01, damp=7000, er=0.7))
+    T.delay("echo", beats=0.75, fb=0.3, damp=5000, ret=0.35)
+    for b_, e in (("lead", std_eq(200, 11000)), ("keys", std_eq(150, 12000)), ("bass", std_eq(35, 3000)),
+                  ("drums", std_eq(35)), ("brass", std_eq(100, 10000))):
+        T.bus(b_, eq=e)
+    RM = {"room": 0.25}
+    P = prog(CANDY_CH * 5, 4, 0)
+    bass(T, "base", "bass", P, [(0, 0, 0.9, 0.9), (1, 7, 0.4, 0.6), (2, 12, 0.9, 0.8), (3, 7, 0.4, 0.6)], M_PIZZ, lo=36, hi=48,
+         gain=0.4, sends=RM)
+    stabs(T, "base", "keys", P, (1.0, 3.0), M_MARIMBA, center=67, count=3, gain=0.12, sends=RM, vel=0.7, dur=0.3)
+    for bar0 in (0, 16, 32):
+        line(T, "base", "lead", CANDY_A, bar0, SQUARE_LEAD, 0.24, {"room": 0.2, "echo": 0.2}, cutoff=3000.0)
+        line(T, "base", "keys", CANDY_A, bar0, M_GLOCK, 0.1, RM, legato=False, transpose=12)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_A, 8, SQUARE_LEAD, 0.24, {"room": 0.2, "echo": 0.2}, pickup=1.0,
+         cutoff=3000.0)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_B, 24, M_GLOCK, 0.16, RM, legato=False, pickup=1.0)
+    clp = bank("clap", lambda r: me.clap(r), 3)
+    kit(T, "base", "drums", range(0, 40), {"clap": (clp, "....x.......x...", 0.3), "shk": (SHK, "g.o.g.o.g.o.g.o.", 0.12)},
+        sends=RM)
+    # hi
+    arp(T, "hi", "keys", P, [0, 1, 2, 3, 2, 1], 0.25, M_SPLUCK, lo=72, hi=96, gain=0.06, sends={"echo": 0.3})
+    kit(T, "hi", "drums", range(0, 40), {"kick": (bank("kick_punch", lambda r: me.kick(r, "punch"), 2), "x...x...x...x...", 0.5),
+                                         "hat": (bank("hat_c", lambda r: me.hat(r, "closed"), 4), "..x...x...x...x.", 0.14)}, sends=RM)
+    stabs(T, "hi", "brass", P[::2], (0.0, 2.5), M_TRPT_STAB, center=67, count=3, gain=0.08, sends=RM, vel=0.7)
+    T.render(rms_db=-14.5, hi_gain=0.7)
+
+
+# --------------------------------------------------------------------------
+# SUPER CARRIER - A major, 120 bpm, 40 bars. A flight-deck anthem: driving rock drums, power-synth
+# chords and an octave bass under a heroic brass fanfare; the JUMP theme as the take-off. Hi layer:
+# soaring strings, choir, trumpets, booms.
+# --------------------------------------------------------------------------
+CAR_CH = "| A | F#m | D | E | A | F#m | D | E |"
+CAR_A = "E5h. A5q | C#6h B5q A5q | F#5h. A5q | B5w | E5h. A5q | C#6h E6q C#6q | D6q C#6q B5q A5q | B5w |"
+
+
+def piece_carrier():
+    T = me.Track("carrier", 120, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("hall", me.make_ir(r, rt60=2.0, predelay=0.02, damp=5000, er=0.4))
+    T.bus("drums", eq=std_eq(30), drive=1.4)
+    T.bus("bass", eq=lambda f: me.hp(f, 30) * me.lp(f, 3000), pump=0.3)
+    T.bus("synth", eq=std_eq(100, 12000), pump=0.35)
+    T.bus("brass", eq=std_eq(60, 9000))
+    T.bus("orch", eq=std_eq(40, 12000))
+    H = {"hall": 0.3}
+    P = prog(CAR_CH * 3, 4, 0) + prog(tx_chords(JUMP_A_CHORDS, 9), 4, 24) + prog(CAR_CH, 4, 32)
+    kit(T, "base", "drums", range(0, 40), {"kick": (bank("kick_punch", lambda r: me.kick(r, "punch"), 2), "x.......x.x.....", 0.6),
+                                          "snare": (bank("snare_ac", lambda r: me.snare(r, "acoustic"), 4), "....x.......x...", 0.45),
+                                          "hat": (bank("hat_c", lambda r: me.hat(r, "closed"), 4), "x.x.x.x.x.x.x.x.", 0.12)},
+        sends=H, pump=("kick",))
+    bass(T, "base", "bass", P, [(k * 0.5, 0 if k % 2 == 0 else 12, 0.45, 0.9) for k in range(8)], M_SBASS, lo=33, hi=45,
+         gain=0.38, cutoff=900.0)
+    pad(T, "base", "synth", P, I(me.supersaw, voices=5, detune=16.0, cutoff=2400.0, att=0.02, rel=0.3, sub=0.0),
+        center=62, count=3, gain=0.12, sends=H, vel=0.7)
+    line(T, "base", "brass", CAR_A, 8, HORNS, 0.4, H)
+    line(T, "base", "brass", CAR_A, 16, HORNS, 0.4, H)
+    line(T, "base", "brass", JUMP_PICKUP + " | " + JUMP_A, 24, HORNS, 0.42, H, pickup=1.0, transpose=-3)
+    line(T, "base", "synth", CAR_A, 32, SYNTH_LEAD, 0.24, {"hall": 0.3})
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    for bar in (0, 8, 16, 24, 32):
+        ring(T, "base", "drums", bar * 4, crash[bar % 2], 0.14, 0.3, H)
+    # hi
+    line(T, "hi", "brass", CAR_A, 16, TRUMPETS, 0.26, H)
+    line(T, "hi", "brass", JUMP_PICKUP + " | " + JUMP_A, 24, TRUMPETS, 0.3, H, pickup=1.0, transpose=9)
+    pad(T, "hi", "orch", P, I(me.strings, att=0.2, rel=0.5, bright=0.55), center=67, count=4, gain=0.12, sends=H, vel=0.75)
+    pad(T, "hi", "orch", prog(tx_chords(JUMP_A_CHORDS, 9), 4, 24), CHOIR_A, center=62, count=4, gain=0.16, sends={"hall": 0.45}, vel=0.8)
+    for bar in (8, 16, 24, 32):
+        ring(T, "hi", "orch", bar * 4, me.boom(me.rng_for("cboom"), 1.0, 36.0, 2.0), 0.24, 0.0, H)
+    T.render(rms_db=-14.5, hi_gain=1.7)
+
+
+def _ff_manor(B, r, k):
+    for m in (50, 57, 62, 65, 69):
+        B.add(0.0, me.organ(r, float(mtof(m)), 3.5, 0.8, leslie=False, rel=1.0), 0.16, sends={"hall": 0.6})
+    B.add(0.0, me.bell(r, float(mtof(62)), 5.0, 0.8, kind="church"), 0.3, sends={"hall": 0.6})
+    B.notes(mel("A4e D5e F5e A5h D6q", 4, 0, 0), I(me.theremin), r, 0.3, sends={"hall": 0.5}, legato=True)
+
+
+def _ff_armada(B, r, k):
+    B.notes(mel("D5t E5t F#5t G5q D6q G6h", 4, 0, 0), I(me.brass, kind="trumpet", voices=2), r, 0.42, sends={"hall": 0.4})
+    for m in (55, 59, 62, 67):
+        B.add(2.0, me.brass(r, float(mtof(m)), 2.2, 0.9, "horn", voices=2), 0.16, sends={"hall": 0.4})
+    B.add(2.0, me.boom(r, 1.0, 40.0, 2.0), 0.4)
+    B.add(2.0, me.cymbal(r, "crash"), 0.2, 0.3, {"hall": 0.3})
+
+
+def _ff_candy(B, r, k):
+    for i, m in enumerate((72, 76, 79, 84, 88, 91, 96)):
+        B.add(0.25 * i, me.mallet(r, float(mtof(m)), 0.6, 0.8, "glockenspiel"), 0.3, (i / 6 - 0.5), {"hall": 0.3})
+    B.notes(mel("G5e C6e E6e G6q C7h", 4, 0, 0), SQUARE_LEAD, r, 0.26, sends={"hall": 0.3})
+    B.add(1.75, me.clap(r), 0.4, sends={"hall": 0.3})
+
+
+def _ff_carrier(B, r, k):
+    B.notes(mel("E4t F#4t G#4t A4q E5q A5h", 4, 0, 0), I(me.brass, kind="trumpet", voices=3), r, 0.42, sends={"hall": 0.4})
+    for m in (45, 52, 57, 61, 64, 69):
+        B.add(2.0, me.brass(r, float(mtof(m)), 2.4, 0.95, "horn", voices=2), 0.15, sends={"hall": 0.4})
+    B.add(2.0, me.boom(r, 1.0, 34.0, 2.5), 0.45)
+    B.add(2.0, me.cymbal(r, "crash"), 0.22, 0.3, {"hall": 0.3})
+
+
+# --------------------------------------------------------------------------
 # stingers: course fanfares (Music bus, then the results music), checkpoint chimes (SFX bus,
 # pitched up the map's scale per checkpoint by Sfx.checkpoint_chime) and the new-best sparkle.
 # --------------------------------------------------------------------------
@@ -1810,6 +2017,10 @@ def stingers():
     fanfare("volcano", 60, _ff_volcano, 5.2, bpm=160.0)
     fanfare("glacier", 66, _ff_glacier, 5.0, bpm=84.0)
     fanfare("desert", 62, _ff_desert, 5.0, bpm=104.0)
+    fanfare("manor", 62, _ff_manor, 5.0, bpm=76.0)
+    fanfare("armada", 67, _ff_armada, 4.5, bpm=116.0)
+    fanfare("candy", 72, _ff_candy, 3.5, bpm=140.0)
+    fanfare("carrier", 69, _ff_carrier, 4.8, bpm=120.0)
     fanfare("ascent", 62, _ff_ascent, 7.0, bpm=128.0, rms=-12.0)
     # checkpoint chimes (tonic of each map's key; the game steps them up its scale)
     chime("gardens", lambda B, r: (B.add(0, me.mallet(r, float(mtof(79)), 0.8, 0.8, "glockenspiel"), 0.4, 0.2, {"small": 0.3}),
@@ -1852,6 +2063,15 @@ def stingers():
                                   B.add(0.24, me.harp(r, float(mtof(81)), 0.8, 0.8), 0.3, -0.2, {"small": 0.4}),
                                   B.add(0.0, me.frame_drum(r, 0.8, True), 0.3, 0.0, {"small": 0.3}),
                                   B.add(0.24, me.triangle(r, 0.6, 0.8), 0.08, 0.3, {"hall": 0.4})))
+    chime("manor", lambda B, r: (B.add(0, me.bell(r, float(mtof(74)), 1.4, 0.6, kind="church"), 0.3, 0.0, {"hall": 0.5}),
+                                 B.add(0.15, me.mallet(r, float(mtof(81)), 0.8, 0.7, "celesta"), 0.3, 0.2, {"hall": 0.5})))
+    chime("armada", lambda B, r: (B.add(0, me.bell(r, float(mtof(79)), 1.2, 0.7), 0.3, 0.0, {"small": 0.4}),
+                                  B.add(0.2, me.bell(r, float(mtof(86)), 1.2, 0.6), 0.25, 0.2, {"small": 0.4})))
+    chime("candy", lambda B, r: (B.add(0, me.mallet(r, float(mtof(84)), 0.6, 0.8, "glockenspiel"), 0.35, -0.2, {"small": 0.3}),
+                                 B.add(0.12, me.mallet(r, float(mtof(88)), 0.6, 0.8, "glockenspiel"), 0.35, 0.0, {"small": 0.3}),
+                                 B.add(0.24, me.mallet(r, float(mtof(91)), 0.6, 0.8, "glockenspiel"), 0.35, 0.2, {"small": 0.3})))
+    chime("carrier", lambda B, r: (B.add(0, me.brass(r, float(mtof(69)), 0.4, 0.9, "trumpet", voices=2, fp=True), 0.3, 0.0, {"hall": 0.3}),
+                                   B.add(0.18, me.brass(r, float(mtof(76)), 0.5, 0.9, "trumpet", voices=2, fp=True), 0.3, 0.1, {"hall": 0.3})))
     chime("ascent", lambda B, r: (B.add(0, me.synth_pluck(r, float(mtof(71)), 0.4, 0.9), 0.4, 0.2, {"hall": 0.3}),
                                   B.add(0.18, me.synth_pluck(r, float(mtof(78)), 0.4, 0.9), 0.4, -0.2, {"hall": 0.3}),
                                   B.add(0.36, me.synth_pluck(r, float(mtof(83)), 0.5, 0.8), 0.35, 0.0, {"hall": 0.4}),
@@ -1878,6 +2098,10 @@ PIECES = {
     "volcano": piece_volcano,
     "glacier": piece_glacier,
     "desert": piece_desert,
+    "manor": piece_manor,
+    "armada": piece_armada,
+    "candy": piece_candy,
+    "carrier": piece_carrier,
     "ascent": piece_ascent,
     "title": piece_title,
     "lobby": piece_lobby,
@@ -1885,7 +2109,7 @@ PIECES = {
     "victory": piece_victory,
     "stingers": stingers,
 }
-LAYERED = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert", "ascent")
+LAYERED = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert", "manor", "armada", "candy", "carrier", "ascent")
 
 
 def verify():
