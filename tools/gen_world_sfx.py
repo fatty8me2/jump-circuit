@@ -31,7 +31,7 @@ SR = ga.SR
 TAU = ga.TAU
 PEAK_DB = ga.SFX_PEAK_DB
 OUT = ga.OUT
-SIZE_BUDGET = 12.6e6
+SIZE_BUDGET = 18.0e6
 
 THEMES = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent", "xeno", "volcano", "glacier", "desert",
           "manor", "armada", "candy", "carrier")

@@ -27,7 +27,7 @@ checks that the first and last samples are near zero. For loops it checks the se
 * the curvature (second difference) across the wrap must pass the same test;
 * the 40 ms window across the wrap must be no quieter than the quietest windows in the loop (a faded-out end would fail).
 
-It also checks the total size, which is about 12.4 MB of a 12.6 MB budget.
+It also checks the total size, which is about 12.4 MB of an 18 MB budget.
 
 ## Formats and levels
 
