@@ -120,14 +120,17 @@ const THEMES: Dictionary = {
 		"decor": Color(0.18, 0.14, 0.22), "decor2": Color(0.90, 0.85, 0.70), "metal": Color(0.6, 0.6, 0.65),
 		"cloud_light": Color(0.50, 0.45, 0.60), "cloud_shade": Color(0.12, 0.10, 0.18),
 	},
+	# Storm Armada: a sky-pirate fleet in a thunderstorm at sunset - rain-dark deck planks, oak hulls,
+	# brass trim, storm-blue accents. (levels/level_12_armada.gd swaps in its own storm sky, a wet-plank
+	# deck shader, the cloud sea and the lightning.)
 	"armada": {
-		"sky_top": Color(0.08, 0.10, 0.16), "sky_horizon": Color(0.40, 0.44, 0.52), "sky_bottom": Color(0.20, 0.22, 0.28),
-		"sun": Color(1.0, 0.85, 0.65), "sun_energy": 1.2, "sun_rot": Vector3(-30, 140, 0),
-		"ambient": Color(0.55, 0.60, 0.70), "ambient_energy": 0.8, "fog": Color(0.30, 0.33, 0.40), "fog_density": 0.004,
-		"top": Color(0.62, 0.45, 0.30), "side": Color(0.36, 0.24, 0.16), "trim": Color(0.95, 0.75, 0.30),
-		"alt_top": Color(0.70, 0.55, 0.38), "accent": Color(0.95, 0.75, 0.30), "accent2": Color(0.40, 0.75, 1.0),
-		"decor": Color(0.30, 0.22, 0.16), "decor2": Color(0.95, 0.75, 0.30), "metal": Color(0.6, 0.6, 0.65),
-		"cloud_light": Color(0.70, 0.72, 0.80), "cloud_shade": Color(0.25, 0.28, 0.36),
+		"sky_top": Color(0.06, 0.08, 0.12), "sky_horizon": Color(0.52, 0.40, 0.38), "sky_bottom": Color(0.14, 0.15, 0.2),
+		"sun": Color(1.0, 0.7, 0.45), "sun_energy": 1.2, "sun_rot": Vector3(-11, 195, 0),
+		"ambient": Color(0.50, 0.58, 0.74), "ambient_energy": 0.8, "fog": Color(0.30, 0.34, 0.44), "fog_density": 0.0042,
+		"top": Color(0.60, 0.44, 0.29), "side": Color(0.34, 0.22, 0.14), "trim": Color(0.96, 0.72, 0.30),
+		"alt_top": Color(0.70, 0.55, 0.38), "accent": Color(0.95, 0.30, 0.22), "accent2": Color(0.40, 0.75, 1.0),
+		"decor": Color(0.30, 0.20, 0.13), "decor2": Color(0.95, 0.72, 0.30), "metal": Color(0.70, 0.56, 0.36),
+		"cloud_light": Color(0.52, 0.55, 0.64), "cloud_shade": Color(0.16, 0.18, 0.25),
 	},
 	"candy": {
 		"sky_top": Color(0.55, 0.75, 1.0), "sky_horizon": Color(1.0, 0.80, 0.90), "sky_bottom": Color(0.95, 0.85, 1.0),
