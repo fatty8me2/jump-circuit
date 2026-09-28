@@ -20,6 +20,9 @@ extends Node3D
 ## The deflector's hinge line (local z, behind the jet's tail) and its size.
 @export var jbd_z: float = 9.4
 @export var jbd_size: Vector2 = Vector2(10.0, 3.8)
+## Local z ranges (from, to; from > to) where the lane has deck under it: the track slot and the
+## shooter lamps are only drawn there. Empty = the whole lane.
+@export var track_spans: Array[Vector2] = []
 
 const RUN: float = 2.3
 const FLY: float = 3.4
@@ -251,6 +254,16 @@ func _pose(t: float) -> void:
 		WorldAudio.at(self, "carrier_launch_flyby", global_position + Vector3(0, 6, -track_length), 1.0, 160.0)
 
 
+## Whether local z has deck under it (see track_spans).
+func _on_deck(z: float) -> bool:
+	if track_spans.is_empty():
+		return true
+	for sp: Vector2 in track_spans:
+		if z <= sp.x and z >= sp.y:
+			return true
+	return false
+
+
 # ---- build ------------------------------------------------------------------------------------------
 
 func _build() -> void:
@@ -375,9 +388,14 @@ func _build() -> void:
 		"size": 2.4, "color": Color(0.85, 0.84, 0.82, 0.3), "aabb": vis})
 	add_child(_deflect)
 	# the catapult track down the lane, and its shuttle
-	var slot := Look.box(Vector3(0.36, 0.04, track_length), Look.flat(Color(0.05, 0.05, 0.06), 0.8), Vector3(0, 0.01, -track_length * 0.5 - 3.0))
-	slot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(slot)
+	var spans: Array[Vector2] = track_spans.duplicate()
+	if spans.is_empty():
+		spans.append(Vector2(-3.0, -track_length - 3.0))
+	for sp: Vector2 in spans:
+		var ln: float = absf(sp.x - sp.y)
+		var slot := Look.box(Vector3(0.36, 0.04, ln), Look.flat(Color(0.05, 0.05, 0.06), 0.8), Vector3(0, 0.01, (sp.x + sp.y) * 0.5))
+		slot.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(slot)
 	_shuttle = Node3D.new()
 	add_child(_shuttle)
 	_shuttle.add_child(Look.box(Vector3(0.5, 0.2, 1.3), Look.flat(Color(0.2, 0.21, 0.22), 0.4, 0.8), Vector3(0, 0.08, 0)))
@@ -400,7 +418,10 @@ func _build() -> void:
 	var nl: int = int(track_length / 10.0)
 	for sx: float in [-1.0, 1.0]:
 		for i: int in nl:
-			var lamp := Look.box(Vector3(0.35, 0.08, 0.35), _lamp_off, Vector3(sx * (lane_width * 0.5 + 0.1), 0.04, -8.0 - float(i) * 10.0))
+			var lz: float = -8.0 - float(i) * 10.0
+			if not _on_deck(lz):
+				continue
+			var lamp := Look.box(Vector3(0.35, 0.08, 0.35), _lamp_off, Vector3(sx * (lane_width * 0.5 + 0.1), 0.04, lz))
 			lamp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(lamp)
 			_lamps.append(lamp)

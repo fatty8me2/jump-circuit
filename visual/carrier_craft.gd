@@ -155,6 +155,29 @@ static func tractor() -> Node3D:
 	return root
 
 
+## A flight deck crewman in a coloured jersey and cranial helmet, standing (about 1.8 m).
+static func crew(jersey: Color) -> Node3D:
+	var root := Node3D.new()
+	var shirt: StandardMaterial3D = Look.flat(jersey, 0.8)
+	var trousers: StandardMaterial3D = Look.flat(Color(0.2, 0.22, 0.25), 0.8)
+	var skin: StandardMaterial3D = Look.flat(Color(0.82, 0.62, 0.48), 0.7)
+	var vest: StandardMaterial3D = Look.flat(jersey.lightened(0.25), 0.6, 0.0, 0.15)
+	for sx: float in [-1.0, 1.0]:
+		_part(root, Look.box(Vector3(0.18, 0.85, 0.2), trousers, Vector3.ZERO), Vector3(sx * 0.12, 0.43, 0))
+		_part(root, Look.box(Vector3(0.14, 0.62, 0.14), shirt, Vector3.ZERO), Vector3(sx * 0.32, 1.12, 0), Vector3(0, 0, sx * 0.12))
+	_part(root, Look.box(Vector3(0.5, 0.62, 0.3), shirt, Vector3.ZERO), Vector3(0, 1.16, 0))
+	_part(root, Look.box(Vector3(0.52, 0.3, 0.32), vest, Vector3.ZERO), Vector3(0, 1.3, 0))
+	_part(root, Look.sphere(0.13, skin), Vector3(0, 1.6, 0))
+	var helmet := Look.sphere(0.16, shirt)
+	helmet.scale = Vector3(1.0, 0.8, 1.05)
+	_part(root, helmet, Vector3(0, 1.68, 0.01))
+	_part(root, Look.box(Vector3(0.36, 0.1, 0.06), Look.flat(Color(0.1, 0.1, 0.1), 0.2, 0.4), Vector3.ZERO), Vector3(0, 1.62, -0.13))
+	for c: Node in root.get_children():
+		if c is GeometryInstance3D:
+			(c as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return root
+
+
 ## A yellow tow tug with a cab and a flashing amber light on top (4.6 x 2.4 m, 2.3 m tall).
 ## Returns the root; its child "Beacon" can be spun.
 static func tug() -> Node3D:

@@ -8,12 +8,14 @@ extends Node3D
 ## line at the middle of the doorway; the leaves slide along local X, the passage runs along Z.
 ##   cycle (s into the period): open .. `warn` warning .. closing (MOVE s) .. closed (hold) .. opening
 
-## Width of the whole doorway (each leaf is half of it), its height, the leaf thickness.
-@export var width: float = 34.0
+## How far the bay's walls are from the doorway's middle on each side (-X side, +X side): each leaf
+## spans from its wall to the middle when shut, and slides open_gap / 2 back into its wall pocket.
+@export var reach_left: float = 17.0
+@export var reach_right: float = 17.0
 @export var height: float = 15.0
 @export var thickness: float = 1.2
-## Gap left between the leaves when open.
-@export var open_gap: float = 4.0
+## Gap left between the leaves when open (keep it within the walls' thickness x 2).
+@export var open_gap: float = 3.0
 @export var period: float = 7.0
 @export var phase: float = 0.0
 ## Seconds held open / closed.
@@ -93,9 +95,9 @@ func _physics_process(_dt: float) -> void:
 
 func _apply(t: float) -> void:
 	var g: float = gap_at(t)
-	var leaf_w: float = (width - open_gap) * 0.5
 	for i: int in 2:
 		var sx: float = -1.0 if i == 0 else 1.0
+		var leaf_w: float = reach_left if i == 0 else reach_right
 		_leaves[i].position = Vector3(sx * (g * 0.5 + leaf_w * 0.5), height * 0.5, 0)
 	var s: float = _s(t)
 	var warning: bool = s >= open_time - warn and s < open_time
@@ -117,13 +119,13 @@ func _apply(t: float) -> void:
 
 
 func _build() -> void:
-	var leaf_w: float = (width - open_gap) * 0.5
 	var steel: StandardMaterial3D = Look.flat(Color(0.5, 0.53, 0.56), 0.6, 0.45)
 	var rib: StandardMaterial3D = Look.flat(Color(0.4, 0.43, 0.46), 0.6, 0.5)
 	var ya: StandardMaterial3D = Look.flat(YELLOW, 0.6, 0.0, 0.2)
 	var yb: StandardMaterial3D = Look.flat(Color(0.08, 0.08, 0.08), 0.7)
 	for i: int in 2:
 		var sx: float = -1.0 if i == 0 else 1.0
+		var leaf_w: float = reach_left if i == 0 else reach_right
 		var leaf := AnimatableBody3D.new()
 		leaf.sync_to_physics = false
 		leaf.collision_layer = 1
@@ -149,7 +151,8 @@ func _build() -> void:
 		add_child(leaf)
 		_leaves.append(leaf)
 	# the overhead track and the lamps over the doorway
-	add_child(Look.box(Vector3(width + 2.0, 1.0, thickness + 1.0), Look.flat(Color(0.3, 0.32, 0.34), 0.6, 0.5), Vector3(0, height + 0.5, 0)))
+	var track_w: float = reach_left + reach_right
+	add_child(Look.box(Vector3(track_w, 1.0, thickness + 1.0), Look.flat(Color(0.3, 0.32, 0.34), 0.6, 0.5), Vector3((reach_right - reach_left) * 0.5, height - 0.5, 0)))
 	_green = Look.flat(Color(0.2, 1.0, 0.35), 0.3, 0.0, 2.4)
 	_red = Look.flat(Color(1.0, 0.15, 0.1), 0.3, 0.0, 3.0)
 	_red_off = Look.flat(Color(0.4, 0.06, 0.05), 0.4, 0.0, 0.2)
@@ -174,5 +177,5 @@ func _build() -> void:
 	_dust = Fx.smoke({"amount": 30, "lifetime": 1.2, "shape": "box", "extents": Vector3(open_gap * 0.5, height * 0.4, 0.4),
 		"offset": Vector3(0, height * 0.5, 0), "dir": Vector3(0, -0.3, 1), "spread": 90.0, "speed": Vector2(1.0, 3.0),
 		"size": 1.6, "color": Color(0.8, 0.8, 0.78, 0.35),
-		"aabb": AABB(Vector3(-width * 0.5, -2, -8), Vector3(width, height + 6, 16))})
+		"aabb": AABB(Vector3(-reach_left, -2, -8), Vector3(reach_left + reach_right, height + 6, 16))})
 	add_child(_dust)
