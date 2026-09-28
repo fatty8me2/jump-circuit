@@ -351,6 +351,30 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"color": Color(0.2, 0.22, 0.25, 0.8), "speed": Vector2(2.0, 4.0), "dir": Vector3(1, 0.05, 0.3), "spread": 60.0,
 					"turbulence": 1.2, "angle": Vector2(80, 100), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
 			]
+		"armada":
+			return [
+				# near: storm rain slanting past on the wind, and spray glittering in the lamplight
+				{"depth": "near", "amount": 190, "lifetime": 0.7, "facing": "velocity", "tex": Fx.Tex.SPARK, "additive": false,
+					"size": Vector2(0.025, 0.8), "color": Color(0.74, 0.82, 0.96, 0.55), "dir": Vector3(0.3, -1, 0.12),
+					"spread": 4.0, "speed": Vector2(18.0, 24.0), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 60, "lifetime": 2.2, "tex": Fx.Tex.DOT, "size": 0.08,
+					"color": Color(1.6, 1.8, 2.2), "speed": Vector2(0.3, 1.2), "dir": Vector3(1, 0.1, 0.2), "spread": 60.0,
+					"gravity": Vector3(0.8, -0.6, 0.1), "turbulence": 1.0, "curve": "pop"},
+				# mid: torn scud blowing through the rigging, and embers from the battle drifting downwind
+				{"depth": "mid", "amount": 40, "lifetime": 6.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 4.0,
+					"color": Color(0.58, 0.62, 0.72, 0.22), "dir": Vector3(1, 0.05, 0.3), "spread": 15.0,
+					"speed": Vector2(3.0, 6.0), "angle": Vector2(0, 360), "spin": Vector2(-20, 20),
+					"curve": "puff", "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 45, "lifetime": 4.0, "tex": Fx.Tex.DOT, "size": 0.22,
+					"color": Color(2.6, 1.2, 0.4), "speed": Vector2(1.0, 2.5), "dir": Vector3(1, 0.3, 0.2), "spread": 40.0,
+					"turbulence": 1.2, "curve": "pop", "fade": PackedFloat32Array([0.0, 1.0, 0.0])},
+				# far: veils of rain sweeping the skyline, and cold flickers deep in the clouds
+				{"depth": "far", "amount": 45, "lifetime": 9.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 16.0,
+					"radius": 80.0, "color": Color(0.36, 0.4, 0.5, 0.3), "speed": Vector2(3.0, 6.0), "dir": Vector3(1, -0.1, 0.25),
+					"spread": 12.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 20, "lifetime": 0.6, "tex": Fx.Tex.DOT, "size": 9.0, "radius": 110.0,
+					"color": Color(0.7, 0.85, 1.6, 0.35), "speed": Vector2(0.0, 0.2), "spread": 180.0, "curve": "pop"},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking
