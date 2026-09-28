@@ -308,4 +308,5 @@ func _build() -> void:
 	_flash.light_energy = 0.0
 	_flash.shadow_enabled = false
 	_flash.position = Vector3(0, 0.3, -0.8)
+	_flash.visible = false
 	add_child(_flash)

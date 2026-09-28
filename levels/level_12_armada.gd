@@ -1043,12 +1043,12 @@ func _crown_disc(c: Vector3, r: float) -> Dictionary:
 
 func _stage_10() -> Vector3:
 	# your ship's deck, shot to pieces: five sections with four holes between them
-	var secs: Array[Vector2] = [Vector2(-3.0, -10.0), Vector2(-13.5, -19.5), Vector2(-23.0, -29.0), Vector2(-32.5, -38.5), Vector2(-42.0, -48.0)]
+	var secs: Array[Vector2] = [Vector2(-3.0, -10.0), Vector2(-14.2, -20.2), Vector2(-24.4, -30.4), Vector2(-34.6, -40.6), Vector2(-44.8, -50.8)]
 	var areas: Array[Dictionary] = []
 	for s: Vector2 in secs:
 		var cz: float = (s.x + s.y) * 0.5
 		areas.append(_blk(Vector3(0, 0, cz), 5.0, s.x - s.y, "main", 0.8, "none"))
-	var cp: Dictionary = _cp(Vector3(0, 0, -54.5))
+	var cp: Dictionary = _cp(Vector3(0, 0, -57.3))
 	# the enemy galleon alongside, her gun ports along your deck
 	_ship(Vector3(-20.0, 2.0, -27.0), 52.0, 12.0, 0.0, {"env_y": 16.0, "env_r": 7.0, "masts": [-0.05, 0.25, 0.5], "mast_h": 18.0, "house": 2})
 	var period: float = 3.6
@@ -1062,7 +1062,7 @@ func _stage_10() -> Vector3:
 		for e: float in [secs[k].y, secs[k + 1].x]:
 			kit.glow_strip(_w(Vector3(0, 0.03, e + (0.12 if e == secs[k].y else -0.12))), _sz(Vector3(4.6, 0.05, 0.16)), RED)
 	# the upper battery: two more lanes raking the middle of the second and fourth sections
-	var mid_z: Array[float] = [-17.3, -36.3]
+	var mid_z: Array[float] = [-18.0, -38.4]
 	var mids: Array[ArmadaCannon] = []
 	for k: int in 2:
 		mids.append(_cannon(Vector3(-13.8, 1.0, mid_z[k]), "+x", period, 0.5 - 0.14 * float(k * 2 + 1), 30.0, 1.0, 11.3, 16.3, false, 26.0))
@@ -1085,19 +1085,21 @@ func _stage_10() -> Vector3:
 	var m0: ArmadaCannon = mids[0]
 	var m1: ArmadaCannon = mids[1]
 	# the run: wait for each hole's lane, jump it, wait out the mid-deck lanes
-	_wait(func() -> bool: return _clear(g0, lanes[0], 0.0, 1.9), _w(Vector3(0, 0, -9.65)))
-	r_jump(_w(Vector3(0, 0, -9.65)), _w(Vector3(0, 0, -15.0)))
-	_wait(func() -> bool: return _clear(m0, mp[0], 0.0, 1.8), _w(Vector3(0, 0, -15.0)))
-	r_walk(_w(Vector3(0, 0, -19.15)))
-	_wait(func() -> bool: return _clear(g1, lanes[1], 0.0, 1.9), _w(Vector3(0, 0, -19.15)))
-	r_jump(_w(Vector3(0, 0, -19.15)), _w(Vector3(0, 0, -24.5)))
-	r_walk(_w(Vector3(0, 0, -28.65)))
-	_wait(func() -> bool: return _clear(g2, lanes[2], 0.0, 1.9), _w(Vector3(0, 0, -28.65)))
-	r_jump(_w(Vector3(0, 0, -28.65)), _w(Vector3(0, 0, -34.0)))
-	_wait(func() -> bool: return _clear(m1, mp[1], 0.0, 1.8), _w(Vector3(0, 0, -34.0)))
-	r_walk(_w(Vector3(0, 0, -38.15)))
-	_wait(func() -> bool: return _clear(g3, lanes[3], 0.0, 1.9), _w(Vector3(0, 0, -38.15)))
-	r_jump(_w(Vector3(0, 0, -38.15)), _w(Vector3(0, 0, -43.5)))
+	var mlanes: Array[ArmadaCannon] = [m0, m1]
+	var gl: Array[ArmadaCannon] = [g0, g1, g2, g3]
+	for k: int in 4:
+		var take: float = secs[k].y + 0.35
+		var land: float = secs[k + 1].x - 1.5
+		var gun: ArmadaCannon = gl[k]
+		var lane_p: Vector3 = lanes[k]
+		if k == 1 or k == 3:
+			var mc: ArmadaCannon = mlanes[0 if k == 1 else 1]
+			var mpp: Vector3 = mp[0 if k == 1 else 1]
+			r_walk(_w(Vector3(0, 0, secs[k].x - 1.5)))
+			_wait(func() -> bool: return _clear(mc, mpp, 0.0, 1.8), _w(Vector3(0, 0, secs[k].x - 1.5)))
+		r_walk(_w(Vector3(0, 0, take)))
+		_wait(func() -> bool: return _clear(gun, lane_p, 0.0, 1.9), _w(Vector3(0, 0, take)))
+		r_jump(_w(Vector3(0, 0, take)), _w(Vector3(0, 0, land)))
 	_hop(areas[4], cp, Vector3(0, 0, 1.5))
 	r_checkpoint()
 	return cp["c"]
@@ -1470,13 +1472,15 @@ func _flagship(stern: Vector3) -> void:
 	ArmadaFx.rising(self, _w(stern + Vector3(0, 0.1, -7.0)), 5.0, 8.0, BRASS, 40)
 	ArmadaFx.motes(self, _w(stern + Vector3(0, 5.0, -8.0)), _sz(Vector3(7.0, 5.0, 7.0)), 60, Color(2.6, 1.6, 0.8))
 	# the sunset breaking through dead ahead: a swollen sun and the light fanning out round it
+	# (placed on the sun's own bearing, so it swells the sky's sun rather than making a second one)
 	_sun_disc = Node3D.new()
-	_sun_disc.position = _w(stern + Vector3(0, 30.0, -620.0))
+	var toward_sun: Vector3 = _sun.global_transform.basis.z.normalized() if _sun != null else Vector3(-0.25, 0.17, -0.95)
+	_sun_disc.position = _w(stern) + toward_sun * 700.0
 	add_child(_sun_disc)
-	var disc := Fx.sprite(Color(2.6, 1.5, 0.7, 1.0), 150.0, Fx.Tex.DOT)
+	var disc := Fx.sprite(Color(1.7, 1.05, 0.55, 1.0), 60.0, Fx.Tex.DOT)
 	(disc.material_override as StandardMaterial3D).disable_fog = true
 	_sun_disc.add_child(disc)
-	var glow := Fx.sprite(Color(1.2, 0.55, 0.25, 0.6), 520.0, Fx.Tex.DOT)
+	var glow := Fx.sprite(Color(0.8, 0.4, 0.2, 0.22), 300.0, Fx.Tex.DOT)
 	(glow.material_override as StandardMaterial3D).disable_fog = true
 	_sun_disc.add_child(glow)
 
