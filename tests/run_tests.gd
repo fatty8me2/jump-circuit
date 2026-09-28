@@ -3187,3 +3187,28 @@ func test_z_world_sounds() -> void:
 		world.queue_free()
 		world = null
 		await ticks(2)
+
+
+func test_zq_particle_slider() -> void:
+	var old_q: int = Settings.quality
+	var old_p: float = Settings.particles
+	Settings.quality = 2
+	Settings.particles = 1.0
+	near(Settings.particle_scale(), 1.0, 0.001, "the particle slider at 100% leaves the quality tier as it is")
+	Settings.particles = 2.0
+	near(Settings.particle_scale(), 2.0, 0.001, "Maximum doubles every emitter")
+	Settings.particles = 0.2
+	near(Settings.particle_scale(), 0.2, 0.001, "Low keeps a fifth")
+	Settings.particles = 9.0
+	Settings.call("_sanitize")
+	near(Settings.particles, 2.0, 0.001, "a hand-edited value is clamped to the slider range")
+	var panel := SettingsPanel.new()
+	add_child(panel)
+	await ticks(2)
+	var found: bool = false
+	for l: Node in panel.find_children("*", "Label", true, false):
+		found = found or (l as Label).text == "Particles"
+	check(found, "Settings has a Particles slider")
+	panel.queue_free()
+	Settings.quality = old_q
+	Settings.particles = old_p

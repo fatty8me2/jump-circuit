@@ -42,6 +42,9 @@ func _ready() -> void:
 
 	_section(box, "Graphics & HUD")
 	_option_row(box, "Quality", Settings.QUALITY_NAMES, Settings.quality, func(i: int) -> void: Settings.quality = i)
+	# how many particles every effect makes (applies when a level loads)
+	_slider_row(box, "Particles", 0.2, 2.0, Settings.particles, func(v: float) -> void: Settings.particles = v,
+		func(v: float) -> String: return "Low" if v <= 0.25 else ("Max" if v >= 1.95 else "%d%%" % roundi(v * 100.0)), 0.05)
 	_fullscreen_check = _check_row(box, "Fullscreen", Settings.fullscreen, func(on: bool) -> void: Settings.fullscreen = on)
 	_check_row(box, "V-Sync", Settings.vsync, func(on: bool) -> void: Settings.vsync = on)
 	var modes: Array[String] = ["auto", "on", "off"]

@@ -22,6 +22,8 @@ var quality: int = 2
 const QUALITY_NAMES: Array[String] = ["Low", "Medium", "High", "Ultra"]
 ## Particle amount multiplier per quality tier (see particle_scale()).
 const PARTICLE_SCALE: Array[float] = [0.45, 0.75, 1.0, 1.75]
+## Particle amount multiplier on top of the Quality tier (Settings slider: Low 0.2 .. Maximum 2.0).
+var particles: float = 1.0
 var fullscreen: bool = false
 var vsync: bool = true
 ## "auto" hides the timer until a level has been finished once.
@@ -82,6 +84,7 @@ func _sanitize() -> void:
 	music_volume = _finite_clamp(music_volume, 0.0, 1.0, 0.4)
 	ambience_volume = _finite_clamp(ambience_volume, 0.0, 1.0, 0.7)
 	quality = clampi(quality, 0, QUALITY_NAMES.size() - 1)
+	particles = _finite_clamp(particles, 0.2, 2.0, 1.0)
 	color_index = posmod(color_index, RACER_COLORS.size())
 	if timer_mode not in ["auto", "on", "off"]:
 		timer_mode = "auto"
@@ -138,14 +141,14 @@ func toggle_fullscreen() -> void:
 
 func _props() -> Array[String]:
 	return ["mouse_sensitivity", "invert_y", "fov", "master_volume", "sfx_volume", "music_volume", "ambience_volume",
-		"quality", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_room_code", "party_binds"]
+		"quality", "particles", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_room_code", "party_binds"]
 
 
 ## How many particles every emitter builds relative to the High baseline: Low 0.45,
 ## Medium 0.75, High 1.0, Ultra 1.75. The single source for particle density (Fx and
 ## PartyFx read it).
 func particle_scale() -> float:
-	return PARTICLE_SCALE[clampi(quality, 0, PARTICLE_SCALE.size() - 1)]
+	return PARTICLE_SCALE[clampi(quality, 0, PARTICLE_SCALE.size() - 1)] * clampf(particles, 0.2, 2.0)
 
 
 func my_color() -> Color:
