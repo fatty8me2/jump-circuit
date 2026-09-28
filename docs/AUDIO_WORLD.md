@@ -8,7 +8,8 @@ maths and seeded noise by `tools/gen_world_sfx.py` (which borrows the helpers in
 ## Regenerating
 
 ```
-python tools/gen_world_sfx.py            # generate all 236 clips into audio/, then verify
+python tools/gen_world_sfx.py            # generate all 293 clips into audio/, then verify
+python tools/gen_world_sfx.py --only=manor,carrier   # just those maps' generators (gen_<name>), then verify all
 python tools/gen_world_sfx.py --verify   # only check the files on disk
 ```
 
@@ -27,7 +28,7 @@ checks that the first and last samples are near zero. For loops it checks the se
 * the curvature (second difference) across the wrap must pass the same test;
 * the 40 ms window across the wrap must be no quieter than the quietest windows in the loop (a faded-out end would fail).
 
-It also checks the total size, which is about 12.4 MB of an 18 MB budget.
+It also checks the total size, which is about 17.9 MB of an 18 MB budget (new clips must be short, or something else must shrink).
 
 ## Formats and levels
 
@@ -42,7 +43,7 @@ whole loop (`cband`, `cnoise`). Time-varying filters (`csvf`) run over three
 periods, and the settled middle one is kept. Every tone has a whole number of
 cycles (`cyc`). Modulators are sums of whole-cycle sines (`clfo`, `crand`).
 Events that run past the end wrap round to the start (`cplace`). The only
-processing after that is a gain, so the seam can't click. Loops are 1 to 2.5 s long.
+processing after that is a gain, so the seam can't click. Loops are 1 to 2.5 s long (the manor's music-box waltz, 3.6 s, is the one exception).
 
 ## Building blocks (in the generator)
 
@@ -259,6 +260,83 @@ f = f_hi / (1 + t / t0)^2. The glacier soundscape uses the same model.
 | `boulder_roll` (loop) | 2.0 s | The stone ball rolling: a 45-400 Hz rumble, knocks from five chips and flats coming round in a repeating pattern (it turns twice a loop), 400 grit crackles, crunch and dust. Pitch it with the ball's speed. | The boulder run, riding on the ball. |
 | `boulder_impact` | 1.4 s | The ball smashing into a wall or its pit: a huge 95 -> 55 Hz thud with harmonics, a crack, a burst of low noise, 30 pieces of rubble tumbling and rattling, debris and dust, in a 1.4 s temple reverb. | The boulder's end. |
 | `stone_grind_1..2` | 1.3 s | A sandstone block sliding: stone grinding on stone (a stick-slip at 26-52 per second through the block's dead resonances, plus a rough scrape), sand crunching under it, and the block settling with a knock at 1.03 s, in the temple. | Sliding walls, the hidden tomb door, turning sun-dials. |
+
+**Phantom Manor** (score in D minor; pitched clips in D minor)
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `manor_phantom_waver` | 0.6 s | Pale D5/F5/A5/D6 sines with 4-6.5 Hz vibrato and an uneven tremolo, over a breathy band wandering round 900 Hz, swelling and fading, in the hall. | A phantom platform flickering. |
+| `manor_phantom_form` / `_fade` | 0.8 s | A detuned cluster gliding into (out of) a D-minor chord, a breath sweeping 400 -> 2600 Hz (2600 -> 350 Hz), and a glassy D6 ping as it takes (loses) shape. | A phantom platform appearing / vanishing. |
+| `manor_gaze_open` | 0.7 s | A low swell of D2 + A2 harmonic stacks, a thin G#5/D6 sting (the tritone), a dry canvas creak and an indrawn breath falling 3 kHz -> 700 Hz. | A portrait's eyes opening. |
+| `manor_gaze_hum` (loop) | 1.5 s | Two D2 hum stacks 0.6 % apart beating, a hollow formant breathing round 600 Hz once a loop, a thin D6 whine pulsing three times, and air. | The gaze while it's on. |
+| `manor_chain_creak` | 0.8 s | Chain links groaning (stick-slip through 850-950/2000-2300/3400 Hz) and five small clinks (bar modes, 1.9-2.6 kHz). | A swinging chandelier. |
+| `manor_possessed_creak` (loop) | 1.5 s | Two wooden groans (150 and 190 Hz timbers), two knocks, a restless rattle and a faint draught, all wrapping round the loop. | Possessed furniture. |
+| `manor_waltz_box` (loop) | 3.6 s | A music box playing a four-bar waltz in D minor, 3/4 at 200 bpm (Dm, Gm, A7, Dm). A bass tine on each downbeat, dyads on beats two and three, and the tune over them. The tines are cantilever modes (1 : 6.27 : 17.55) and ring across the wrap. The pins tick, and the spring and air brake whirr softly. | The music box. |
+| `manor_board_creak` | 0.6 s | A floorboard's long creak: stick-slip at 25-70 per second through a 210-250 Hz board's modes. | A weak board taking weight. |
+| `manor_board_snap` | 0.6 s | A splintering crack through the board's modes (240-3000 Hz), 40 splinters, fibres tearing and a dull drop below. | The board breaking. |
+| `manor_coffin_slam` | 0.9 s | A heavy 120 -> 58 Hz thud, the box's plate modes booming, the lid rattling three times, and a 1.8 s crypt reverb. | A coffin lid slamming. |
+| `manor_bell_toll` | 2.0 s | A D4 bell with a minor tierce (hum, prime, tierce, quint, nominal and upper partials), struck with a thud and swinging (a 2.2 Hz beat), in a long reverb. | The tower bell and the finish. |
+| `manor_mirror_chime` | 1.0 s | A quick glassy arpeggio up D6 F6 A6 D7 (glass modes 1 : 2.32 : 4.25) with a high shimmer. | A haunted mirror. |
+
+**Storm Armada** (score in E minor)
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `armada_cannon_fuse` | 0.8 s | A spitting fuse: a 2.5-11 kHz hiss with ragged amplitude, 160 bright crackles and a few low pops. | A cannon about to fire. |
+| `armada_cannon_fire` | 1.2 s | A crack, a 106 -> 36 Hz thump with harmonics, a smoky tilted blast, a rolling low tail and the carriage recoiling at 0.09 s, with a sky echo. | A cannon firing. |
+| `armada_cannon_impact` | 0.9 s | A 130 -> 60 Hz thud, a splintering crack, the deck's plate modes and 50 splinters raining down. | A ball hitting home. |
+| `armada_hull_creak` (loop) | 1.5 s | Two deep timber groans (95 and 140 Hz), water sloshing in the bilge once a loop, and a low bed. | Ship decks in the storm. |
+| `armada_swing_creak` | 0.7 s | Rope fibres groaning round the spar (380-440/900-1000/1900 Hz). | Rope swings. |
+| `armada_rod_charge` | 0.9 s | A buzz rising from E2 to E4, with corona hiss and crackle thickening. | A lightning rod charging. |
+| `armada_lightning_strike` | 1.2 s | A searing crack, a sizzle and a short E2 buzz, then thunder right on top (tilted noise and a 70 -> 38 Hz boom) with a sky reverb. | A strike on the rod. |
+| `armada_prop_loop` (loop) | 1.0 s | Blades chopping the air 16 times a second, an E2 engine thrumming with them, and the wash. | Airship propellers. |
+| `armada_prop_spinup` | 1.0 s | The chop speeding up from 2 to 16 per second and the engine climbing to pitch. | A propeller starting. |
+| `armada_mast_creak` | 0.9 s | A long, deep groan of a 110 Hz timber, with grit. | A mast leaning before it falls. |
+| `armada_mast_crash` | 1.2 s | Fibres splintering, a huge 100 -> 45 Hz thud, the planks' plate modes booming, and rigging and debris clattering. | The mast crashing down. |
+| `armada_winch_loop` (loop) | 1.0 s | A pawl clacking over the ratchet ten times a second, an E3 gear whine, the rope creaking round the drum, and a rumble. | Winches hauling. |
+| `armada_ship_bell` | 1.4 s | "Ding-ding": a small brass bell on E5, struck twice. | Ship's bells. |
+| `armada_salute` | 1.5 s | Three guns fired in turn (0, 0.38, 0.76 s), each rolling off the clouds. | The finish salute. |
+
+`armada_thunder_near` / `armada_thunder_far` were in the brief, but nothing calls them (the ambience's
+`amb_armada_thunder_*` covers thunder), so they were not made.
+
+**Sugar Rush** (score in C major; pitched clips in C major)
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `candy_jelly_boing` | 0.5 s | A wobbling "boing" gliding C3 -> G3 with a decaying 11 Hz jiggle, a wet slap and a squelch falling 1.5 kHz -> 400 Hz. | Jelly pads (via `Sfx.has_clip`; falls back to `bounce`). |
+| `candy_jack_wind` | 0.8 s | A crank ratchet clicking six times and a music-box tune plinking C5 E5 G5 C6. | A jack-in-the-box winding. |
+| `candy_jack_pop` | 0.7 s | A latch click, a spring "sproing" (C4 gliding up an octave with a 22 Hz wobble), a cork pop and a C6/E6/G6 ding. | The jack popping out. |
+| `candy_soldier_march` (loop) | 1.6 s | Four stiff tin-foot clacks at 150 steps a minute, each with a drum tap, clockwork ticking inside and a spring whirr. | Marching tin soldiers. |
+| `candy_soldier_turn` | 0.4 s | A quick clockwork whirr and a tin clank. | A soldier's about-turn. |
+| `candy_train_chug` (loop) | 1.6 s | Four steam chuffs, wheels clacking in pairs over the rail joins, the boiler's rumble and a steam hiss. | The toy train. |
+| `candy_train_whistle` | 1.2 s | A C6/E6/G6 chord blown through a steamy pipe, scooping into pitch: a short toot, then a long one. | The train's whistle. |
+| `candy_gumball_drop` | 0.6 s | The coin wheel clunking, then the ball bouncing down the chute, each hop shorter. | A gumball released. |
+| `candy_gumball_roll` (loop) | 1.2 s | A hollow 500 Hz rumble, a knock at each of eight chute seams and the ball's rattle. | A gumball rolling. |
+| `candy_gumball_splash` | 0.8 s | A gloopy plunk (a 260 Hz bubble and a thud), a thick splash and slow bubbles. | A gumball landing in syrup. |
+| `candy_confetti` | 0.9 s | A popper's pop, 220 paper flutters and a C-major twinkle (C6 E6 G6 C7). | Checkpoints. |
+| `candy_fireworks` | 1.5 s | A rocket whistling up (1.2 -> 3.2 kHz), a bang and 260 stars crackling as they fall. | The finish. |
+
+**Super Carrier** (score in A major; pitched clips in A)
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `carrier_cat_hiss` | 0.8 s | Steam bursting out of the track slot (an 800-10000 Hz hiss and a low body). | The catapult venting. |
+| `carrier_cat_launch` | 1.2 s | A 110 -> 50 Hz steam thump, the shuttle screaming down the track (a whoosh, and the rails singing), and the water brake's clunk and hiss at 0.85 s. | The catapult firing. |
+| `carrier_cat_retract` | 0.9 s | A rumble along the track, a hydraulic whine falling 900 -> 500 Hz, and a clunk. | The shuttle returning. |
+| `carrier_jet_spool` | 1.2 s | A compressor whine climbing 600 -> 3200 Hz and the roar swelling under it. | A jet winding up. |
+| `carrier_jet_roar` (loop) | 1.5 s | A churning tilted roar, a tearing 600-3000 Hz band, a 3.2 kHz whine and the deck rumbling. | Jet blast. |
+| `carrier_wire_twang` | 0.7 s | A 55 Hz steel cable (a stiff, slightly inharmonic string with a 7 Hz flutter) and the hook's clank. | An arresting wire. |
+| `carrier_elevator_start` / `_stop` | 0.6 s | The lock clunk and the motor winding up to (down from) A3. | The deck-edge elevator. |
+| `carrier_elevator_hum` (loop) | 1.0 s | An A2 motor hum stack, a faint A5 whine and the platform rumbling in its guides. | The elevator moving. |
+| `carrier_door_klaxon` | 1.0 s | Two blasts of a buzzy A4 through a horn formant (1.4 and 2.6 kHz). | The hangar door alarm. |
+| `carrier_door_grind` | 1.2 s | Steel dragging on its rails (stick-slip through 180-2800 Hz), rollers and a deep A1 motor. | The hangar door moving. |
+| `carrier_launch_spool` | 1.2 s | The whine climbing 900 -> 3000 Hz, the roar rising, and the afterburner lighting at 0.9 s with a thump and crackle. | A jet on the catapult going to full power. |
+| `carrier_launch_shot` | 1.2 s | The catapult's slam and the jet's roar blasting away down the deck (a band falling 2.5 kHz -> 500 Hz). | The launch. |
+| `carrier_launch_flyby` | 1.5 s | A roar sweeping in and out, with the whine's Doppler drop (3.4 -> 2.3 kHz). | The launched jet passing. |
+| `carrier_jbd_raise` / `_lower` | 1.0 s | A hydraulic whine rising (falling) between 300 and 520 Hz, fluid hiss, and a deep lock clunk at 0.78 s. | The jet blast deflectors. |
+| `carrier_lift_move` | 1.0 s | A clunk, two warning beeps (A5, C#6) and an A2 motor hum rising. | Aircraft lifts. |
+| `carrier_flyover` | 1.8 s | Three jets thundering past in turn (peaks at 0.6, 0.8 and 1.0 s), whines dropping, with a sky echo. | The finish flyover. |
 
 ### Deliberately silent
 

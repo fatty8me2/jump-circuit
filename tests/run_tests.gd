@@ -58,6 +58,9 @@ func _ready() -> void:
 		var gen: int = _test_gen
 		# physics-time budget (process_in_physics, scaled): the bot levels get 1300 s each
 		var limit: float = 1300.0 * Game.LEVELS.size() if n == "test_n_bot_levels" else watchdog_s
+		if n == "test_z_world_sounds":
+			# loads every level and walks each machine kind: scale with the level count
+			limit = maxf(watchdog_s, 30.0 * Game.LEVELS.size())
 		get_tree().create_timer(limit, true, true, false).timeout.connect(func() -> void: _watchdog(n, gen))
 		var before: int = trap.count()
 		trap.expected = 0
@@ -3127,12 +3130,24 @@ const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_l
 	"spore_boing", "snapjaw_snap", "snapjaw_open", "geyser_erupt", "leviathan_call",
 	"bomb_launch", "bomb_whistle", "bomb_impact", "basalt_sink", "crust_crack", "crust_break", "eruption_boom",
 	"icicle_crack", "icicle_fall", "icicle_shatter", "gust_whoosh", "ice_crack", "ice_break", "avalanche_rumble",
-	"snow_thump", "spike_trap", "spike_retract", "quicksand_sink", "mirage_shimmer", "boulder_impact", "stone_grind"]
+	"snow_thump", "spike_trap", "spike_retract", "quicksand_sink", "mirage_shimmer", "boulder_impact", "stone_grind",
+	"manor_phantom_waver", "manor_phantom_form", "manor_phantom_fade", "manor_gaze_open", "manor_chain_creak",
+	"manor_board_creak", "manor_board_snap", "manor_coffin_slam", "manor_bell_toll", "manor_mirror_chime",
+	"armada_cannon_fuse", "armada_cannon_fire", "armada_cannon_impact", "armada_swing_creak", "armada_rod_charge",
+	"armada_lightning_strike", "armada_prop_spinup", "armada_mast_creak", "armada_mast_crash", "armada_ship_bell",
+	"armada_salute", "candy_jelly_boing", "candy_jack_wind", "candy_jack_pop", "candy_soldier_turn",
+	"candy_train_whistle", "candy_gumball_drop", "candy_gumball_splash", "candy_confetti", "candy_fireworks",
+	"carrier_cat_hiss", "carrier_cat_launch", "carrier_cat_retract", "carrier_jet_spool", "carrier_wire_twang",
+	"carrier_elevator_start", "carrier_elevator_stop", "carrier_door_klaxon", "carrier_door_grind",
+	"carrier_launch_spool", "carrier_launch_shot", "carrier_launch_flyby", "carrier_jbd_raise", "carrier_jbd_lower",
+	"carrier_lift_move", "carrier_flyover"]
 const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
 	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
 	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz",
 	"drift_hum", "lava_rise", "fumarole_loop", "lavafall_loop", "avalanche_roar", "sandfall_loop", "dustdevil_loop",
-	"boulder_roll"]
+	"boulder_roll", "manor_gaze_hum", "manor_possessed_creak", "manor_waltz_box", "armada_hull_creak",
+	"armada_prop_loop", "armada_winch_loop", "candy_soldier_march", "candy_train_chug", "candy_gumball_roll",
+	"carrier_jet_roar", "carrier_elevator_hum"]
 
 
 func test_z_world_sounds() -> void:
@@ -3151,6 +3166,30 @@ func test_z_world_sounds() -> void:
 		if not Sfx.has_clip(c):
 			missing.append(c)
 	check(missing.is_empty(), "every world sound clip exists %s" % str(missing))
+	# every clip the newer maps' scripts ask WorldAudio / Sfx for by name exists (a missing one is
+	# silently skipped at runtime, so only this catches a typo)
+	var srcs: Array[String] = []
+	for f: String in ["level_11_manor.gd", "level_12_armada.gd", "level_13_candy.gd", "level_14_carrier.gd"]:
+		srcs.append("res://levels/" + f)
+	for f: String in DirAccess.get_files_at("res://mechanics"):
+		if f.ends_with(".gd") and (f.begins_with("manor_") or f.begins_with("armada_") or f.begins_with("candy_")
+				or f.begins_with("carrier_")):
+			srcs.append("res://mechanics/" + f)
+	var re := RegEx.create_from_string("\"((?:manor|armada|candy|carrier)_[a-z0-9_]+)\"")
+	var asked: Dictionary = {}
+	for path: String in srcs:
+		for line: String in FileAccess.get_file_as_string(path).split("
+"):
+			if not (line.contains("WorldAudio.") or line.contains("Sfx.")):
+				continue
+			for m: RegExMatch in re.search_all(line):
+				asked[m.get_string(1)] = true
+	var unknown: Array[String] = []
+	for c: String in asked:
+		if not Sfx.has_clip(c):
+			unknown.append(c)
+	check(asked.size() >= 40 and unknown.is_empty(),
+		"every WorldAudio clip the newer maps name exists (%d named) %s" % [asked.size(), str(unknown)])
 	var flat: Array[String] = []
 	for c: String in WORLD_LOOPS:
 		var s: AudioStreamWAV = load("res://audio/%s.wav" % c) as AudioStreamWAV
@@ -3172,7 +3211,11 @@ func test_z_world_sounds() -> void:
 		var seen: Dictionary = {}
 		var heard: int = 0
 		var pool: Array = Sfx.get("_pool3d")
-		for n: Node in lvl.find_children("*", "Node3D", true, false):
+		for o: Variant in lvl.find_children("*", "Node3D", true, false):
+			# a machine can free its own parts mid-sweep (the carrier's launched jets)
+			if not is_instance_valid(o):
+				continue
+			var n: Node = o
 			var sc: Script = n.get_script() as Script
 			if sc == null or seen.has(sc) or not sc.resource_path.begins_with("res://mechanics/"):
 				continue

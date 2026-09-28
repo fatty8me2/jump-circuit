@@ -110,6 +110,30 @@ for _n, _d in (("air_rush", 2.5), ("wallrun_scrape", 1.0), ("ice_slide", 1.2),
                ("drift_hum", 2.0), ("lava_rise", 2.5), ("fumarole_loop", 2.0), ("lavafall_loop", 2.0),
                ("avalanche_roar", 2.5), ("sandfall_loop", 2.0), ("dustdevil_loop", 2.0), ("boulder_roll", 2.0)):
     _reg(_n, _d, True)
+# the second set of new worlds: Phantom Manor, Storm Armada, Sugar Rush, Super Carrier
+for _n, _d in (("manor_phantom_waver", 0.6), ("manor_phantom_form", 0.8), ("manor_phantom_fade", 0.8),
+               ("manor_gaze_open", 0.7), ("manor_chain_creak", 0.8), ("manor_board_creak", 0.6),
+               ("manor_board_snap", 0.6), ("manor_coffin_slam", 0.9), ("manor_bell_toll", 2.0),
+               ("manor_mirror_chime", 1.0),
+               ("armada_cannon_fuse", 0.8), ("armada_cannon_fire", 1.2), ("armada_cannon_impact", 0.9),
+               ("armada_swing_creak", 0.7), ("armada_rod_charge", 0.9), ("armada_lightning_strike", 1.2),
+               ("armada_prop_spinup", 1.0), ("armada_mast_creak", 0.9), ("armada_mast_crash", 1.2),
+               ("armada_ship_bell", 1.4), ("armada_salute", 1.5),
+               ("candy_jelly_boing", 0.5), ("candy_jack_wind", 0.8), ("candy_jack_pop", 0.7),
+               ("candy_soldier_turn", 0.4), ("candy_train_whistle", 1.2), ("candy_gumball_drop", 0.6),
+               ("candy_gumball_splash", 0.8), ("candy_confetti", 0.9), ("candy_fireworks", 1.5),
+               ("carrier_cat_hiss", 0.8), ("carrier_cat_launch", 1.2), ("carrier_cat_retract", 0.9),
+               ("carrier_jet_spool", 1.2), ("carrier_wire_twang", 0.7), ("carrier_elevator_start", 0.6),
+               ("carrier_elevator_stop", 0.6), ("carrier_door_klaxon", 1.0), ("carrier_door_grind", 1.2),
+               ("carrier_launch_spool", 1.2), ("carrier_launch_shot", 1.2), ("carrier_launch_flyby", 1.5),
+               ("carrier_jbd_raise", 1.0), ("carrier_jbd_lower", 1.0), ("carrier_lift_move", 1.0),
+               ("carrier_flyover", 1.8)):
+    _reg(_n, _d)
+for _n, _d in (("manor_gaze_hum", 1.5), ("manor_possessed_creak", 1.5), ("manor_waltz_box", 3.6),
+               ("armada_hull_creak", 1.5), ("armada_prop_loop", 1.0), ("armada_winch_loop", 1.0),
+               ("candy_soldier_march", 1.6), ("candy_train_chug", 1.6), ("candy_gumball_roll", 1.2),
+               ("carrier_jet_roar", 1.5), ("carrier_elevator_hum", 1.0)):
+    _reg(_n, _d, True)
 
 
 # ---------------------------------------------------------------------------
@@ -2180,6 +2204,749 @@ def gen_desert():
 
 
 # ===========================================================================
+# the second set of new worlds: Phantom Manor (D minor), Storm Armada (E minor),
+# Sugar Rush (C major), Super Carrier (A major).  Pitched clips sit in their map's key.
+# ===========================================================================
+def midi(m):
+    return 440.0 * 2.0 ** ((m - 69) / 12.0)
+
+
+def bell_modes(f, tau):
+    """A cast bell: hum, prime, minor tierce, quint, nominal and the upper partials."""
+    return [(f * 0.5, 0.55, tau * 1.4), (f, 1.0, tau), (f * 1.2, 0.65, tau * 0.8), (f * 1.5, 0.35, tau * 0.6),
+            (f * 2.0, 0.75, tau * 0.5), (f * 2.52, 0.3, tau * 0.35), (f * 2.67, 0.28, tau * 0.3),
+            (f * 3.01, 0.25, tau * 0.25), (f * 4.07, 0.15, tau * 0.15), (f * 5.43, 0.08, tau * 0.1)]
+
+
+def tine(r, f, dur, tau=0.9):
+    """A music-box comb tooth plucked by a pin: a cantilever's modes (1 : 6.27 : 17.55) and a tick."""
+    t = tv(dur)
+    tau *= (523.0 / f) ** 0.35
+    x = modes(t, [(f, 1.0, tau), (f * 2.0, 0.05, tau * 0.4), (f * 6.27, 0.22, tau * 0.12),
+                  (f * 17.55, 0.06, tau * 0.03)], r, 0.0015)
+    return taper(x + 0.15 * click(r, dur, 2000, 9000, 0.0015), 0.05)
+
+
+def groan(r, secs, f0, spec_scale=1.0, rate=(18.0, 45.0)):
+    """A slow wooden groan: stick-slip swelling up and back through a timber's resonances."""
+    lo, hi = rate
+    g = creak(r, secs, lambda u: lo + (hi - lo) * np.sin(np.pi * u) ** 1.5,
+              [(f0 * spec_scale, 1.0, 0.03), (f0 * 2.3 * spec_scale, 0.7, 0.02),
+               (f0 * 4.9 * spec_scale, 0.4, 0.012), (f0 * 9.1 * spec_scale, 0.2, 0.006)])
+    return taper(g * np.sin(np.pi * np.linspace(0, 1, len(g))) ** 0.8, 0.02)
+
+
+def cannon_boom(r, secs, f0=70.0, size=1.0):
+    """A black-powder gun: a sharp crack, a deep pressure thump, a smoky blast and a rolling tail."""
+    t = tv(secs)
+    n = len(t)
+    x = 0.9 * thud(t, f0 * 1.6, f0 * 0.55, 0.12, 0.16 * size, harm=(0.5, 0.25))
+    x += 0.9 * click(r, secs, 300, 9000, 0.004)
+    x += 0.8 * unit(tilt(r.standard_normal(n), -3.0)) * env(t, 0.002, 0.07 * size)
+    x += 0.5 * noise(r, n, 40, 400) * env(t, 0.01, 0.35 * size)
+    return x
+
+
+def turbine(t, f0, f1, glide_s, blades=(1.0, 2.0, 3.02)):
+    """A jet compressor's whine: a few gliding partials."""
+    f = glide(f0, f1, t, glide_s)
+    x = np.zeros(len(t))
+    for k, a in zip(blades, (1.0, 0.5, 0.25)):
+        x += a * tone(f * k)
+    return unit(x)
+
+
+def gen_manor():
+    # a phantom wavering in the air: pale D-minor tones drifting in and out of tune with a slow,
+    # uneven tremolo, over a breathy, hollow band that sighs with them
+    name = "manor_phantom_waver"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    for m, a in ((74, 1.0), (77, 0.7), (81, 0.55), (86, 0.3)):
+        vib = 1.0 + 0.009 * np.sin(TAU * r.uniform(4.0, 6.5) * t + r.uniform(0, TAU))
+        x += a * tone(midi(m) * vib) * (0.6 + 0.4 * np.sin(TAU * r.uniform(5, 9) * t + r.uniform(0, TAU)))
+    breath = unit(svf(r.standard_normal(n), 900 * 2.0 ** (0.6 * np.sin(TAU * 2.2 * t)), 5.0))
+    save(name, space(r, (unit(x) + 0.4 * breath) * np.sin(np.pi * t / dur(name)) ** 1.5, 1.4, 0.3),
+         fin=0.02, fout=0.1)
+
+    # a phantom forming / fading: a breath sweeping up (down) and a cluster of detuned tones
+    # gliding into (out of) a D-minor chord, with a glassy ping as it takes (loses) shape
+    for name, up in (("manor_phantom_form", True), ("manor_phantom_fade", False)):
+        r = rng(name)
+        t = tv(dur(name))
+        n = len(t)
+        d = dur(name)
+        k = np.clip(t / (d * 0.7), 0, 1) if up else np.clip(t / d, 0, 1)
+        x = np.zeros(n)
+        for m in (62, 69, 74, 77, 81):
+            spread = r.uniform(-1.0, 1.0) * 0.06
+            f = midi(m) * (1.0 + spread * ((1.0 - k) if up else k))
+            x += tone(f) * r.uniform(0.5, 1.0)
+        shape = (np.sin(0.5 * np.pi * k) ** 2 * np.exp(-np.maximum(t - 0.7 * d, 0) / 0.06)) if up else \
+            (1.0 - k) ** 1.5 * np.minimum(t / 0.03, 1.0)
+        breath = unit(svf(r.standard_normal(n), glide(400, 2600, t, d) if up else glide(2600, 350, t, d), 3.0))
+        x = unit(x) * shape + 0.5 * breath * shape
+        ping = modes(tv(0.4), [(midi(86), 1.0, 0.12), (midi(86) * 2.32, 0.4, 0.05), (midi(86) * 4.25, 0.2, 0.02)])
+        place(x, 0.56 if up else 0.0, ping, 0.35)
+        save(name, space(r, x, 1.4, 0.35), fin=0.01, fout=0.08)
+
+    # a portrait's eyes snapping open: a low swell of dread (D2 and A2 gliding up a little), a thin
+    # sting a tritone off, a dry canvas creak and a sucked-in breath
+    name = "manor_gaze_open"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    low = hum_stack(n, midi(38), 8, 1.2, 1.0) * 0.6 + hum_stack(n, midi(45) * 1.003, 6, 1.3, 1.0) * 0.4
+    swell = np.minimum(t / 0.12, 1.0) * np.exp(-np.maximum(t - 0.12, 0) / 0.25)
+    sting = tone(midi(80) * (1.0 + 0.004 * np.sin(TAU * 6 * t)), t) + 0.5 * tone(midi(86), t)
+    x = unit(low) * swell + 0.25 * sting * env(t, 0.03, 0.2)
+    x += 0.4 * unit(svf(r.standard_normal(n), glide(3000, 700, t, 0.3), 4.0)) * env(t, 0.08, 0.1)
+    cr = creak(r, 0.15, lambda u: 90.0, [(700, 1.0, 0.01), (1600, 0.6, 0.006), (3100, 0.3, 0.004)])
+    place(x, 0.0, cr * np.hanning(len(cr)), 0.35)
+    save(name, space(r, x, 1.2, 0.3), fin=0.004, fout=0.1)
+
+    # the portrait's gaze held on you: a dark, beating drone (D2 against a slightly sharp copy),
+    # a hollow formant breathing through it and a thin whine pulsing twice a second
+    name = "manor_gaze_hum"
+    r = rng(name)
+    n = ns(dur(name))
+    a = hum_stack(n, cyc(midi(38), n), 10, 1.1, 1.2, r)
+    b = hum_stack(n, cyc(midi(38) * 1.006, n), 8, 1.2, 1.0, r)
+    form = unit(csvf(r.standard_normal(n), 600 * 2.0 ** (0.5 * clfo(n, 1)), 6.0))
+    whine = np.sin(TAU * cyc(midi(86), n) * np.arange(n) / SR) * (0.6 + 0.4 * clfo(n, 3))
+    air = cnoise(r, n, 2000, 7000) * (0.7 + 0.3 * crand(r, n, 6))
+    save_loop(name, unit(a + 0.8 * b) + 0.35 * form + 0.12 * whine + 0.08 * air)
+
+    # a chandelier's chain swinging: the links groaning against each other and a few small clinks
+    name = "manor_chain_creak"
+    r = rng(name)
+    t = tv(dur(name))
+    x = np.zeros(len(t))
+    cr = creak(r, 0.6, lambda u: 30.0 + 50.0 * np.sin(np.pi * u),
+               [(r.uniform(850, 950), 1.0, 0.012), (r.uniform(2000, 2300), 0.7, 0.008), (3400, 0.4, 0.005)])
+    place(x, 0.05, cr * np.sin(np.pi * np.linspace(0, 1, len(cr))), 0.8)
+    for _ in range(5):
+        tj = r.uniform(0.1, 0.6)
+        place(x, tj, modes(tv(0.15), bar_modes(r.uniform(1900, 2600), 0.03), r, 0.02, hard=7000), r.uniform(0.1, 0.3))
+    save(name, space(r, x, 1.2, 0.3), fin=0.004, fout=0.1)
+
+    # possessed furniture: slow wooden groans and knocks that repeat round the loop, a restless
+    # rattle, over a faint draught
+    name = "manor_possessed_creak"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    for t0, secs, f0 in ((0.1, 0.6, 150.0), (0.8, 0.55, 190.0)):
+        cplace(x, t0, groan(r, secs, f0), r.uniform(0.7, 1.0))
+    for t0 in (0.72, 1.4):
+        cplace(x, t0, thud(tv(0.12), 160, 90, 0.02, 0.025) + 0.4 * click(r, 0.12, 400, 3000, 0.003), 0.4)
+    rattle = np.zeros(n)
+    grains(r, rattle, 30, 0.0, dur(name), 600, 2500, 0.001, 0.004, 1.0, wrap=True)
+    bed = cnoise(r, n, 100, 1200) * (0.7 + 0.3 * crand(r, n, 4))
+    save_loop(name, unit(x) + 0.25 * unit(rattle) + 0.15 * bed)
+
+    # a music box playing a little waltz in D minor, 3/4 at 200 bpm, four bars (Dm, Gm, A7, Dm):
+    # a bass note on each downbeat, a dyad on beats two and three, the tune over it, tines ringing
+    # across the wrap, the pins' ticks and the soft whirr of the spring and the air brake
+    name = "manor_waltz_box"
+    r = rng(name)
+    n = ns(dur(name))
+    beat = dur(name) / 12.0
+    x = np.zeros(n)
+    bass = (62, 55, 57, 62)
+    dyads = ((65, 69), (70, 74), (67, 73), (65, 69))
+    for bar in range(4):
+        cplace(x, bar * 3 * beat, tine(r, midi(bass[bar]), 1.6), 0.6)
+        for b in (1, 2):
+            for m in dyads[bar]:
+                cplace(x, (bar * 3 + b) * beat + r.uniform(0, 0.004), tine(r, midi(m), 1.0, 0.5), 0.28)
+    for b, m in ((0, 81), (2, 86), (3, 82), (4, 79), (5, 82), (6, 81), (7, 85), (8, 88), (9, 86), (11, 81)):
+        cplace(x, b * beat + r.uniform(0, 0.006), tine(r, midi(m), 1.6), 0.8)
+    ticks = np.zeros(n)
+    for b in range(12):
+        cplace(ticks, b * beat + 0.15, taper(click(r, 0.01, 2500, 8000, 0.0006)), 0.3)
+    whirr = cnoise(r, n, 300, 2500) * (0.8 + 0.2 * clfo(n, 24))
+    save_loop(name, unit(x) + 0.05 * unit(ticks) + 0.025 * whirr)
+
+    # a floorboard giving a long creak under a foot
+    name = "manor_board_creak"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.02, groan(r, 0.45, r.uniform(210, 250), rate=(25.0, 70.0)), 1.0)
+    save(name, space(r, x, 1.0, 0.25), fin=0.004, fout=0.08)
+
+    # the rotten board snapping: a splintering crack through the wood's modes, fibres tearing,
+    # a dull drop into the void below
+    name = "manor_board_snap"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.9 * click(r, dur(name), 800, 9000, 0.004)
+    x += 0.6 * modes(t, [(r.uniform(240, 280), 1.0, 0.04), (r.uniform(610, 680), 0.7, 0.025),
+                         (r.uniform(1300, 1500), 0.5, 0.012), (r.uniform(2600, 3000), 0.3, 0.006)], r)
+    grains(r, x, 40, 0.0, 0.18, 1500, 7000, 0.0006, 0.003, 0.4, decay=0.06)
+    tear = creak(r, 0.15, lambda u: 200.0, [(900, 1.0, 0.006), (2100, 0.6, 0.004)])
+    place(x, 0.01, tear * np.linspace(1, 0, len(tear)), 0.4)
+    place(x, 0.2, thud(tv(0.3), 140, 70, 0.03, 0.05), 0.4)
+    save(name, space(r, x, 1.0, 0.25), fin=0.0008, fout=0.1)
+
+    # a coffin lid slamming down: a heavy wooden thud, the box booming, the lid's rattle and
+    # the crypt answering
+    name = "manor_coffin_slam"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = thud(t, 120, 58, 0.05, 0.1, harm=(0.5, 0.2)) + 0.6 * click(r, dur(name), 300, 5000, 0.004)
+    x += 0.5 * modes(t, plate_modes(r.uniform(140, 170), 2.4, 0.08, 8, r=r), r, 0.0, hard=2500)
+    for j in range(3):
+        place(x, 0.06 + 0.05 * j + r.uniform(0, 0.02), thud(tv(0.08), 200, 120, 0.01, 0.015) +
+              0.4 * click(r, 0.08, 500, 4000, 0.002), 0.3 / (j + 1))
+    save(name, space(r, x, 1.8, 0.4, 100, 5000), fin=0.0008, fout=0.2)
+
+    # the manor's great bell: a D3 minor-third bell struck once, humming on
+    name = "manor_bell_toll"
+    r = rng(name)
+    t = tv(dur(name))
+    x = modes(t, bell_modes(midi(62), 0.9), r, 0.002, hard=2500)
+    x += 0.4 * click(r, dur(name), 500, 5000, 0.003) + 0.3 * thud(t, 90, 70, 0.05, 0.05)
+    x *= 1.0 + 0.15 * np.sin(TAU * 2.2 * t)          # the hum and prime beating as it swings
+    save(name, space(r, x, 2.2, 0.3, 100, 6000), fin=0.0008, fout=0.4)
+
+    # a haunted mirror: a quick glassy arpeggio up a D-minor chord, each note a thin glass ring,
+    # with a shimmer over it
+    name = "manor_mirror_chime"
+    r = rng(name)
+    t = tv(dur(name))
+    x = np.zeros(len(t))
+    for j, m in enumerate((86, 89, 93, 98)):
+        f = midi(m)
+        place(x, j * 0.07, modes(tv(0.8), [(f, 1.0, 0.3), (f * 2.32, 0.35, 0.1), (f * 4.25, 0.15, 0.04)], r, 0.002),
+              1.0 - 0.12 * j)
+    x += 0.08 * noise(r, len(t), 5000, 12000) * env(t, 0.05, 0.3)
+    save(name, space(r, x, 1.6, 0.35, 300, 9000), fin=0.002, fout=0.15)
+
+
+def gen_armada():
+    # a cannon's fuse burning down: a spitting, sizzling hiss with bright sparks and pops
+    name = "armada_cannon_fuse"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    hiss = noise(r, n, 2500, 11000) * (0.5 + 0.5 * np.abs(noise(r, n, None, 30)))
+    x = 0.6 * hiss + 0.8 * unit(crackle(r, dur(name), 160, 2000, 10000))
+    grains(r, x, 20, 0.0, dur(name), 800, 3000, 0.001, 0.004, 0.4)
+    save(name, x * np.minimum(t / 0.03, 1.0), fin=0.01, fout=0.1)
+
+    # the cannon firing: a crack, a deep thump and a smoky blast, the carriage recoiling back on
+    # its trucks, and the shot rolling off the clouds
+    name = "armada_cannon_fire"
+    r = rng(name)
+    x = cannon_boom(r, dur(name), 66.0, 1.2)
+    place(x, 0.09, thud(tv(0.3), 150, 80, 0.03, 0.05) + 0.4 * click(r, 0.3, 300, 3000, 0.004), 0.35)
+    save(name, space(r, x, 1.8, 0.4, 80, 5000, predelay=0.03), fin=0.0005, fout=0.25)
+
+    # the ball hitting home: a heavy thud through the timbers, a splintering crack, the deck
+    # boards booming and splinters raining down
+    name = "armada_cannon_impact"
+    r = rng(name)
+    t = tv(dur(name))
+    x = thud(t, 130, 60, 0.06, 0.09, harm=(0.5, 0.2)) + 0.8 * click(r, dur(name), 600, 9000, 0.005)
+    x += 0.45 * modes(t, plate_modes(r.uniform(160, 200), 3.0, 0.07, 8, r=r), r, 0.0, hard=3000)
+    grains(r, x, 50, 0.01, 0.5, 1200, 7000, 0.0008, 0.004, 0.35, decay=0.15)
+    save(name, space(r, x, 1.2, 0.3), fin=0.0005, fout=0.15)
+
+    # a ship's hull working in the storm: deep timber groans coming round, the rigging's creak
+    # and water sloshing in the bilge
+    name = "armada_hull_creak"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    cplace(x, 0.05, groan(r, 0.8, 95.0, rate=(14.0, 34.0)), 1.0)
+    cplace(x, 0.9, groan(r, 0.5, 140.0, rate=(20.0, 50.0)), 0.6)
+    slosh = cnoise(r, n, 150, 1500) * (0.5 + 0.5 * clfo(n, 1, 0.5)) ** 2
+    bed = cnoise(r, n, 40, 250) * (0.8 + 0.2 * crand(r, n, 3))
+    save_loop(name, unit(x) + 0.3 * slosh + 0.25 * bed)
+
+    # a rope swing's creak: the rope fibres groaning round the spar at each end of the swing
+    name = "armada_swing_creak"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    cr = creak(r, 0.5, lambda u: 40.0 + 60.0 * np.sin(np.pi * u),
+               [(r.uniform(380, 440), 1.0, 0.02), (r.uniform(900, 1000), 0.6, 0.012), (1900, 0.3, 0.006)])
+    place(x, 0.03, cr * np.sin(np.pi * np.linspace(0, 1, len(cr))), 1.0)
+    save(name, space(r, x, 0.9, 0.2), fin=0.004, fout=0.1)
+
+    # a lightning rod charging: an electric buzz rising (E2 up two octaves), crackle thickening and
+    # a hiss of corona building
+    name = "armada_rod_charge"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    f = glide(midi(40), midi(64), t, dur(name))
+    ph = np.cumsum(f) / SR
+    saw = sum(np.sin(TAU * k * ph) / k for k in range(1, 20))
+    grow = np.clip(t / dur(name), 0, 1) ** 1.5
+    x = 0.7 * unit(saw) * grow + 0.4 * noise(r, n, 3000, 11000) * grow
+    cr = crackle(r, dur(name), 250, 2000, 10000)
+    x += 0.7 * unit(cr) * grow
+    save(name, x, fin=0.01, fout=0.03)
+
+    # lightning hitting the rod: a searing crack, an electric sizzle, and thunder right on top of it
+    name = "armada_lightning_strike"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 1.0 * click(r, dur(name), 200, 12000, 0.006) + 0.5 * unit(crackle(r, 0.15, 150, 2000, 11000, n=n))
+    x += 0.3 * buzz_wave(midi(40), n, 30) * env(t, 0.001, 0.08)
+    x += 0.9 * unit(tilt(r.standard_normal(n), -4.0)) * env(t, 0.03, 0.35) * (1.0 + 0.4 * noise(r, n, None, 8))
+    x += 0.6 * thud(t, 70, 38, 0.2, 0.3, harm=(0.4, 0.2))
+    save(name, space(r, x, 1.8, 0.35, 60, 5000, predelay=0.04), fin=0.0005, fout=0.3)
+
+    # a sky ship's propeller: the blades chopping the air sixteen times a second, a thrumming
+    # E2 engine under it and the wash of air
+    name = "armada_prop_loop"
+    r = rng(name)
+    n = ns(dur(name))
+    chop = (0.5 + 0.5 * clfo(n, 16)) ** 4
+    air = cnoise(r, n, 200, 3000)
+    engine = hum_stack(n, cyc(midi(40), n), 12, 1.0, 1.3, r) * (0.85 + 0.15 * clfo(n, 16))
+    wash = cnoise(r, n, 80, 600)
+    save_loop(name, 0.8 * air * (0.3 + chop) + 0.5 * engine + 0.35 * wash)
+
+    # the propeller spinning up from rest: the chop speeding up and the engine climbing to pitch
+    name = "armada_prop_spinup"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    rate = 2.0 + 14.0 * np.clip(t / 0.8, 0, 1) ** 0.7
+    chop = (0.5 + 0.5 * np.cos(TAU * np.cumsum(rate) / SR)) ** 4
+    eng_f = midi(40) * rate / 16.0
+    engine = sum(np.sin(TAU * k * np.cumsum(eng_f) / SR) / k for k in range(1, 12))
+    x = 0.8 * noise(r, n, 200, 3000) * (0.3 + chop) + 0.4 * unit(engine) + 0.3 * click(r, dur(name), 200, 2000, 0.02)
+    save(name, x * np.minimum(t / 0.05, 1.0), fin=0.01, fout=0.15)
+
+    # a mast leaning before it falls: a long, deep groan of the timber
+    name = "armada_mast_creak"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.02, groan(r, 0.8, 110.0, rate=(12.0, 38.0)), 1.0)
+    grains(r, x, 20, 0.3, 0.8, 1500, 5000, 0.0008, 0.003, 0.15)
+    save(name, space(r, x, 1.3, 0.25), fin=0.004, fout=0.1)
+
+    # the mast crashing down: fibres splintering, a huge thud onto the deck, the planks booming,
+    # the rigging snapping and debris clattering
+    name = "armada_mast_crash"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    grains(r, x, 60, 0.0, 0.15, 1500, 8000, 0.0006, 0.003, 0.6)
+    place(x, 0.12, thud(tv(1.0), 100, 45, 0.1, 0.18, harm=(0.5, 0.25)) + 0.8 * click(r, 1.0, 300, 7000, 0.006), 1.0)
+    place(x, 0.12, modes(tv(1.0), plate_modes(r.uniform(120, 150), 3.5, 0.1, 9, r=r), r, 0.0, hard=2500), 0.5)
+    for _ in range(3):
+        tj = r.uniform(0.15, 0.35)
+        place(x, tj, modes(tv(0.3), [(r.uniform(150, 250), 1.0, 0.05), (r.uniform(500, 700), 0.4, 0.02)], r), 0.35)
+    grains(r, x, 60, 0.15, 0.9, 800, 5000, 0.001, 0.005, 0.3, decay=0.25)
+    save(name, space(r, x, 1.6, 0.35, 80, 5000), fin=0.004, fout=0.25)
+
+    # a winch hauling: its pawl clacking over the ratchet ten times a second, a gear whine, the
+    # rope creaking round the drum and a low rumble
+    name = "armada_winch_loop"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    for k in range(10):
+        cplace(x, k * 0.1 + r.uniform(0, 0.004), taper(modes(tv(0.05), bar_modes(r.uniform(1400, 1600), 0.012), r, 0.02)) +
+               0.5 * taper(click(r, 0.05, 800, 6000, 0.002)), r.uniform(0.7, 1.0))
+    whine = hum_stack(n, cyc(midi(52), n), 6, 1.3, 1.0, r) * (0.7 + 0.3 * clfo(n, 2))
+    rope = np.zeros(n)
+    cplace(rope, 0.1, groan(r, 0.8, 330.0, rate=(40.0, 70.0)), 1.0)
+    save_loop(name, unit(x) + 0.2 * whine + 0.3 * unit(rope) + 0.2 * cnoise(r, n, 60, 400))
+
+    # the ship's bell rung twice, "ding-ding": a small brass bell on E5
+    name = "armada_ship_bell"
+    r = rng(name)
+    t = tv(dur(name))
+    x = np.zeros(len(t))
+    for t0, g in ((0.0, 1.0), (0.32, 0.9)):
+        place(x, t0, modes(tv(1.4 - t0), bell_modes(midi(76), 0.5), r, 0.001, hard=5000) +
+              0.3 * click(r, 1.4 - t0, 2000, 9000, 0.001), g)
+    save(name, space(r, x, 1.4, 0.25, 200, 8000), fin=0.0008, fout=0.2)
+
+    # the victory salute: three guns fired in turn, each rolling off the clouds
+    name = "armada_salute"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for j, t0 in enumerate((0.0, 0.38, 0.76)):
+        place(x, t0, cannon_boom(r, dur(name) - t0, 70.0 + 6 * j, 0.9), 1.0 - 0.1 * j)
+    save(name, space(r, x, 1.8, 0.4, 80, 5000, predelay=0.04), fin=0.0005, fout=0.25)
+
+
+def gen_candy():
+    # jelly bouncing: a wobbling "boing" gliding C3 up to G3 with a decaying 11 Hz jiggle, a wet slap
+    name = "candy_jelly_boing"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    f = glide(midi(48), midi(55), t, 0.12) * (1.0 + 0.06 * np.sin(TAU * 11 * t) * np.exp(-t / 0.15))
+    x = (tone(f) + 0.3 * tone(2 * f) + 0.1 * tone(3 * f)) * env(t, 0.004, 0.14)
+    x += 0.5 * noise(r, n, 300, 3000) * env(t, 0.001, 0.015)
+    x += 0.3 * unit(svf(r.standard_normal(n), glide(1500, 400, t, 0.1), 4.0)) * env(t, 0.002, 0.05)
+    save(name, x, fin=0.001, fout=0.08)
+
+    # a jack-in-the-box being wound: the crank's ratchet clicking and its tune plinking up C major
+    name = "candy_jack_wind"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for k in range(6):
+        place(x, 0.02 + k * 0.12, taper(modes(tv(0.04), bar_modes(r.uniform(1800, 2200), 0.008), r, 0.02)) +
+              0.4 * taper(click(r, 0.04, 1000, 7000, 0.0015)), 0.5)
+    for k, m in enumerate((72, 76, 79, 84)):
+        place(x, 0.02 + k * 0.18, tine(r, midi(m), 0.5, 0.25), 0.6)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # the jack popping out: a latch click, a springy "sproing" (a C4 tone gliding up with a fast
+    # wobble), a cork-like pop and a bright C-major ding
+    name = "candy_jack_pop"
+    r = rng(name)
+    t = tv(dur(name))
+    x = 0.4 * click(r, dur(name), 1500, 8000, 0.001)
+    tt = tv(0.5)
+    f = glide(midi(60), midi(72), tt, 0.1) * (1.0 + 0.08 * np.sin(TAU * 22 * tt) * np.exp(-tt / 0.12))
+    place(x, 0.01, (tone(f) + 0.4 * tone(2.01 * f)) * env(tt, 0.002, 0.12), 0.7)
+    place(x, 0.02, bubble(300, 0.1, 0.012, 1.2) + 0.5 * click(r, 0.1, 500, 4000, 0.003), 0.8)
+    for m in (84, 88, 91):
+        place(x, 0.06, modes(tv(0.6), bar_modes(midi(m), 0.25), r, 0.0, hard=6000), 0.2)
+    save(name, x, fin=0.0008, fout=0.1)
+
+    # a tin soldier marching: four stiff tin-foot clacks a loop (at 150 steps a minute), a drum tap
+    # on each, the clockwork ticking eight times a second inside and its spring whirr
+    name = "candy_soldier_march"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    for k in range(4):
+        f1 = 1700.0 if k % 2 == 0 else 1850.0
+        foot = modes(tv(0.1), [(f1, 1.0, 0.02), (f1 * 1.58, 0.6, 0.012), (f1 * 2.4, 0.4, 0.008), (420, 0.6, 0.02)], r, 0.01)
+        drum = noise(r, ns(0.1), 180, 3000) * np.exp(-tv(0.1) / 0.02) + tone(180, tv(0.1)) * np.exp(-tv(0.1) / 0.03)
+        cplace(x, k * 0.4, taper(foot + 0.5 * taper(drum)), 1.0 if k % 2 == 0 else 0.85)
+    for k in range(13):
+        cplace(x, k * dur(name) / 13 + 0.05, taper(click(r, 0.01, 3000, 9000, 0.0005)), 0.12)
+    whirr = cnoise(r, n, 800, 4000) * (0.6 + 0.4 * clfo(n, 26))
+    save_loop(name, unit(x) + 0.05 * whirr)
+
+    # the soldier's about-turn: a quick clockwork whirr and a tin clank as it pivots
+    name = "candy_soldier_turn"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.4 * noise(r, n, 1000, 5000) * (0.5 + 0.5 * np.sin(TAU * 40 * t)) * env(t, 0.02, 0.1)
+    place(x, 0.15, modes(tv(0.2), [(1600, 1.0, 0.04), (2530, 0.6, 0.025), (3900, 0.4, 0.012)], r, 0.01) +
+          0.4 * click(r, 0.2, 1500, 8000, 0.002), 1.0)
+    save(name, x, fin=0.004, fout=0.08)
+
+    # a toy steam train: four chuffs a loop, the wheels clacking over the rail joins, the
+    # boiler's rumble and a little steam hiss
+    name = "candy_train_chug"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    for k in range(4):
+        tt = tv(0.3)
+        chuff = noise(r, len(tt), 300, 4000) * env(tt, 0.01, 0.07) + 0.4 * noise(r, len(tt), 80, 400) * env(tt, 0.005, 0.05)
+        cplace(x, k * 0.4, taper(chuff), 1.0 if k % 2 == 0 else 0.8)
+    for t0 in (0.55, 0.65, 1.35, 1.45):
+        cplace(x, t0, taper(thud(tv(0.06), 240, 150, 0.01, 0.012) + 0.4 * click(r, 0.06, 1500, 6000, 0.001)), 0.5)
+    rumble = cnoise(r, n, 50, 300) * (0.8 + 0.2 * clfo(n, 4))
+    hiss = cnoise(r, n, 3000, 9000)
+    save_loop(name, unit(x) + 0.2 * rumble + 0.05 * hiss)
+
+    # the train's whistle: a C-major chord (C6, E6, G6) blown through a steamy pipe, scooping up
+    # into pitch, breathy, with a short toot then a longer one
+    name = "candy_train_whistle"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    for t0, d in ((0.0, 0.25), (0.35, 0.8)):
+        tt = tv(d)
+        m = len(tt)
+        scoop = 1.0 - 0.03 * np.exp(-tt / 0.04)
+        e = np.minimum(tt / 0.03, 1.0) * np.minimum((d - tt) / 0.06, 1.0)
+        v = np.zeros(m)
+        for mm, a in ((84, 1.0), (88, 0.8), (91, 0.7)):
+            f = midi(mm) * scoop * (1.0 + 0.003 * np.sin(TAU * 5.5 * tt))
+            v += a * (tone(f) + 0.2 * tone(2 * f))
+        steam = unit(svf(r.standard_normal(m), midi(88), 8.0))
+        place(x, t0, (unit(v) + 0.35 * steam + 0.2 * noise(r, m, 2000, 9000)) * e, 1.0)
+    save(name, space(r, x, 1.2, 0.3), fin=0.004, fout=0.12)
+
+    # a gumball dropping out of the machine: the coin wheel clunking round, then the ball
+    # bouncing down the chute, each hop shorter
+    name = "candy_gumball_drop"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.0, thud(tv(0.15), 300, 180, 0.02, 0.03) + 0.5 * click(r, 0.15, 800, 5000, 0.003), 0.7)
+    t0, gap, g = 0.12, 0.14, 1.0
+    while t0 < 0.55:
+        place(x, t0, modes(tv(0.08), [(r.uniform(850, 950), 1.0, 0.012), (2300, 0.4, 0.006), (4100, 0.2, 0.003)], r) +
+              0.3 * click(r, 0.08, 1500, 7000, 0.001), g)
+        t0 += gap
+        gap *= 0.72
+        g *= 0.75
+    save(name, x, fin=0.001, fout=0.06)
+
+    # a gumball rolling down a candy chute: a hollow rumble, a knock at each seam of the chute
+    # and the ball's own little rattle
+    name = "candy_gumball_roll"
+    r = rng(name)
+    n = ns(dur(name))
+    rumble = csvf(r.standard_normal(n), 500 * (1.0 + 0.1 * clfo(n, 6)), 2.0)
+    knocks = np.zeros(n)
+    for k in range(8):
+        cplace(knocks, k * 0.15, taper(modes(tv(0.05), [(r.uniform(700, 800), 1.0, 0.01), (1900, 0.4, 0.005)], r)), 1.0)
+    rattle = np.zeros(n)
+    grains(r, rattle, 60, 0.0, dur(name), 1500, 5000, 0.001, 0.003, 1.0, wrap=True)
+    save_loop(name, unit(rumble) + 0.5 * unit(knocks) + 0.2 * unit(rattle))
+
+    # a gumball plopping into syrup: a gloopy plunk, a thick splash and a few slow bubbles
+    name = "candy_gumball_splash"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.5 * thud(t, 160, 80, 0.04, 0.05)
+    place(x, 0.0, bubble(260, 0.25, 0.04, 1.4), 0.8)
+    x += 0.6 * unit(svf(r.standard_normal(n), glide(2500, 600, t, 0.2), 3.0)) * env(t, 0.004, 0.08)
+    for _ in range(6):
+        place(x, r.uniform(0.12, 0.6), bubble(r.uniform(300, 600), 0.12, 0.02, 0.8), r.uniform(0.1, 0.3))
+    save(name, x, fin=0.0008, fout=0.1)
+
+    # a confetti popper: a pop, a flurry of paper fluttering down and a twinkle of C-major bells
+    name = "candy_confetti"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.9 * click(r, dur(name), 400, 6000, 0.004)
+    place(x, 0.0, bubble(180, 0.1, 0.015, 1.5), 0.6)
+    flutter = np.zeros(n)
+    grains(r, flutter, 220, 0.02, 0.8, 2000, 9000, 0.0005, 0.002, 1.0, decay=0.3)
+    x += 0.5 * unit(flutter)
+    for j, m in enumerate((84, 88, 91, 96)):
+        place(x, 0.05 + 0.06 * j, modes(tv(0.5), bar_modes(midi(m), 0.2), r, 0.0, hard=8000), 0.15)
+    save(name, space(r, x, 1.0, 0.2, 300, 9000), fin=0.0008, fout=0.12)
+
+    # fireworks: a rocket whistling up, a bang, and the stars crackling as they fall
+    name = "candy_fireworks"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    tt = tv(0.45)
+    wh = unit(svf(r.standard_normal(len(tt)), glide(1200, 3200, tt, 0.45), 20.0)) * np.minimum(tt / 0.05, 1.0)
+    place(x, 0.0, taper(wh), 0.4)
+    place(x, 0.45, cannon_boom(r, 1.0, 90.0, 0.7), 1.0)
+    cr = np.zeros(n)
+    for _ in range(260):
+        t0 = 0.5 + r.gamma(2.0, 0.18)
+        if t0 < dur(name) - 0.02:
+            place(cr, t0, noise(r, ns(0.004), 2500, 11000) * np.exp(-tv(0.004) / 0.0007), r.uniform(0.2, 1.0) ** 2)
+    x += 0.5 * unit(cr)
+    save(name, space(r, x, 1.6, 0.35, 100, 7000, predelay=0.03), fin=0.004, fout=0.25)
+
+
+def gen_carrier():
+    # the steam catapult venting: a loud hiss of steam bursting up out of the track slot
+    name = "carrier_cat_hiss"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = noise(r, n, 800, 10000) * (0.85 + 0.15 * noise(r, n, None, 20)) + 0.4 * noise(r, n, 150, 900)
+    save(name, x * np.minimum(t / 0.04, 1.0) * np.exp(-t / 0.35), fin=0.004, fout=0.1)
+
+    # the catapult firing: a huge steam thump, the shuttle screaming down the track (a whoosh
+    # rising and the rails singing) and the water brake catching it with a clunk and hiss
+    name = "carrier_cat_launch"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.9 * thud(t, 110, 50, 0.1, 0.12, harm=(0.5, 0.2)) + 0.8 * noise(r, n, 300, 9000) * env(t, 0.002, 0.08)
+    x += 0.7 * whoosh(r, dur(name), 300, 2500, 1200, 0.7, 0.3)
+    x += 0.2 * unit(svf(r.standard_normal(n), glide(400, 2000, t, 0.8), 25.0)) * np.sin(np.pi * np.clip(t / 0.9, 0, 1))
+    place(x, 0.85, thud(tv(0.35), 140, 70, 0.03, 0.06) + 0.6 * click(r, 0.35, 500, 5000, 0.004) +
+          0.4 * noise(r, ns(0.35), 1000, 9000) * np.exp(-tv(0.35) / 0.1), 0.8)
+    save(name, space(r, x, 1.2, 0.25, 80, 6000, predelay=0.02), fin=0.0005, fout=0.15)
+
+    # the shuttle being hauled back: a rumble along the track, a hydraulic whine falling, a clunk
+    name = "carrier_cat_retract"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.6 * noise(r, n, 80, 800) * np.sin(np.pi * np.clip(t / 0.75, 0, 1))
+    x += 0.3 * turbine(t, 900, 500, 0.75) * np.sin(np.pi * np.clip(t / 0.75, 0, 1))
+    place(x, 0.72, thud(tv(0.18), 160, 90, 0.02, 0.03) + 0.5 * click(r, 0.18, 600, 6000, 0.003), 0.8)
+    save(name, x, fin=0.01, fout=0.08)
+
+    # a jet engine spooling up: the compressor whine climbing, the roar swelling under it
+    name = "carrier_jet_spool"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    k = np.clip(t / dur(name), 0, 1)
+    x = 0.5 * turbine(t, 600, 3200, dur(name)) * (0.3 + 0.7 * k)
+    x += 0.8 * unit(tilt(r.standard_normal(n), -2.0)) * k ** 1.5 + 0.4 * noise(r, n, 40, 250) * k
+    save(name, x * np.minimum(t / 0.1, 1.0), fin=0.02, fout=0.1)
+
+    # a jet at full power behind the blast deflector: a churning, tearing roar, the whine on top
+    # and the deck rumbling
+    name = "carrier_jet_roar"
+    r = rng(name)
+    n = ns(dur(name))
+    roar = unit(tilt(cnoise(r, n, 60, 12000, 1), -2.0, circular=True)) * (0.8 + 0.2 * crand(r, n, 20, 0.5))
+    tear = cnoise(r, n, 600, 3000) * (0.6 + 0.4 * crand(r, n, 30))
+    whine = hum_stack(n, cyc(3200, n), 2, 1.0, 1.0, r)
+    rumble = cnoise(r, n, 30, 150)
+    save_loop(name, roar + 0.3 * tear + 0.05 * whine + 0.4 * rumble)
+
+    # a hook catching the arresting wire: the steel cable's low twang (a stiff string, slightly
+    # inharmonic) and the clank of the hook
+    name = "carrier_wire_twang"
+    r = rng(name)
+    t = tv(dur(name))
+    f0 = 55.0
+    spec = [(f0 * k * np.sqrt(1 + 0.004 * k * k), 1.0 / k, 0.25 / k ** 0.4) for k in range(1, 16)]
+    x = modes(t, spec, r, 0.0) * (1.0 + 0.2 * np.sin(TAU * 7 * t))
+    x += 0.6 * modes(t, bar_modes(r.uniform(900, 1100), 0.05), r, 0.02) + 0.6 * click(r, dur(name), 500, 7000, 0.003)
+    save(name, x, fin=0.0008, fout=0.12)
+
+    # an aircraft elevator starting / stopping: the lock clunk and the motor winding up / down
+    for name, up in (("carrier_elevator_start", True), ("carrier_elevator_stop", False)):
+        r = rng(name)
+        t = tv(dur(name))
+        n = len(t)
+        x = np.zeros(n)
+        clunk = thud(tv(0.25), 130, 65, 0.03, 0.05, harm=(0.5, 0.2)) + 0.6 * click(r, 0.25, 400, 5000, 0.004)
+        if up:
+            place(x, 0.0, clunk, 1.0)
+            k = np.clip(t / 0.5, 0, 1)
+            x += 0.5 * turbine(t, 110, midi(45) * 2, 0.5, (1.0, 2.0, 4.0)) * k
+        else:
+            k = np.clip(1.0 - t / 0.4, 0, 1)
+            x += 0.5 * turbine(t, midi(45) * 2, 110, 0.4, (1.0, 2.0, 4.0)) * k
+            place(x, 0.35, clunk, 1.0)
+        save(name, x, fin=0.004, fout=0.08)
+
+    # the elevator moving: an A-pitched motor hum and the platform rumbling in its guides
+    name = "carrier_elevator_hum"
+    r = rng(name)
+    n = ns(dur(name))
+    hum = hum_stack(n, cyc(midi(45), n), 12, 1.0, 1.5, r)
+    whine = np.sin(TAU * cyc(midi(81), n) * np.arange(n) / SR)
+    rumble = cnoise(r, n, 50, 500) * (0.8 + 0.2 * crand(r, n, 6))
+    save_loop(name, 0.6 * hum + 0.1 * whine + 0.5 * rumble)
+
+    # the hangar door alarm: two klaxon blasts (a buzzy A4 through a horn formant)
+    name = "carrier_door_klaxon"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for t0 in (0.0, 0.5):
+        tt = tv(0.4)
+        m = len(tt)
+        b = buzz_wave(midi(69), m, 30, 0.8)
+        b = unit(svf(b, 1400.0, 2.0) + 0.5 * svf(b, 2600.0, 3.0))
+        place(x, t0, b * np.minimum(tt / 0.02, 1.0) * np.minimum((0.4 - tt) / 0.03, 1.0), 1.0)
+    save(name, space(r, x, 1.4, 0.3, 200, 6000), fin=0.004, fout=0.1)
+
+    # the hangar door grinding: steel dragging on its rails (stick-slip through its resonances),
+    # rollers rumbling and a deep motor
+    name = "carrier_door_grind"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    g = creak(r, 1.0, lambda u: 28.0 + 20.0 * np.sin(np.pi * u),
+              [(r.uniform(180, 220), 1.0, 0.03), (r.uniform(480, 540), 0.7, 0.02), (r.uniform(1150, 1300), 0.4, 0.012),
+               (r.uniform(2400, 2800), 0.2, 0.006)])
+    x = np.zeros(n)
+    place(x, 0.05, g * np.sin(np.pi * np.linspace(0, 1, len(g))) ** 0.5, 0.8)
+    x += 0.5 * noise(r, n, 40, 300) * np.sin(np.pi * t / dur(name)) + 0.3 * hum_stack(n, midi(33), 10) * np.sin(np.pi * t / dur(name))
+    save(name, space(r, x, 1.4, 0.3, 80, 5000), fin=0.01, fout=0.1)
+
+    # a jet on the catapult winding up to launch power: the whine climbing, the roar rising and the
+    # afterburner lighting with a thump and a crackle
+    name = "carrier_launch_spool"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    k = np.clip(t / 0.9, 0, 1)
+    x = 0.4 * turbine(t, 900, 3000, 0.9) * (0.3 + 0.7 * k)
+    x += 0.7 * unit(tilt(r.standard_normal(n), -2.0)) * k ** 1.5
+    ab = t > 0.9
+    x += ab * (0.9 * unit(tilt(r.standard_normal(n), -3.0)) + 0.4 * unit(crackle(r, dur(name), 300, 1500, 8000)))
+    place(x, 0.9, thud(tv(0.3), 90, 45, 0.05, 0.08), 0.8)
+    save(name, x * np.minimum(t / 0.1, 1.0), fin=0.02, fout=0.06)
+
+    # the launch: the catapult's slam, the jet's roar blasting past and away down the deck
+    name = "carrier_launch_shot"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.9 * thud(t, 100, 45, 0.1, 0.12, harm=(0.5, 0.2)) + 0.6 * noise(r, n, 300, 9000) * env(t, 0.002, 0.06)
+    roar = unit(tilt(r.standard_normal(n), -2.5))
+    x += 0.9 * unit(svf(roar, glide(2500, 500, t, 1.0), 0.8)) * np.exp(-t / 0.5)
+    x += 0.2 * turbine(t, 3000, 1800, 1.0) * np.exp(-t / 0.4)
+    save(name, space(r, x, 1.4, 0.3, 60, 6000, predelay=0.03), fin=0.0005, fout=0.2)
+
+    # a jet flying past close by: the roar sweeping in and out with the Doppler drop in its whine
+    name = "carrier_launch_flyby"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = whoosh(r, dur(name), 300, 3000, 400, 0.6, 0.25, q=0.9)
+    x += 0.5 * unit(tilt(r.standard_normal(n), -3.0)) * np.exp(-0.5 * ((t - 0.65) / 0.3) ** 2)
+    x += 0.15 * turbine(t, 3400, 2300, 1.2) * np.exp(-0.5 * ((t - 0.6) / 0.3) ** 2)
+    save(name, x, fin=0.02, fout=0.15)
+
+    # the jet blast deflector raising / lowering: a hydraulic whine rising (falling), fluid hiss, a
+    # deep clunk when it locks
+    for name, up in (("carrier_jbd_raise", True), ("carrier_jbd_lower", False)):
+        r = rng(name)
+        t = tv(dur(name))
+        n = len(t)
+        body = np.sin(np.pi * np.clip(t / 0.8, 0, 1)) ** 0.5
+        x = 0.4 * turbine(t, 300 if up else 520, 520 if up else 300, 0.8, (1.0, 2.0, 3.0)) * body
+        x += 0.3 * noise(r, n, 2000, 8000) * body + 0.3 * noise(r, n, 60, 300) * body
+        place(x, 0.78, thud(tv(0.22), 120, 60, 0.03, 0.05, harm=(0.5, 0.2)) + 0.6 * click(r, 0.22, 400, 5000, 0.003), 1.0)
+        save(name, x, fin=0.02, fout=0.06)
+
+    # an aircraft lift moving: a clunk, two A-major warning beeps and the motor hum rising
+    name = "carrier_lift_move"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.4 * hum_stack(n, midi(45), 10, 1.0, 1.5) * np.minimum(t / 0.3, 1.0) + 0.3 * noise(r, n, 50, 400)
+    place(x, 0.0, thud(tv(0.25), 130, 65, 0.03, 0.05) + 0.5 * click(r, 0.25, 400, 5000, 0.004), 1.0)
+    for t0, m in ((0.1, 81), (0.35, 85)):
+        tt = tv(0.15)
+        place(x, t0, (tone(midi(m), tt) + 0.3 * tone(3 * midi(m), tt)) * np.minimum(tt / 0.005, 1.0) *
+              np.minimum((0.15 - tt) / 0.01, 1.0), 0.25)
+    save(name, x, fin=0.004, fout=0.12)
+
+    # the finish flyover: three jets thundering past in turn, roars overlapping, the whines
+    # dropping as they go
+    name = "carrier_flyover"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    for j, tp in enumerate((0.6, 0.8, 1.0)):
+        x += whoosh(r, dur(name), 250, 2500 - 200 * j, 350, tp, 0.3, q=0.8) * (1.0 - 0.1 * j)
+        x += 0.12 * turbine(t, 3300 - 100 * j, 2200, 1.5) * np.exp(-0.5 * ((t - tp) / 0.3) ** 2)
+    x += 0.5 * noise(r, n, 30, 200) * np.exp(-0.5 * ((t - 0.8) / 0.4) ** 2)
+    save(name, space(r, x, 1.8, 0.3, 60, 6000, predelay=0.04), fin=0.02, fout=0.25)
+
+
+# ===========================================================================
 # verification
 # ===========================================================================
 def verify():
@@ -2238,17 +3005,21 @@ def verify():
 
 GENERATORS = (gen_steps, gen_wall, gen_movement_loops, gen_lasers, gen_crusher_piston, gen_swings, gen_surfaces,
               gen_foundry, gen_reef, gen_orbital, gen_clockwork, gen_balance, gen_gardens, gen_ascent, gen_xeno,
-              gen_volcano, gen_glacier, gen_desert)
+              gen_volcano, gen_glacier, gen_desert, gen_manor, gen_armada, gen_candy, gen_carrier)
 
 
 def main():
+    """--only=manor,armada runs just those generators (gen_<name>) before verifying everything."""
     args = sys.argv[1:]
+    only = [a.split("=", 1)[1].split(",") for a in args if a.startswith("--only=")]
+    only = ["gen_" + o for o in only[0]] if only else None
     if "--verify" not in args:
         print("world effects -> audio/")
         for fn in GENERATORS:
-            fn()
+            if only is None or fn.__name__ in only:
+                fn()
         missing = [n for n in CLIPS if n not in LOG]
-        if missing:
+        if missing and only is None:
             print("not generated: " + ", ".join(missing))
             sys.exit(1)
     sys.exit(0 if verify() else 1)
