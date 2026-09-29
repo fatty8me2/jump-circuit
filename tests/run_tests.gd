@@ -3264,3 +3264,123 @@ func test_zq_particle_slider() -> void:
 	panel.queue_free()
 	Settings.quality = old_q
 	Settings.particles = old_p
+
+
+# ---- run it again: race laps ------------------------------------------------------------------
+func test_zl_lap_math_and_messages() -> void:
+	check(Net.laps_ahead(1, 0, 0, 3) == 1, "exactly one full course ahead is a lap")
+	check(Net.laps_ahead(1, 0, 1, 3) == 0 and Net.laps_ahead(1, 1, 1, 3) == 1, "one checkpoint short is not a lap; matching it is")
+	check(Net.laps_ahead(2, 3, 0, 3) == 2 and Net.laps_ahead(3, 1, 1, 3) == 3, "several courses ahead count several laps")
+	check(Net.host(24598) == OK, "hosting a race")
+	var me: int = Net.my_id()
+	Net.roster[me]["finished"] = 50.0
+	Net.roster[me]["cp"] = 4
+	Net.roster[2] = {"name": "Ada", "color": 1, "cp": 1, "finished": -1.0, "cp_at": 5.0}
+	Net.roster[3] = {"name": "Bo", "color": 2, "cp": 0, "finished": -1.0, "cp_at": 0.0}
+	var order: Array[int] = Net.standings()
+	var got: Array = []
+	var cb := func(l: int, v: int, n: int) -> void: got.append([l, v, n])
+	Net.racer_lapped.connect(cb)
+	Net.send_lap(1, 0, 3, false)
+	check(got.is_empty() and int(Net.race_laps[me]["lap"]) == 1, "starting a lap only reports progress")
+	Net.send_lap(1, 1, 3)
+	check(got.size() == 2 and int(got[0][2]) == 1, "a full course ahead laps both racers once (%s)" % str(got))
+	Net.send_lap(1, 2, 3)
+	check(got.size() == 2, "no repeat message for the same lap")
+	Net.send_lap(3, 1, 3)
+	check(Net.times_lapped(2) == 3 and int(got[got.size() - 1][2]) == 3, "three courses ahead is the third lap (%s)" % str(got))
+	check(Net.standings() == order, "laps never change the standings")
+	Net.roster[3]["finished"] = 70.0
+	var before: int = got.size()
+	Net.send_lap(5, 0, 3)
+	var hit_bo: bool = false
+	for g: Array in got.slice(before):
+		hit_bo = hit_bo or int(g[1]) == 3
+	check(not hit_bo, "a racer who has finished can't be lapped")
+	Net._apply_lap_msg(2, {"k": "x", "victim": me, "count": 1})
+	check(Net.times_lapped(me) == 0, "a racer still on the first run can't send laps")
+	Net.leave()
+	# the relay path: a lap packet riding the pose event
+	Net.roster = {1: {"name": "Host", "color": 0, "cp": 4, "finished": 40.0}, 7: {"name": "Me", "color": 1, "cp": 1, "finished": -1.0}}
+	Net.set("_relay_peer_id", 7)
+	Net.set("_relay_mode", true)
+	Net.active = true
+	got.clear()
+	var poses: Array = []
+	var pcb := func(id: int, _p: Vector3, _v: Vector3, _g: bool, _s: int) -> void: poses.append(id)
+	Net.racer_pose.connect(pcb)
+	Net.call("_handle_relay_event", 1, "pose", {"lap": {"k": "x", "victim": 7, "count": 3}})
+	check(got.size() == 1 and int(got[0][0]) == 1 and int(got[0][1]) == 7 and int(got[0][2]) == 3 and poses.is_empty(),
+		"a lap message arrives over the relay's pose event and is never a pose (%s)" % str(got))
+	Net.racer_pose.disconnect(pcb)
+	Net.racer_lapped.disconnect(cb)
+	Net.leave()
+	Net.set("_relay_mode", false)
+
+
+func test_zl_run_it_again() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	check(Net.host(24599) == OK, "hosting a race")
+	var me: int = Net.my_id()
+	Net.roster[2] = {"name": "Ada", "color": 1, "cp": 0, "finished": -1.0, "cp_at": 0.0}
+	Net.roster[3] = {"name": "Bo", "color": 2, "cp": 4, "finished": 30.0, "cp_at": 0.0}
+	Game.level_index = 0
+	Game.race_mode = true
+	Net.race_start_time = Net.now() - 1.0
+	var lvl: LevelBase = (load(Game.LEVELS[0]["scene"]) as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	# being lapped (Bo has finished and is running again)
+	Net._apply_lap_msg(3, {"k": "x", "victim": me, "count": 1})
+	check(lvl.hud._lapped != null and lvl.hud._lapped.text == "Bo lapped you!", "the lapped racer sees NAME lapped you!")
+	Net._apply_lap_msg(3, {"k": "x", "victim": me, "count": 3})
+	check(lvl.hud._lapped.text == "Bo lapped you 3 TIMES!" and lvl.hud._lapped.get_theme_font_size("font_size") == 64,
+		"the third lap is the big one (%s)" % lvl.hud._lapped.text)
+	lvl.hud._rebuild_board()
+	var board: String = ""
+	for l: Node in lvl.hud._board.get_children():
+		board += (l as Label).text + "|"
+	check(board.contains("lapped x3"), "the board tags a racer lapped three times (%s)" % board)
+	# first finish, then Run It Again with the pad
+	lvl.run_time = 42.0
+	lvl._on_finish()
+	var first_time: float = float(Net.roster[me]["finished"])
+	var order: Array[int] = Net.standings()
+	var btn: Button = null
+	for n: Node in lvl.hud._results.find_children("*", "Button", true, false):
+		if (n as Button).text == "Run It Again":
+			btn = n as Button
+	check(btn != null, "race results offer Run It Again")
+	await real_seconds(1.1)
+	check(_focused_text().begins_with("Spectate"), "Spectate keeps first focus while Ada races (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(_focused_text() == "Run It Again", "the D-pad reaches Run It Again (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(_focused_text() != "Run It Again" and _focused_text() != "", "and moves on past it (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_UP))
+	check(_focused_text() == "Run It Again", "and back")
+	var seq0: int = int(Net.get("_pose_seq"))
+	lvl.current_checkpoint = 3
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	await ticks(2)
+	check(not lvl.finished and lvl.current_checkpoint == 0 and lvl.hud._results == null and lvl.laps_done == 1 and lvl.player.control_enabled,
+		"A runs it again: back at the start with checkpoints reset")
+	check(int(Net.get("_pose_seq")) != seq0, "the run-again teleport bumps the pose sequence (ghosts snap)")
+	check(float(Net.roster[me]["finished"]) == first_time and Net.standings() == order, "the first finish time and placing are kept")
+	# a checkpoint on lap 2 is a full course ahead of Ada, still at the start
+	lvl._on_checkpoint(lvl.checkpoints[0])
+	check(lvl.hud._toast.text == "You lapped Ada" and Net.lap_counts.has(2), "the lapper sees You lapped NAME (%s)" % lvl.hud._toast.text)
+	lvl.run_time = lvl._lap_start + 20.0
+	lvl._on_finish()
+	check(lvl.laps_done == 2 and not lvl.finished and lvl.current_checkpoint == 0 and lvl.hud._toast.text.begins_with("Lap 2 done"),
+		"finishing a lap toasts it and starts the next (%s)" % lvl.hud._toast.text)
+	check(float(Net.roster[me]["finished"]) == first_time and Net.standings() == order, "laps change neither time nor standings")
+	Net.leave()
+	Game.race_mode = false
+	world.queue_free()
+	world = null
+	await ticks(2)

@@ -265,6 +265,7 @@ func _process(dt: float) -> void:
 			_count.text = "READY"
 	if _spec_bar.visible:
 		_update_spectate_bar()
+	_update_lap_chip()
 	if Game.race_mode:
 		_board_refresh -= dt
 		if _board_refresh <= 0.0:
@@ -287,6 +288,10 @@ func _rebuild_board() -> void:
 		var e: Dictionary = Net.roster[id]
 		var col: Color = Settings.RACER_COLORS[int(e["color"]) % Settings.RACER_COLORS.size()]
 		var status: String = SaveData.format_time(float(e["finished"])) if float(e["finished"]) >= 0.0 else "%d/%d" % [int(e["cp"]), total]
+		if Net.times_lapped(id) >= 3:
+			status += "  lapped x%d" % Net.times_lapped(id)
+		elif Net.race_laps.has(id) and float(e["finished"]) >= 0.0:
+			status += "  lap %d" % (int(Net.race_laps[id]["lap"]) + 1)
 		var me: String = "  <" if id == Net.my_id() else ("  - watching" if level != null and id == level.spectating_id else "")
 		var l: Label = UiKit.shadowed(UiKit.label("%d  %s   %s%s" % [place, e["name"], status, me], 20, col.lerp(Color.WHITE, 0.35)), 5)
 		_board.add_child(l)
@@ -392,6 +397,9 @@ func show_race_results(time: float) -> void:
 		func() -> void: level.spectate(1))
 	_spectate_btn.visible = not level.spectate_candidates().is_empty()
 	box.add_child(_spectate_btn)
+	if level.party == null:
+		_run_again_btn = UiKit.button("Run It Again", func() -> void: level.run_again())
+		box.add_child(_run_again_btn)
 	# these buttons get focus, and Space / A are also the jump inputs: anything that
 	# ends the race for someone still running takes two presses
 	if Net.is_host():
@@ -420,7 +428,7 @@ func show_race_results(time: float) -> void:
 	tw.tween_interval(0.65)
 	tw.tween_callback(func() -> void:
 		_results_ready = true
-		if not _results.visible:
+		if _results == null or not _results.visible:
 			return      # already spectating (LB / RB); focus waits for the panel
 		if _spectate_btn.visible and get_viewport().gui_get_focus_owner() == null:
 			_spectate_btn.grab_focus()
@@ -466,3 +474,64 @@ static func _ordinal(n: int) -> String:
 		3:
 			return "rd"
 	return "th"
+
+
+# ---- run it again (race laps) ---------------------------------------------------------
+
+## Race results: "Run It Again" (LevelBase.run_again).
+var _run_again_btn: Button
+var _lap_chip: Label
+var _lapped: Label
+var _lapped_tw: Tween
+
+
+## Run It Again closes the race results panel (spectating was already stopped).
+func close_race_results() -> void:
+	if _results != null:
+		_results.queue_free()
+	_results = null
+	_results_ready = false
+	_spectate_btn = null
+	_run_again_btn = null
+	_spec_bar.visible = false
+	get_viewport().gui_release_focus()
+
+
+## "LAP n" under the timer while running again (lap 2+).
+func _update_lap_chip() -> void:
+	var on: bool = Game.race_mode and level.laps_done > 0 and not level.finished and _results == null
+	if on and _lap_chip == null:
+		_lap_chip = UiKit.shadowed(UiKit.label("", 22, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER), 5)
+		_lap_chip.set_anchors_preset(Control.PRESET_CENTER_TOP)
+		_lap_chip.position = Vector2(-80, 48)
+		_lap_chip.custom_minimum_size = Vector2(160, 0)
+		_root.add_child(_lap_chip)
+	if _lap_chip != null:
+		_lap_chip.visible = on
+		if on:
+			_lap_chip.text = "LAP %d" % (level.laps_done + 1)
+
+
+## The lapped player's big banner: "NAME lapped you!", and a stronger one at the third lap.
+func lapped_toast(lapper_name: String, count: int) -> void:
+	var strong: bool = count >= 3
+	if _lapped == null:
+		_lapped = UiKit.shadowed(UiKit.label("", 48, UiKit.GOLD, HORIZONTAL_ALIGNMENT_CENTER), 10)
+		_lapped.set_anchors_preset(Control.PRESET_CENTER)
+		_lapped.position = Vector2(-450, -150)
+		_lapped.custom_minimum_size = Vector2(900, 0)
+		_lapped.modulate.a = 0.0
+		_root.add_child(_lapped)
+	_lapped.text = ("%s lapped you %d TIMES!" % [lapper_name, count]) if strong else ("%s lapped you!" % lapper_name)
+	_lapped.add_theme_font_size_override("font_size", 64 if strong else 48)
+	_lapped.add_theme_color_override("font_color", Color(1.0, 0.35, 0.3) if strong else UiKit.GOLD)
+	Sfx.play("new_best" if strong else "tick")
+	if _lapped_tw != null and _lapped_tw.is_valid():
+		_lapped_tw.kill()
+	_lapped.pivot_offset = _lapped.size * 0.5
+	_lapped.scale = Vector2.ONE * (1.9 if strong else 1.4)
+	_lapped_tw = create_tween()
+	_lapped_tw.tween_property(_lapped, "modulate:a", 1.0, 0.1)
+	_lapped_tw.parallel().tween_property(_lapped, "scale", Vector2.ONE, 0.5 if strong else 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_lapped_tw.tween_interval(2.4 if strong else 1.6)
+	_lapped_tw.tween_property(_lapped, "modulate:a", 0.0, 0.5)

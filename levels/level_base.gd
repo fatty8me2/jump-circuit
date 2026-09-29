@@ -179,6 +179,7 @@ func _setup_race() -> void:
 			hud.toast("%s finished - %s" % [Net.roster[id]["name"], SaveData.format_time(time)])
 			if id == spectating_id:
 				_spectate_moved_on())
+	Net.racer_lapped.connect(_on_racer_lapped)
 	# a dropped relay link reconnects on its own; the race carries on meanwhile
 	Net.connection_interrupted.connect(func(_detail: String) -> void:
 		if is_inside_tree():
@@ -453,12 +454,17 @@ func _on_checkpoint(cp: Checkpoint) -> void:
 		Sfx.music_progress(float(cp.index) / float(maxi(checkpoints.size(), 1)))
 	hud.checkpoint_reached(cp.index, run_time)
 	player.visual.on_checkpoint()
-	if Game.race_mode:
+	if Game.race_mode and laps_done > 0:
+		Net.send_lap(laps_done, cp.index, checkpoints.size())
+	elif Game.race_mode:
 		Net.send_checkpoint(cp.index)
 
 
 func _on_finish() -> void:
 	if finished:
+		return
+	if laps_done > 0 and Game.race_mode and party == null:
+		_finish_lap()
 		return
 	finished = true
 	player.control_enabled = false
@@ -480,6 +486,7 @@ func _on_finish() -> void:
 		party.on_local_finish(time)
 		return
 	if Game.race_mode:
+		laps_done = 1
 		Net.send_checkpoint(checkpoints.size() + 1)
 		Net.send_finished(time)
 		SaveData.record_finish(level_id, time, deaths, splits)
@@ -571,3 +578,59 @@ func r_until(test: Callable) -> void:
 
 func r_checkpoint() -> void:
 	route.append({"kind": "checkpoint"})
+
+
+# ---- run it again (race laps) ---------------------------------------------------------
+# After your first race finish the results offer "Run It Again": you go back to the start
+# and run lap after lap. The first finish time, the save and your placing never change;
+# finishing a lap just toasts its time and starts the next one. Being a full course ahead
+# of a racer still on their first run laps them (Net.send_lap). Race mode only.
+
+## Courses completed in this race (0 = not finished yet, 1 = first finish, 2+ = laps).
+var laps_done: int = 0
+var _lap_start: float = 0.0
+
+
+func run_again() -> void:
+	if not Game.race_mode or party != null or not finished or laps_done < 1:
+		return
+	stop_spectating()
+	hud.close_race_results()
+	finished = false
+	player.control_enabled = not (_pause != null and _pause.open)
+	if not headless_mode and player.control_enabled:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	_begin_lap()
+	Net.send_lap(laps_done, 0, checkpoints.size(), false)
+
+
+func _begin_lap() -> void:
+	current_checkpoint = 0
+	splits.fill(-1.0)
+	for cp: Checkpoint in checkpoints:
+		cp.set_active(false, false)
+	_lap_start = Game.course_time
+	run_time = Game.course_time
+	Sfx.music_progress(0.0)
+	hud.clear_banner()
+	# respawn -> player.teleported -> Net.note_teleport: ghosts snap to the start, not slide
+	respawn()
+
+
+func _finish_lap() -> void:
+	laps_done += 1
+	var lap_time: float = run_time - _lap_start
+	Sfx.play("finish")
+	Net.send_lap(laps_done, 0, checkpoints.size())
+	_begin_lap()
+	hud.toast("Lap %d done - %s" % [laps_done, SaveData.format_time(lap_time)], "", UiKit.SOFT, true)
+
+
+func _on_racer_lapped(lapper: int, victim: int, count: int) -> void:
+	if not is_inside_tree() or not Game.race_mode or party != null:
+		return
+	var me: int = Net.my_id()
+	if victim == me and lapper != me and not finished and Net.roster.has(lapper):
+		hud.lapped_toast(str(Net.roster[lapper]["name"]), count)
+	elif lapper == me and victim != me and Net.roster.has(victim):
+		hud.toast("You lapped %s" % Net.roster[victim]["name"], "x%d!" % count if count >= 3 else "", UiKit.GOLD, true)

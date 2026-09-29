@@ -26,6 +26,8 @@ signal connection_interrupted(detail: String)
 signal connection_restored
 ## Someone else's link dropped / came back ("Sam lost connection...", "The host is back").
 signal relay_notice(text: String)
+## Race laps (run it again): `lapper` is now `count` full courses ahead of `victim`.
+signal racer_lapped(lapper: int, victim: int, count: int)
 
 const PORT: int = 24565
 const MAX_PLAYERS: int = 8
@@ -259,6 +261,8 @@ func _shutdown() -> void:
 	active = false
 	in_race = false
 	roster.clear()
+	race_laps.clear()
+	lap_counts.clear()
 	_best_rtt = 999.0
 	_pings_left = 0
 	_connect_left = -1.0
@@ -541,6 +545,11 @@ func _handle_relay_event(from_id: int, event: String, raw_data: Variant) -> void
 			if from_id == 1:
 				_return_to_lobby()
 		"pose":
+			if data.has("lap"):
+				# a race-lap packet riding the pose event (see send_lap)
+				if typeof(data["lap"]) == TYPE_DICTIONARY:
+					_apply_lap_msg(from_id, data["lap"])
+				return
 			if data.has("party"):
 				# a Party Mode packet riding the pose event (see send_party)
 				var to: int = int(data.get("to", 0))
@@ -758,6 +767,8 @@ func _start_race(level_index: int, start_time: float, mode: String = "", round_n
 		roster[id]["cp"] = 0
 		roster[id]["cp_at"] = 0.0
 		roster[id]["finished"] = -1.0
+	race_laps.clear()
+	lap_counts.clear()
 	race_starting.emit(level_index, start_time)
 
 
@@ -994,3 +1005,90 @@ func _apply_party_cfg(raw: Variant) -> void:
 func try_upnp() -> void:
 	upnp_text = "Room-code relay is used; no router setup is needed."
 	upnp_result.emit(upnp_text)
+
+
+# ---- race laps (run it again) ----------------------------------------------------
+# After your first finish you may run the course again. Your finish time and placing never
+# change; laps only show off. Lap packets ride the relay's "pose" event as {"lap": msg} (like
+# send_party: no relay redeploy) and a reliable RPC on a direct connection.
+# Only racers who have NOT finished can be lapped: a finished racer is done, and anything
+# arriving for them after their finish is ignored.
+
+## peer id -> {"lap": courses completed, "cp": checkpoint on the current lap}, for racers who
+## have finished once and are running again.
+var race_laps: Dictionary = {}
+## victim id -> {lapper id -> times lapped by that racer}
+var lap_counts: Dictionary = {}
+
+
+## Full courses `(lap, cp)` is ahead of an unfinished racer on checkpoint `their_cp`; a course
+## is `n_cp` checkpoints plus the finish. Exactly one course ahead counts as a lap.
+static func laps_ahead(lap: int, cp: int, their_cp: int, n_cp: int) -> int:
+	var course: int = n_cp + 1
+	return maxi(0, floori(float(lap * course + cp - their_cp) / float(course)))
+
+
+## The most times anyone has lapped `id` (the board's "lapped x3" tag).
+func times_lapped(id: int) -> int:
+	var best: int = 0
+	for n: Variant in (lap_counts.get(id, {}) as Dictionary).values():
+		best = maxi(best, int(n))
+	return best
+
+
+## The local racer (running again) is on checkpoint `cp` having completed `lap` courses.
+## Broadcasts the progress and, when `check`, laps any unfinished racer a full course behind.
+func send_lap(lap: int, cp: int, n_cp: int, check: bool = true) -> void:
+	if not active or not roster.has(my_id()):
+		return
+	var me: int = my_id()
+	var prog: Dictionary = {"k": "p", "lap": lap, "cp": cp}
+	_apply_lap_msg(me, prog)
+	_send_lap_msg(prog)
+	if not check:
+		return
+	for id: int in roster:
+		if id == me or float(roster[id]["finished"]) >= 0.0:
+			continue
+		var k: int = laps_ahead(lap, cp, int(roster[id]["cp"]), n_cp)
+		var had: int = int((lap_counts.get(id, {}) as Dictionary).get(me, 0))
+		if k > had:
+			var msg: Dictionary = {"k": "x", "victim": id, "count": k}
+			_apply_lap_msg(me, msg)
+			_send_lap_msg(msg)
+
+
+func _send_lap_msg(msg: Dictionary) -> void:
+	if _relay_mode:
+		if _relay_ready and roster.size() > 1:
+			_relay_send_event("pose", {"lap": msg})
+		return
+	if multiplayer.multiplayer_peer == null or multiplayer.get_peers().is_empty():
+		return
+	_lap.rpc(msg)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _lap(msg: Dictionary) -> void:
+	_apply_lap_msg(multiplayer.get_remote_sender_id(), msg)
+
+
+func _apply_lap_msg(from_id: int, msg: Dictionary) -> void:
+	if not roster.has(from_id) or float(roster[from_id]["finished"]) < 0.0:
+		return   # only a racer who has finished can be running laps
+	match str(msg.get("k", "")):
+		"p":
+			race_laps[from_id] = {"lap": int(msg.get("lap", 0)), "cp": int(msg.get("cp", 0))}
+			roster_changed.emit()
+		"x":
+			var victim: int = int(msg.get("victim", 0))
+			var count: int = int(msg.get("count", 0))
+			if not roster.has(victim) or float(roster[victim]["finished"]) >= 0.0 or count <= 0:
+				return   # left, or already finished: no stale messages
+			var per: Dictionary = lap_counts.get(victim, {})
+			if count <= int(per.get(from_id, 0)):
+				return
+			per[from_id] = count
+			lap_counts[victim] = per
+			roster_changed.emit()
+			racer_lapped.emit(from_id, victim, count)
