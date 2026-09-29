@@ -22,9 +22,12 @@ func _ready() -> void:
 	SaveData.path_override = "user://test_progress.json"
 	SaveData.wipe()
 	var only: String = ""
+	var skip: String = ""
 	for a: String in OS.get_cmdline_user_args():
 		if a.begins_with("--only="):
 			only = a.trim_prefix("--only=")
+		elif a.begins_with("--skip="):
+			skip = a.trim_prefix("--skip=")
 		elif a.begins_with("--level="):
 			var v: String = a.trim_prefix("--level=")
 			if not v.is_valid_int() or int(v) < 0 or int(v) >= Game.LEVELS.size():
@@ -46,7 +49,7 @@ func _ready() -> void:
 	var tests: Array[String] = []
 	for m: Dictionary in get_method_list():
 		var n: String = m["name"]
-		if n.begins_with("test_") and (only == "" or n.contains(only)):
+		if n.begins_with("test_") and (only == "" or n.contains(only)) and (skip == "" or not n.contains(skip)):
 			tests.append(n)
 	if tests.is_empty():
 		_usage_error("--only=%s matched no test_ method" % only)

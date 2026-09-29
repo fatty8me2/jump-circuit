@@ -141,7 +141,7 @@ tools\Godot_v4.7.1-stable_win64.exe --headless --path . --import
 tools\Godot_v4.7.1-stable_win64.exe --headless --path . res://tests/run_tests.tscn
 ```
 
-Options after `--`: `--only=<substring>`, `--level=<0-4>`, `--fps=<cap>`. A selection that matches
+Options after `--`: `--only=<substring>`, `--skip=<substring>`, `--level=<0-14>`, `--route=<n|all>`, `--fps=<cap>`. A selection that matches
 nothing exits with code 2. Any engine or script error logged during a test fails that test, and a
 per-test watchdog fails a test that hangs.
 The suite measures the controller (speed, jump heights/distances, coyote, buffer, air control),
