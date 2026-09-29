@@ -82,6 +82,13 @@ under the effects) and this keeps stereo loops inside the size budget.
 | `go.wav` | 0.50 s | Brighter, an octave up: 1760 Hz with 880, 1318, 2640 and 3520 Hz partials, slight vibrato, longer decay. |
 | `ui.wav` | 0.06 s | Tiny sine click gliding 1250 -> 850 Hz with an 11 ms decay. |
 | `beacon.wav` | 4.0 s | Power-up swell: a detuned sine stack (root, fifth, octave, twelfth) glides two octaves D2 -> D4 over 2.7 s, upper voices fading in later, with a tremolo accelerating 4 -> 17 Hz and a swept band-pass noise riser. It lands on a D major add9 chord of detuned sine pairs with individually tremoloed upper notes, a sub thump, an airy noise burst and random high pentatonic pings, fading over the last 0.3 s. |
+| `fin_fireworks.wav` | 2.2 s | Fireworks finish (unlockable): three rising whistles, each landing on a 95 -> 40 Hz boom with a noise body and a tail of 2.5-9 kHz crackles. |
+| `fin_confetti.wav` | 1.0 s | Confetti Cannon finish: two party-popper cracks 50 ms apart, a papery 13 Hz flutter of high noise and a few bright pings. |
+| `fin_lightning.wav` | 1.8 s | Lightning Bolt finish: a sharp high-noise crack, a crackling sizzle and a long 25-220 Hz rolling rumble over a 70 -> 32 Hz drop. |
+| `fin_ghost.wav` | 1.4 s | Ghost Spin finish: a wavering "woo-oo" of detuned sines gliding up and back down, an airy band-passed breath and three faint bells. |
+| `fin_jet.wav` | 2.4 s | Jet Flyover finish: a band-passed roar and turbine whine that swell to the flyby at 0.9 s with a doppler drop, then fade away. |
+
+Finish clips are played at the racer by `PlayerVisual.play_finish` (`python tools/gen_audio.py --only-new` rebuilds just these).
 
 ## Music
 

@@ -43,6 +43,20 @@ func setup(p_name: String, color: Color) -> void:
 	_label.modulate = color.lerp(Color.WHITE, 0.4)
 
 
+## The racer's unlocked trail and finish celebration, as they registered them (unknown ids
+## from a newer or hand-edited client fall back to the defaults).
+func set_cosmetics(trail: Variant, finish: Variant) -> void:
+	var t: String = Cosmetics.clean("trail", trail)
+	if t != _visual.trail_id:
+		_visual.set_trail(t)
+	_visual.finish_id = Cosmetics.clean("finish", finish)
+
+
+## They crossed the line: their own finish celebration.
+func celebrate() -> void:
+	_visual.on_cheer()
+
+
 # ---- Party Mode accessors (read-only views; party attachments hang off visual()) -------
 
 ## The Volt model (party costumes and status effects are added as its children).

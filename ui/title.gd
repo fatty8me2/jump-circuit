@@ -25,6 +25,10 @@ var _mode_label: Label
 var _update_status: Label
 var _update_button: Button
 var _update_secondary_buttons: Array[Button] = []
+## Locker: the line describing the focused item, and whether picks are written to
+## settings.cfg (tests turn it off so they never touch the player's real settings).
+var _locker_info: Label
+var persist_settings: bool = true
 
 
 func _ready() -> void:
@@ -90,6 +94,7 @@ func _build_diorama() -> void:
 	add_child(_volt)
 	_volt.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_volt.set_accent(Settings.my_color())
+	_wear_equipped()
 	_volt.position = Vector3(1.5, 0.2, 0.5)
 	_volt.add_child(BlobShadow.make())
 	_cam = Camera3D.new()
@@ -103,6 +108,9 @@ func _build_diorama() -> void:
 
 func _process(dt: float) -> void:
 	_t += dt
+	if Game.title_screen == "locker":
+		_locker_preview(dt)
+		return
 	var a: float = 0.55 + sin(_t * 0.11) * 0.35
 	_cam.position = Vector3(sin(a) * 15.0 - 2.0, 5.2 + sin(_t * 0.17) * 0.6, cos(a) * 15.0)
 	_cam.look_at(Vector3(-3.5, 2.6, -5))
@@ -135,6 +143,10 @@ func show_screen(id: String) -> void:
 	Game.title_screen = id
 	# a race host may have lent us another colour; leaving the session gives ours back
 	_volt.set_accent(Settings.my_color())
+	_locker_info = null
+	if id != "locker":
+		_wear_equipped()
+		_volt.position = Vector3(1.5, maxf(_volt_y, 0.2), 0.5)   # back on the pad after the Locker's laps
 	match id:
 		"levels":
 			_screen = _levels_screen()
@@ -146,6 +158,8 @@ func show_screen(id: String) -> void:
 			_screen = _settings_screen()
 		"practice":
 			_screen = _practice_screen()
+		"locker":
+			_screen = _locker_screen()
 		"victory":
 			_screen = _victory_screen()
 		"update":
@@ -180,7 +194,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	match Game.title_screen:
-		"levels", "victory", "update", "practice":
+		"levels", "victory", "update", "practice", "locker":
 			show_screen("main")
 		"settings":
 			Settings.save_settings()  # same as the panel's Done
@@ -251,6 +265,8 @@ func _main_screen() -> Control:
 	box.add_child(race_btn)
 	var practice_btn: Button = UiKit.button(PartyNames.mode_name("practice"), func() -> void: show_screen("practice"), 380)
 	box.add_child(practice_btn)
+	var locker_btn: Button = UiKit.button("Locker", func() -> void: show_screen("locker"), 380)
+	box.add_child(locker_btn)
 	var settings_btn: Button = UiKit.button("Settings", func() -> void: show_screen("settings"), 380)
 	box.add_child(settings_btn)
 	if Game.dev_mode:
@@ -265,7 +281,18 @@ func _main_screen() -> Control:
 	box.add_child(_controls_hint)
 	_update_controls_hint(Game.using_pad)
 	box.add_child(UiKit.shadowed(UiKit.label("v%s" % Updater.current_version(), 15, UiKit.SOFT), 4))
-	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn, "practice": practice_btn}
+	# cosmetics earned by progress made before they existed (or not yet announced)
+	var fresh: Array[Array] = Cosmetics.check_unlocks()
+	if not fresh.is_empty():
+		var names: Array[String] = []
+		for f: Array in fresh:
+			names.append(Cosmetics.display_name(f[0], f[1]))
+		var note: Label = UiKit.shadowed(UiKit.label("Unlocked: %s!  See the Locker." % ", ".join(names), 18, UiKit.GOLD), 5)
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		note.custom_minimum_size = Vector2(420, 0)
+		box.add_child(note)
+		box.move_child(note, 2)
+	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn, "practice": practice_btn, "locker": locker_btn}
 	_focus_pref = openers.get(_prev_screen, play)
 	return _left_column(box)
 
@@ -432,6 +459,169 @@ func _practice_screen() -> Control:
 	root.add_child(list_panel)
 	_focus_pref = first
 	return _left_column(root, 1140)
+
+
+# ---- locker (unlockable trails and finish celebrations) ------------------------------------------
+
+## The title Volt wears what is equipped (the Locker previews other things on it).
+func _wear_equipped() -> void:
+	if _volt == null:
+		return
+	if _volt.trail_id != Cosmetics.equipped_trail():
+		_volt.set_trail(Cosmetics.equipped_trail())
+	_volt.finish_id = Cosmetics.equipped_finish()
+
+
+## Locker preview: Volt laps the pad platform at a run so the trail streams out, framed
+## to the right of the menu column.
+func _locker_preview(dt: float) -> void:
+	var centre := Vector3(0.5, 0.2, 0.0)
+	var r: float = 3.4
+	var w: float = 3.5   # ~12 m/s: over the speed where every trail (Classic too) shows
+	var a: float = _t * w
+	var tangent := Vector3(-sin(a), 0, cos(a))
+	_volt.position = centre + Vector3(cos(a), 0, sin(a)) * r
+	_volt.animate(dt, tangent * r * w, true, tangent)
+	_cam.position = centre + Vector3(-7.5, 4.2, 10.5)
+	_cam.look_at(centre + Vector3(-4.6, 0.9, 0.0))
+
+
+func _locker_screen() -> Control:
+	var box: VBoxContainer = UiKit.vbox(10)
+	box.add_child(UiKit.shadowed(UiKit.label("LOCKER", 40, Color.WHITE), 8))
+	var blurb: Label = UiKit.label("Beat courses to unlock trails and finish celebrations. Racers online see yours too.", 17, UiKit.SOFT)
+	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	blurb.custom_minimum_size = Vector2(600, 0)
+	box.add_child(blurb)
+	# colour, as on the Race Friends screen
+	box.add_child(UiKit.label("COLOUR", 16, UiKit.TEAL))
+	var colours: HBoxContainer = UiKit.hbox(8)
+	colours.name = "Colours"
+	var styles: Array[StyleBoxFlat] = []
+	for i: int in Settings.RACER_COLORS.size():
+		var sw := Button.new()
+		sw.custom_minimum_size = Vector2(44, 44)
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Settings.RACER_COLORS[i]
+		sb.set_corner_radius_all(8)
+		sb.border_color = Color.WHITE
+		sb.set_border_width_all(3 if i == Settings.color_index else 0)
+		styles.append(sb)
+		for state: String in ["normal", "hover", "pressed"]:
+			sw.add_theme_stylebox_override(state, sb)
+		sw.focus_entered.connect(func() -> void: _set_locker_info("Colour", UiKit.SOFT))
+		sw.pressed.connect(func() -> void:
+			Settings.color_index = i
+			Net.preferred_color = -1
+			_save_locker()
+			for j: int in styles.size():
+				styles[j].set_border_width_all(3 if j == i else 0)
+			_volt.set_accent(Settings.my_color())
+			Net.update_identity())
+		colours.add_child(sw)
+	box.add_child(colours)
+	var trails: GridContainer = _locker_grid("trail", 5)
+	box.add_child(UiKit.label("TRAILS", 16, UiKit.TEAL))
+	box.add_child(trails)
+	var finishes: GridContainer = _locker_grid("finish", 3)
+	box.add_child(UiKit.label("FINISH", 16, UiKit.TEAL))
+	box.add_child(finishes)
+	_locker_info = UiKit.shadowed(UiKit.label("", 18, UiKit.SOFT), 5)
+	_locker_info.custom_minimum_size = Vector2(600, 48)
+	_locker_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_locker_info)
+	var back: Button = UiKit.button("Back", func() -> void: show_screen("main"), 600)
+	back.name = "Back"
+	back.focus_entered.connect(func() -> void: _set_locker_info("", UiKit.SOFT))
+	box.add_child(back)
+	var p: PanelContainer = UiKit.panel(Vector2(640, 0))
+	p.add_child(box)
+	# start on the equipped trail
+	for b: Node in trails.get_children():
+		if str(b.get_meta("item")) == Cosmetics.equipped_trail():
+			_focus_pref = b as Button
+	return _left_column(p, 660)
+
+
+## A grid of item buttons. Focusing one previews it on Volt and names how to unlock it;
+## pressing equips it (a locked one is only previewed).
+func _locker_grid(kind: String, columns: int) -> GridContainer:
+	var grid := GridContainer.new()
+	grid.name = "Trails" if kind == "trail" else "Finishes"
+	grid.columns = columns
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 8)
+	for id: String in Cosmetics.ids(kind):
+		var b: Button = UiKit.button("", func() -> void: _locker_pick(kind, id), 112.0 if kind == "trail" else 192.0)
+		b.set_meta("item", id)
+		b.set_meta("kind", kind)
+		b.custom_minimum_size.y = 46
+		b.add_theme_font_size_override("font_size", 16)
+		b.focus_entered.connect(func() -> void: _locker_focus(kind, id))
+		b.mouse_entered.connect(func() -> void: _locker_focus(kind, id))
+		grid.add_child(b)
+	_refresh_locker_grid(grid)
+	return grid
+
+
+static func _equipped(kind: String) -> String:
+	return Cosmetics.equipped_trail() if kind == "trail" else Cosmetics.equipped_finish()
+
+
+func _refresh_locker_grid(grid: GridContainer) -> void:
+	for n: Node in grid.get_children():
+		var b := n as Button
+		var kind: String = str(b.get_meta("kind"))
+		var id: String = str(b.get_meta("item"))
+		var item_name: String = str(Cosmetics.catalogue(kind)[id]["name"])
+		var unlocked: bool = Cosmetics.is_unlocked(kind, id)
+		if id == _equipped(kind):
+			b.text = "> %s <" % item_name
+		else:
+			b.text = item_name if unlocked else "Locked"
+		b.modulate = Color.WHITE if unlocked else Color(0.6, 0.62, 0.7)
+		b.tooltip_text = item_name if unlocked else "%s  -  %s" % [item_name, Cosmetics.hint(kind, id)]
+
+
+func _locker_focus(kind: String, id: String) -> void:
+	var item_name: String = Cosmetics.display_name(kind, id)
+	if not Cosmetics.is_unlocked(kind, id):
+		var prog: String = Cosmetics.progress(kind, id)
+		_set_locker_info("LOCKED  %s  -  %s%s" % [item_name, Cosmetics.hint(kind, id), "  (%s)" % prog if prog != "" else ""], Color(1, 0.7, 0.55))
+	elif id == _equipped(kind):
+		_set_locker_info("%s  -  equipped" % item_name, UiKit.GOLD)
+	else:
+		_set_locker_info(item_name, Color.WHITE)
+	if kind == "trail" and _volt.trail_id != id:
+		_volt.set_trail(id)
+
+
+func _locker_pick(kind: String, id: String) -> void:
+	if Cosmetics.is_unlocked(kind, id):
+		if kind == "trail":
+			Settings.trail_id = id
+		else:
+			Settings.finish_id = id
+		_save_locker()
+		Net.update_identity()
+		Sfx.play("ui", 0.05, 0.8)
+		for g: Node in _screen.find_children("*", "GridContainer", true, false):
+			_refresh_locker_grid(g as GridContainer)
+		_locker_focus(kind, id)
+	if kind == "finish":
+		_volt.finish_id = id
+		_volt.on_cheer()
+
+
+func _save_locker() -> void:
+	if persist_settings:
+		Settings.save_settings()
+
+
+func _set_locker_info(text: String, color: Color) -> void:
+	if _locker_info != null and is_instance_valid(_locker_info):
+		_locker_info.text = text
+		_locker_info.add_theme_color_override("font_color", color)
 
 
 func _settings_screen() -> Control:

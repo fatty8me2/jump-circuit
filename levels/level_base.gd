@@ -108,6 +108,8 @@ func _spawn_player() -> void:
 	add_child(player)
 	player.connect_feedback()
 	player.visual.set_accent(Settings.my_color())
+	player.visual.set_trail(Cosmetics.equipped_trail())
+	player.visual.finish_id = Cosmetics.equipped_finish()
 	camera = OrbitCamera.new()
 	add_child(camera)
 	camera.target = player
@@ -177,6 +179,8 @@ func _setup_race() -> void:
 	Net.racer_finished.connect(func(id: int, time: float) -> void:
 		if id != Net.my_id() and Net.roster.has(id) and is_inside_tree():
 			hud.toast("%s finished - %s" % [Net.roster[id]["name"], SaveData.format_time(time)])
+			if _ghosts.has(id):
+				(_ghosts[id] as RemoteRacer).celebrate()
 			if id == spectating_id:
 				_spectate_moved_on())
 	# a dropped relay link reconnects on its own; the race carries on meanwhile
@@ -196,6 +200,7 @@ func _add_ghost(id: int, at: Vector3) -> void:
 	var g := RemoteRacer.new()
 	add_child(g)
 	g.setup(str(Net.roster[id]["name"]), Settings.RACER_COLORS[int(Net.roster[id]["color"]) % Settings.RACER_COLORS.size()])
+	g.set_cosmetics(Net.roster[id].get("trail"), Net.roster[id].get("finish"))
 	g.global_position = at
 	_ghosts[id] = g
 
@@ -484,6 +489,7 @@ func _on_finish() -> void:
 		Net.send_finished(time)
 		SaveData.record_finish(level_id, time, deaths, splits)
 		hud.show_race_results(time)
+		announce_unlocks()
 		return
 	var prev_best: float = SaveData.best_time(level_id)
 	var prev_ff: int = SaveData.fewest_falls(level_id)
@@ -494,6 +500,16 @@ func _on_finish() -> void:
 	hud.show_results(time, prev_best, is_best, deaths, prev_ff)
 	if is_best and prev_best >= 0.0:
 		Sfx.play("new_best")
+	announce_unlocks()
+
+
+## "Unlocked: Flame trail!" toasts for cosmetics this finish earned (each shows once ever).
+func announce_unlocks() -> void:
+	var fresh: Array[Array] = Cosmetics.check_unlocks()
+	for i: int in fresh.size():
+		get_tree().create_timer(0.4 + 2.0 * i).timeout.connect(func() -> void:
+			if is_inside_tree():
+				hud.toast(Cosmetics.unlock_text(fresh[i][0], fresh[i][1]), "Equip it in the Locker", UiKit.GOLD, true))
 
 
 ## Override for a bespoke ending (level 5's beacon).

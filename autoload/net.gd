@@ -275,13 +275,26 @@ func _shutdown() -> void:
 
 
 func _my_entry() -> Dictionary:
-	return {"name": Settings.player_name, "color": Settings.color_index, "cp": 0, "finished": -1.0}
+	var e: Dictionary = {"name": Settings.player_name, "color": Settings.color_index, "cp": 0, "finished": -1.0}
+	e.merge(_my_cosmetics())
+	return e
+
+
+## Our equipped trail / finish, sent with the colour so the others see them.
+func _my_cosmetics() -> Dictionary:
+	return {"trail": Cosmetics.equipped_trail(), "finish": Cosmetics.equipped_finish()}
+
+
+func _register_data() -> Dictionary:
+	var d: Dictionary = {"name": Settings.player_name, "color": Settings.color_index}
+	d.merge(_my_cosmetics())
+	return d
 
 
 func _on_connected() -> void:
 	_connect_left = -1.0
 	_begin_clock_sync()
-	_register.rpc_id(1, Settings.player_name, Settings.color_index)
+	_register.rpc_id(1, Settings.player_name, Settings.color_index, _my_cosmetics())
 
 
 ## (Re)measure the host clock: a short ping burst, keeping the lowest-RTT sample.
@@ -469,7 +482,7 @@ func _handle_relay_packet(message: String) -> void:
 				joined_lobby.emit()
 			else:
 				_begin_clock_sync()
-				_relay_send_event("register", {"name": Settings.player_name, "color": Settings.color_index}, 1)
+				_relay_send_event("register", _register_data(), 1)
 		"error":
 			var error_reason := str(packet.get("reason", "The relay rejected the room connection."))
 			var resuming := _relay_resume_left >= 0.0
@@ -516,7 +529,7 @@ func _handle_relay_event(from_id: int, event: String, raw_data: Variant) -> void
 	match event:
 		"register":
 			if is_host():
-				_register_player(from_id, str(data.get("name", "Runner")), int(data.get("color", 0)))
+				_register_player(from_id, str(data.get("name", "Runner")), int(data.get("color", 0)), data)
 		"roster":
 			if not is_host():
 				_sync_roster(_roster_from_wire(data.get("players", [])), data.get("party", {}))
@@ -601,11 +614,12 @@ func _roster_from_wire(raw_players: Variant) -> Dictionary:
 # ---- lobby RPCs -----------------------------------------------------------------
 
 @rpc("any_peer", "call_remote", "reliable")
-func _register(player_name: String, color: int) -> void:
-	_register_player(multiplayer.get_remote_sender_id(), player_name, color)
+func _register(player_name: String, color: int, cosmetics: Dictionary = {}) -> void:
+	_register_player(multiplayer.get_remote_sender_id(), player_name, color, cosmetics)
 
 
-func _register_player(id: int, player_name: String, color: int) -> void:
+## `cosmetics` may hold "trail" / "finish" ids (anything else in it is ignored).
+func _register_player(id: int, player_name: String, color: int, cosmetics: Dictionary = {}) -> void:
 	if not is_host():
 		return
 	if in_race and not roster.has(id):
@@ -628,6 +642,8 @@ func _register_player(id: int, player_name: String, color: int) -> void:
 	entry["name"] = player_name.substr(0, 14)
 	# a newcomer gets a colour nobody else wears; later explicit picks are honoured
 	entry["color"] = _free_color(id, color) if joining else posmod(color, Settings.RACER_COLORS.size())
+	entry["trail"] = Cosmetics.clean("trail", cosmetics.get("trail"))
+	entry["finish"] = Cosmetics.clean("finish", cosmetics.get("finish"))
 	roster[id] = entry
 	if joining and game_mode == "team" and not teams.has(id):
 		teams[id] = PartyRules.smaller_team(teams)
@@ -713,10 +729,11 @@ func update_identity() -> void:
 			if roster.has(1):
 				roster[1]["name"] = Settings.player_name
 				roster[1]["color"] = Settings.color_index
+				roster[1].merge(_my_cosmetics(), true)
 				_broadcast_roster()
 				roster_changed.emit()
 		else:
-			_relay_send_event("register", {"name": Settings.player_name, "color": Settings.color_index}, 1)
+			_relay_send_event("register", _register_data(), 1)
 		return
 	# still connecting: nothing to send yet (_on_connected registers the current identity)
 	if not active or multiplayer.multiplayer_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
@@ -724,10 +741,11 @@ func update_identity() -> void:
 	if is_host():
 		roster[1]["name"] = Settings.player_name
 		roster[1]["color"] = Settings.color_index
+		roster[1].merge(_my_cosmetics(), true)
 		_sync_roster.rpc(roster, _party_cfg())
 		roster_changed.emit()
 	else:
-		_register.rpc_id(1, Settings.player_name, Settings.color_index)
+		_register.rpc_id(1, Settings.player_name, Settings.color_index, _my_cosmetics())
 
 
 # ---- race flow --------------------------------------------------------------------

@@ -30,6 +30,9 @@ var vsync: bool = true
 var timer_mode: String = "auto"
 var player_name: String = "Runner"
 var color_index: int = 0
+## Equipped cosmetics (Cosmetics catalogue ids; a locked pick shows the default in game).
+var trail_id: String = "classic"
+var finish_id: String = "cheer"
 var last_room_code: String = ""
 ## Party Mode rebinds: action -> {"key": physical keycode, "mouse": button, "pad": button}
 ## (only what differs from Game.PARTY_BIND_DEFAULTS is needed; 0 / -1 = unbound).
@@ -86,6 +89,8 @@ func _sanitize() -> void:
 	quality = clampi(quality, 0, QUALITY_NAMES.size() - 1)
 	particles = _finite_clamp(particles, 0.2, 2.0, 1.0)
 	color_index = posmod(color_index, RACER_COLORS.size())
+	trail_id = Cosmetics.clean("trail", trail_id)
+	finish_id = Cosmetics.clean("finish", finish_id)
 	if timer_mode not in ["auto", "on", "off"]:
 		timer_mode = "auto"
 	player_name = player_name.strip_edges().substr(0, 14)
@@ -141,7 +146,8 @@ func toggle_fullscreen() -> void:
 
 func _props() -> Array[String]:
 	return ["mouse_sensitivity", "invert_y", "fov", "master_volume", "sfx_volume", "music_volume", "ambience_volume",
-		"quality", "particles", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_room_code", "party_binds"]
+		"quality", "particles", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_room_code", "party_binds",
+		"trail_id", "finish_id"]
 
 
 ## How many particles every emitter builds relative to the High baseline: Low 0.45,
