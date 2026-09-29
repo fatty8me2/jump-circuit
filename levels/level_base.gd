@@ -611,6 +611,7 @@ func _begin_lap() -> void:
 		cp.set_active(false, false)
 	_lap_start = Game.course_time
 	run_time = Game.course_time
+	Sfx.music(music_track)   # back from the results music (cancels a fanfare still handing over)
 	Sfx.music_progress(0.0)
 	hud.clear_banner()
 	# respawn -> player.teleported -> Net.note_teleport: ghosts snap to the start, not slide
