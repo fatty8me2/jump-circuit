@@ -8,6 +8,7 @@ and generated from maths + seeded noise, so no third-party assets are used.
 Usage (from anywhere):
     python tools/gen_audio.py            # generate everything, then verify
     python tools/gen_audio.py --verify   # only verify the files on disk
+    python tools/gen_audio.py --only-new # just the finish-celebration clips (fin_*), then verify
     (the score: tools/gen_music.py; ambience: tools/gen_ambience.py; world sounds: tools/gen_world_sfx.py)
 
 Deterministic: every sound uses its own RNG seeded from SEED + its name, so
@@ -429,11 +430,110 @@ def sfx_beacon():
 
 
 # --------------------------------------------------------------------------
+# finish celebrations (unlockable cosmetics; PlayerVisual.play_finish plays fin_<id>)
+# --------------------------------------------------------------------------
+def sfx_fin_fireworks():
+    # three launches: a rising whistle each, then a boom and a tail of crackles
+    r = rng_for("fin_fireworks")
+    dur = 2.2
+    x = np.zeros(int(round(dur * SR)))
+    for k in range(3):
+        t0 = 0.5 * k
+        tw = tvec(0.38)
+        whistle = osc(sweep(900.0 + 120 * k, 2600.0 + 200 * k, tw, 0.38)) * np.minimum(tw / 0.05, 1.0) * np.exp(-tw / 0.5)
+        place(x, t0, whistle, gain=0.18)
+        tb = tvec(0.7)
+        boom = osc(sweep(95.0, 40.0, tb, 0.25)) * ad_env(tb, 0.002, 0.16)
+        body = fft_band(r.standard_normal(len(tb)), SR, 60.0, 1400.0, 2) * ad_env(tb, 0.001, 0.09)
+        place(x, t0 + 0.38, boom + 0.9 * body / np.max(np.abs(body)), gain=0.8)
+        for _ in range(26):
+            tc = t0 + 0.45 + r.uniform(0.0, 0.9)
+            cl = grain(r, 0.03, 2500.0, 9000.0, 0.006)
+            place(x, tc, cl, gain=r.uniform(0.05, 0.16))
+    finish_sfx("fin_fireworks", x, fout=0.2)
+
+
+def sfx_fin_confetti():
+    # a party-cannon pop (twice, left and right) and a papery flutter
+    r = rng_for("fin_confetti")
+    dur = 1.0
+    x = np.zeros(int(round(dur * SR)))
+    for t0, g in ((0.0, 1.0), (0.05, 0.85)):
+        tp = tvec(0.25)
+        pop = osc(sweep(260.0, 90.0, tp, 0.05)) * ad_env(tp, 0.001, 0.03)
+        snap = fft_band(r.standard_normal(len(tp)), SR, 700.0, 6000.0, 2) * np.exp(-tp / 0.012)
+        place(x, t0, pop + 0.8 * snap / np.max(np.abs(snap)), gain=g)
+    tf = tvec(0.85)
+    flutter = fft_band(r.standard_normal(len(tf)), SR, 2000.0, 8000.0, 2)
+    flutter *= (0.55 + 0.45 * np.abs(np.sin(TAU * 13.0 * tf + r.uniform(0, TAU)))) * np.exp(-tf / 0.3)
+    place(x, 0.08, flutter / np.max(np.abs(flutter)), gain=0.25)
+    for _ in range(5):
+        tt = tvec(0.15)
+        place(x, r.uniform(0.1, 0.5), np.sin(TAU * mtof(int(r.choice([84, 88, 91, 96]))) * tt) * ad_env(tt, 0.002, 0.05), gain=0.08)
+    finish_sfx("fin_confetti", x, fout=0.1)
+
+
+def sfx_fin_lightning():
+    # a sharp crack, a sizzle and a long rolling rumble
+    r = rng_for("fin_lightning")
+    dur = 1.8
+    n = int(round(dur * SR))
+    t = tvec(dur)
+    x = np.zeros(n)
+    crack = fft_band(r.standard_normal(n), SR, 1200.0, 12000.0, 2) * np.exp(-t / 0.025)
+    x += crack / np.max(np.abs(crack))
+    sizzle = fft_band(r.standard_normal(n), SR, 3000.0, 10000.0, 2)
+    sizzle *= (r.random(n) > 0.93) * np.exp(-t / 0.18)
+    x += 0.5 * sizzle / (np.max(np.abs(sizzle)) + 1e-9)
+    rumble = fft_band(r.standard_normal(n), SR, 25.0, 220.0, 2)
+    rumble *= np.minimum(t / 0.06, 1.0) * np.exp(-t / 0.55) * (0.7 + 0.3 * np.sin(TAU * 3.1 * t))
+    x += 0.9 * rumble / np.max(np.abs(rumble))
+    x += 0.4 * osc(sweep(70.0, 32.0, t, 0.6)) * ad_env(t, 0.004, 0.3)
+    finish_sfx("fin_lightning", x, fout=0.3)
+
+
+def sfx_fin_ghost():
+    # a wavering "woo-oo" of detuned sines gliding up then down, with an airy breath
+    r = rng_for("fin_ghost")
+    dur = 1.4
+    t = tvec(dur)
+    u = t / dur
+    f = mtof(67) * 2.0 ** ((np.sin(np.pi * u) * 7.0 - 2.0 * u) / 12.0)
+    f *= 1.0 + 0.012 * np.sin(TAU * 5.5 * t)
+    env = np.sin(np.pi * np.clip(u, 0, 1)) ** 1.2
+    x = (osc(f) + 0.8 * osc(f * 1.006) + 0.35 * osc(f * 2.003)) * env
+    breath = svf_bandpass(r.standard_normal(len(t)), f * 2.0, 4.0, SR)
+    x += 0.4 * breath / np.max(np.abs(breath)) * env
+    for m in (79, 83, 86):
+        tt = tvec(0.6)
+        place(x, 0.1 + 0.08 * (m - 79) / 4.0, bell(mtof(m), 0.6, SR, 0.2) * 0.12)
+    finish_sfx("fin_ghost", x, fin=0.02, fout=0.1)
+
+
+def sfx_fin_jet():
+    # a jet screaming past: band noise and a whine with a doppler drop at the flyby
+    r = rng_for("fin_jet")
+    dur = 2.4
+    n = int(round(dur * SR))
+    t = tvec(dur)
+    tc = 0.9   # closest pass
+    closeness = 1.0 / (1.0 + ((t - tc) / 0.28) ** 2)
+    dop = 1.0 + 0.18 * np.tanh(-(t - tc) / 0.2)
+    roar = svf_bandpass(r.standard_normal(n), 900.0 * dop, 0.8, SR)
+    low = fft_band(r.standard_normal(n), SR, 40.0, 400.0, 2)
+    whine = osc(2400.0 * dop) + 0.5 * osc(3700.0 * dop)
+    x = (roar / np.max(np.abs(roar)) + 0.8 * low / np.max(np.abs(low)) * closeness + 0.12 * whine) * closeness
+    x *= np.minimum(t / 0.3, 1.0)
+    finish_sfx("fin_jet", x, fin=0.05, fout=0.4)
+
+
+# --------------------------------------------------------------------------
 # verification
 # --------------------------------------------------------------------------
 SFX_SPEC = {"jump": 0.18, "land": 0.2, "bounce": 0.45, "checkpoint": 0.7, "crumble": 0.7, "collapse": 0.9,
             "creak": 0.35, "finish": 2.2, "respawn": 0.3, "tick": 0.12, "go": 0.5, "ui": 0.06, "beacon": 4.0,
-            "whack": 0.3, "step": 0.07}
+            "whack": 0.3, "step": 0.07,
+            "fin_fireworks": 2.2, "fin_confetti": 1.0, "fin_lightning": 1.8, "fin_ghost": 1.4, "fin_jet": 2.4}
 MUSIC = ()  # the score lives in tools/gen_music.py now
 
 
@@ -498,7 +598,10 @@ def main():
         if "--music" not in args:
             print("effects:")
             for fn in (sfx_jump, sfx_land, sfx_whack, sfx_bounce, sfx_checkpoint, sfx_crumble, sfx_collapse,
-                       sfx_creak, sfx_finish, sfx_respawn, sfx_tick, sfx_go, sfx_ui, sfx_beacon, sfx_step):
+                       sfx_creak, sfx_finish, sfx_respawn, sfx_tick, sfx_go, sfx_ui, sfx_beacon, sfx_step,
+                       sfx_fin_fireworks, sfx_fin_confetti, sfx_fin_lightning, sfx_fin_ghost, sfx_fin_jet):
+                if "--only-new" in args and not fn.__name__.startswith("sfx_fin_"):
+                    continue
                 fn()
     sys.exit(0 if verify() else 1)
 

@@ -3384,3 +3384,322 @@ func test_zl_run_it_again() -> void:
 	world.queue_free()
 	world = null
 	await ticks(2)
+
+
+
+# ---- unlockable cosmetics: trails and finish celebrations (Cosmetics, Locker) -----------------
+
+func _cos_levels(ids: Array, extra: Dictionary = {}) -> Dictionary:
+	var lv: Dictionary = {}
+	for id: Variant in ids:
+		lv[id] = {"completed": true, "runs": 1}
+	lv.merge(extra, true)
+	return lv
+
+
+func test_zc_cosmetics_unlock_rules() -> void:
+	var none: Dictionary = {}
+	for kind: String in ["trail", "finish"]:
+		for id: String in Cosmetics.ids(kind):
+			var is_default: bool = Cosmetics.catalogue(kind)[id]["rule"]["type"] == "default"
+			check(Cosmetics.is_unlocked(kind, id, none) == is_default, "%s %s: %s on a fresh save" % [kind, id, "owned" if is_default else "locked"])
+			if not is_default:
+				check(Cosmetics.hint(kind, id) != "", "%s %s has an unlock hint (%s)" % [kind, id, Cosmetics.hint(kind, id)])
+	# every world-themed trail is earned on its own world
+	var themed: Dictionary = {"flame": "volcano", "bubbles": "reef", "frost": "glacier", "sand": "desert",
+		"wisps": "manor", "sprinkles": "candy", "contrail": "carrier"}
+	for trail: String in themed:
+		var lv: Dictionary = _cos_levels([themed[trail]])
+		check(Cosmetics.is_unlocked("trail", trail, lv), "beating %s unlocks the %s trail" % [themed[trail], trail])
+		check(not Cosmetics.is_unlocked("trail", "rainbow", lv), "... but not Rainbow")
+	check(not Cosmetics.is_unlocked("trail", "flame", {"volcano": {"completed": false, "runs": 0}}), "an unfinished course unlocks nothing")
+	var four: Dictionary = _cos_levels(["gardens", "foundry", "balance", "clockwork"])
+	check(not Cosmetics.is_unlocked("finish", "fireworks", four), "4 courses: no Fireworks yet (%s)" % Cosmetics.progress("finish", "fireworks", four))
+	four["reef"] = {"completed": true, "runs": 1}
+	check(Cosmetics.is_unlocked("finish", "fireworks", four), "5 different courses unlock Fireworks")
+	check(not Cosmetics.is_unlocked("finish", "fireworks", {"playground": {"completed": true}, "gardens": {"completed": true}, "x1": {"completed": true}, "x2": {"completed": true}, "x3": {"completed": true}}),
+		"only real courses count towards the course milestones")
+	check(Cosmetics.is_unlocked("finish", "confetti", {"gardens": {"completed": true, "runs": 25}}), "25 runs (even on one course) unlock the Confetti Cannon")
+	check(not Cosmetics.is_unlocked("finish", "confetti", {"gardens": {"completed": true, "runs": 24}}), "24 runs do not")
+	check(Cosmetics.is_unlocked("finish", "lightning", _cos_levels(["armada"])), "Storm Armada unlocks the Lightning Bolt")
+	check(Cosmetics.is_unlocked("finish", "ghost", {"gardens": {"completed": true, "fewest_falls": 0}}), "a run without a fall unlocks Ghost Spin")
+	check(Cosmetics.is_unlocked("finish", "ghost", {"gardens": {"completed": true, "legacy_fewest_falls": 0}}), "... also one set on an older layout")
+	check(not Cosmetics.is_unlocked("finish", "ghost", {"gardens": {"completed": true, "fewest_falls": 2}}), "falls every run: no Ghost Spin")
+	var all_ids: Array = []
+	for info: Dictionary in Game.LEVELS:
+		all_ids.append(info["id"])
+	var every: Dictionary = _cos_levels(all_ids)
+	check(Cosmetics.is_unlocked("trail", "rainbow", every) and Cosmetics.is_unlocked("finish", "jet", every), "every course: Rainbow trail and Jet Flyover")
+	every.erase("ascent")
+	check(not Cosmetics.is_unlocked("trail", "rainbow", every) and Cosmetics.is_unlocked("finish", "jet", every), "one short of all: no Rainbow (10+ is enough for the jet)")
+	check(Cosmetics.unlock_text("trail", "flame") == "Unlocked: Flame trail!", "the toast reads '%s'" % Cosmetics.unlock_text("trail", "flame"))
+
+
+func test_zc_cosmetics_retroactive_and_one_time_toast() -> void:
+	var old_trail: String = Settings.trail_id
+	# a save from before cosmetics existed: two worlds beaten, no "cosmetics_seen"
+	var f: FileAccess = FileAccess.open(SaveData._path(), FileAccess.WRITE)
+	f.store_string(JSON.stringify({"game_completed": false, "levels": {
+		"reef": {"completed": true, "runs": 3, "best": 80.0, "rev": 1},
+		"glacier": {"completed": true, "runs": 1, "best": 120.0, "rev": 1}}}))
+	f.close()
+	SaveData.load_data()
+	check(Cosmetics.is_unlocked("trail", "bubbles") and Cosmetics.is_unlocked("trail", "frost"), "an old save unlocks what it already earned")
+	var fresh: Array[Array] = Cosmetics.check_unlocks()
+	var keys: Array[String] = []
+	for x: Array in fresh:
+		keys.append("%s:%s" % [x[0], x[1]])
+	check(keys == ["trail:bubbles", "trail:frost"], "announced once, defaults never: %s" % [keys])
+	check(Cosmetics.check_unlocks().is_empty(), "the second check announces nothing")
+	SaveData.load_data()
+	check(Cosmetics.check_unlocks().is_empty(), "... even after reloading the save (seen list stored: %s)" % [SaveData.cosmetics_seen()])
+	# the title's main menu shows the retroactive batch once, then never again
+	SaveData.data["cosmetics_seen"] = []
+	Game.title_screen = "main"
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	title.set("persist_settings", false)
+	add_child(title)
+	await ticks(2)
+	var note_count := func() -> int:
+		var n: int = 0
+		for l: Node in (title.get("_screen") as Control).find_children("*", "Label", true, false):
+			if (l as Label).text.begins_with("Unlocked:"):
+				n += 1
+		return n
+	check(note_count.call() == 1, "the main menu lists retroactive unlocks")
+	title.call("show_screen", "main")
+	await ticks(2)
+	check(note_count.call() == 0, "only the first time")
+	title.queue_free()
+	await ticks(2)
+	# a new finish unlocks exactly its own item
+	SaveData.record_finish("volcano", 100.0, 3)
+	fresh = Cosmetics.check_unlocks()
+	check(fresh.size() == 1 and fresh[0] == ["trail", "flame"], "beating Cinder Peak announces the Flame trail (%s)" % [fresh])
+	# a hand-edited seen list keeps strings only
+	var clean: Dictionary = SaveData._sanitize({"levels": {}, "cosmetics_seen": ["trail:flame", 5, null, "trail:flame", "finish:jet"]})
+	check(clean.get("cosmetics_seen") == ["trail:flame", "finish:jet"], "cosmetics_seen is sanitized (%s)" % [clean.get("cosmetics_seen")])
+	# a locked pick wears the default in game
+	Settings.trail_id = "rainbow"
+	check(Cosmetics.equipped_trail() == "classic", "a locked trail in settings falls back to Classic")
+	Settings.trail_id = "flame"
+	check(Cosmetics.equipped_trail() == "flame", "an unlocked one is worn")
+	Settings.trail_id = old_trail
+	SaveData.wipe()
+
+
+func test_zc_settings_sanitize_cosmetic_ids() -> void:
+	var old_t: String = Settings.trail_id
+	var old_f: String = Settings.finish_id
+	Settings.trail_id = "laser_beams"
+	Settings.finish_id = ""
+	Settings.call("_sanitize")
+	check(Settings.trail_id == "classic" and Settings.finish_id == "cheer", "unknown ids fall back to the defaults")
+	Settings.trail_id = "frost"
+	Settings.finish_id = "jet"
+	Settings.call("_sanitize")
+	check(Settings.trail_id == "frost" and Settings.finish_id == "jet", "known ids are kept (even if still locked)")
+	# a hand-edited settings file with the wrong types
+	var path: String = "user://test_settings_cosmetics.cfg"
+	var cf := ConfigFile.new()
+	cf.set_value("s", "trail_id", 42)
+	cf.set_value("s", "finish_id", "nope")
+	cf.save(path)
+	Settings.load_settings(path)
+	check(Settings.trail_id == "frost" and Settings.finish_id == "cheer", "a wrong-typed id is ignored, a bad string resets (%s / %s)" % [Settings.trail_id, Settings.finish_id])
+	check("trail_id" in Settings._props() and "finish_id" in Settings._props(), "both picks are saved with the settings")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	Settings.trail_id = old_t
+	Settings.finish_id = old_f
+
+
+func test_zc_locker_pad_navigation() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var old_t: String = Settings.trail_id
+	var old_f: String = Settings.finish_id
+	SaveData.wipe()
+	SaveData.data["levels"]["volcano"] = {"completed": true, "runs": 1}
+	Settings.trail_id = "classic"
+	Settings.finish_id = "cheer"
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	title.set("persist_settings", false)
+	add_child(title)
+	title.call("show_screen", "main")
+	await ticks(3)
+	var send := func(button: JoyButton) -> void:
+		var ev := InputEventJoypadButton.new()
+		ev.device = 2
+		ev.button_index = button
+		ev.pressed = true
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+		var up: InputEventJoypadButton = ev.duplicate()
+		up.pressed = false
+		Input.parse_input_event(up)
+		await ticks(2)
+	var focus := func() -> Control:
+		return get_viewport().gui_get_focus_owner()
+	# walk down the main menu to Locker and press A
+	var guard: int = 0
+	while not (focus.call() is Button and (focus.call() as Button).text == "Locker") and guard < 12:
+		await send.call(JOY_BUTTON_DPAD_DOWN)
+		guard += 1
+	check(focus.call() is Button and (focus.call() as Button).text == "Locker", "the main menu has a Locker entry reachable with the D-pad")
+	await send.call(JOY_BUTTON_A)
+	await ticks(2)
+	check(Game.title_screen == "locker", "A opens the Locker")
+	var volt: PlayerVisual = title.get("_volt")
+	var f: Control = focus.call()
+	check(f != null and f.get_meta("item", "") == "classic", "it starts on the equipped trail")
+	await send.call(JOY_BUTTON_DPAD_RIGHT)
+	f = focus.call()
+	check(f != null and f.get_meta("item", "") == "sparkle" and volt.trail_id == "sparkle", "right moves along the trails and previews each on Volt")
+	await send.call(JOY_BUTTON_DPAD_RIGHT)
+	var info: Label = title.get("_locker_info")
+	check(focus.call().get_meta("item", "") == "flame" and not info.text.begins_with("LOCKED"), "Flame (Cinder Peak beaten) shows as owned")
+	await send.call(JOY_BUTTON_A)
+	check(Settings.trail_id == "flame" and (focus.call() as Button).text == "> Flame <", "A equips an unlocked trail")
+	await send.call(JOY_BUTTON_DPAD_RIGHT)
+	check(focus.call().get_meta("item", "") == "bubbles" and info.text.begins_with("LOCKED") and info.text.contains("Coral Depths"),
+		"a locked trail can be focused and names its unlock (%s)" % info.text)
+	await send.call(JOY_BUTTON_A)
+	check(Settings.trail_id == "flame", "A on a locked trail only previews it")
+	# down into the finish row, then to Back
+	guard = 0
+	while not (focus.call() != null and focus.call().get_meta("kind", "") == "finish") and guard < 4:
+		await send.call(JOY_BUTTON_DPAD_DOWN)
+		guard += 1
+	check(focus.call() != null and focus.call().get_meta("kind", "") == "finish", "down reaches the Finish row")
+	var fin_id: String = str(focus.call().get_meta("item", ""))
+	await send.call(JOY_BUTTON_A)
+	var want_fin: String = fin_id if Cosmetics.is_unlocked("finish", fin_id) else "cheer"
+	check(Settings.finish_id == want_fin and volt.finish_id == fin_id,
+		"A on a finish plays it on Volt (%s), equipping only if owned" % fin_id)
+	guard = 0
+	while not (focus.call() is Button and (focus.call() as Button).text == "Back") and guard < 4:
+		await send.call(JOY_BUTTON_DPAD_DOWN)
+		guard += 1
+	check(focus.call() is Button and (focus.call() as Button).text == "Back", "down again reaches Back")
+	await send.call(JOY_BUTTON_DPAD_UP)
+	check(focus.call() != null and focus.call().get_meta("kind", "") == "finish", "and up goes back to the Finish row")
+	await send.call(JOY_BUTTON_B)
+	await ticks(2)
+	check(Game.title_screen == "main", "B leaves the Locker")
+	check(focus.call() is Button and (focus.call() as Button).text == "Locker", "focus returns to the Locker button")
+	check(volt.trail_id == "flame", "the title Volt wears the equipped trail again")
+	title.queue_free()
+	await ticks(2)
+	Settings.trail_id = old_t
+	Settings.finish_id = old_f
+	SaveData.wipe()
+
+
+func test_zc_trail_and_finish_particles_follow_slider() -> void:
+	await new_world()
+	var old_q: int = Settings.quality
+	var old_p: float = Settings.particles
+	Settings.quality = 2
+	var v := PlayerVisual.new()
+	world.add_child(v)
+	await ticks(1)
+	for trail: String in Cosmetics.ids("trail"):
+		var counts: Array[Array] = []
+		for p: float in [1.0, 2.0, 0.2]:
+			Settings.particles = p
+			v.set_trail(trail)
+			var row: Array = []
+			for e: GPUParticles3D in v.trail_emitters():
+				row.append(e.amount)
+			counts.append(row)
+		var ok: bool = true
+		var specs: Array[Dictionary] = PlayerVisual.trail_layers(trail)
+		for i: int in counts[0].size():
+			var base: int = int(specs[i]["amount"]) if not specs.is_empty() else 44
+			ok = ok and counts[0][i] == base and counts[1][i] == roundi(base * 2.0) and counts[2][i] == maxi(1, roundi(base * 0.2))
+		check(ok and v.trail_id == trail, "%s trail: every layer scales with the Particles slider %s" % [trail, counts])
+	# a moving Volt streams its trail; standing still stops it
+	Settings.particles = 1.0
+	v.set_trail("flame")
+	v.animate(1.0 / 60.0, Vector3(9, 0, 0), true, Vector3.FORWARD)
+	check(v.trail_emitters().all(func(e: GPUParticles3D) -> bool: return e.emitting), "a brisk run lights every layer of an unlocked trail")
+	v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(v.trail_emitters().all(func(e: GPUParticles3D) -> bool: return not e.emitting), "standing still puts it out")
+	# finish effects: fired through Fx.spawn, so they scale too
+	for p: float in [1.0, 2.0]:
+		Settings.particles = p
+		var before: Array[Node] = v.find_children("*", "GPUParticles3D", true, false)
+		v.play_finish("confetti")
+		var added: Array[int] = []
+		for n: Node in v.find_children("*", "GPUParticles3D", true, false):
+			if not before.has(n):
+				added.append((n as GPUParticles3D).amount)
+		check(added.has(roundi(70 * p)), "the Confetti Cannon fires %d-particle bursts at %.0f%% (%s)" % [roundi(70 * p), p * 100.0, added])
+	for id: String in Cosmetics.ids("finish"):
+		var e0: int = trap.count()
+		v.finish_id = id
+		v.on_cheer()
+		await ticks(5)
+		check(trap.count() == e0, "the %s finish plays without errors %s" % [id, trap.since(e0)])
+	await seconds(4.5)
+	var leftovers: int = 0
+	for n: Node in v.get_children():
+		if str(n.name).begins_with("FinishBolt") or str(n.name).begins_with("FinishJet"):
+			leftovers += 1
+	check(leftovers == 0, "the bolt and the jet clean up after themselves (%d left)" % leftovers)
+	Settings.quality = old_q
+	Settings.particles = old_p
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+func test_zc_remote_racer_cosmetics() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var r := RemoteRacer.new()
+	add_child(r)
+	await ticks(1)
+	r.setup("Ada", Settings.RACER_COLORS[1])
+	r.set_cosmetics("frost", "lightning")
+	check(r.visual().trail_id == "frost" and r.visual().finish_id == "lightning", "a remote racer wears the trail and finish they sent")
+	r.set_cosmetics("<script>", 7)
+	check(r.visual().trail_id == "classic" and r.visual().finish_id == "cheer", "unknown ids from the wire fall back to the defaults")
+	r.queue_free()
+	# the host keeps each racer's ids in the roster, and they survive the relay's JSON
+	check(Net.host(24595) == OK, "hosting a lobby")
+	check(Net.roster[1].has("trail") and Net.roster[1].has("finish"), "the host's own entry carries its cosmetics")
+	Net._register_player(2, "Ada", 1, {"trail": "wisps", "finish": "ghost"})
+	Net._register_player(3, "Bo", 2, {"trail": 99})
+	check(Net.roster[2]["trail"] == "wisps" and Net.roster[2]["finish"] == "ghost", "registration stores trail / finish next to the colour")
+	check(Net.roster[3]["trail"] == "classic" and Net.roster[3]["finish"] == "cheer", "junk or missing ids register as the defaults")
+	var wire: Variant = JSON.parse_string(JSON.stringify({"players": Net._roster_to_wire()}))
+	var back: Dictionary = Net._roster_from_wire((wire as Dictionary)["players"])
+	check(back.has(2) and back[2]["trail"] == "wisps" and back[2]["finish"] == "ghost", "the ids survive the relay's JSON roster")
+	check(Net._register_data().get("trail") == Cosmetics.equipped_trail(), "our relay registration sends our trail")
+	# in the race: ghosts wear them and celebrate their own way
+	Net.roster[2]["cp"] = 0
+	Net.roster[2]["cp_at"] = 0.0
+	Net.roster[3]["cp_at"] = 0.0
+	Game.level_index = 0
+	Game.race_mode = true
+	Net.race_start_time = Net.now() - 1.0
+	var lvl: LevelBase = (load(Game.LEVELS[0]["scene"]) as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	var g: RemoteRacer = lvl._ghosts.get(2)
+	check(g != null and g.visual().trail_id == "wisps" and g.visual().finish_id == "ghost", "the race ghost wears Ada's Ghostly Wisps and Ghost Spin")
+	var e0: int = trap.count()
+	Net._apply_finished(2, 50.0)
+	await ticks(5)
+	check(trap.count() == e0 and g.visual()._cheer_t < 1.0, "when Ada finishes her ghost celebrates %s" % trap.since(e0))
+	Net.leave()
+	Game.race_mode = false
+	world.queue_free()
+	world = null
+	await ticks(2)

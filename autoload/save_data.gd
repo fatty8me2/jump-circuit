@@ -55,6 +55,13 @@ func _read_dict(p: String) -> Variant:
 ## Rebuilds the save keeping only fields of the expected types.
 func _sanitize(v: Dictionary) -> Dictionary:
 	var out: Dictionary = {"levels": {}, "game_completed": v.get("game_completed") is bool and bool(v["game_completed"])}
+	# cosmetics already announced ("trail:flame"): strings only
+	if v.get("cosmetics_seen") is Array:
+		var seen: Array = []
+		for k: Variant in (v["cosmetics_seen"] as Array):
+			if k is String and not seen.has(k):
+				seen.append(k)
+		out["cosmetics_seen"] = seen
 	var levels: Variant = v.get("levels")
 	if not (levels is Dictionary):
 		return out
@@ -173,6 +180,21 @@ func best_splits(level_id: String) -> Array:
 		return []
 	var s: Variant = (data["levels"][level_id] as Dictionary).get("splits", [])
 	return s if s is Array else []
+
+
+## Cosmetic unlocks already announced (see Cosmetics.check_unlocks).
+func cosmetics_seen() -> Array:
+	var s: Variant = data.get("cosmetics_seen", [])
+	return s if s is Array else []
+
+
+func mark_cosmetics_seen(keys: Array[String]) -> void:
+	var seen: Array = cosmetics_seen().duplicate()
+	for k: String in keys:
+		if not seen.has(k):
+			seen.append(k)
+	data["cosmetics_seen"] = seen
+	save_data()
 
 
 func set_game_completed() -> void:

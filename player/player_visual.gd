@@ -26,6 +26,12 @@ var _antenna: Node3D
 var _dust: GPUParticles3D        # landing puffs
 var _jump_dust: GPUParticles3D   # takeoff / bounce puffs (own emitter, so a quick jump can't wipe a landing puff)
 var _trail: GPUParticles3D
+## Extra layers of an unlockable trail (embers over flames, mist under frost...); the
+## movement streak drives them together with _trail. See set_trail().
+var _trail_layers: Array[GPUParticles3D] = []
+## Equipped cosmetics (Cosmetics ids). The finish celebration plays from on_cheer().
+var trail_id: String = "classic"
+var finish_id: String = "cheer"
 
 var _squash: float = 0.0       # spring displacement: + stretch, - squash
 var _squash_vel: float = 0.0
@@ -516,6 +522,8 @@ func _tint_fx() -> void:
 	var hot: Color = Fx.hot(accent.lerp(Color.WHITE, 0.25), 2.4)
 	for p: GPUParticles3D in [_arrive_column, _arrive_ring, _arrive_stars, _cp_helix, _cp_ring]:
 		(p.process_material as ParticleProcessMaterial).color = hot
+	if trail_id == "sparkle" and _trail != null:
+		(_trail.process_material as ParticleProcessMaterial).color = Fx.hot(accent.lerp(Color.WHITE, 0.25), 2.2)
 	var streak: Color = Fx.hot(accent.lerp(Color.WHITE, 0.4), 1.5)
 	_hand_trail_l.color = streak
 	_hand_trail_r.color = streak
@@ -718,17 +726,373 @@ func on_checkpoint() -> void:
 		_flash(accent, 4.0, 0.5)
 
 
-## Crossed the finish: a big stretch and the brightest bulb flash.
+## Crossed the finish: a big stretch and the brightest bulb flash, then the equipped
+## finish celebration (finish_id).
 func on_cheer() -> void:
 	_squash_vel += 7.0
 	_flare = 1.6
 	_cheer_t = 0.0
-	_start_flip(Vector3(0, 2.0 * TAU_F, 0), 0.8, 0.1, 0.0)
+	var ghost: bool = finish_id == "ghost"
+	_start_flip(Vector3(0, (3.0 if ghost else 2.0) * TAU_F, 0), 1.1 if ghost else 0.8, 0.1, 0.0)
 	if _cp_helix != null and _cp_helix.is_inside_tree():
 		_cp_helix.restart()
 		_pop(_arrive_stars, global_position)
-		_pop(_cheer_confetti, global_position + Vector3(0, 1.2, 0))
+		if finish_id == "cheer" or not Cosmetics.has_item("finish", finish_id):
+			_pop(_cheer_confetti, global_position + Vector3(0, 1.2, 0))
 		_flash(accent.lerp(Color.WHITE, 0.3), 4.0, 0.6)
+		play_finish(finish_id)
+
+
+# ---- unlockable cosmetics (Cosmetics catalogue) ---------------------------------------------
+
+## Swaps the movement streak for an unlockable trail. Every layer is built through
+## Fx.emitter, so the Particles slider / quality tier scale it like everything else.
+func set_trail(id: String) -> void:
+	id = Cosmetics.clean("trail", id)
+	trail_id = id
+	if _root == null:
+		return
+	var was: bool = _trail != null and _trail.emitting
+	for p: GPUParticles3D in _trail_layers:
+		p.queue_free()
+	_trail_layers.clear()
+	if _trail != null:
+		_trail.queue_free()
+	var specs: Array[Dictionary] = trail_layers(id, accent)
+	if specs.is_empty():
+		_trail = _make_trail()
+		add_child(_trail)
+	else:
+		for i: int in specs.size():
+			var o: Dictionary = {"emitting": false, "fixed_fps": 0, "local": false, "layers": 2}
+			o.merge(specs[i], true)
+			var p: GPUParticles3D = Fx.emitter(o)
+			p.position = Vector3(0, 0.5, 0)
+			add_child(p)
+			if i == 0:
+				_trail = p
+			else:
+				_trail_layers.append(p)
+	_set_trail_emitting(was)
+
+
+## Every emitter of the equipped trail (the first is the main one).
+func trail_emitters() -> Array[GPUParticles3D]:
+	var out: Array[GPUParticles3D] = [_trail]
+	out.append_array(_trail_layers)
+	return out
+
+
+func _set_trail_emitting(on: bool) -> void:
+	if _trail == null:
+		return
+	_trail.emitting = on
+	for p: GPUParticles3D in _trail_layers:
+		p.emitting = on
+
+
+## The option dictionaries (Fx.emitter) of a trail's layers; [] is the classic white streak.
+## HDR colours stay at or under ~3 so the glow pass blooms them without blowing out.
+static func trail_layers(id: String, tint: Color = Color(1.0, 0.72, 0.2)) -> Array[Dictionary]:
+	match id:
+		"sparkle":
+			return [
+				{"amount": 40, "lifetime": 0.7, "tex": Fx.Tex.STAR, "size": 0.28, "shape": "sphere", "radius": 0.22,
+					"speed": Vector2(0.0, 0.4), "spread": 180.0, "curve": "pop", "angle": Vector2(0, 360),
+					"spin": Vector2(-200, 200), "color": Fx.hot(tint.lerp(Color.WHITE, 0.25), 2.2)},
+				{"amount": 30, "lifetime": 0.5, "tex": Fx.Tex.DOT, "size": 0.12, "shape": "sphere", "radius": 0.3,
+					"speed": Vector2(0.0, 0.3), "spread": 180.0, "curve": "shrink", "color": Color(2.0, 2.0, 2.0)},
+			]
+		"flame":
+			return [
+				{"amount": 60, "lifetime": 0.42, "tex": Fx.Tex.DOT, "size": 0.46, "shape": "sphere", "radius": 0.18,
+					"dir": Vector3.UP, "spread": 30.0, "speed": Vector2(0.2, 0.8), "gravity": Vector3(0, 3.0, 0),
+					"curve": "shrink", "turbulence": 0.8,
+					"colors": PackedColorArray([Color(3.0, 2.6, 1.4, 1.0), Color(2.8, 1.1, 0.2, 0.9),
+						Color(1.2, 0.2, 0.05, 0.5), Color(0.3, 0.05, 0.02, 0.0)])},
+				{"amount": 24, "lifetime": 0.8, "tex": Fx.Tex.SPARK, "facing": "velocity", "size": Vector2(0.04, 0.22),
+					"dir": Vector3.UP, "spread": 35.0, "speed": Vector2(1.0, 2.5), "gravity": Vector3(0, 2.0, 0),
+					"curve": "shrink", "turbulence": 1.2, "color": Color(3.0, 1.4, 0.3)},
+				{"amount": 14, "lifetime": 1.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 0.6,
+					"speed": Vector2(0.1, 0.4), "gravity": Vector3(0, 1.6, 0), "curve": "puff",
+					"angle": Vector2(0, 360), "spin": Vector2(-40, 40), "color": Color(0.18, 0.15, 0.14, 0.45),
+					"fade": PackedFloat32Array([0.0, 0.6, 0.0])},
+			]
+		"bubbles":
+			return [
+				{"amount": 36, "lifetime": 1.3, "tex": Fx.Tex.BUBBLE, "additive": false, "size": 0.22,
+					"scale": Vector2(0.4, 1.2), "shape": "sphere", "radius": 0.25, "speed": Vector2(0.1, 0.5),
+					"spread": 180.0, "gravity": Vector3(0, 2.2, 0), "damping": Vector2(0.5, 1.0), "turbulence": 0.9,
+					"curve": "flat", "color": Color(0.8, 0.95, 1.0, 0.9), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"amount": 20, "lifetime": 0.5, "tex": Fx.Tex.DOT, "size": 0.09, "shape": "sphere", "radius": 0.3,
+					"speed": Vector2(0.1, 0.6), "spread": 180.0, "gravity": Vector3(0, 1.0, 0), "curve": "shrink",
+					"color": Color(0.6, 1.6, 2.0)},
+			]
+		"frost":
+			return [
+				{"amount": 34, "lifetime": 0.8, "tex": Fx.Tex.STAR, "size": 0.24, "shape": "sphere", "radius": 0.25,
+					"speed": Vector2(0.0, 0.4), "spread": 180.0, "gravity": Vector3(0, -1.2, 0), "curve": "pop",
+					"angle": Vector2(0, 360), "spin": Vector2(-240, 240), "color": Color(1.6, 2.0, 2.6)},
+				{"amount": 14, "lifetime": 0.9, "tex": Fx.Tex.SMOKE, "additive": false, "size": 0.7,
+					"speed": Vector2(0.0, 0.3), "gravity": Vector3(0, -0.4, 0), "curve": "puff",
+					"angle": Vector2(0, 360), "spin": Vector2(-30, 30), "color": Color(0.85, 0.93, 1.0, 0.5),
+					"fade": PackedFloat32Array([0.0, 0.7, 0.0])},
+				{"amount": 30, "lifetime": 1.1, "tex": Fx.Tex.DOT, "size": 0.08, "shape": "sphere", "radius": 0.35,
+					"speed": Vector2(0.1, 0.5), "spread": 180.0, "gravity": Vector3(0, -2.0, 0), "turbulence": 0.7,
+					"curve": "flat", "color": Color(1.8, 1.9, 2.0), "fade": PackedFloat32Array([1.0, 1.0, 0.0])},
+			]
+		"sand":
+			return [
+				{"amount": 18, "lifetime": 0.9, "tex": Fx.Tex.SMOKE, "additive": false, "size": 0.65,
+					"speed": Vector2(0.2, 0.8), "spread": 90.0, "gravity": Vector3(0, -0.6, 0), "curve": "puff",
+					"angle": Vector2(0, 360), "spin": Vector2(-50, 50), "color": Color(0.86, 0.72, 0.48, 0.6),
+					"fade": PackedFloat32Array([0.0, 0.8, 0.0])},
+				{"amount": 40, "lifetime": 0.7, "tex": Fx.Tex.DOT, "additive": false, "size": 0.06,
+					"shape": "sphere", "radius": 0.25, "dir": Vector3.UP, "spread": 60.0, "speed": Vector2(0.5, 1.5),
+					"gravity": Vector3(0, -6.0, 0), "curve": "flat", "color": Color(0.95, 0.8, 0.5),
+					"fade": PackedFloat32Array([1.0, 1.0, 0.0])},
+				{"amount": 10, "lifetime": 0.5, "tex": Fx.Tex.STAR, "size": 0.16, "shape": "sphere", "radius": 0.3,
+					"speed": Vector2(0.0, 0.3), "spread": 180.0, "curve": "pop", "color": Color(2.6, 2.0, 0.8)},
+			]
+		"wisps":
+			return [
+				{"amount": 30, "lifetime": 1.4, "tex": Fx.Tex.DOT, "size": 0.42, "shape": "sphere", "radius": 0.2,
+					"speed": Vector2(0.1, 0.5), "spread": 180.0, "gravity": Vector3(0, 0.8, 0), "curve": "pop",
+					"turbulence": 1.6, "turbulence_scale": 2.0,
+					"colors": PackedColorArray([Color(0.7, 2.0, 1.4, 0.0), Color(0.6, 1.8, 1.3, 0.8),
+						Color(0.8, 0.6, 1.8, 0.5), Color(0.5, 0.3, 1.2, 0.0)])},
+				{"amount": 14, "lifetime": 0.9, "tex": Fx.Tex.STAR, "size": 0.12, "shape": "sphere", "radius": 0.4,
+					"speed": Vector2(0.0, 0.3), "spread": 180.0, "curve": "pop", "color": Color(1.2, 2.0, 1.6)},
+			]
+		"sprinkles":
+			return [
+				{"amount": 46, "lifetime": 0.9, "tex": Fx.Tex.DOT, "additive": false, "size": Vector2(0.07, 0.2),
+					"shape": "sphere", "radius": 0.25, "dir": Vector3.UP, "spread": 70.0, "speed": Vector2(0.5, 1.8),
+					"gravity": Vector3(0, -7.0, 0), "angle": Vector2(0, 360), "spin": Vector2(-400, 400),
+					"curve": "flat", "fade": PackedFloat32Array([1.0, 1.0, 0.0]),
+					"pick": PackedColorArray([Color(1.0, 0.45, 0.7), Color(0.5, 0.85, 1.0), Color(1.0, 0.9, 0.35),
+						Color(0.6, 1.0, 0.5), Color(0.85, 0.55, 1.0), Color(1.0, 1.0, 1.0)])},
+				{"amount": 10, "lifetime": 0.5, "tex": Fx.Tex.STAR, "size": 0.14, "shape": "sphere", "radius": 0.3,
+					"speed": Vector2(0.0, 0.3), "spread": 180.0, "curve": "pop", "color": Color(2.4, 2.0, 2.2)},
+			]
+		"contrail":
+			return [
+				{"amount": 70, "lifetime": 1.6, "tex": Fx.Tex.SMOKE, "additive": false, "size": 0.38,
+					"speed": Vector2(0.0, 0.1), "spread": 180.0, "curve": "grow", "angle": Vector2(0, 360),
+					"color": Color(0.97, 0.98, 1.0, 0.7), "fade": PackedFloat32Array([0.0, 0.8, 0.5, 0.0])},
+				{"amount": 30, "lifetime": 0.18, "tex": Fx.Tex.DOT, "size": 0.3, "speed": Vector2(0.0, 0.2),
+					"spread": 180.0, "curve": "shrink",
+					"colors": PackedColorArray([Color(2.6, 2.4, 3.0, 1.0), Color(0.6, 1.2, 3.0, 0.8), Color(2.4, 0.9, 0.2, 0.0)])},
+			]
+		"rainbow":
+			return [
+				{"amount": 70, "lifetime": 0.8, "tex": Fx.Tex.DOT, "size": 0.42, "scale": Vector2(0.9, 1.0),
+					"speed": Vector2(0.0, 0.15), "spread": 180.0, "curve": "shrink",
+					"colors": PackedColorArray([Color(2.6, 0.4, 0.4, 1.0), Color(2.6, 1.4, 0.3, 1.0), Color(2.4, 2.4, 0.4, 0.9),
+						Color(0.5, 2.4, 0.6, 0.8), Color(0.4, 1.2, 2.6, 0.6), Color(1.4, 0.5, 2.6, 0.35), Color(1.4, 0.5, 2.6, 0.0)])},
+				{"amount": 16, "lifetime": 0.6, "tex": Fx.Tex.STAR, "size": 0.2, "shape": "sphere", "radius": 0.3,
+					"speed": Vector2(0.0, 0.3), "spread": 180.0, "curve": "pop", "color": Color(2.2, 2.2, 2.2)},
+			]
+	return []
+
+
+## The equipped finish celebration on top of the cheer (sound included). Every emitter is
+## a self-freeing Fx.spawn, scaled by the Particles slider.
+func play_finish(id: String) -> void:
+	if not is_inside_tree() or not Cosmetics.has_item("finish", id) or id == "cheer":
+		return
+	var at: Vector3 = global_position
+	match id:
+		"fireworks":
+			_fin_fireworks(at)
+		"confetti":
+			_fin_confetti(at)
+		"lightning":
+			_fin_lightning(at)
+		"ghost":
+			_fin_ghost(at)
+		"jet":
+			_fin_jet(at)
+	Sfx.play_at("fin_" + id, at + Vector3(0, 1, 0), 0.03, 0.9)
+
+
+func _fin_fireworks(at: Vector3) -> void:
+	var cols: Array[Color] = [Color(1.0, 0.35, 0.45), Color(0.35, 0.85, 1.0), Color(1.0, 0.85, 0.3), Color(0.55, 1.0, 0.45), Color(0.85, 0.5, 1.0)]
+	var first: int = randi() % cols.size()
+	var tw: Tween = create_tween()
+	for k: int in 3:
+		var col: Color = cols[(first + k * 2) % cols.size()]
+		var sky: Vector3 = at + Vector3(randf_range(-2.5, 2.5), randf_range(5.5, 7.0), randf_range(-2.5, 2.5))
+		tw.tween_callback(func() -> void:
+			if is_inside_tree():
+				Fx.spawn(self, Fx.sparks({"amount": 12, "lifetime": 0.4, "dir": (sky - at).normalized(), "spread": 4.0,
+					"speed": Vector2(14.0, 17.0), "gravity": Vector3(0, -4, 0), "damping": Vector2(0.5, 1.0),
+					"color": Color(2.8, 2.2, 1.2), "layers": 2}), at + Vector3(0, 0.6, 0)))
+		tw.tween_interval(0.38)
+		tw.tween_callback(func() -> void:
+			if not is_inside_tree():
+				return
+			var hot: Color = Fx.hot(col, 2.6)
+			Fx.spawn(self, Fx.burst({"amount": 70, "lifetime": 1.3, "spread": 180.0, "speed": Vector2(5.0, 8.0),
+				"damping": Vector2(1.5, 2.5), "gravity": Vector3(0, -3.0, 0), "size": 0.24, "curve": "shrink",
+				"colors": PackedColorArray([Color(2.8, 2.8, 2.8, 1.0), hot, Color(hot.r * 0.4, hot.g * 0.4, hot.b * 0.4, 0.0)]),
+				"layers": 2}), sky)
+			Fx.spawn(self, Fx.burst({"amount": 24, "lifetime": 1.6, "tex": Fx.Tex.STAR, "spread": 180.0,
+				"speed": Vector2(2.0, 4.0), "gravity": Vector3(0, -2.0, 0), "size": 0.2, "curve": "pop",
+				"color": Color(2.6, 2.4, 1.6), "layers": 2}), sky)
+			Fx.flash(self, sky, col, 5.0, 14.0, 0.5))
+		tw.tween_interval(0.12)
+
+
+func _fin_confetti(at: Vector3) -> void:
+	var pick := PackedColorArray([Color(1.0, 0.3, 0.45), Color(0.25, 0.8, 1.0), Color(1.0, 0.85, 0.2),
+		Color(0.45, 1.0, 0.4), Color(0.85, 0.45, 1.0), Color(1.0, 1.0, 1.0)])
+	for side: float in [-1.0, 1.0]:
+		var muzzle: Vector3 = at + Vector3(side * 0.9, 0.4, 0)
+		Fx.spawn(self, Fx.burst({"amount": 70, "lifetime": 2.2, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.2,
+			"dir": Vector3(side * 0.45, 1.0, 0.0), "spread": 18.0, "speed": Vector2(9.0, 14.0),
+			"damping": Vector2(2.0, 3.5), "gravity": Vector3(0, -6.0, 0), "angle": Vector2(0, 360),
+			"spin": Vector2(-600, 600), "curve": "flat", "fade": PackedFloat32Array([1.0, 1.0, 0.0]),
+			"turbulence": 0.6, "pick": pick, "layers": 2}), muzzle)
+		Fx.spawn(self, Fx.smoke({"amount": 8, "lifetime": 0.7, "size": 0.6, "dir": Vector3(side * 0.45, 1.0, 0.0),
+			"spread": 25.0, "speed": Vector2(1.5, 3.0), "color": Color(1, 1, 1, 0.7), "layers": 2}), muzzle)
+	Fx.flash(self, at + Vector3(0, 1.0, 0), Color(1.0, 0.9, 0.7), 3.0, 6.0, 0.3)
+
+
+func _fin_lightning(at: Vector3) -> void:
+	var bolt := Node3D.new()
+	bolt.name = "FinishBolt"
+	bolt.top_level = true
+	add_child(bolt)
+	bolt.global_transform = Transform3D.IDENTITY
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	mat.albedo_color = Color(0.85, 0.92, 1.0, 1.0)
+	var top: Vector3 = at + Vector3(randf_range(-1.5, 1.5), 16.0, randf_range(-1.5, 1.5))
+	var hit: Vector3 = at + Vector3(0, 0.9, 0)
+	_bolt_path(bolt, top, hit, 10, 0.9, 0.16, mat)
+	# a forked branch off the upper third
+	var fork: Vector3 = top.lerp(hit, 0.35) + Vector3(randf_range(-0.6, 0.6), 0, randf_range(-0.6, 0.6))
+	_bolt_path(bolt, fork, fork + Vector3(randf_range(-3.0, 3.0), -4.5, randf_range(-3.0, 3.0)), 5, 0.6, 0.08, mat)
+	# a wider, dimmer glow sheath around the main channel
+	var glow := StandardMaterial3D.new()
+	glow.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	glow.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glow.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	glow.albedo_color = Color(0.35, 0.5, 1.0, 0.35)
+	_bolt_path(bolt, top, hit, 10, 0.0, 0.5, glow)
+	var tw: Tween = bolt.create_tween()
+	for i: int in 3:
+		tw.tween_property(mat, "albedo_color:a", 0.15, 0.05)
+		tw.tween_property(mat, "albedo_color:a", 1.0, 0.04)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 0.35)
+	tw.parallel().tween_property(glow, "albedo_color:a", 0.0, 0.35)
+	tw.tween_callback(bolt.queue_free)
+	var blue := Color(1.6, 2.0, 3.0)
+	Fx.spawn(self, Fx.sparks({"amount": 40, "lifetime": 0.5, "dir": Vector3.UP, "spread": 85.0, "flatness": 0.6,
+		"speed": Vector2(5.0, 11.0), "color": blue, "layers": 2}), at + Vector3(0, 0.1, 0))
+	Fx.spawn(self, Fx.shockwave(3.2, {"lifetime": 0.45, "color": blue, "layers": 2}), at + Vector3(0, 0.08, 0))
+	Fx.spawn(self, Fx.smoke({"amount": 10, "lifetime": 1.0, "shape": "ring", "ring_radius": 0.6, "size": 0.8,
+		"dir": Vector3.UP, "spread": 70.0, "speed": Vector2(1.0, 2.5), "color": Color(0.55, 0.6, 0.7, 0.6),
+		"layers": 2}), at)
+	Fx.flash(self, hit, Color(0.7, 0.8, 1.0), 8.0, 16.0, 0.6)
+
+
+## A jagged chain of thin glowing boxes from `a` down to `b` (world space, under `parent`).
+func _bolt_path(parent: Node3D, a: Vector3, b: Vector3, segs: int, jitter: float, width: float, mat: Material) -> void:
+	var pts: Array[Vector3] = [a]
+	for i: int in range(1, segs):
+		var p: Vector3 = a.lerp(b, float(i) / float(segs))
+		pts.append(p + Vector3(randf_range(-jitter, jitter), 0.0, randf_range(-jitter, jitter)))
+	pts.append(b)
+	for i: int in segs:
+		var d: Vector3 = pts[i + 1] - pts[i]
+		var seg_len: float = d.length()
+		if seg_len < 0.001:
+			continue
+		var z: Vector3 = d / seg_len
+		var x: Vector3 = z.cross(Vector3.RIGHT if absf(z.x) < 0.9 else Vector3.FORWARD).normalized()
+		var box := BoxMesh.new()
+		box.size = Vector3(width, width, seg_len + width)
+		var mi := MeshInstance3D.new()
+		mi.mesh = box
+		mi.material_override = mat
+		mi.layers = 2
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.transform = Transform3D(Basis(x, z.cross(x), z), (pts[i] + pts[i + 1]) * 0.5)
+		parent.add_child(mi)
+
+
+func _fin_ghost(at: Vector3) -> void:
+	var ghostly := PackedColorArray([Color(0.7, 2.0, 1.5, 0.0), Color(0.6, 1.8, 1.4, 0.9), Color(0.9, 0.7, 1.9, 0.5), Color(0.5, 0.3, 1.2, 0.0)])
+	Fx.spawn(self, Fx.burst({"amount": 40, "lifetime": 1.6, "explosiveness": 0.5, "shape": "ring", "ring_radius": 0.9,
+		"ring_inner": 0.7, "dir": Vector3.UP, "spread": 8.0, "speed": Vector2(1.5, 3.0), "damping": Vector2(0.5, 1.0),
+		"turbulence": 1.2, "size": 0.36, "curve": "pop", "colors": ghostly, "layers": 2}), at)
+	Fx.spawn(self, Fx.smoke({"amount": 12, "lifetime": 1.3, "shape": "sphere", "radius": 0.5, "size": 1.0,
+		"speed": Vector2(0.4, 1.2), "color": Color(0.75, 0.7, 0.95, 0.55), "layers": 2}), at + Vector3(0, 0.7, 0))
+	Fx.spawn(self, Fx.shockwave(2.6, {"lifetime": 0.7, "color": Color(0.8, 2.0, 1.5), "layers": 2}), at + Vector3(0, 0.06, 0))
+	Fx.spawn(self, Fx.burst({"amount": 14, "lifetime": 1.2, "tex": Fx.Tex.STAR, "shape": "sphere", "radius": 0.8,
+		"speed": Vector2(0.3, 1.0), "size": 0.2, "curve": "pop", "color": Color(1.2, 2.2, 1.7), "layers": 2}), at + Vector3(0, 1.0, 0))
+	Fx.flash(self, at + Vector3(0, 1.0, 0), Color(0.5, 1.0, 0.8), 3.0, 7.0, 0.8)
+
+
+func _fin_jet(at: Vector3) -> void:
+	var jet := Node3D.new()
+	jet.name = "FinishJet"
+	jet.top_level = true
+	add_child(jet)
+	var hull := StandardMaterial3D.new()
+	hull.albedo_color = Color(0.62, 0.66, 0.72)
+	hull.metallic = 0.5
+	hull.roughness = 0.35
+	var body := CapsuleMesh.new()
+	body.radius = 0.32
+	body.height = 3.2
+	var fus: MeshInstance3D = _part(jet, body, hull, Vector3.ZERO)
+	fus.rotation = Vector3(PI * 0.5, 0, 0)   # the capsule's long axis along z (nose at -z)
+	var wing := BoxMesh.new()
+	wing.size = Vector3(3.4, 0.07, 0.9)
+	_part(jet, wing, hull, Vector3(0, -0.05, 0.2))
+	var tailplane := BoxMesh.new()
+	tailplane.size = Vector3(1.4, 0.06, 0.45)
+	_part(jet, tailplane, hull, Vector3(0, 0.0, 1.35))
+	var fin := BoxMesh.new()
+	fin.size = Vector3(0.07, 0.75, 0.55)
+	_part(jet, fin, hull, Vector3(0, 0.42, 1.3))
+	_part(jet, SphereMesh.new(), _mat(Color(0.15, 0.25, 0.4), 0.1, 0.4), Vector3(0, 0.26, -0.7), Vector3(0.36, 0.3, 0.8))
+	var burner: MeshInstance3D = Fx.sprite(Color(2.4, 1.6, 0.9), 0.9, Fx.Tex.DOT)
+	burner.position = Vector3(0, 0, 1.75)
+	burner.layers = 2
+	jet.add_child(burner)
+	var trails: Array[GPUParticles3D] = []
+	for x: float in [-1.6, 1.6]:
+		var c: GPUParticles3D = Fx.emitter({"amount": 90, "lifetime": 2.2, "fixed_fps": 0, "tex": Fx.Tex.SMOKE,
+			"additive": false, "size": 0.45, "speed": Vector2(0.0, 0.1), "spread": 180.0, "curve": "grow",
+			"color": Color(0.97, 0.98, 1.0, 0.75), "fade": PackedFloat32Array([0.0, 0.85, 0.5, 0.0]), "layers": 2})
+		c.position = Vector3(x, -0.05, 0.5)
+		jet.add_child(c)
+		trails.append(c)
+	var from: Vector3 = at + Vector3(-45.0, 9.0, -5.0)
+	var to: Vector3 = at + Vector3(45.0, 10.5, -5.0)
+	# nose (-z) turned to fly along +x
+	jet.global_transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), from)
+	var tw: Tween = jet.create_tween()
+	tw.tween_property(jet, "global_position", to, 1.7)
+	var burst_tw: Tween = jet.create_tween()
+	burst_tw.tween_interval(0.85)
+	burst_tw.tween_callback(func() -> void:
+		if is_inside_tree():
+			Fx.spawn(self, Fx.burst({"amount": 30, "lifetime": 1.0, "tex": Fx.Tex.STAR, "spread": 180.0,
+				"speed": Vector2(2.0, 5.0), "size": 0.26, "curve": "pop", "color": Fx.hot(accent.lerp(Color.WHITE, 0.3), 2.4),
+				"layers": 2}), at + Vector3(0, 2.0, 0)))
+	tw.tween_callback(func() -> void:
+		for c: GPUParticles3D in trails:
+			c.emitting = false
+		burner.visible = false)
+	tw.tween_interval(2.3)
+	tw.tween_callback(jet.queue_free)
 
 
 ## Respawn arrival: drops the motion carried over from the death pose (lean, squash,
@@ -761,7 +1125,7 @@ func on_respawn() -> void:
 	_sprint = 0.0
 	_skid = 0.0
 	_last_wall = 0.0
-	_trail.emitting = false
+	_set_trail_emitting(false)
 	_stop_moves_fx()
 	_pop(_arrive_column, _feet())
 	_pop(_arrive_ring, _feet() + Vector3(0, 0.05, 0))
@@ -1276,9 +1640,14 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 	# speed streak: carried momentum (the same > 11 m/s as the HUD readout and the FOV
 	# kick), plus big launches (pads, flings off rising platforms); plain hops stay clean
 	var rise: float = 0.0 if on_floor else vel.y
-	var streak: bool = speed > 11.0 or rise > 15.0
-	_trail.emitting = streak
+	# (an unlocked trail is there to be seen: it shows from a brisk run, not just at boost speed)
+	var fancy: bool = trail_id != "classic"
+	var streak: bool = speed > (7.5 if fancy else 11.0) or rise > (12.0 if fancy else 15.0)
+	if _trail.emitting != streak:
+		_set_trail_emitting(streak)
 	if streak:
-		_trail.amount_ratio = clampf((maxf(speed, rise) - 9.0) / 12.0, 0.35, 1.0)
-		_trail.position.y = 0.28 if on_floor else 0.5
+		var ratio: float = clampf((maxf(speed, rise) - (6.0 if fancy else 9.0)) / 12.0, 0.35, 1.0)
+		for p: GPUParticles3D in trail_emitters():
+			p.amount_ratio = ratio
+			p.position.y = 0.28 if on_floor else 0.5
 	_animate_fx(dt, vel, on_floor)
