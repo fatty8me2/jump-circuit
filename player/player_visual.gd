@@ -7,19 +7,20 @@ extends Node3D
 ## ---- cosmetics hook API (Cosmetics kinds: character, hat, paint; trail / finish below) ----
 ## Callers (LevelBase._spawn_player, RemoteRacer.set_cosmetics, the title / Locker preview) only
 ## ever use these; ids are cleaned (unknown -> the kind's default) before anything is built:
-##   set_character(id)  Cosmetics.CHARACTERS id -> character_id. STUB: every id still builds Volt.
-##                      Art pass: split _build()'s body block into _build_body(id); every body
-##                      must provide _body, "Belt", "Pack", _eye_l/_eye_r, _antenna/_bulb, feet,
-##                      hands (invisible stubs where a body has none) and re-create _head_anchor,
-##                      then re-apply set_hat(hat_id) and set_paint(paint_id).
+##   set_character(id)  Cosmetics.CHARACTERS id -> character_id. _build_body(id) builds that
+##                      body from primitives on the shared rig (_root/_flip/_rig/_torso). Every
+##                      body provides _body, "Belt", "Pack", _eye_l/_eye_r, _antenna/_bulb, feet,
+##                      hands and _head_anchor (invisible stubs where a body has none), so blink,
+##                      the antenna spring, accent colours and the mitt swooshes all keep working;
+##                      a rebuild re-applies the hat and the paint.
 ##   set_hat(id)        Cosmetics.HATS id -> hat_id. Hats hang off _head_anchor (a Node3D on
-##                      _torso at the top of the head, so they bob / lean / flip with the body).
-##                      "none" removes it. STUB: a placeholder primitive tinted per id
-##                      (_build_hat(id) is the function to replace with real models).
-##   set_paint(id)      Cosmetics.PAINTS id -> paint_id. Swaps the body shell material
-##                      (_paint_material(id)). STUB: a flat tint per id ("ghost" translucent).
-##                      Art pass: chrome / galaxy / translucent looks (NaN-safe shaders or
-##                      StandardMaterial3D, emission bounded).
+##                      _torso at the crown of the head, placed and scaled per character: HEADS),
+##                      so they bob / lean / flip with the body. "none" removes it. The models are
+##                      in CosmeticArt.hat (_build_hat).
+##   set_paint(id)      Cosmetics.PAINTS id -> paint_id. Swaps the material of the body's shell
+##                      parts (paint_parts(); never eyes, visors or accent pieces) for
+##                      CosmeticArt.paint_material(id); "white" restores each character's own
+##                      factory finish.
 ##   set_trail(id), finish_id + play_finish(id)  unlockable trails / finish celebrations.
 ## None of them touch the collider or the animation state; they are safe to call before or
 ## after _ready() (calls before it are applied when the rig is built).
@@ -58,6 +59,60 @@ var paint_id: String = "white"
 ## Where hats mount (top of the head, child of _torso). See set_hat().
 var _head_anchor: Node3D
 var _hat: Node3D
+## The body actually built (character_id may be set before the rig exists).
+var built_character: String = ""
+## Per-character head: where the hat anchor sits (feet-relative, like the body parts) and how
+## much hats scale (they are modelled for Volt's 0.39 m head).
+const HEADS: Dictionary = {
+	"volt": [Vector3(0, 1.045, -0.04), 1.0],
+	"knight": [Vector3(0, 1.06, -0.02), 1.0],
+	"ninja": [Vector3(0, 1.045, -0.04), 1.0],
+	"astronaut": [Vector3(0, 1.225, -0.01), 0.85],
+	"dino": [Vector3(0, 1.045, -0.03), 1.0],
+	"skeleton": [Vector3(0, 1.075, -0.01), 0.82],
+	"catbot": [Vector3(0, 1.045, -0.04), 1.0],
+	"outlaw": [Vector3(0, 1.045, -0.04), 1.0],
+	"cyber": [Vector3(0, 1.045, -0.04), 1.0],
+	"golden": [Vector3(0, 1.045, -0.04), 1.0],
+}
+const TZ := Vector3(0, -0.2, 0)   # torso parts keep their feet-relative heights
+## The racer-colour materials every body / hat shares (tinted in place by set_accent).
+var _acc_base: StandardMaterial3D
+var _acc_dark: StandardMaterial3D
+var _acc_hand: StandardMaterial3D
+var _acc_glow: StandardMaterial3D
+## Eye size at rest (blinks squash its Y) and the antenna bulb's rest scale.
+var _eye_base: Vector3 = Vector3(0.09, 0.12, 0.06)
+var _bulb_base: float = 0.12
+## Shell parts the paint covers, and the factory material of each ("white").
+var _paint_parts: Array[MeshInstance3D] = []
+var _paint_stock: Array[Material] = []
+## Secondary motion: tails, plumes, headband tails (the body) and hat parts riding the
+## antenna spring; hat parts that spin or float; Golden Volt's twinkles.
+var _sways: Array[Sway] = []
+var _hat_sways: Array[Sway] = []
+var _hat_spin: Array[Node3D] = []
+var _hat_spin_rate: Array[Vector2] = []
+var _hat_spin_base: Array[Basis] = []
+var _hat_spin_angle: PackedFloat32Array = PackedFloat32Array()
+var _hat_bob: Node3D
+var _hat_bob_k: Vector3 = Vector3.ZERO   # rest y, amplitude, rad/s
+var _twinkles: Array[MeshInstance3D] = []
+## Parts on the crown of the head that a covering hat hides (Volt's antenna, the dino's top
+## spike) instead of letting them poke through it.
+var _crown_parts: Array[Node3D] = []
+
+
+## A part that lags the body on the antenna spring (see _animate_sways).
+class Sway:
+	var node: Node3D
+	var base: Vector3
+	var pitch: float     # gain on the spring's pitch (+ swings an upright part back)
+	var roll: float      # gain on its roll
+	var flutter: float   # fast flapping, growing with speed
+	var wag: float       # side-to-side yaw wag
+	var lift: float      # extra pitch at full run speed (streaming out behind)
+	var phase: float
 
 var _squash: float = 0.0       # spring displacement: + stretch, - squash
 var _squash_vel: float = 0.0
@@ -208,57 +263,12 @@ func _build() -> void:
 	_torso = Node3D.new()
 	_torso.position = Vector3(0, 0.2, 0)
 	_rig.add_child(_torso)
-	var tz := Vector3(0, -0.2, 0)   # torso parts keep their feet-relative heights
-	var sphere := SphereMesh.new()
-	sphere.radius = 0.5
-	sphere.height = 1.0
-	sphere.radial_segments = 28
-	sphere.rings = 14
-	# body: a plump shell
-	_body = _part(_torso, sphere, _mat(Color(0.96, 0.94, 0.88), 0.4), Vector3(0, 0.62, 0) + tz, Vector3(0.78, 0.86, 0.78))
-	# accent belt
-	var belt := TorusMesh.new()
-	belt.inner_radius = 0.33
-	belt.outer_radius = 0.41
-	belt.rings = 28
-	belt.ring_segments = 10
-	var belt_mi := _part(_torso, belt, _mat(accent, 0.45), Vector3(0, 0.47, 0) + tz, Vector3(1, 0.9, 1))
-	belt_mi.name = "Belt"
-	# visor + eyes (front is -Z)
-	_part(_torso, sphere, _mat(Color(0.08, 0.1, 0.16), 0.15, 0.3), Vector3(0, 0.74, -0.2) + tz, Vector3(0.56, 0.3, 0.42))
-	var eye_mat := _mat(Color(0.5, 0.97, 1.0), 0.3, 0.0, 3.0)
-	_eye_l = _part(_torso, sphere, eye_mat, Vector3(-0.11, 0.75, -0.385) + tz, Vector3(0.09, 0.12, 0.06))
-	_eye_r = _part(_torso, sphere, eye_mat, Vector3(0.11, 0.75, -0.385) + tz, Vector3(0.09, 0.12, 0.06))
-	# backpack
-	var box := BoxMesh.new()
-	box.size = Vector3(0.34, 0.3, 0.16)
-	var pack := _part(_torso, box, _mat(accent.darkened(0.25), 0.5), Vector3(0, 0.62, 0.33) + tz)
-	pack.name = "Pack"
-	# antenna
-	_antenna = Node3D.new()
-	_antenna.position = Vector3(0, 1.02, 0.02) + tz
-	_torso.add_child(_antenna)
-	var rod := CylinderMesh.new()
-	rod.top_radius = 0.012
-	rod.bottom_radius = 0.02
-	rod.height = 0.3
-	_part(_antenna, rod, _mat(Color(0.25, 0.27, 0.33), 0.4, 0.6), Vector3(0, 0.15, 0))
+	_acc_base = _mat(accent, 0.45)
+	_acc_dark = _mat(accent.darkened(0.25), 0.5)
+	_acc_hand = _mat(accent.lerp(Color.WHITE, 0.12), 0.45)
+	_acc_glow = _mat(accent, 0.3, 0.0, 2.0)
 	_bulb_mat = _mat(accent, 0.3, 0.0, 2.0)
-	_bulb = _part(_antenna, sphere, _bulb_mat, Vector3(0, 0.33, 0), Vector3.ONE * 0.12)
-	# hat mount: the crown of the shell, just in front of the antenna
-	_head_anchor = Node3D.new()
-	_head_anchor.name = "HeadAnchor"
-	_head_anchor.position = Vector3(0, 1.0, -0.04) + tz
-	_torso.add_child(_head_anchor)
-	# feet (dark rubber) and floating mitts (accent, like the belt)
-	var foot_mat := _mat(Color(0.16, 0.18, 0.26), 0.6)
-	_foot_l = _part(_rig, sphere, foot_mat, Vector3(-0.17, 0.09, 0), Vector3(0.24, 0.17, 0.34))
-	_foot_r = _part(_rig, sphere, foot_mat, Vector3(0.17, 0.09, 0), Vector3(0.24, 0.17, 0.34))
-	var hand_mat := _mat(accent.lerp(Color.WHITE, 0.12), 0.45)
-	_hand_l = _part(_rig, sphere, hand_mat, Vector3(-HAND_REST.x, HAND_REST.y, HAND_REST.z), Vector3(0.18, 0.17, 0.2))
-	_hand_r = _part(_rig, sphere, hand_mat, HAND_REST, Vector3(0.18, 0.17, 0.2))
-	_hand_l.name = "HandL"
-	_hand_r.name = "HandR"
+	_build_body(character_id)
 	_dust = _make_burst(Color(1, 1, 1, 0.75))
 	add_child(_dust)
 	_jump_dust = _make_burst(Color(1, 1, 1, 0.75))
@@ -267,28 +277,431 @@ func _build() -> void:
 	add_child(_trail)
 	_build_fx()
 	# picks made before the rig existed
-	if paint_id != "white":
-		set_paint(paint_id)
-	if hat_id != "none":
-		set_hat(hat_id)
+	_wear_hat_and_paint()
 
 
+## The racer colour: every accent material is tinted in place (bodies and hats share them).
 func _apply_colors() -> void:
-	(_torso.get_node("Belt") as MeshInstance3D).material_override = _mat(accent, 0.45)
-	(_torso.get_node("Pack") as MeshInstance3D).material_override = _mat(accent.darkened(0.25), 0.5)
-	var hand_mat := _mat(accent.lerp(Color.WHITE, 0.12), 0.45)
-	_hand_l.material_override = hand_mat
-	_hand_r.material_override = hand_mat
+	_acc_base.albedo_color = accent
+	_acc_dark.albedo_color = accent.darkened(0.25)
+	_acc_hand.albedo_color = accent.lerp(Color.WHITE, 0.12)
+	_acc_glow.albedo_color = accent
+	_acc_glow.emission = accent
 	_bulb_mat.albedo_color = accent
 	_bulb_mat.emission = accent
 	_tint_fx()
 
 
+## "base" (belts, plumes, headbands), "dark" (packs, shields), "hand" (mitts) or "glow".
+func accent_material(kind: String = "base") -> StandardMaterial3D:
+	match kind:
+		"dark":
+			return _acc_dark
+		"hand":
+			return _acc_hand
+		"glow":
+			return _acc_glow
+	return _acc_base
+
+
 # ---- characters, hats, paints (see the hook API at the top) ---------------------------------
 
-## STUB: every character still builds as Volt (the art pass builds the real bodies).
 func set_character(id: String) -> void:
 	character_id = Cosmetics.clean("character", id)
+	if _torso == null or character_id == built_character:
+		return
+	# rebuild in place: keep the limbs where they are (no pop mid-run), then re-dress
+	var keep: Array[Vector3] = [_foot_l.position, _foot_r.position, _hand_l.position, _hand_r.position]
+	for c: Node in _torso.get_children():
+		_torso.remove_child(c)
+		c.queue_free()
+	for c: Node in _rig.get_children():
+		if c != _torso:
+			_rig.remove_child(c)
+			c.queue_free()
+	_hat = null
+	_build_body(character_id)
+	_foot_l.position = keep[0]
+	_foot_r.position = keep[1]
+	_hand_l.position = keep[2]
+	_hand_r.position = keep[3]
+	if _hand_trail_l != null:
+		_hand_trail_l.clear()
+		_hand_trail_r.clear()
+	_wear_hat_and_paint()
+
+
+func _wear_hat_and_paint() -> void:
+	set_hat(hat_id)
+	set_paint(paint_id)
+
+
+## Builds character `id` on the rig. Resets every per-body handle first.
+func _build_body(id: String) -> void:
+	built_character = id
+	_paint_parts.clear()
+	_paint_stock.clear()
+	_sways.clear()
+	_twinkles.clear()
+	_crown_parts.clear()
+	_eye_base = Vector3(0.09, 0.12, 0.06)
+	_bulb_base = 0.12
+	match id:
+		"knight":
+			_body_knight()
+		"ninja":
+			_body_ninja()
+		"astronaut":
+			_body_astronaut()
+		"dino":
+			_body_dino()
+		"skeleton":
+			_body_skeleton()
+		"catbot":
+			_body_catbot()
+		"outlaw":
+			_body_outlaw()
+		"cyber", "golden":
+			_body_volt(id)
+		_:
+			_body_volt("volt")
+	# hat mount: the crown of the head
+	var head: Array = HEADS.get(id, HEADS["volt"])
+	_head_anchor = Node3D.new()
+	_head_anchor.name = "HeadAnchor"
+	_head_anchor.position = (head[0] as Vector3) + TZ
+	_head_anchor.scale = Vector3.ONE * float(head[1])
+	_torso.add_child(_head_anchor)
+
+
+## A torso part placed in feet-relative coordinates.
+func _tp(mesh: Mesh, mat: Material, pos: Vector3, scl: Vector3 = Vector3.ONE, rot: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+	return CosmeticArt.part(_torso, mesh, mat, pos + TZ, scl, rot)
+
+
+## An invisible stand-in for a named part a body doesn't have.
+func _stub(parent: Node3D, pos: Vector3, stub_name: String = "") -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.visible = false
+	mi.position = pos
+	if stub_name != "":
+		mi.name = stub_name
+	parent.add_child(mi)
+	return mi
+
+
+func _paintable(mi: MeshInstance3D) -> MeshInstance3D:
+	_paint_parts.append(mi)
+	_paint_stock.append(mi.material_override)
+	return mi
+
+
+func _belt(mesh: Mesh, pos: Vector3, scl: Vector3 = Vector3.ONE, mat: Material = null, rot: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+	var b: MeshInstance3D = _tp(mesh, mat if mat != null else _acc_base, pos, scl, rot)
+	b.name = "Belt"
+	return b
+
+
+func _pack(mesh: Mesh, mat: Material, pos: Vector3, scl: Vector3, rot: Vector3 = Vector3.ZERO) -> MeshInstance3D:
+	var p: MeshInstance3D = _tp(mesh, mat, pos, scl, rot)
+	p.name = "Pack"
+	return p
+
+
+## Both eyes (right-eye position; the left mirrors x) at rest size `base`.
+func _eyes(mat: Material, pos_r: Vector3, base: Vector3) -> void:
+	_eye_base = base
+	_eye_l = _tp(CosmeticArt.sphere(1), mat, Vector3(-pos_r.x, pos_r.y, pos_r.z), base)
+	_eye_r = _tp(CosmeticArt.sphere(1), mat, pos_r, base)
+	_eye_l.name = "EyeL"
+	_eye_r.name = "EyeR"
+
+
+## The antenna pivot (the spring). Bodies without one still get the pivot (Knight hangs his
+## plume on it) and an invisible bulb.
+func _antenna_at(pos: Vector3, rod_mat: Material) -> void:
+	_antenna = Node3D.new()
+	_antenna.name = "Antenna"
+	_antenna.position = pos + TZ
+	_torso.add_child(_antenna)
+	if rod_mat == null:
+		_bulb = _stub(_antenna, Vector3(0, 0.33, 0), "Bulb")
+		return
+	CosmeticArt.part(_antenna, CosmeticArt.cyl(0.012, 0.02, 8), rod_mat, Vector3(0, 0.15, 0), Vector3(1, 0.3, 1))
+	_bulb = CosmeticArt.part(_antenna, CosmeticArt.sphere(1), _bulb_mat, Vector3(0, 0.33, 0), Vector3.ONE * _bulb_base)
+	_bulb.name = "Bulb"
+
+
+## Feet (on the rig) and floating mitts.
+func _limbs(foot_mat: Material, hand_mat: Material, foot_scl: Vector3 = Vector3(0.24, 0.17, 0.34), hand_scl: Vector3 = Vector3(0.18, 0.17, 0.2)) -> void:
+	var s: SphereMesh = CosmeticArt.sphere(1)
+	_foot_l = CosmeticArt.part(_rig, s, foot_mat, Vector3(-0.17, 0.09, 0), foot_scl)
+	_foot_r = CosmeticArt.part(_rig, s, foot_mat, Vector3(0.17, 0.09, 0), foot_scl)
+	_hand_l = CosmeticArt.part(_rig, s, hand_mat, Vector3(-HAND_REST.x, HAND_REST.y, HAND_REST.z), hand_scl)
+	_hand_r = CosmeticArt.part(_rig, s, hand_mat, HAND_REST, hand_scl)
+	_foot_l.name = "FootL"
+	_foot_r.name = "FootR"
+	_hand_l.name = "HandL"
+	_hand_r.name = "HandR"
+
+
+## The same detail on both mitts (or both feet): `pos` / `scl` in the limb's own unit space.
+func _on_pair(a: MeshInstance3D, b: MeshInstance3D, mesh: Mesh, mat: Material, pos: Vector3, scl: Vector3, rot: Vector3 = Vector3.ZERO) -> void:
+	CosmeticArt.part(a, mesh, mat, Vector3(-pos.x, pos.y, pos.z), scl, Vector3(rot.x, -rot.y, -rot.z))
+	CosmeticArt.part(b, mesh, mat, pos, scl, rot)
+
+
+func _add_sway(list: Array[Sway], node: Node3D, pitch: float, roll: float, flutter: float, wag: float, lift: float) -> void:
+	var s := Sway.new()
+	s.node = node
+	s.base = node.rotation
+	s.pitch = pitch
+	s.roll = roll
+	s.flutter = flutter
+	s.wag = wag
+	s.lift = lift
+	s.phase = float(list.size()) * 1.7 + (0.6 if node.position.x < 0.0 else 0.0)
+	list.append(s)
+
+
+# ---- the bodies ----
+
+## Volt and his two variants: Cyber Volt (graphite shell, glowing circuit traces, a HUD visor)
+## and Golden Volt (polished gold that twinkles).
+func _body_volt(variant: String) -> void:
+	var shell: Material = CosmeticArt.std(Color(0.96, 0.94, 0.88), 0.4)
+	var visor: Material = CosmeticArt.std(Color(0.08, 0.1, 0.16), 0.15, 0.3)
+	var eye: Material = CosmeticArt.std(Color(0.5, 0.97, 1.0), 0.3, 0.0, 3.0)
+	var rod: Material = CosmeticArt.std(Color(0.25, 0.27, 0.33), 0.4, 0.6)
+	var foot: Material = CosmeticArt.std(Color(0.16, 0.18, 0.26), 0.6)
+	if variant == "golden":
+		shell = CosmeticArt.std(Color(1.0, 0.77, 0.3), 0.18, 1.0)
+		visor = CosmeticArt.std(Color(0.06, 0.05, 0.04), 0.08, 0.6)
+		eye = CosmeticArt.std(Color(1.0, 0.93, 0.7), 0.3, 0.0, 2.6)
+		rod = CosmeticArt.std(Color(1.0, 0.8, 0.35), 0.2, 1.0)
+		foot = CosmeticArt.std(Color(0.62, 0.42, 0.12), 0.3, 0.9)
+	elif variant == "cyber":
+		shell = CosmeticArt.std(Color(0.13, 0.13, 0.17), 0.3, 0.5)
+		visor = CosmeticArt.shader("hud")
+		eye = CosmeticArt.std(Color(1.0, 0.25, 0.85), 0.3, 0.0, 2.6)
+		rod = CosmeticArt.std(Color(0.1, 0.1, 0.13), 0.3, 0.7)
+		foot = CosmeticArt.std(Color(0.07, 0.07, 0.09), 0.5)
+	_body = _paintable(_tp(CosmeticArt.sphere(2), shell, Vector3(0, 0.62, 0), Vector3(0.78, 0.86, 0.78)))
+	_belt(CosmeticArt.torus(0.33, 0.41), Vector3(0, 0.47, 0), Vector3(1, 0.9, 1))
+	_tp(CosmeticArt.sphere(2), visor, Vector3(0, 0.74, -0.2), Vector3(0.56, 0.3, 0.42))
+	_eyes(eye, Vector3(0.11, 0.75, -0.385), Vector3(0.09, 0.12, 0.06))
+	_pack(CosmeticArt.box(), _acc_dark, Vector3(0, 0.62, 0.33), Vector3(0.34, 0.3, 0.16))
+	_antenna_at(Vector3(0, 1.02, 0.02), rod)
+	_crown_parts.append(_antenna)
+	_limbs(foot, _acc_hand)
+	if variant == "cyber":
+		# traces glow through a thin shell over the body (kept under any paint)
+		_tp(CosmeticArt.sphere(2), CosmeticArt.shader("circuit"), Vector3(0, 0.62, 0), Vector3(0.786, 0.866, 0.786))
+		_on_pair(_foot_l, _foot_r, CosmeticArt.box(), CosmeticArt.std(Color(0.1, 1.0, 0.85), 0.4, 0.0, 2.0), Vector3(0, -0.3, 0), Vector3(1.02, 0.12, 0.9))
+	elif variant == "golden":
+		for at: Vector3 in [Vector3(0.3, 0.98, -0.22), Vector3(-0.37, 0.62, -0.16), Vector3(0.22, 0.36, -0.32)]:
+			var tw: MeshInstance3D = Fx.sprite(Color(2.6, 2.2, 1.2), 0.3, Fx.Tex.STAR)
+			tw.layers = 2
+			tw.position = at + TZ
+			tw.scale = Vector3.ONE * 0.01
+			_torso.add_child(tw)
+			_twinkles.append(tw)
+
+
+## Knight: a steel helm with a T-slit visor (eyes glowing behind it), a crest and a plume
+## in the racer colour, a breastplate, a shield on the back and steel gauntlets.
+func _body_knight() -> void:
+	_body = _paintable(_tp(CosmeticArt.sphere(2), CosmeticArt.std(Color(0.7, 0.73, 0.78), 0.3, 0.75), Vector3(0, 0.62, 0), Vector3(0.78, 0.86, 0.78)))
+	_paintable(_tp(CosmeticArt.sphere(1), CosmeticArt.std(Color(0.8, 0.82, 0.86), 0.25, 0.8), Vector3(0, 0.46, -0.07), Vector3(0.72, 0.5, 0.66)))
+	var dark_steel: Material = CosmeticArt.std(Color(0.45, 0.47, 0.52), 0.35, 0.8)
+	_tp(CosmeticArt.sphere(1), dark_steel, Vector3(0, 0.62, 0), Vector3(0.06, 0.9, 0.82))
+	var slit: Material = CosmeticArt.std(Color(0.02, 0.02, 0.03), 0.6)
+	_tp(CosmeticArt.sphere(1), slit, Vector3(0, 0.79, -0.2), Vector3(0.42, 0.055, 0.34))
+	_tp(CosmeticArt.sphere(1), slit, Vector3(0, 0.68, -0.25), Vector3(0.06, 0.22, 0.3))
+	_eyes(CosmeticArt.std(Color(1.0, 0.85, 0.4), 0.3, 0.0, 2.5), Vector3(0.08, 0.79, -0.365), Vector3(0.07, 0.035, 0.04))
+	_belt(CosmeticArt.torus(0.29, 0.35), Vector3(0, 0.36, 0))
+	# the shield (Pack) with a steel cross
+	var lean := Vector3(-0.12, 0, 0)
+	_pack(CosmeticArt.box(), _acc_dark, Vector3(0, 0.58, 0.4), Vector3(0.34, 0.4, 0.05), lean)
+	var bright: Material = CosmeticArt.std(Color(0.85, 0.86, 0.9), 0.25, 0.85)
+	_tp(CosmeticArt.box(), bright, Vector3(0, 0.585, 0.428), Vector3(0.05, 0.3, 0.02), lean)
+	_tp(CosmeticArt.box(), bright, Vector3(0, 0.62, 0.43), Vector3(0.24, 0.05, 0.02), lean)
+	# the plume rides the antenna spring
+	_antenna_at(Vector3(0, 1.03, 0.06), null)
+	CosmeticArt.part_b(_antenna, CosmeticArt.arc(1.9, 0.28, 0.06, 8, 12), _acc_base, Vector3.ZERO, Basis(Vector3.UP, -PI * 0.5).scaled(Vector3.ONE * 0.3))
+	CosmeticArt.part_b(_antenna, CosmeticArt.arc(1.5, 0.24, 0.04, 8, 10), _acc_dark, Vector3(0, 0.0, -0.03), Basis(Vector3.UP, -PI * 0.5).scaled(Vector3.ONE * 0.24))
+	_limbs(CosmeticArt.std(Color(0.5, 0.52, 0.58), 0.35, 0.7), CosmeticArt.std(Color(0.72, 0.74, 0.8), 0.3, 0.7))
+	_on_pair(_hand_l, _hand_r, CosmeticArt.sphere(0), _acc_base, Vector3(0, 0, 0.32), Vector3(1.05, 1.0, 0.45))
+
+
+## Ninja: a dark wrapped head with a skin-tone eye slit, a headband in the racer colour whose
+## tails stream out behind, a sword across the back.
+func _body_ninja() -> void:
+	var cloth: Material = CosmeticArt.std(Color(0.14, 0.15, 0.22), 0.75)
+	_body = _paintable(_tp(CosmeticArt.sphere(2), cloth, Vector3(0, 0.62, 0), Vector3(0.78, 0.86, 0.78)))
+	_tp(CosmeticArt.sphere(1), CosmeticArt.std(Color(0.96, 0.8, 0.66), 0.7), Vector3(0, 0.76, -0.18), Vector3(0.6, 0.14, 0.44))
+	_eyes(CosmeticArt.std(Color(0.06, 0.06, 0.09), 0.25), Vector3(0.1, 0.765, -0.395), Vector3(0.06, 0.075, 0.04))
+	_on_pair(_eye_l, _eye_r, CosmeticArt.sphere(0), CosmeticArt.std(Color(1, 1, 1), 0.3, 0.0, 1.5), Vector3(0.22, 0.22, -0.42), Vector3.ONE * 0.3)
+	_tp(CosmeticArt.torus(0.33, 0.37), CosmeticArt.std(Color(0.09, 0.1, 0.15), 0.8), Vector3(0, 0.55, 0), Vector3(1.05, 1.0, 1.05), Vector3(0.0, 0, 0.18))
+	_tp(CosmeticArt.torus(0.29, 0.335), _acc_base, Vector3(0, 0.9, 0), Vector3.ONE, Vector3(0.12, 0, 0))
+	_tp(CosmeticArt.sphere(0), _acc_base, Vector3(0, 0.86, 0.3), Vector3(0.1, 0.08, 0.07))
+	for side: float in [-1.0, 1.0]:
+		var tail: Node3D = CosmeticArt.pivot(_torso, Vector3(0.035 * side, 0.86, 0.33) + TZ, Vector3(-0.5, 0, 0.22 * side))
+		CosmeticArt.part(tail, CosmeticArt.box(), _acc_base, Vector3(0, -0.15, 0), Vector3(0.07, 0.3, 0.015))
+		_add_sway(_sways, tail, -0.9, 0.6, 0.22, 0.0, -0.9)
+	_belt(CosmeticArt.torus(0.34, 0.4), Vector3(0, 0.47, 0), Vector3(1, 0.9, 1))
+	# the sword (Pack is the scabbard), slung across the back
+	var tilt := Vector3(0, 0, 0.7)
+	var dir := Vector3(-sin(0.7), cos(0.7), 0)
+	var c := Vector3(0, 0.62, 0.37)
+	_pack(CosmeticArt.box(), _acc_dark, c, Vector3(0.075, 0.44, 0.08), tilt)
+	_tp(CosmeticArt.box(), CosmeticArt.std(Color(0.08, 0.07, 0.07), 0.8), c + dir * 0.295 + Vector3(0, 0, -0.02), Vector3(0.055, 0.15, 0.055), tilt)
+	_tp(CosmeticArt.box(), CosmeticArt.std(Color(0.9, 0.72, 0.3), 0.3, 0.8), c + dir * 0.22, Vector3(0.13, 0.025, 0.09), tilt)
+	_antenna_at(Vector3(0, 1.02, 0.02), null)
+	_limbs(CosmeticArt.std(Color(0.1, 0.1, 0.14), 0.7), CosmeticArt.std(Color(0.2, 0.21, 0.28), 0.7))
+
+
+## Astronaut: a white suit, a big glass bubble helmet over a little dark face, a gold sun
+## visor, a life-support pack with an antenna and tanks.
+func _body_astronaut() -> void:
+	var suit: Material = CosmeticArt.std(Color(0.92, 0.92, 0.94), 0.75)
+	_body = _paintable(_tp(CosmeticArt.sphere(2), suit, Vector3(0, 0.5, 0), Vector3(0.74, 0.68, 0.72)))
+	_tp(CosmeticArt.torus(0.22, 0.29), CosmeticArt.std(Color(0.6, 0.62, 0.68), 0.3, 0.6), Vector3(0, 0.76, 0), Vector3(1, 0.8, 1))
+	_tp(CosmeticArt.sphere(1), CosmeticArt.std(Color(0.12, 0.13, 0.18), 0.2, 0.2), Vector3(0, 0.95, 0), Vector3(0.36, 0.34, 0.34))
+	_eyes(CosmeticArt.std(Color(0.5, 0.97, 1.0), 0.3, 0.0, 3.0), Vector3(0.07, 0.97, -0.165), Vector3(0.06, 0.08, 0.04))
+	_tp(CosmeticArt.sphere(1), CosmeticArt.std(Color(1.0, 0.8, 0.35), 0.1, 1.0), Vector3(0, 1.08, -0.17), Vector3(0.5, 0.24, 0.3))
+	_tp(CosmeticArt.sphere(2), CosmeticArt.shader("glass"), Vector3(0, 0.94, 0), Vector3.ONE * 0.58)
+	_belt(CosmeticArt.torus(0.33, 0.39), Vector3(0, 0.4, 0))
+	# chest panel with two status lights
+	_tp(CosmeticArt.box(), CosmeticArt.std(Color(0.3, 0.32, 0.38), 0.4, 0.4), Vector3(0, 0.55, -0.35), Vector3(0.2, 0.12, 0.04))
+	_tp(CosmeticArt.sphere(0), CosmeticArt.std(Color(1.0, 0.25, 0.2), 0.3, 0.0, 2.2), Vector3(-0.05, 0.56, -0.375), Vector3.ONE * 0.035)
+	_tp(CosmeticArt.sphere(0), CosmeticArt.std(Color(0.3, 1.0, 0.4), 0.3, 0.0, 2.2), Vector3(0.05, 0.56, -0.375), Vector3.ONE * 0.035)
+	# life support
+	_pack(CosmeticArt.box(), CosmeticArt.std(Color(0.82, 0.83, 0.86), 0.6), Vector3(0, 0.58, 0.38), Vector3(0.46, 0.44, 0.22))
+	var tank: Material = CosmeticArt.std(Color(0.7, 0.72, 0.76), 0.35, 0.5)
+	_tp(CosmeticArt.cyl(0.5, 0.5, 12), tank, Vector3(-0.12, 0.58, 0.5), Vector3(0.12, 0.42, 0.12))
+	_tp(CosmeticArt.cyl(0.5, 0.5, 12), tank, Vector3(0.12, 0.58, 0.5), Vector3(0.12, 0.42, 0.12))
+	_tp(CosmeticArt.sphere(0), _acc_glow, Vector3(0, 0.74, 0.5), Vector3(0.07, 0.04, 0.04))
+	_antenna_at(Vector3(0.17, 0.8, 0.44), CosmeticArt.std(Color(0.55, 0.57, 0.62), 0.4, 0.6))
+	_limbs(CosmeticArt.std(Color(0.55, 0.56, 0.6), 0.6), CosmeticArt.std(Color(0.94, 0.94, 0.96), 0.7), Vector3(0.26, 0.2, 0.36))
+	_on_pair(_hand_l, _hand_r, CosmeticArt.sphere(0), _acc_base, Vector3(0, 0, 0.32), Vector3(1.05, 1.0, 0.45))
+
+
+## Explorer Dino: a round green dino with a snout, big shiny eyes, a cream belly, back spikes
+## in the racer colour, a little wagging tail and an explorer's satchel.
+func _body_dino() -> void:
+	var green: Material = CosmeticArt.std(Color(0.38, 0.74, 0.36), 0.6)
+	_body = _paintable(_tp(CosmeticArt.sphere(2), green, Vector3(0, 0.62, 0), Vector3(0.78, 0.86, 0.78)))
+	_tp(CosmeticArt.sphere(1), CosmeticArt.std(Color(0.98, 0.92, 0.7), 0.7), Vector3(0, 0.48, -0.2), Vector3(0.56, 0.6, 0.4))
+	_paintable(_tp(CosmeticArt.sphere(1), green, Vector3(0, 0.7, -0.32), Vector3(0.46, 0.3, 0.36)))
+	var dark: Material = CosmeticArt.std(Color(0.08, 0.12, 0.08), 0.6)
+	_tp(CosmeticArt.sphere(0), dark, Vector3(-0.07, 0.75, -0.485), Vector3(0.04, 0.03, 0.03))
+	_tp(CosmeticArt.sphere(0), dark, Vector3(0.07, 0.75, -0.485), Vector3(0.04, 0.03, 0.03))
+	_tp(CosmeticArt.sphere(0), dark, Vector3(0, 0.655, -0.465), Vector3(0.2, 0.018, 0.05))
+	_eyes(CosmeticArt.std(Color(1, 1, 1), 0.3), Vector3(0.13, 0.88, -0.27), Vector3(0.15, 0.17, 0.12))
+	_on_pair(_eye_l, _eye_r, CosmeticArt.sphere(0), CosmeticArt.std(Color(0.05, 0.05, 0.07), 0.2), Vector3(0.05, 0.0, -0.36), Vector3(0.55, 0.6, 0.4))
+	_on_pair(_eye_l, _eye_r, CosmeticArt.sphere(0), CosmeticArt.std(Color(1, 1, 1), 0.2, 0.0, 1.5), Vector3(0.12, 0.18, -0.5), Vector3.ONE * 0.2)
+	# back spikes along the spine, standing on the shell's surface
+	var sizes: Array[float] = [1.0, 1.1, 0.95, 0.72]
+	var angles: Array[float] = [0.42, 0.95, 1.48, 2.0]
+	for k: int in 4:
+		var phi: float = angles[k]
+		var y: float = 0.62 + 0.43 * cos(phi)
+		var z: float = 0.39 * sin(phi)
+		var n := Vector2((y - 0.62) / (0.43 * 0.43), z / (0.39 * 0.39))   # (y, z) of the normal
+		var tilt: float = atan2(n.y, n.x)
+		var s: float = sizes[k]
+		var up := Vector3(0, cos(tilt), sin(tilt))
+		var spike: MeshInstance3D = _tp(CosmeticArt.cyl(0.0, 0.5, 8), _acc_base, Vector3(0, y, z) + up * 0.06 * s, Vector3(0.12, 0.16, 0.08) * s, Vector3(tilt, 0, 0))
+		if k == 0:
+			_crown_parts.append(spike)
+	# the tail: back and a little down, curling up at the tip; it wags
+	var root: Node3D = CosmeticArt.pivot(_torso, Vector3(0, 0.34, 0.3) + TZ)
+	var d := Vector3(0, -0.3, 0.954)
+	var u := Vector3(0, 0.954, 0.3)
+	_paintable(CosmeticArt.part_b(root, CosmeticArt.arc(1.0, 0.42, 0.0, 8, 10), green, Vector3.ZERO, Basis(u, d, Vector3.RIGHT).scaled(Vector3.ONE * 0.32)))
+	_add_sway(_sways, root, 0.3, 0.5, 0.0, 0.35, 0.0)
+	_belt(CosmeticArt.torus(0.35, 0.41), Vector3(0, 0.44, 0))
+	_pack(CosmeticArt.box(), CosmeticArt.std(Color(0.55, 0.38, 0.22), 0.8), Vector3(0.37, 0.42, 0.04), Vector3(0.1, 0.2, 0.24), Vector3(0, 0, 0.25))
+	_antenna_at(Vector3(0, 1.02, 0.02), null)
+	_limbs(CosmeticArt.std(Color(0.3, 0.6, 0.28), 0.6), green)
+
+
+## Skeleton: a skull with dark sockets (the eyes glow in the racer colour), a jaw with
+## teeth, a ribcage over a dark core, and bony hands.
+func _body_skeleton() -> void:
+	var bone: Material = CosmeticArt.std(Color(0.95, 0.93, 0.85), 0.55)
+	var dark: Material = CosmeticArt.std(Color(0.04, 0.03, 0.05), 1.0)
+	_body = _paintable(_tp(CosmeticArt.sphere(2), bone, Vector3(0, 0.8, 0), Vector3(0.64, 0.56, 0.6)))
+	_paintable(_tp(CosmeticArt.sphere(1), bone, Vector3(0, 0.58, -0.06), Vector3(0.42, 0.2, 0.4)))
+	_tp(CosmeticArt.box(), dark, Vector3(0, 0.635, -0.245), Vector3(0.2, 0.02, 0.03))
+	_tp(CosmeticArt.box(), dark, Vector3(-0.05, 0.62, -0.25), Vector3(0.012, 0.05, 0.03))
+	_tp(CosmeticArt.box(), dark, Vector3(0.05, 0.62, -0.25), Vector3(0.012, 0.05, 0.03))
+	_tp(CosmeticArt.sphere(1), dark, Vector3(-0.11, 0.83, -0.255), Vector3(0.15, 0.16, 0.08))
+	_tp(CosmeticArt.sphere(1), dark, Vector3(0.11, 0.83, -0.255), Vector3(0.15, 0.16, 0.08))
+	_tp(CosmeticArt.sphere(0), dark, Vector3(0, 0.74, -0.285), Vector3(0.05, 0.06, 0.03))
+	_eyes(_acc_glow, Vector3(0.11, 0.83, -0.29), Vector3(0.05, 0.06, 0.03))
+	# ribcage: bone hoops over a dark core, the spine behind (Pack)
+	_tp(CosmeticArt.sphere(1), CosmeticArt.std(Color(0.08, 0.07, 0.1), 0.9), Vector3(0, 0.34, 0), Vector3(0.42, 0.36, 0.34))
+	var rib_scl := Vector3(1, 1, 0.82)
+	_tp(CosmeticArt.torus(0.18, 0.22), bone, Vector3(0, 0.42, 0), rib_scl)
+	_tp(CosmeticArt.torus(0.2, 0.24), bone, Vector3(0, 0.34, 0), rib_scl)
+	_tp(CosmeticArt.torus(0.18, 0.22), bone, Vector3(0, 0.26, 0), rib_scl)
+	_pack(CosmeticArt.cyl(0.5, 0.5, 8), bone, Vector3(0, 0.36, 0.1), Vector3(0.08, 0.36, 0.08))
+	_belt(CosmeticArt.torus(0.14, 0.2), Vector3(0, 0.2, 0))
+	_antenna_at(Vector3(0, 1.08, 0.02), null)
+	_limbs(bone, bone, Vector3(0.2, 0.12, 0.32), Vector3(0.14, 0.12, 0.15))
+	_on_pair(_hand_l, _hand_r, CosmeticArt.box(), bone, Vector3(0.2, 0, -0.75), Vector3(0.18, 0.2, 0.6))
+	_on_pair(_hand_l, _hand_r, CosmeticArt.box(), bone, Vector3(-0.2, 0, -0.75), Vector3(0.18, 0.2, 0.6))
+
+
+## Cat-bot: a robot with a face screen, glowing slit-pupil eyes, pointed ears (inner ears in
+## the racer colour), whiskers, a pink nose and a curly wagging tail.
+func _body_catbot() -> void:
+	var shell: Material = CosmeticArt.std(Color(0.8, 0.8, 0.9), 0.35, 0.35)
+	_body = _paintable(_tp(CosmeticArt.sphere(2), shell, Vector3(0, 0.62, 0), Vector3(0.78, 0.86, 0.78)))
+	_tp(CosmeticArt.sphere(2), CosmeticArt.std(Color(0.06, 0.07, 0.1), 0.15, 0.3), Vector3(0, 0.74, -0.2), Vector3(0.6, 0.38, 0.42))
+	_eyes(CosmeticArt.std(Color(0.55, 1.0, 0.45), 0.3, 0.0, 2.4), Vector3(0.12, 0.77, -0.385), Vector3(0.09, 0.12, 0.05))
+	_on_pair(_eye_l, _eye_r, CosmeticArt.box(), CosmeticArt.std(Color(0.02, 0.04, 0.02), 0.5), Vector3(0, 0, -0.4), Vector3(0.22, 0.85, 0.3))
+	_tp(CosmeticArt.sphere(0), CosmeticArt.std(Color(1.0, 0.55, 0.7), 0.4, 0.0, 0.6), Vector3(0, 0.69, -0.41), Vector3(0.05, 0.035, 0.03))
+	var whisker: Material = CosmeticArt.std(Color(0.95, 0.95, 1.0), 0.4, 0.0, 1.2)
+	for side: float in [-1.0, 1.0]:
+		for k: int in 2:
+			var dy: float = 0.02 - 0.04 * float(k)
+			_tp(CosmeticArt.box(), whisker, Vector3(0.25 * side, 0.69 + dy, -0.31), Vector3(0.18, 0.008, 0.008), Vector3(0, 0.35 * side, (0.12 - 0.24 * float(k)) * side))
+	# ears: square pyramids, tilted out
+	for side: float in [-1.0, 1.0]:
+		var rot := Vector3(0, 0, -0.35 * side)
+		_tp(CosmeticArt.cyl(0.0, 0.5, 4), shell, Vector3(0.234 * side, 1.05, 0.0), Vector3(0.2, 0.2, 0.1), rot)
+		_tp(CosmeticArt.cyl(0.0, 0.5, 4), _acc_base, Vector3(0.232 * side, 1.04, -0.03), Vector3(0.11, 0.13, 0.05), rot)
+	# a curly tail with an accent tip; it wags
+	var root: Node3D = CosmeticArt.pivot(_torso, Vector3(0, 0.36, 0.33) + TZ)
+	_paintable(CosmeticArt.part_b(root, CosmeticArt.arc(2.2, 0.27, 0.22, 8, 14), shell, Vector3.ZERO,
+		Basis(Vector3(0, 0.98, -0.196), Vector3(0, 0.196, 0.98), Vector3.RIGHT).scaled(Vector3.ONE * 0.22)))
+	CosmeticArt.part(root, CosmeticArt.sphere(0), _acc_base, Vector3(0, 0.378, 0.106), Vector3.ONE * 0.1)
+	_add_sway(_sways, root, 0.5, 0.5, 0.0, 0.4, 0.0)
+	_belt(CosmeticArt.torus(0.33, 0.41), Vector3(0, 0.47, 0), Vector3(1, 0.9, 1))
+	_pack(CosmeticArt.box(), _acc_dark, Vector3(0, 0.6, 0.36), Vector3(0.26, 0.22, 0.12))
+	_antenna_at(Vector3(0, 1.02, 0.02), null)
+	_limbs(CosmeticArt.std(Color(0.2, 0.2, 0.28), 0.6), _acc_hand)
+
+
+## Outlaw: a bandana (racer colour) over the lower face, squinting eyes, a striped poncho,
+## a bedroll on the back and spurred boots.
+func _body_outlaw() -> void:
+	_body = _paintable(_tp(CosmeticArt.sphere(2), CosmeticArt.std(Color(0.84, 0.7, 0.5), 0.7), Vector3(0, 0.62, 0), Vector3(0.78, 0.86, 0.78)))
+	_tp(CosmeticArt.sphere(2), CosmeticArt.std(Color(0.08, 0.08, 0.1), 0.2, 0.2), Vector3(0, 0.8, -0.2), Vector3(0.56, 0.24, 0.42))
+	_eyes(CosmeticArt.std(Color(1.0, 0.75, 0.35), 0.3, 0.0, 2.2), Vector3(0.11, 0.81, -0.385), Vector3(0.09, 0.07, 0.06))
+	_tp(CosmeticArt.sphere(2), _acc_base, Vector3(0, 0.62, 0), Vector3(0.84, 0.3, 0.84))
+	_tp(CosmeticArt.cyl(0.0, 0.5, 3), _acc_base, Vector3(0, 0.52, -0.4), Vector3(0.3, 0.2, 0.08), Vector3(PI - 0.35, 0, 0))
+	_tp(CosmeticArt.cyl(0.3, 0.47, 24), CosmeticArt.shader("poncho"), Vector3(0, 0.42, 0), Vector3(1, 0.28, 1))
+	_belt(CosmeticArt.torus(0.19, 0.25), Vector3(0, 0.25, 0), Vector3.ONE, CosmeticArt.std(Color(0.35, 0.22, 0.12), 0.7))
+	_pack(CosmeticArt.cyl(0.5, 0.5, 12), CosmeticArt.std(Color(0.55, 0.25, 0.2), 0.85), Vector3(0, 0.68, 0.38), Vector3(0.18, 0.42, 0.18), Vector3(0, 0, PI * 0.5))
+	_antenna_at(Vector3(0, 1.02, 0.02), null)
+	var leather: Material = CosmeticArt.std(Color(0.36, 0.22, 0.12), 0.75)
+	_limbs(leather, CosmeticArt.std(Color(0.45, 0.3, 0.18), 0.8), Vector3(0.25, 0.2, 0.36))
+	_on_pair(_foot_l, _foot_r, CosmeticArt.cyl(0.5, 0.5, 12), leather, Vector3(0, 0.7, 0.12), Vector3(0.8, 1.0, 0.6))
+	_on_pair(_foot_l, _foot_r, CosmeticArt.torus(0.3, 0.5, 12), CosmeticArt.std(Color(0.8, 0.8, 0.82), 0.25, 0.9), Vector3(0, 0.1, 0.55), Vector3(0.35, 0.35, 0.15), Vector3(PI * 0.5, 0, 0))
 
 
 func set_hat(id: String) -> void:
@@ -299,57 +712,62 @@ func set_hat(id: String) -> void:
 		_hat.get_parent().remove_child(_hat)
 		_hat.queue_free()
 	_hat = null
+	_hat_sways.clear()
+	_hat_spin.clear()
+	_hat_spin_rate.clear()
+	_hat_spin_base.clear()
+	_hat_spin_angle.clear()
+	_hat_bob = null
+	var covered: bool = CosmeticArt.covers_crown(hat_id)
+	for n: Node3D in _crown_parts:
+		n.visible = not covered
 	if hat_id == "none":
 		return
 	_hat = _build_hat(hat_id)
 	_hat.name = "Hat"
 	_head_anchor.add_child(_hat)
+	# the moving bits the hat tagged (see CosmeticArt)
+	var stack: Array[Node] = [_hat]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		stack.append_array(n.get_children())
+		if not (n is Node3D):
+			continue
+		var n3: Node3D = n
+		if n3.has_meta("sway"):
+			var k: Array = n3.get_meta("sway")
+			_add_sway(_hat_sways, n3, float(k[0]), float(k[1]), float(k[2]), float(k[3]), float(k[4]))
+		if n3.has_meta("spin"):
+			var sp: Array = n3.get_meta("spin")
+			_hat_spin.append(n3)
+			_hat_spin_rate.append(Vector2(float(sp[0]), float(sp[1])))
+			_hat_spin_base.append(n3.basis)
+			_hat_spin_angle.append(0.0)
+		if n3.has_meta("bob"):
+			var b: Array = n3.get_meta("bob")
+			_hat_bob = n3
+			_hat_bob_k = Vector3(n3.position.y, float(b[0]), float(b[1]))
 
 
-## STUB placeholder: a short cylinder (a ring for the halo) tinted per hat id.
 func _build_hat(id: String) -> Node3D:
-	var holder := Node3D.new()
-	var col := Color.from_hsv(float(absi(hash(id)) % 1000) / 1000.0, 0.55, 0.9)
-	if id == "halo":
-		var ring := TorusMesh.new()
-		ring.inner_radius = 0.16
-		ring.outer_radius = 0.2
-		_part(holder, ring, _mat(Color(1.0, 0.92, 0.5), 0.3, 0.0, 1.5), Vector3(0, 0.22, 0))
-		return holder
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.17
-	cyl.bottom_radius = 0.22
-	cyl.height = 0.16
-	_part(holder, cyl, _mat(col, 0.5), Vector3(0, 0.06, 0))
-	return holder
+	return CosmeticArt.hat(id, self)
 
 
 func set_paint(id: String) -> void:
 	paint_id = Cosmetics.clean("paint", id)
-	if _body != null:
-		_body.material_override = _paint_material(paint_id)
+	var m: Material = _paint_material(paint_id)
+	for i: int in _paint_parts.size():
+		_paint_parts[i].material_override = m if m != null else _paint_stock[i]
 
 
-## STUB placeholder looks: a flat tint per paint (Ghost is see-through, Neon Glow glows a little).
-func _paint_material(id: String) -> StandardMaterial3D:
-	match id:
-		"chrome":
-			return _mat(Color(0.82, 0.84, 0.88), 0.12, 0.9)
-		"camo":
-			return _mat(Color(0.42, 0.5, 0.3), 0.7)
-		"lava":
-			return _mat(Color(0.9, 0.35, 0.12), 0.5, 0.0, 0.6)
-		"galaxy":
-			return _mat(Color(0.25, 0.18, 0.5), 0.3, 0.2)
-		"candy":
-			return _mat(Color(1.0, 0.62, 0.8), 0.35)
-		"ghost":
-			var m: StandardMaterial3D = _mat(Color(0.85, 0.95, 1.0, 0.45), 0.3)
-			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-			return m
-		"neon":
-			return _mat(Color(0.3, 1.0, 0.85), 0.3, 0.0, 0.8)
-	return _mat(Color(0.96, 0.94, 0.88), 0.4)
+## The paint's shared material (null: the character's own factory finish).
+func _paint_material(id: String) -> Material:
+	return CosmeticArt.paint_material(id)
+
+
+## The shell parts the paint covers (tests and the Locker inspect them).
+func paint_parts() -> Array[MeshInstance3D]:
+	return _paint_parts
 
 
 ## The hat node on the head (null for "none"); tests and the art pass inspect it.
@@ -1730,7 +2148,7 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 	if _fidget == 3:
 		happy = maxf(happy, fid_w)
 	eye_y = lerpf(eye_y, 0.4, happy)
-	var eye_s := Vector3(0.09, 0.12 * clampf(eye_y, 0.08, 1.4), 0.06)
+	var eye_s := Vector3(_eye_base.x, _eye_base.y * clampf(eye_y, 0.08, 1.4), _eye_base.z)
 	_eye_l.scale = eye_s
 	_eye_r.scale = eye_s
 
@@ -1748,7 +2166,8 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 	_antenna.rotation = Vector3(_antenna_sway.x, 0, _antenna_sway.y)
 	_flare = maxf(_flare - dt * 2.5, 0.0)
 	_bulb_mat.emission_energy_multiplier = 2.0 + _flare * 7.0
-	_bulb.scale = Vector3.ONE * (0.12 + _flare * 0.05)
+	_bulb.scale = Vector3.ONE * (_bulb_base * (1.0 + _flare * 0.42))
+	_animate_extras(dt, amp, speed)
 
 	# speed streak: carried momentum (the same > 11 m/s as the HUD readout and the FOV
 	# kick), plus big launches (pads, flings off rising platforms); plain hops stay clean
@@ -1764,3 +2183,29 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 			p.amount_ratio = ratio
 			p.position.y = 0.28 if on_floor else 0.5
 	_animate_fx(dt, vel, on_floor)
+
+
+## Secondary motion on the spring (tails, plumes, hat stalks), spinning / floating hat parts
+## and Golden Volt's twinkles. No allocation: everything was gathered when it was built.
+func _animate_extras(dt: float, amp: float, speed: float) -> void:
+	for s: Sway in _sways:
+		_apply_sway(s, amp)
+	for s: Sway in _hat_sways:
+		_apply_sway(s, amp)
+	for i: int in _hat_spin.size():
+		_hat_spin_angle[i] = fposmod(_hat_spin_angle[i] + dt * (_hat_spin_rate[i].x + _hat_spin_rate[i].y * minf(speed, 20.0)), TAU)
+		_hat_spin[i].basis = _hat_spin_base[i] * Basis(Vector3.UP, _hat_spin_angle[i])
+	if _hat_bob != null:
+		_hat_bob.position.y = _hat_bob_k.x + _hat_bob_k.y * sin(_t * _hat_bob_k.z)
+	for i: int in _twinkles.size():
+		var k: float = pow(maxf(sin(_t * 2.3 + float(i) * 2.1), 0.0), 4.0)
+		_twinkles[i].scale = Vector3.ONE * maxf(k, 0.01)
+
+
+func _apply_sway(s: Sway, amp: float) -> void:
+	var ph: float = _t * 13.0 + s.phase
+	var fl: float = s.flutter * (0.25 + amp)
+	s.node.rotation = s.base + Vector3(
+		_antenna_sway.x * s.pitch + s.lift * amp + fl * sin(ph),
+		s.wag * (0.35 + 0.65 * amp) * sin(_t * 3.4 + s.phase),
+		_antenna_sway.y * s.roll + fl * 0.6 * sin(ph * 1.3 + 1.0))
