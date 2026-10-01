@@ -8,7 +8,7 @@ maths and seeded noise by `tools/gen_world_sfx.py` (which borrows the helpers in
 ## Regenerating
 
 ```
-python tools/gen_world_sfx.py            # generate all 293 clips into audio/, then verify
+python tools/gen_world_sfx.py            # generate all 321 clips into audio/, then verify
 python tools/gen_world_sfx.py --only=manor,carrier   # just those maps' generators (gen_<name>), then verify all
 python tools/gen_world_sfx.py --verify   # only check the files on disk
 ```
@@ -28,7 +28,7 @@ checks that the first and last samples are near zero. For loops it checks the se
 * the curvature (second difference) across the wrap must pass the same test;
 * the 40 ms window across the wrap must be no quieter than the quietest windows in the loop (a faded-out end would fail).
 
-It also checks the total size, which is about 17.9 MB of a 24 MB budget (room for roughly one more four-map round).
+It also checks the total size, which is about 18.5 MB of a 30 MB budget.
 
 ## Formats and levels
 
@@ -125,6 +125,10 @@ model struck harder, with a heavier body, longer tails and more debris.
 | Storm Armada | `step_armada_*`, `land_armada_*` | A wet wooden deck in the rain: a plank knock (about 290 / 610 / 1100 / 1750 Hz), a 130-150 -> 75 Hz body, the film of water slapping (0.5-5 kHz), 12 to 52 droplets splashing away (1.5-7 kHz grains) with a few small bubbles, and a faint suck as the boot lifts. The landing adds a thud and the puddle thrown up. |
 | Sugar Rush | `step_candy_*`, `land_candy_*` | Sugar-crusted candy over something soft: a squish (noise through a band rising from 380-450 Hz to about 1.4 kHz as it squashes), a 140-165 -> 85 Hz body, a spray of 35 to 115 bright sugar-crystal grains (2-9.5 kHz) with glassy 4-11 kHz ticks, and a springy little 150 -> 190 Hz rebound with an 11 Hz wobble. The landing adds a thud and a jelly-like 85 -> 130 Hz "boing". |
 | Super Carrier | `step_carrier_*`, `land_carrier_*` | The flight deck: thick steel under a gritty non-skid coating, so it barely rings. A boot-heel click, a dense rasp of 60 to 140 tiny grit grains (1.2-7 kHz) and a sole scuff, a heavy 150-175 -> 90 Hz body and just a hint of plate modes (f11 170-200 Hz, very short). The landing adds a thud and the hull's deep answer through the deck (plate modes from 70-85 Hz). |
+| Sakura Peaks | `step_sakura_*`, `land_sakura_*` | Polished cypress boards of a temple floor raised over stone: a tight, warm knock (about 260 / 560 / 960 / 1600 Hz, 6-25 ms), a slightly hollow 160-185 Hz body under the boards and a soft scuff of a sock on the polish. On about a third of the steps (and most landings) the floor's clamps chirp faintly underfoot (a nightingale floor: a 1.5-1.9 -> 2.3-2.8 kHz squeak), in a small hall. The landing adds a thud and the stone below (dead modes about 350 / 750 / 1300 Hz). |
+| Jungle Temple | `step_jungle_*`, `land_jungle_*` | Mossy temple stone under leaf litter: a dull, dead stone knock (about 360 / 730 / 1220 Hz, 5-10 ms) and a 125-145 -> 70 Hz body, muffled by a damp pad of moss (a soft squelch rising from 300-380 Hz to about 0.9 kHz), with 30 to 100 crackling leaf grains (1.2-8 kHz) and a few twigs (0.4-1.5 kHz). The landing adds a thud and the leaves settling. |
+| Wild West Heist | `step_frontier_*`, `land_frontier_*` | The dry, dusty roof boards of a wooden boxcar: a plank knock (about 300 / 640 / 1120 / 1950 Hz), the hollow car under it booming low (115-135 Hz, ringing 50-110 ms), 20 to 60 dust and grit grains (1.5-7.5 kHz), and often a loose roofwalk board clacking a moment later. The landing adds a thud and a puff of dust. |
+| Neon City | `step_neon_*`, `land_neon_*` | A wet steel rooftop: a sheet-metal panel's dull ring (plate modes from f11 230-270 Hz, damped by the water on it), a 135-155 -> 80 Hz body, the boot slapping the puddle (0.6-6 kHz), 16 to 61 droplets spraying off with a few small bubbles, in a short open reverb. The landing adds a thud and the puddle thrown up. |
 
 ## Player: movement
 

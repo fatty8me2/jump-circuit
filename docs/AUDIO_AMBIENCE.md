@@ -17,7 +17,7 @@ python tools/gen_ambience.py --only=reef  # only files whose name contains "reef
 python tools/gen_ambience.py --verify     # only check the files on disk
 ```
 
-* Needs Python 3, numpy and soundfile. Generating everything takes about 6 minutes.
+* Needs Python 3, numpy and soundfile. Generating everything takes about 8 minutes.
 * Deterministic: every clip has its own RNG (`SEED` + CRC of its name). libsndfile gives each
   Ogg stream a random serial number, so the generator pins the serial and rewrites the page
   CRCs, which makes re-runs bit-identical.
@@ -28,19 +28,19 @@ target, peak under -3 dBFS, and less than 35 % of the energy below 80 Hz. It als
 loop seam on the *decoded* file: the sample step and the curvature across the wrap must be no
 larger than ordinary ones inside the file, and the level of the last 50 ms must match the first
 50 ms. For **one-shots**: 44.1 kHz mono, 0.2-10 s, peak about -3 dBFS, silent first and last
-samples. It fails on missing or stray `amb_*` files and when the total goes over 26 MB.
+samples. It fails on missing or stray `amb_*` files and when the total goes over 34 MB.
 
 ## Formats and levels
 
 | Group     | Files                            | Format                         | Level |
 |-----------|----------------------------------|--------------------------------|-------|
-| Beds      | `amb_<theme>.ogg` (+ layers)     | Ogg Vorbis, 32 kHz stereo      | -24 to -27 dBFS RMS (title -30; the glacier and desert storm layers, the manor's tower and the carrier's island are 1 dB above their base beds, and the armada's flagship 1 dB below, as the storm breaks); a memoryless soft knee holds peaks under -4 dBFS; 40 Hz high-pass, 6-9 kHz low-pass |
+| Beds      | `amb_<theme>.ogg` (+ layers)     | Ogg Vorbis, 32 kHz stereo      | -24 to -27 dBFS RMS (title -30; the glacier and desert storm layers, the manor's tower, the carrier's island, Sakura Peaks' keep and the frontier train's engine are 1 dB above their base beds, and the armada's flagship 1 dB below, as the storm breaks); a memoryless soft knee holds peaks under -4 dBFS; 40 Hz high-pass, 6-9 kHz low-pass |
 | One-shots | `amb_<theme>_<event>_<n>.ogg`    | Ogg Vorbis, 44.1 kHz mono      | peak normalised to -3 dBFS; the runtime plays them 8-22 dB down |
 
-One-shots are Ogg rather than WAV to keep within the size budget: the 223 clips add up to about
-790 s, which would be about 70 MB as 44.1 kHz 16-bit WAV, against 6.3 MB as Ogg. Nothing is
-timing-critical, so Ogg's decode latency doesn't matter. Total size: about 23.9 MB (26 beds 17.6 MB,
-223 one-shots 6.3 MB).
+One-shots are Ogg rather than WAV to keep within the size budget: the 292 clips add up to about
+1090 s, which would be about 96 MB as 44.1 kHz 16-bit WAV, against 8.5 MB as Ogg. Nothing is
+timing-critical, so Ogg's decode latency doesn't matter. Total size: about 30.9 MB (34 beds 22.5 MB,
+292 one-shots 8.5 MB).
 
 The beds sit well under the music and effects. They are rolled off at both ends, so there is
 no masking sub rumble and no fizzy top that tires the ear over a long session.
@@ -71,7 +71,12 @@ the score) and by the title diorama (`"title"`). An unknown theme builds a silen
   Pass (`amb_glacier_storm`) and the sandstorm reaches Scarab Sands (`amb_desert_storm`). Phantom
   Manor climbs into its bell tower (`amb_manor_tower`), the storm breaks as Storm Armada reaches
   the flagship (`amb_armada_flagship`), Sugar Rush rises into the cotton-candy clouds
-  (`amb_candy_high`) and the wind howls round Super Carrier's island (`amb_carrier_island`). Near
+  (`amb_candy_high`) and the wind howls round Super Carrier's island (`amb_carrier_island`). The
+  wind, the banners and a great bronze bell take over at Sakura Peaks' castle keep
+  (`amb_sakura_keep`), Jungle Temple opens out into the wind at the top of the pyramid with the
+  waterfall below (`amb_jungle_top`), the engine comes near as the Wild West Heist reaches the
+  locomotive (`amb_frontier_loco`) and the gale rises round Neon City's spire as the rain thins
+  (`amb_neon_spire`). Near
   the top of the Final Ascent, `amb_ascent_high` takes over: stronger, howling wind with the city
   further away.
 * **One-shots:** each event counts down a random interval. When it is due, it plays with
@@ -118,6 +123,14 @@ the score) and by the title diorama (`"title"`). An unknown theme builds a silen
 | `amb_candy_high.ogg` | 64 s | Up among the cotton-candy clouds: a stronger, airier breeze, half again as many music-box notes, twice the sparkles, and the chocolate river far below and duller. Crossfades in from 30 % to 95 % of the course. |
 | `amb_carrier.ogg` | 64 s | The flight deck of a supercarrier on a bright day. Wind over the deck that never drops away (the ship steams into the wind), with a soft 380-700 Hz moan. The sea far below: swells running along the hull and slapping it every 3-6 s, a continuous wash, the bow wave and the wake's foam, dulled at 2.8 kHz. Jets idling on deck: two turbine whines (3150 and 3420 Hz with a lower spool) drifting in and out, and their roar. The ship's machinery and ventilation humming up through the deck (60 Hz harmonics). |
 | `amb_carrier_island.ogg` | 64 s | Near the top of the island: the wind stronger, gustier and howling round the masts and antennas (a Q 10 whistle, 700 -> 1500 Hz), halyard clips tinking against the mast in the gusts, a flag flogging, the radar turning overhead (its 400 Hz motor and a whoosh of air each time the array sweeps by, 16 times a loop), and the sea and jets further below. It is 1 dB louder than the base bed. Crossfades in from 50 % to 95 % of the course. |
+| `amb_sakura.ogg` | 64 s | A mountain temple at dusk. Wind sighing through the pines (a broad 330-620 Hz resonance) and the bamboo leaves rustling with it (a soft rustle and a chopped flutter). Bamboo culms knocking together in the gusts (hollow tubes: three short modes and a click, one to three clacks at a time). Wind chimes on the eaves (metal tubes on D minor pentatonic, from D5) set going by the gusts. The monks' chant drifting up from a temple below: **no words**, a drone of five low voices (two on D2 a hair apart, A2, D3 and A1) held on one vowel (fixed 420 / 820 Hz formants), each breathing in its own time so the drone never breaks. The koi pond's inflow babbling (a 400-3000 Hz babble and 500 small bubbles). Four evening crickets (the manor's model). |
+| `amb_sakura_keep.ogg` | 64 s | The castle keep: a stronger, higher wind (a Q 8 howl, 560 -> 1150 Hz), banners flogging on the roof (the canvas model, every 3-7 s), the great bronze bell humming as the gusts catch it (its D3 partials, each a beating pair), more chimes, the chant and the bamboo further below, two crickets, no pond. It is 1 dB louder than the base bed. Crossfades in from 50 % to 95 % of the course. |
+| `amb_jungle.ogg` | 64 s | Deep rainforest. The insect chorus: six cicada-like drones (3.2-7 kHz tones and bands buzzed at 90-220 Hz, each singing in stretches) and four katydids ticking (2-3 pulses of 5-9 kHz noise, 1.5-3.5 calls a second). About 110 runs of tree frogs (whistled 2-3.2 kHz peeps and harmonic 600-950 Hz quarks). 320 drips (plinks into puddles and taps on broad leaves). A waterfall off to one side (an 80-2600 Hz roar and its spray). A light breeze in the canopy. About 26 far bird calls (the one-shot species dulled at 4.5 kHz). Thunder rolling 3.5-5 km away a couple of times a loop. |
+| `amb_jungle_top.ogg` | 64 s | The top of the pyramid: open air and a real wind (a soft 380-760 Hz howl), the waterfall below (darker, to 1.5 kHz, and louder), half the insects, fewer frogs, drips and birds. Crossfades in from 50 % to 95 % of the course. |
+| `amb_frontier.ogg` | 64 s | Riding a steam train through a canyon. Clickety-clack: once a second the trucks of two cars cross a rail joint ("da-dum, da-dum": four wheel thumps, each a 140 -> 70 Hz knock with a short steel ring 0.9-3.6 kHz), from our car and two cars further along (quieter, duller); the loop point sits in the quiet between joints. The cars rolling (a 70-700 Hz rumble and a wheel roar). The locomotive far ahead, dulled at 1.1 kHz: eight exhaust chuffs a second (two turns of the drivers), unevenly accented. Canyon wind whistling round the cars (480-900 Hz). The wooden cars creaking every 3-7 s. A long, canyon-like reverb with a 70 ms predelay. |
+| `amb_frontier_loco.ogg` | 64 s | On the engine: the chuffs loud and bright, steam hissing from the valves (2.5-8 kHz), the firebox roar, the side rods clanking twice a second, and the bell (G) rung 10-14 times for a crossing once a loop; the wheels and wind further back. It is 1 dB louder than the base bed. Crossfades in from 50 % to 95 % of the course. |
+| `amb_neon.ogg` | 64 s | Rooftops in a downpour. Rain: a 1.5-9 kHz hiss, 3200 drops a second (clicks 1-7 kHz), the heavier ones pinging on sheet metal (four modes, 0.9-4.8 kHz) and slapping into puddles. Gutters overflowing and a down pipe gurgling (300 low bubbles). The city's traffic hum (60-1100 Hz). 24 hover cars whooshing past (a 180-280 Hz turbine hum dropping in pitch as it passes, under a rush of air, panning across). Three neon signs buzzing (120 Hz harmonics and gas fizz), each flickering in its own way. The club in the basement, muffled through the floors: a 120 bpm kick (under 180 Hz) and an offbeat bass line in E minor (E E C D, a bar each, under 220 Hz). A light breeze between the buildings. |
+| `amb_neon_spire.ogg` | 64 s | The spire: a gale howling round it (a Q 9 whistle, 600 -> 1300 Hz), the rain thinner (900 drops a second), the city far below (to 600 Hz), 14 hover cars, one faint sign, no gutters and no club. Crossfades in from 50 % to 95 % of the course. |
 
 ## One-shots
 
@@ -204,6 +217,34 @@ the score) and by the title diorama (`"title"`). An unknown theme builds a silen
 | `amb_carrier_announce_1..3` | Deck announcements as a far-off public-address horn renders them: **no words**, only tone bursts of one fixed, buzzy timbre (no formants moving, so nothing vowel-like) that follow a speaking contour: pitch and level rising and falling in phrases of syllable-length bursts, band-limited to a horn (450-2800 Hz, a 1.1 kHz resonance), lightly driven, with slap echoes off the island and hull. 1 opens with a two-tone chime; 2 is a radio call with a squelch in and out; 3 opens with a bosun's-call whistle swelling up and trilling. |
 | `amb_carrier_heli_1..2` | A helicopter passing along the deck 60-110 m away: rotor slaps about 18 a second, the tail rotor's tone and a faint turbine whine, flown past by the Doppler model (the two go opposite ways). |
 | `amb_carrier_gull_1..3` | The Balance Works gulls, re-rolled (variants 1, 3 and 4 of theirs). |
+| `amb_sakura_bell_1..2` | A temple bell far across the valley (a bonsho: seven partials 1 : 1.62 : 2.07 : 2.73 : 3.42 : 4.25 : 5.1, each a slowly beating pair, ringing 9 s), struck with a wooden beam (a soft thud, no metallic click). 1 is on D3 and struck again as the hum fades; 2 is on A2. |
+| `amb_sakura_shishi_1..3` | A shishi-odoshi: water trickling into the bamboo arm (a babble and small bubbles), a gush as it tips, and the hollow "tock" of the bamboo on its stone, echoing off the far side of the valley. 2 comes in as it tips; in 3 it rocks back for a second, softer knock. |
+| `amb_sakura_chime_1..3` | Wind chimes: metal tubes (free-bar partials) on D minor pentatonic from D5. 1 is a few lazy strikes; 2 a gust that sets them all going; 3 a glass wind bell (its clapper tinkling 3-6 times, D6 upwards) with its paper strip fluttering. |
+| `amb_sakura_cicada_1..3` | Evening cicadas: a ringing "kana-kana-kana", 9-12 notes a second around 4.2-5.2 kHz, each buzzing (180-240 Hz) and sagging a little, the run slowing and sinking as it dies away. In 3 another answers further off. They fade out as the course climbs (chance 100 % -> 20 %). |
+| `amb_sakura_bamboo_1..3` | A gust through the bamboo grove: leaves rushing and culms knocking (6-14 hollow clacks from three culms, following the gust). In 2 a tall culm creaks as it bends; 3 is mostly knocks as the wind drops. |
+| `amb_sakura_bird_1..2` | 1 is a bush warbler: a long rising whistle and a quick, bright "ho-ke-kyo". 2 is a crow heading home at dusk: three hoarse "kaa"s (the hawk model, rough and low). |
+| `amb_sakura_koi_1..2` | A koi at the pond's surface: 1 a gulp (a low 250-380 Hz plop), 2 a tail slap; then 6-14 drips and ripples. |
+| `amb_jungle_bird_1..3` | Rainforest birds, in A minor: 1 a bellbird's loud "bonk"s (a clangorous note on A5 or E5, two to four times); 2 an oropendola's liquid gurgles ending in a falling "glooop"; 3 a tinamou's tremulous whistles stepping down A5, G5, E5, D5. |
+| `amb_jungle_parrot_1..3` | Parrots (a harsh, rough harmonic voice with a jittering pitch through a bright band, plus a noisy edge): 1 two or three squawks; 2 a flock flying over, squawking, louder as they pass; 3 a macaw's long, raucous "raaa-aah", twice. |
+| `amb_jungle_toucan_1..3` | Toucans croaking "kree-ok" (a buzzy 110-150 Hz pulse train through two formants that rise and fall). 2 is answered by a second, duller bird; 3 starts with a bill clatter (fast wooden taps). |
+| `amb_jungle_howler_1..2` | Apes whooping far off through the canopy, **gibbon-like and cheerful, not menacing**: a run of rising "hoo" notes that climb and quicken into a whoop. In 2 a second, higher voice joins in. Dulled at 2.6 kHz in a 2.4 s reverb. |
+| `amb_jungle_drip_1..3` | 1 is a shower shaken off the canopy (30-55 drops on broad leaves and in a puddle, thinning out); 2 a few big, slow drops into a pool; 3 a branch shaking: a rustle and a burst of drops. |
+| `amb_jungle_insect_1..2` | 1 is a cicada winding up: its buzz swells and climbs (3.2-4.8 kHz), holds and sputters out. 2 is katydids: bursts of quick rasping ticks, one answering another. |
+| `amb_jungle_thunder_1..2` | Thunder over the hills (the physical model, 2.5-3.5 km away; 2 with a restrike), in a 3 s reverb. |
+| `amb_frontier_whistle_1..2` | The engine's chime whistle (three pipes on a G major chord, G4 B4 D5, each a breathy harmonic tone that sags as the valve opens) echoing off the canyon walls: 1 a long blow and a short one; 2 the crossing call (long, long, short, long). |
+| `amb_frontier_hawk_1..3` | The Scarab Sands hawks, re-rolled (their own seeds). |
+| `amb_frontier_creak_1..3` | 1 is the car body working (two or three timber creaks); 2 slack running in along the train (coupler after coupler clanking, each further off); 3 a boxcar door rattling in its track. |
+| `amb_frontier_steam_1..2` | 1 is the cylinder cocks blowing down (4-7 sharp bursts of steam in time with the drivers); 2 the safety valve lifting (a long, fluttering roar of steam). |
+| `amb_frontier_bell_1..2` | The locomotive's bell on G (bell partials on G4, the minor tierce held down): 1 rung steadily for a crossing; 2 three strokes, the rope let go. |
+| `amb_frontier_coyote_1..2` | Coyotes far across the canyon: 1 a few yips and a long howl (rising, wavering, falling); 2 a pack, howls overlapping and yips among them. |
+| `amb_frontier_squeal_1..2` | Wheel flanges squealing round a curve: a thin screech hopping between three wheel modes (1.8-4.2 kHz), swelling and dying away. The runtime keeps it quiet. |
+| `amb_neon_hover_1..3` | Hover cars on the traffic lanes (an electric turbine hum and whine over a rush of air, through the Doppler model): 1 one passing; 2 a fast one (85-110 m/s); 3 three in a stream. |
+| `amb_neon_siren_1..2` | A siren far down in the streets, **softened** by distance and the rain (dulled at 1.3 kHz, a 3 s reverb, slap echoes, fading in and out): 1 a slow two-tone, B4 / E5; 2 a lazy wail rising and falling. |
+| `amb_neon_drone_1..2` | A delivery drone passing overhead: four small rotors (230-270 Hz) a little apart, flown past by the Doppler model; in 2 it chirps a two-note status beep (B5, E6) as it goes over. |
+| `amb_neon_spark_1..3` | Neon in the rain: 1 a tube sputtering (bursts of 120 Hz buzz and crackle); 2 a transformer arcing (a sharp crack and a sizzle dying away over a hum surge); 3 a sign flickering on (relay ticks, failed sputters, then the buzz catches). |
+| `amb_neon_gutter_1..3` | 1 is a gutter overflowing onto a metal awning (a pouring stream and 60-100 drops pinging the tin); 2 a storm drain gurgling (low glugs over a rush); 3 drips on a tin can, slowing. |
+| `amb_neon_horn_1..2` | A hover car's horn down the street (a soft, synthy E4 + G4 chord through a horn resonance), echoing between the towers: 1 a quick double tap; 2 one long blare and a short one. |
+| `amb_neon_thunder_1..2` | Thunder above the city (1.8-3 km; 2 with a restrike). |
 
 ## Scheduling tables (`Soundscape.THEMES`)
 
@@ -361,6 +402,54 @@ dove every 25-50 s (-22 to -15 dB).
 | catapult | 25-55 | -16 to -10 | 0.05 | 60-150 | -5 to 5 | chance 100 % -> 60 % |
 | heli | 45-100 | -16 to -11 | 0.03 | 90-180 | 10-60 | travel 90 m |
 
+**Sakura Peaks** (bed `amb_sakura`, layer `amb_sakura_keep` from 0.5 to 0.95)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| bamboo | 7-16 | -20 to -13 | 0.08 | 6-20 | 0-8 | |
+| chime | 8-18 | -20 to -13 | 0 (in tune) | 4-12 | 2-6 | |
+| cicada | 9-20 | -20 to -13 | 0.04 | 10-30 | 3-12 | answer 30 %, chance 100 % -> 20 % (dusk falls) |
+| shishi | 14-30 | -18 to -12 | 0.03 | 10-25 | -6 to 2 | chance 100 % -> 30 % |
+| koi | 18-40 | -22 to -15 | 0.06 | 6-18 | -8 to 0 | chance 100 % -> 20 % |
+| bird | 20-45 | -18 to -12 | 0.04 | 20-50 | 5-20 | answer 25 % |
+| bell | 45-100 | -16 to -10 | 0 (in tune) | 80-160 | -20 to 30 | chance 60 % -> 100 % |
+
+**Jungle Temple** (bed `amb_jungle`, layer `amb_jungle_top` from 0.5 to 0.95)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| bird | 6-14 | -18 to -10 | 0 (in tune) | 15-40 | 4-20 | answer 35 % |
+| drip | 8-18 | -22 to -15 | 0.08 | 2-8 | 1-6 | chance 100 % -> 40 % |
+| parrot | 10-24 | -18 to -11 | 0.06 | 15-45 | 8-25 | travel 15 m |
+| toucan | 12-28 | -18 to -11 | 0.05 | 15-40 | 6-20 | answer 30 % |
+| insect | 15-35 | -20 to -13 | 0.05 | 8-25 | 2-12 | chance 100 % -> 50 % |
+| howler | 35-80 | -16 to -10 | 0.04 | 60-150 | 0-30 | answer 40 %, chance 100 % -> 70 % |
+| thunder | 40-90 | -16 to -10 | 0.05 | 200-400 | 100-300 | |
+
+**Wild West Heist** (bed `amb_frontier`, layer `amb_frontier_loco` from 0.5 to 0.95)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| creak | 6-14 | -20 to -13 | 0.08 | 4-14 | -3 to 2 | |
+| steam | 12-28 | -20 to -13 | 0.06 | 20-60 | -2 to 4 | chance 60 % -> 100 % |
+| hawk | 14-32 | -18 to -11 | 0.05 | 40-90 | 20-50 | answer 20 % |
+| squeal | 25-55 | -22 to -16 | 0.04 | 20-50 | -4 to 0 | |
+| whistle | 30-70 | -16 to -10 | 0 (in tune) | 60-140 | 0-10 | |
+| bell | 30-65 | -18 to -12 | 0 (in tune) | 40-100 | 0-6 | chance 30 % -> 100 % |
+| coyote | 45-100 | -18 to -12 | 0.04 | 120-250 | 10-60 | answer 30 %, chance 100 % -> 50 % |
+
+**Neon City** (bed `amb_neon`, layer `amb_neon_spire` from 0.5 to 0.95)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| gutter | 7-16 | -22 to -15 | 0.08 | 3-10 | -3 to 3 | chance 100 % -> 30 % |
+| hover | 8-20 | -16 to -10 | 0.06 | 20-60 | -10 to 20 | travel 50 m, chance 100 % -> 60 % |
+| spark | 10-24 | -22 to -14 | 0.1 | 4-14 | -2 to 6 | |
+| drone | 25-55 | -18 to -12 | 0.06 | 10-25 | 3-15 | travel 40 m |
+| horn | 30-70 | -20 to -14 | 0 (in tune) | 60-150 | -40 to 10 | chance 100 % -> 40 % |
+| thunder | 40-90 | -16 to -10 | 0.05 | 200-400 | 100-300 | |
+| siren | 50-110 | -20 to -14 | 0.03 | 150-300 | -120 to -30 (the streets) | chance 100 % -> 50 % |
+
 **The Final Ascent** (bed `amb_ascent`, layer `amb_ascent_high` from 0.3 to 0.95)
 
 | Event | every | dB | pitch +- | dist | height | extra |
@@ -376,6 +465,7 @@ dove every 25-50 s (-22 to -15 dB).
 soundscape, then builds every theme's soundscape headless and checks three things. First, each
 bed and layer loads as a looping Ogg of 45 s or more and plays on the Ambience bus with
 `PROCESS_MODE_ALWAYS`. Second, every event has clips and plays in 3D on the Ambience bus. Third,
-every layer (reef, xeno, volcano, glacier, desert, manor, armada, candy, carrier, ascent) has
+every layer (reef, xeno, volcano, glacier, desert, manor, armada, candy, carrier, sakura, jungle,
+frontier, neon, ascent) has
 taken over at the end of the course. In the real Coral Depths level, reaching the last checkpoint
 starts easing the deep bed in.

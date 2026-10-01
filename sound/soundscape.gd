@@ -5,8 +5,10 @@ extends Node
 ## the deep, Xeno Wilds grows wilder, Cinder Peak roars nearer the crater, the blizzard over
 ## Frostbite Pass and the sandstorm over Scarab Sands close in, Phantom Manor climbs into its bell
 ## tower, the storm breaks over Storm Armada's flagship, Sugar Rush rises into the cotton-candy
-## clouds, the wind howls round Super Carrier's island, the Final Ascent's wind picks up near the
-## summit), plus one-shots - birds, gulls,
+## clouds, the wind howls round Super Carrier's island, the wind and a great bell take over at
+## Sakura Peaks' castle keep, Jungle Temple opens out at the top of the pyramid, the engine
+## comes near on the Wild West Heist, the gale rises round Neon City's spire, the Final Ascent's
+## wind picks up near the summit), plus one-shots - birds, gulls,
 ## far-off clanks, whale song - scheduled at random and placed in 3D around the listener.
 ## Clips come from tools/gen_ambience.py. The beds keep playing while the game is paused (so
 ## the pause muffle on the Ambience bus is heard); the one-shot schedule pauses with the tree.
@@ -284,6 +286,86 @@ const THEMES: Dictionary = {
 				"dist": Vector2(60.0, 150.0), "height": Vector2(-5.0, 5.0), "chance": Vector2(1.0, 0.6)},
 			{"clip": "amb_carrier_heli", "every": Vector2(45.0, 100.0), "db": Vector2(-16.0, -11.0), "pitch": 0.03,
 				"dist": Vector2(90.0, 180.0), "height": Vector2(10.0, 60.0), "travel": 90.0},
+		],
+	},
+	"sakura": {
+		"bed": "amb_sakura", "bed_db": 0.0,
+		"layer": "amb_sakura_keep", "from": 0.5, "to": 0.95,
+		"events": [
+			{"clip": "amb_sakura_bamboo", "every": Vector2(7.0, 16.0), "db": Vector2(-20.0, -13.0), "pitch": 0.08,
+				"dist": Vector2(6.0, 20.0), "height": Vector2(0.0, 8.0)},
+			{"clip": "amb_sakura_chime", "every": Vector2(8.0, 18.0), "db": Vector2(-20.0, -13.0), "pitch": 0.0,
+				"dist": Vector2(4.0, 12.0), "height": Vector2(2.0, 6.0)},
+			{"clip": "amb_sakura_cicada", "every": Vector2(9.0, 20.0), "db": Vector2(-20.0, -13.0), "pitch": 0.04,
+				"dist": Vector2(10.0, 30.0), "height": Vector2(3.0, 12.0), "answer": 0.3, "chance": Vector2(1.0, 0.2)},
+			{"clip": "amb_sakura_shishi", "every": Vector2(14.0, 30.0), "db": Vector2(-18.0, -12.0), "pitch": 0.03,
+				"dist": Vector2(10.0, 25.0), "height": Vector2(-6.0, 2.0), "chance": Vector2(1.0, 0.3)},
+			{"clip": "amb_sakura_koi", "every": Vector2(18.0, 40.0), "db": Vector2(-22.0, -15.0), "pitch": 0.06,
+				"dist": Vector2(6.0, 18.0), "height": Vector2(-8.0, 0.0), "chance": Vector2(1.0, 0.2)},
+			{"clip": "amb_sakura_bird", "every": Vector2(20.0, 45.0), "db": Vector2(-18.0, -12.0), "pitch": 0.04,
+				"dist": Vector2(20.0, 50.0), "height": Vector2(5.0, 20.0), "answer": 0.25},
+			{"clip": "amb_sakura_bell", "every": Vector2(45.0, 100.0), "db": Vector2(-16.0, -10.0), "pitch": 0.0,
+				"dist": Vector2(80.0, 160.0), "height": Vector2(-20.0, 30.0), "chance": Vector2(0.6, 1.0)},
+		],
+	},
+	"jungle": {
+		"bed": "amb_jungle", "bed_db": 0.0,
+		"layer": "amb_jungle_top", "from": 0.5, "to": 0.95,
+		"events": [
+			{"clip": "amb_jungle_bird", "every": Vector2(6.0, 14.0), "db": Vector2(-18.0, -10.0), "pitch": 0.0,
+				"dist": Vector2(15.0, 40.0), "height": Vector2(4.0, 20.0), "answer": 0.35},
+			{"clip": "amb_jungle_drip", "every": Vector2(8.0, 18.0), "db": Vector2(-22.0, -15.0), "pitch": 0.08,
+				"dist": Vector2(2.0, 8.0), "height": Vector2(1.0, 6.0), "chance": Vector2(1.0, 0.4)},
+			{"clip": "amb_jungle_parrot", "every": Vector2(10.0, 24.0), "db": Vector2(-18.0, -11.0), "pitch": 0.06,
+				"dist": Vector2(15.0, 45.0), "height": Vector2(8.0, 25.0), "travel": 15.0},
+			{"clip": "amb_jungle_toucan", "every": Vector2(12.0, 28.0), "db": Vector2(-18.0, -11.0), "pitch": 0.05,
+				"dist": Vector2(15.0, 40.0), "height": Vector2(6.0, 20.0), "answer": 0.3},
+			{"clip": "amb_jungle_insect", "every": Vector2(15.0, 35.0), "db": Vector2(-20.0, -13.0), "pitch": 0.05,
+				"dist": Vector2(8.0, 25.0), "height": Vector2(2.0, 12.0), "chance": Vector2(1.0, 0.5)},
+			{"clip": "amb_jungle_howler", "every": Vector2(35.0, 80.0), "db": Vector2(-16.0, -10.0), "pitch": 0.04,
+				"dist": Vector2(60.0, 150.0), "height": Vector2(0.0, 30.0), "answer": 0.4, "chance": Vector2(1.0, 0.7)},
+			{"clip": "amb_jungle_thunder", "every": Vector2(40.0, 90.0), "db": Vector2(-16.0, -10.0), "pitch": 0.05,
+				"dist": Vector2(200.0, 400.0), "height": Vector2(100.0, 300.0)},
+		],
+	},
+	"frontier": {
+		"bed": "amb_frontier", "bed_db": 0.0,
+		"layer": "amb_frontier_loco", "from": 0.5, "to": 0.95,
+		"events": [
+			{"clip": "amb_frontier_creak", "every": Vector2(6.0, 14.0), "db": Vector2(-20.0, -13.0), "pitch": 0.08,
+				"dist": Vector2(4.0, 14.0), "height": Vector2(-3.0, 2.0)},
+			{"clip": "amb_frontier_steam", "every": Vector2(12.0, 28.0), "db": Vector2(-20.0, -13.0), "pitch": 0.06,
+				"dist": Vector2(20.0, 60.0), "height": Vector2(-2.0, 4.0), "chance": Vector2(0.6, 1.0)},
+			{"clip": "amb_frontier_hawk", "every": Vector2(14.0, 32.0), "db": Vector2(-18.0, -11.0), "pitch": 0.05,
+				"dist": Vector2(40.0, 90.0), "height": Vector2(20.0, 50.0), "answer": 0.2},
+			{"clip": "amb_frontier_squeal", "every": Vector2(25.0, 55.0), "db": Vector2(-22.0, -16.0), "pitch": 0.04,
+				"dist": Vector2(20.0, 50.0), "height": Vector2(-4.0, 0.0)},
+			{"clip": "amb_frontier_whistle", "every": Vector2(30.0, 70.0), "db": Vector2(-16.0, -10.0), "pitch": 0.0,
+				"dist": Vector2(60.0, 140.0), "height": Vector2(0.0, 10.0)},
+			{"clip": "amb_frontier_bell", "every": Vector2(30.0, 65.0), "db": Vector2(-18.0, -12.0), "pitch": 0.0,
+				"dist": Vector2(40.0, 100.0), "height": Vector2(0.0, 6.0), "chance": Vector2(0.3, 1.0)},
+			{"clip": "amb_frontier_coyote", "every": Vector2(45.0, 100.0), "db": Vector2(-18.0, -12.0), "pitch": 0.04,
+				"dist": Vector2(120.0, 250.0), "height": Vector2(10.0, 60.0), "answer": 0.3, "chance": Vector2(1.0, 0.5)},
+		],
+	},
+	"neon": {
+		"bed": "amb_neon", "bed_db": 0.0,
+		"layer": "amb_neon_spire", "from": 0.5, "to": 0.95,
+		"events": [
+			{"clip": "amb_neon_gutter", "every": Vector2(7.0, 16.0), "db": Vector2(-22.0, -15.0), "pitch": 0.08,
+				"dist": Vector2(3.0, 10.0), "height": Vector2(-3.0, 3.0), "chance": Vector2(1.0, 0.3)},
+			{"clip": "amb_neon_hover", "every": Vector2(8.0, 20.0), "db": Vector2(-16.0, -10.0), "pitch": 0.06,
+				"dist": Vector2(20.0, 60.0), "height": Vector2(-10.0, 20.0), "travel": 50.0, "chance": Vector2(1.0, 0.6)},
+			{"clip": "amb_neon_spark", "every": Vector2(10.0, 24.0), "db": Vector2(-22.0, -14.0), "pitch": 0.1,
+				"dist": Vector2(4.0, 14.0), "height": Vector2(-2.0, 6.0)},
+			{"clip": "amb_neon_drone", "every": Vector2(25.0, 55.0), "db": Vector2(-18.0, -12.0), "pitch": 0.06,
+				"dist": Vector2(10.0, 25.0), "height": Vector2(3.0, 15.0), "travel": 40.0},
+			{"clip": "amb_neon_horn", "every": Vector2(30.0, 70.0), "db": Vector2(-20.0, -14.0), "pitch": 0.0,
+				"dist": Vector2(60.0, 150.0), "height": Vector2(-40.0, 10.0), "chance": Vector2(1.0, 0.4)},
+			{"clip": "amb_neon_thunder", "every": Vector2(40.0, 90.0), "db": Vector2(-16.0, -10.0), "pitch": 0.05,
+				"dist": Vector2(200.0, 400.0), "height": Vector2(100.0, 300.0)},
+			{"clip": "amb_neon_siren", "every": Vector2(50.0, 110.0), "db": Vector2(-20.0, -14.0), "pitch": 0.03,
+				"dist": Vector2(150.0, 300.0), "height": Vector2(-120.0, -30.0), "chance": Vector2(1.0, 0.5)},
 		],
 	},
 	"ascent": {

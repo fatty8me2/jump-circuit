@@ -31,10 +31,10 @@ SR = ga.SR
 TAU = ga.TAU
 PEAK_DB = ga.SFX_PEAK_DB
 OUT = ga.OUT
-SIZE_BUDGET = 24.0e6
+SIZE_BUDGET = 30.0e6
 
 THEMES = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent", "xeno", "volcano", "glacier", "desert",
-          "manor", "armada", "candy", "carrier")
+          "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon")
 
 # ---------------------------------------------------------------------------
 # clip table: name -> (seconds, loop).  The verifier checks the files against it.
@@ -738,6 +738,76 @@ def surface_hit(theme, r, k, dur):
             place(x, 0.0, thud(t, 90, 42, 0.12, 0.1, harm=(0.3,)), 0.45)
             # the hull's deep answer through the deck
             place(x, 0.005, modes(tv(dur - 0.005), plate_modes(r.uniform(70, 85), 2.0, 0.12, 5, 0.8, r), r, 0.02, hard=400), 0.2)
+    elif theme == "sakura":
+        # polished cypress boards of a temple floor, raised over the stone (a little hollow under
+        # them): a tight, warm knock and a soft scuff of a sock on the polish. Now and then the
+        # floor's clamps chirp underfoot (a nightingale floor), and a landing reaches the stone below
+        wood = modes(t, [(r.uniform(240, 280), 1.0, 0.025), (r.uniform(520, 600), 0.7, 0.016),
+                         (r.uniform(900, 1020), 0.45, 0.01), (r.uniform(1500, 1700), 0.25, 0.006)], r, 0.0)
+        hollow = thud(t, r.uniform(160, 185), r.uniform(140, 160), 0.04, 0.035 + 0.03 * k, harm=(0.25,))
+        both(click(r, dur, 1200, 6000, 0.0012) * 0.5 + 0.8 * wood + 0.6 * hollow + 0.5 * thud(t, 140, 80, 0.03, 0.02))
+        x += 0.12 * noise(r, n, 1500, 7000) * env(t, 0.003, 0.02)
+        if r.random() < 0.35 + 0.4 * k:
+            tc = tv(0.05)
+            chirp = tone(glide(r.uniform(1500, 1900), r.uniform(2300, 2800), tc, 0.03)) * np.sin(np.pi * tc / 0.05) ** 2
+            place(x, r.uniform(0.02, 0.04), taper(chirp), 0.08 + 0.05 * k)
+        x = band(x, None, 10000)
+        if k:
+            place(x, 0.0, thud(t, 100, 50, 0.1, 0.09), 0.6)
+            place(x, 0.0, modes(t, [(r.uniform(320, 380), 1.0, 0.012), (r.uniform(700, 800), 0.6, 0.008),
+                                    (r.uniform(1200, 1400), 0.35, 0.005)], r, 0.0), 0.25)
+        x = space(r, x, 0.9 + 0.3 * k, 0.15 + 0.08 * k, 200, 7000)
+    elif theme == "jungle":
+        # mossy temple stone under leaf litter: the stone's dull, dead knock, muffled by a damp pad of
+        # moss (a soft squelch), and leaves and twigs crackling on top
+        stone = modes(t, [(r.uniform(330, 390), 1.0, 0.01), (r.uniform(680, 780), 0.6, 0.007),
+                          (r.uniform(1150, 1300), 0.35, 0.005)], r, 0.0)
+        body = thud(t, r.uniform(125, 145), 70, 0.04, 0.025 + 0.03 * k, harm=(0.25,))
+        moss = svf(r.standard_normal(n), glide(r.uniform(300, 380), r.uniform(800, 950), t, 0.04 + 0.03 * k), 2.0)
+        moss = unit(moss) * env(t, 0.003, 0.018 + 0.025 * k)
+        both(0.9 * body + 0.35 * stone + 0.5 * moss)
+        litter = np.zeros(n)
+        grains(r, litter, int(30 + 70 * k), 0.0, 0.06 + 0.12 * k, 1200, 8000, 0.0012, 0.004, 1.0, decay=0.03 + 0.06 * k)
+        grains(r, litter, int(4 + 10 * k), 0.005, 0.05 + 0.1 * k, 400, 1500, 0.003, 0.008, 0.6, decay=0.04)   # twigs
+        x += 0.5 * unit(litter)
+        x = band(x, None, 9000)
+        if k:
+            place(x, 0.0, thud(t, 95, 45, 0.1, 0.09), 0.7)
+            x += 0.08 * noise(r, n, 2000, 7000) * env(t, 0.02, 0.1)   # leaves settling
+    elif theme == "frontier":
+        # the roof boards of a wooden boxcar, dry and dusty: a plank knock over the hollow car (its
+        # body booms low), grit scuffing under the boot, and often a loose roofwalk board clacking
+        plank = modes(t, [(r.uniform(280, 330), 1.0, 0.018), (r.uniform(600, 690), 0.65, 0.012),
+                          (r.uniform(1050, 1200), 0.4, 0.008), (r.uniform(1800, 2100), 0.2, 0.005)], r, 0.0)
+        boom = thud(t, r.uniform(115, 135), r.uniform(95, 110), 0.05, 0.05 + 0.06 * k, harm=(0.3, 0.1))
+        both(click(r, dur, 1200, 6000, 0.0015) * 0.6 + 0.7 * plank + 0.6 * boom + 0.5 * thud(t, 150, 85, 0.03, 0.02))
+        grit = np.zeros(n)
+        grains(r, grit, int(20 + 40 * k), 0.0, 0.04 + 0.06 * k, 1500, 7500, 0.0008, 0.003, 1.0, decay=0.02 + 0.03 * k)
+        x += 0.3 * unit(grit)
+        if r.random() < 0.3 + 0.5 * k:
+            board = modes(tv(0.06), [(r.uniform(700, 900), 1.0, 0.008), (r.uniform(1500, 1800), 0.5, 0.005)], r, 0.0)
+            place(x, r.uniform(0.03, 0.06), board, 0.2 + 0.1 * k)
+        x = band(x, None, 10000)
+        if k:
+            place(x, 0.0, thud(t, 90, 45, 0.12, 0.12, harm=(0.3,)), 0.6)
+            x += 0.1 * noise(r, n, 600, 4000) * env(t, 0.01, 0.15)   # a puff of dust
+    elif theme == "neon":
+        # a wet steel rooftop: a sheet-metal panel's dull ring (damped by the water on it), the boot
+        # slapping the puddle and droplets spraying off; the landing splashes and booms the panel
+        plate = modes(t, plate_modes(r.uniform(230, 270), 1.5, 0.03 + 0.03 * k, 8, 0.7, r), r, 0.02, hard=4000)
+        body = thud(t, r.uniform(135, 155), 80, 0.03, 0.022 + 0.03 * k, harm=(0.3,))
+        slap = noise(r, n, 600, 6000) * env(t, 0.001, 0.01 + 0.015 * k)
+        both(click(r, dur, 2000, 9000, 0.001) * 0.35 + 0.45 * plate + 0.7 * body + 0.6 * slap)
+        splash = np.zeros(n)
+        grains(r, splash, int(16 + 45 * k), 0.004, 0.05 + 0.12 * k, 1500, 8000, 0.001, 0.004, 1.0, decay=0.03 + 0.05 * k)
+        for _ in range(int(2 + 6 * k)):
+            place(splash, r.uniform(0.01, 0.05 + 0.15 * k), bubble(r.uniform(1200, 3200), 0.03, 0.004, 0.8), r.uniform(0.3, 0.8))
+        x += 0.5 * unit(splash)
+        x = band(x, None, 11000)
+        if k:
+            place(x, 0.0, thud(t, 95, 45, 0.1, 0.09), 0.6)
+            x += 0.2 * noise(r, n, 800, 7000) * env(t, 0.004, 0.06)   # the puddle thrown up
+        x = space(r, x, 0.5, 0.12, 300, 8000)
     return x
 
 
