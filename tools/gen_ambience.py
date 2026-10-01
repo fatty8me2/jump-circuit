@@ -41,7 +41,7 @@ BED_QUALITY = 0.85    # libsndfile Vorbis compression level (0 best .. 1 smalles
 SHOT_QUALITY = 0.55
 SHOT_PEAK_DB = -3.0
 BED_CEIL = 10.0 ** (-4.0 / 20.0)   # soft-knee ceiling for beds (-4 dBFS)
-SIZE_BUDGET = 26.0e6
+SIZE_BUDGET = 34.0e6
 place = ga.place
 
 
@@ -1884,6 +1884,399 @@ def bed_carrier():
 @bed("amb_carrier_island", -24.0)
 def bed_carrier_island():
     carrier_bed("amb_carrier_island", island=True)
+
+
+# ---- the third new worlds: sakura, jungle, frontier, neon -----------------
+D_MINOR_PENTA = (0, 3, 5, 7, 10)   # D F G A C: Sakura Peaks' score is in D minor pentatonic
+
+
+def dpenta(base, step):
+    """The step-th note of D minor pentatonic above MIDI note `base` (a D)."""
+    octave, degree = divmod(int(step), 5)
+    return ga.mtof(base + 12 * octave + D_MINOR_PENTA[degree])
+
+
+def bamboo_knock(r, f=None, sr=SR):
+    """Two bamboo culms knocking together: a hollow, woody tube (short-lived modes) and a click."""
+    f = f or r.uniform(380.0, 820.0)
+    k = modal([f, f * r.uniform(2.3, 2.6), f * r.uniform(3.9, 4.4)], [1.0, 0.45, 0.2], [0.035, 0.016, 0.008], 0.15, sr, r=r)
+    return unit(k) + 0.35 * noise_hit(r, 0.15, 1500.0, min(9000.0, 0.4 * sr), 0.001, sr)
+
+
+def sakura_bed(name, keep):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    t = np.arange(n) / BSR
+    # wind through the pines and bamboo: a soft sigh on the slopes, a stronger, higher wind round
+    # the castle keep
+    gust = gusts(r, n, 0.08, bias=0.4 if keep else -0.3) * (0.7 + 0.3 * cbeat(n, 3, r.uniform(0, TAU)))
+    wind_layer(mix, "wind", r, gust, 110.0, 2800.0 if keep else 1800.0, howl=(560.0, 1150.0) if keep else (330.0, 620.0),
+               howl_q=8.0 if keep else 3.0, howl_gain=0.7 if keep else 0.35, body_gain=0.9 if keep else 0.5, howl_pow=1.5)
+    # bamboo leaves: a soft rustle and a flutter, both rising with the gusts
+    for ch in range(2):
+        g = 0.1 + 0.9 * np.roll(gust, int(ch * 0.5 * BSR))
+        soft = cband(r.standard_normal(n), 900.0, 5500.0, 3)
+        chop = 0.3 + 0.7 * (0.5 + 0.5 * np.tanh(1.8 * smooth(r, n, 14.0, BSR)))
+        flutter = cband(r.standard_normal(n), 1600.0, 7000.0, 3) * chop
+        chans = np.zeros((n, 2))
+        chans[:, ch] = (rmsn(soft) * 0.6 + rmsn(flutter) * 0.5) * g ** 1.5
+        mix.add_loop("leaves", chans)
+    # culms knocking together in the gusts, one to three hollow clacks at a time
+    for tb in density_times(r, T, 18 if keep else 26, gust ** 2 + 0.05):
+        f = r.uniform(380.0, 820.0)
+        for j in range(int(r.integers(1, 4))):
+            mix.add("knocks", tb + j * r.uniform(0.08, 0.2), bamboo_knock(r, f * r.uniform(0.97, 1.03), BSR),
+                    gain=r.uniform(0.4, 1.0), pan=r.uniform(-0.8, 0.8), rev=0.4)
+    # wind chimes on the eaves, set going by the gusts (metal tubes on D minor pentatonic)
+    for tb in density_times(r, T, 22 if keep else 14, gust ** 3 + 0.03):
+        for j in range(int(r.integers(2, 6))):
+            mix.add("chimes", tb + j * r.uniform(0.1, 0.35), glock(r, dpenta(74, r.integers(0, 8)), 2.5, 1.4, BSR),
+                    gain=r.uniform(0.3, 1.0), pan=r.uniform(-0.5, 0.5) + (0.3 if keep else -0.3), rev=0.5)
+    # the monks' chant from a temple far below: a wordless drone of low voices on D and A, held on
+    # one vowel (fixed formants, so nothing word-like), each voice breathing in its own time so the
+    # drone never breaks
+    for f0, pan in ((73.42, -0.3), (73.6, 0.25), (110.0, -0.1), (146.83, 0.35), (55.0, 0.0)):
+        phrases = int(r.integers(6, 9))
+        breath = 0.5 + 0.5 * np.tanh(5.0 * (np.cos(TAU * phrases * t / T + r.uniform(0, TAU)) + 0.6))
+        voice = np.zeros(n)
+        for k in range(1, 16):
+            fk = f0 * k
+            g = (resonance(420.0, fk, 3.0) + 0.6 * resonance(820.0, fk, 4.0) + 0.02) / k ** 0.3
+            voice += g * csine(fk, n, phase=r.uniform(0, TAU))
+        swell = 0.6 + 0.4 * cbeat(n, 2, r.uniform(0, TAU))
+        mix.add_loop("chant", st(cband(rmsn(voice), None, 1400.0, 2) * breath * swell, pan) * 0.3, rev=0.9)
+    if keep:
+        # banners flogging on the keep's roof, and the great bronze bell humming as the gusts catch it
+        for tb in spaced_times(r, T, 3.0, 7.0):
+            mix.add("banners", tb, flap(r, r.uniform(1.6, 3.2), r.uniform(4.0, 7.0), BSR), gain=r.uniform(0.4, 1.0),
+                    pan=r.uniform(-0.7, 0.7), rev=0.3)
+        g = np.roll(gust, int(1.5 * BSR)) ** 2
+        hum = sum(a * (csine(146.83 * q - 0.35, n) + csine(146.83 * q + 0.35, n))
+                  for q, a in ((0.5, 0.4), (1.0, 1.0), (1.62, 0.4), (2.07, 0.5), (2.73, 0.25), (3.42, 0.15)))
+        mix.add_loop("bell", st(hum * (0.25 + 0.75 * g), 0.2), rev=0.5)
+        crickets(mix, "crickets", r, 2)
+        levels = {"wind": 0.0, "leaves": -7.0, "banners": -8.0, "bell": -14.0, "chimes": -12.0, "knocks": -16.0,
+                  "chant": -20.0, "crickets": -25.0}
+    else:
+        # the koi pond's inflow: a little stream babbling in, and small bubbles
+        for ch in range(2):
+            babble = cband(r.standard_normal(n), 400.0, 3000.0, 2) * (0.5 + 0.5 * np.abs(smooth(r, n, 10.0, BSR)))
+            chans = np.zeros((n, 2))
+            chans[:, ch] = rmsn(babble) * (0.6 if ch == 0 else 0.35)
+            mix.add_loop("pond", chans, rev=0.3)
+        for tb in r.uniform(0, T, 500):
+            rmm = np.exp(r.uniform(0.0, np.log(3.5)))
+            mix.add("pond", tb, bubble(r, 3260.0 / rmm, 0.003 + 0.003 * rmm, r.uniform(0.2, 0.6)),
+                    gain=r.uniform(0.05, 0.2), pan=r.uniform(-0.6, 0.1), rev=0.3)
+        crickets(mix, "crickets", r, 4)
+        levels = {"leaves": 0.0, "wind": -3.0, "pond": -8.0, "chant": -12.0, "chimes": -14.0, "knocks": -15.0,
+                  "crickets": -19.0}
+    mix.render(BEDS[name][1], levels, t60=2.2, damp=2800.0, wet=0.35, predelay=0.04, hp_hz=40.0, lp_hz=8500.0)
+
+
+@bed("amb_sakura", -26.0)
+def bed_sakura():
+    sakura_bed("amb_sakura", keep=False)
+
+
+@bed("amb_sakura_keep", -25.0)
+def bed_sakura_keep():
+    sakura_bed("amb_sakura_keep", keep=True)
+
+
+def jungle_bed(name, top):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    t = np.arange(n) / BSR
+    # a breeze in the canopy (open air and a real wind at the top of the pyramid)
+    gust = gusts(r, n, 0.07, bias=0.3 if top else -0.5) * (0.7 + 0.3 * cbeat(n, 2, r.uniform(0, TAU)))
+    wind_layer(mix, "wind", r, gust, 120.0, 3000.0, howl=(380.0, 760.0) if top else None, howl_q=4.0, howl_gain=0.35,
+               body_gain=1.0 if top else 0.35, howl_pow=1.5)
+    for ch in range(2):
+        g = 0.15 + 0.85 * np.roll(gust, int(ch * 0.4 * BSR))
+        chop = 0.3 + 0.7 * (0.5 + 0.5 * np.tanh(1.5 * smooth(r, n, 12.0, BSR)))
+        leaves = cband(r.standard_normal(n), 1200.0, 6500.0, 3) * chop
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(leaves) * g ** 1.5
+        mix.add_loop("canopy", chans)
+    # the waterfall: a far, steady roar off to one side (from the top it is below: darker, nearer)
+    for ch in range(2):
+        roar = cband(pink(r, n, BSR, slope=-0.6), 80.0, 1500.0 if top else 2600.0, 2) * \
+            (0.85 + 0.15 * np.tanh(smooth(r, n, 0.2, BSR)))
+        spray = cband(r.standard_normal(n), 1500.0, 5000.0, 2) * (0.7 + 0.3 * np.abs(smooth(r, n, 3.0, BSR)))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = (rmsn(roar) + rmsn(spray) * (0.08 if top else 0.15)) * (1.0 if ch == 0 else 0.7)
+        mix.add_loop("waterfall", chans)
+    # the insect chorus: cicada-like drones (a tone buzzed by the tymbal, each singing in stretches)
+    # and katydids ticking in rhythm
+    for _ in range(3 if top else 6):
+        f = r.uniform(3200.0, 7000.0)
+        am = 0.5 + 0.5 * csine(r.uniform(90.0, 220.0), n, phase=r.uniform(0, TAU))
+        on = cbeat(n, int(r.integers(2, 6)), r.uniform(0, TAU)) ** 2
+        s = csine(f, n) * 0.6 + rmsn(cband(r.standard_normal(n), f * 0.92, f * 1.08, 2)) * 0.4
+        mix.add_loop("insects", st(s * am ** 2 * on, r.uniform(-0.9, 0.9)) * r.uniform(0.4, 1.0), rev=0.3)
+    for _ in range(2 if top else 4):
+        rate = max(1.0, np.round(r.uniform(1.5, 3.5) * T)) / T
+        prate = r.uniform(25.0, 45.0)
+        pulses = int(r.integers(2, 4))
+        sec = ((t * rate + r.uniform(0.0, 1.0)) % 1.0) / rate
+        gate = (sec < pulses / prate) * np.sin(np.pi * ((sec * prate) % 1.0)) ** 2
+        on = cbeat(n, int(r.integers(2, 5)), r.uniform(0, TAU)) ** 3
+        s = rmsn(cband(r.standard_normal(n), 5000.0, 9000.0, 2)) * gate * on
+        mix.add_loop("insects", st(s, r.uniform(-0.9, 0.9)) * r.uniform(0.3, 0.7), rev=0.3)
+    # tree frogs: short whistled peeps and lower quarks, in little runs
+    for tb in density_times(r, T, 40 if top else 110, 0.3 + cbeat(n, 3, r.uniform(0, TAU))):
+        quark = r.random() < 0.4
+        f0 = r.uniform(600.0, 950.0) if quark else r.uniform(2000.0, 3200.0)
+        pan = r.uniform(-0.9, 0.9)
+        for j in range(int(r.integers(2, 6))):
+            m = int(r.uniform(0.04, 0.08) * BSR)
+            s = tone(np.linspace(f0 * 0.9, f0 * 1.15, m), ((1, 1.0), (2, 0.4), (3, 0.25)) if quark else ((1, 1.0), (2, 0.08)),
+                     BSR) * np.sin(np.pi * np.arange(m) / m) ** 2
+            mix.add("frogs", tb + j * r.uniform(0.18, 0.3), s, gain=r.uniform(0.5, 1.0), pan=pan, rev=0.5)
+    # drips off the leaves: plinks into puddles and taps on broad leaves
+    for tb in r.uniform(0, T, 140 if top else 320):
+        if r.random() < 0.5:
+            s = bubble(r, r.uniform(700.0, 2400.0), r.uniform(0.004, 0.012), r.uniform(0.3, 0.8))
+        else:
+            fl = r.uniform(250.0, 700.0)
+            s = modal([fl, fl * 2.3], [1.0, 0.4], [0.008, 0.004], 0.06, BSR, r=r) + \
+                0.3 * noise_hit(r, 0.06, 1500.0, 6000.0, 0.001, BSR)
+        mix.add("drips", tb, s, gain=r.uniform(0.2, 1.0) ** 2, pan=r.uniform(-0.9, 0.9), rev=0.5)
+    # birds calling through the forest (the one-shot species, far off and dulled)
+    calls = (jungle_bonk, jungle_gurgle, jungle_tinamou, lambda rr: croak(rr, rr.uniform(0.25, 0.4), rr.uniform(110, 150),
+                                                                          rr.uniform(800, 1100)),
+             lambda rr: squawk(rr, rr.uniform(0.15, 0.35), rr.uniform(700, 1100)))
+    for tb in density_times(r, T, 10 if top else 26, 0.3 + cbeat(n, 3, r.uniform(0, TAU))):
+        s = to_bed(lp(calls[int(r.integers(0, len(calls)))](r), 4500.0))
+        mix.add("birds", tb, s, gain=r.uniform(0.3, 1.0), pan=r.uniform(-0.85, 0.85), rev=0.6)
+    # thunder rolling far off, a storm over the hills
+    for tb in spaced_times(r, T, 22.0, 34.0):
+        th = to_bed(lp(hp(thunder(r, 7.5, r.uniform(3500.0, 5000.0), r.uniform(600.0, 1000.0)), 40.0), 1200.0))
+        mix.add("thunder", tb, unit(th), gain=r.uniform(0.5, 1.0), pan=r.uniform(-0.7, 0.7), rev=0.8)
+    if top:
+        levels = {"wind": 0.0, "waterfall": -3.0, "canopy": -8.0, "insects": -9.0, "birds": -15.0, "thunder": -14.0,
+                  "frogs": -18.0, "drips": -18.0}
+    else:
+        levels = {"insects": 0.0, "waterfall": -5.0, "canopy": -9.0, "birds": -9.0, "frogs": -12.0, "drips": -12.0,
+                  "wind": -12.0, "thunder": -16.0}
+    mix.render(BEDS[name][1], levels, t60=1.6, damp=3000.0, wet=0.4, predelay=0.02, hp_hz=40.0, lp_hz=9000.0)
+
+
+@bed("amb_jungle", -25.0)
+def bed_jungle():
+    jungle_bed("amb_jungle", top=False)
+
+
+@bed("amb_jungle_top", -25.0)
+def bed_jungle_top():
+    jungle_bed("amb_jungle_top", top=True)
+
+
+# the trucks of two neighbouring cars crossing one rail joint: "da-dum, da-dum" (s, level)
+FRONTIER_CLACK = ((0.0, 1.0), (0.12, 0.8), (0.34, 0.9), (0.46, 0.75))
+FRONTIER_BELL_AMPS = (0.15, 0.8, 0.12, 0.35, 1.0, 0.3, 0.1, 0.25, 0.1)   # bright, the minor tierce held down
+
+
+def rail_clack(r, sr=BSR):
+    """A wheel over a rail joint: a heavy, short thump and the steel's brief ring."""
+    t = tv(0.25, sr)
+    th = tone(ga.sweep(140.0, 70.0, t, 0.03), ((1, 1.0), (2, 0.4)), sr) * ga.ad_env(t, 0.001, 0.035)
+    ring = modal([r.uniform(900, 1100), r.uniform(1900, 2300), r.uniform(3100, 3600)], [1.0, 0.5, 0.3],
+                 [0.02, 0.012, 0.008], 0.25, sr, r=r)
+    return unit(th) + 0.35 * unit(ring) + 0.4 * noise_hit(r, 0.25, 300.0, 3000.0, 0.006, sr)
+
+
+def chuff(r, dur, sr=BSR):
+    """One exhaust beat from a locomotive's stack: a sharp burst of steam with a low 'chuh'."""
+    t = tv(dur, sr)
+    m = len(t)
+    hiss = bp(r.standard_normal(m), 700.0, 6000.0, 2, sr) * ga.ad_env(t, 0.006, dur * 0.3)
+    body = bp(r.standard_normal(m), 120.0, 600.0, 2, sr) * ga.ad_env(t, 0.004, dur * 0.2)
+    return (0.7 * unit(hiss) + unit(body)) * rcos_env(m, 0.0, dur * 0.3, sr)
+
+
+def loco_bell(r, dur):
+    """The locomotive's bell, on G (G4 prime, G5 nominal)."""
+    return church_bell(r, ga.mtof(67), dur, amps=FRONTIER_BELL_AMPS, tau_scale=0.4)
+
+
+def frontier_bed(name, loco):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    # the train at speed: every second the trucks of two cars cross a rail joint (clickety-clack);
+    # the cars further along answer, quieter and duller.  The loop point falls in the quiet between
+    # one joint and the next.
+    kernels = [rail_clack(r) for _ in range(6)]
+    period = T / 64
+    for off, g, lp_hz, pan in ((0.22, 1.0, 5000.0, -0.2), (0.08, 0.5, 2500.0, 0.5), (0.15, 0.3, 1500.0, -0.6)):
+        ks = [lp(k, lp_hz, 2, BSR) for k in kernels]
+        for k in range(64):
+            for dt, a in FRONTIER_CLACK:
+                mix.add("wheels", off + k * period + dt + r.normal(0, 0.004), ks[int(r.integers(0, 6))],
+                        gain=g * a * r.uniform(0.8, 1.0), pan=pan, rev=0.25)
+    # the cars rolling: a low rumble and the roar of wheels on rail
+    for ch in range(2):
+        rumble = cband(pink(r, n, BSR, slope=-0.6), 70.0, 700.0, 2) * (0.85 + 0.15 * np.tanh(smooth(r, n, 0.3, BSR)))
+        roll = cband(r.standard_normal(n), 400.0, 3000.0, 2) * (0.8 + 0.2 * np.abs(smooth(r, n, 4.0, BSR)))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(rumble) + rmsn(roll) * 0.25
+        mix.add_loop("rumble", chans)
+    # the locomotive: eight exhaust beats a second (two turns of the drivers), unevenly accented;
+    # far ahead and dull from the cars, loud and bright on the engine (the beats are set so the loop
+    # point falls where the level matches across it)
+    per = T / 512
+    ks = [chuff(r, 0.16) for _ in range(4)]
+    if not loco:
+        ks = [lp(k, 1100.0, 2, BSR) for k in ks]
+    accent = (1.0, 0.6, 0.85, 0.55)
+    for k in range(512):
+        mix.add("chuff", 0.108 + k * per + r.normal(0, 0.002), ks[k % 4], gain=accent[k % 4] * r.uniform(0.85, 1.0),
+                pan=0.1 if loco else 0.35, rev=0.3)
+    # canyon wind, whistling round the cars
+    gust = gusts(r, n, 0.07, bias=0.0 if loco else -0.3) * (0.7 + 0.3 * cbeat(n, 2, r.uniform(0, TAU)))
+    wind_layer(mix, "wind", r, gust, 120.0, 2600.0, howl=(480.0, 900.0), howl_q=6.0, howl_gain=0.45, body_gain=0.8,
+               howl_pow=1.6)
+    # the wooden cars working as they rock
+    for tb in spaced_times(r, T, 3.0, 7.0):
+        cr = wood_creak(r, r.uniform(0.5, 1.4), lambda u: 12.0 + 35.0 * np.sin(np.pi * u), lo=r.uniform(0.7, 1.2),
+                        bend=r.uniform(0.9, 1.1), sr=BSR)
+        mix.add("creaks", tb, lp(cr, 3000.0, 2, BSR), gain=r.uniform(0.3, 1.0), pan=r.uniform(-0.8, 0.8), rev=0.3)
+    if loco:
+        # on the engine: steam hissing from the valves and glands, the firebox's roar, the side rods
+        # clanking once a turn, and the bell rung for a crossing
+        for ch in range(2):
+            hiss = cband(r.standard_normal(n), 2500.0, 8000.0, 2) * (0.8 + 0.2 * np.tanh(smooth(r, n, 3.0, BSR)))
+            fire = cband(pink(r, n, BSR, slope=-0.7), 80.0, 500.0, 2) * (0.8 + 0.2 * np.tanh(smooth(r, n, 2.0, BSR)))
+            chans = np.zeros((n, 2))
+            chans[:, ch] = rmsn(hiss) * 0.6 + rmsn(fire) * 0.4
+            mix.add_loop("steam", chans)
+        rod = modal([r.uniform(420, 480), r.uniform(1000, 1100), r.uniform(1600, 1800)], [1.0, 0.5, 0.3],
+                    [0.04, 0.025, 0.015], 0.2, BSR, r=r) + 0.3 * noise_hit(r, 0.2, 500.0, 4000.0, 0.004, BSR)
+        for k in range(128):
+            mix.add("rods", 0.2 + k * T / 128 + r.normal(0, 0.002), rod, gain=(1.0 if k % 2 == 0 else 0.7) * r.uniform(0.8, 1.0),
+                    pan=0.0, rev=0.2)
+        strokes = [to_bed(loco_bell(r, 3.0)) for _ in range(2)]
+        tb = r.uniform(0, T)
+        for k in range(int(r.integers(10, 15))):
+            mix.add("bell", tb + k * 1.02, strokes[k % 2], gain=1.0 if k % 2 == 0 else 0.8, pan=-0.15, rev=0.3)
+        levels = {"chuff": 0.0, "steam": -7.0, "rumble": -6.0, "wheels": -6.0, "wind": -9.0, "rods": -15.0,
+                  "bell": -11.0, "creaks": -17.0}
+    else:
+        levels = {"wheels": 0.0, "rumble": -3.0, "wind": -4.0, "chuff": -11.0, "creaks": -12.0}
+    mix.render(BEDS[name][1], levels, t60=2.4, damp=2200.0, wet=0.3, predelay=0.07, hp_hz=40.0, lp_hz=8000.0)
+
+
+@bed("amb_frontier", -25.0)
+def bed_frontier():
+    frontier_bed("amb_frontier", loco=False)
+
+
+@bed("amb_frontier_loco", -24.0)
+def bed_frontier_loco():
+    frontier_bed("amb_frontier_loco", loco=True)
+
+
+def neon_rain(mix, stem, r, rate):
+    """Rain on a city roof: a hiss, a patter of drops (clicks, `rate` a second), heavier drops
+    pinging on sheet metal (AC units, vents, tin) and slapping into puddles."""
+    n = mix.n
+    k = modal([r.uniform(900, 1100), r.uniform(1800, 2100), r.uniform(2900, 3400), r.uniform(4300, 4800)],
+              [1.0, 0.6, 0.4, 0.25], [0.02, 0.014, 0.01, 0.006], 0.08, BSR, r=r)
+    for ch in range(2):
+        g = 0.85 + 0.15 * np.tanh(smooth(r, n, 0.1, BSR))
+        hiss = cband(r.standard_normal(n), 1500.0, 9000.0, 2) * g
+        drops = (r.random(n) < rate * g / BSR) * r.lognormal(-0.3, 0.7, n) * np.sign(r.standard_normal(n))
+        metal = (r.random(n) < rate * 0.06 / BSR) * r.lognormal(0.0, 0.5, n)
+        puddle = (r.random(n) < rate * 0.1 / BSR) * r.lognormal(0.0, 0.5, n) * np.sign(r.standard_normal(n))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = (rmsn(hiss) * 0.6 + rmsn(cband(drops, 1000.0, 7000.0, 2)) * 0.8 + rmsn(cconv(metal, k)) * 0.3 +
+                        rmsn(cband(puddle, 300.0, 1500.0, 2)) * 0.2)
+        mix.add_loop(stem, chans)
+
+
+def neon_bed(name, spire):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    # heavy rain on the rooftops (sparser up the spire, where the wind takes it)
+    neon_rain(mix, "rain", r, 900.0 if spire else 3200.0)
+    # the city: a traffic hum (far below from the spire)
+    for ch in range(2):
+        wash = cband(pink(r, n, BSR), 60.0, 600.0 if spire else 1100.0, 2) * (0.8 + 0.2 * np.tanh(smooth(r, n, 0.06, BSR)))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(wash) * 0.6
+        mix.add_loop("city", chans)
+    # hover cars whooshing past on the traffic lanes: a turbine hum dropping in pitch as it passes,
+    # under a rush of air, panning across
+    for tb in r.uniform(0, T, 14 if spire else 24):
+        d = r.uniform(1.5, 3.0)
+        m = int(d * BSR)
+        u = np.arange(m) / m
+        f = r.uniform(180.0, 280.0) * (1.08 - 0.16 * (0.5 + 0.5 * np.tanh(6.0 * (u - 0.5))))
+        hum = tone(f, ((1, 1.0), (2, 0.5), (3, 0.3), (5, 0.15)), BSR)
+        air = bp(r.standard_normal(m), 400.0, 3500.0, 2, BSR)
+        s = lp((0.4 * unit(hum) + unit(air)) * np.exp(-((u - 0.5) / 0.18) ** 2), r.uniform(1500.0, 4000.0), 2, BSR)
+        p0 = r.uniform(0.3, 0.9) * (1.0 if r.random() < 0.5 else -1.0)
+        a = (np.clip(p0 - 2.0 * p0 * u, -1.0, 1.0) + 1.0) * np.pi / 4.0
+        sw = np.stack([s * np.cos(a), s * np.sin(a)], axis=1) * np.sqrt(2.0)
+        mix.add("whoosh", tb, sw, gain=r.uniform(0.3, 1.0), rev=0.4)
+    # neon signs: transformer buzz and gas fizz, each sign flickering in its own way
+    for pan in ((-0.5,) if spire else (-0.5, 0.4, 0.1)):
+        flick = 1.0 - 0.7 * (smooth(r, n, 5.0, BSR) > 2.0) * np.abs(smooth(r, n, 40.0, BSR))
+        flick = np.clip(cband(flick, None, 80.0, 1), 0.0, 1.2)
+        buzz = sum(a * csine(120.0 * k, n, phase=r.uniform(0, TAU))
+                   for k, a in ((1, 1.0), (2, 0.5), (3, 0.6), (4, 0.25), (5, 0.35), (7, 0.2), (9, 0.15), (11, 0.1), (13, 0.07)))
+        fizz = cband(r.standard_normal(n), 2500.0, 7000.0, 2)
+        mix.add_loop("neon", st((buzz * 0.03 + rmsn(fizz) * 0.006) * flick, pan), rev=0.2)
+    # wind (a breeze between the buildings; a gale howling round the spire)
+    gust = gusts(r, n, 0.08, bias=0.3 if spire else -0.4) * (0.7 + 0.3 * cbeat(n, 2, r.uniform(0, TAU)))
+    wind_layer(mix, "wind", r, gust, 130.0, 2600.0 if spire else 1600.0, howl=(600.0, 1300.0) if spire else (420.0, 800.0),
+               howl_q=9.0 if spire else 5.0, howl_gain=0.7 if spire else 0.2, body_gain=1.0 if spire else 0.3, howl_pow=1.5)
+    if spire:
+        levels = {"wind": 0.0, "rain": -5.0, "city": -9.0, "whoosh": -14.0, "neon": -22.0}
+    else:
+        # gutters overflowing and a down pipe gurgling
+        for ch in range(2):
+            pour = cband(r.standard_normal(n), 250.0, 2500.0, 2) * (0.6 + 0.4 * np.abs(smooth(r, n, 15.0, BSR)))
+            chans = np.zeros((n, 2))
+            chans[:, ch] = rmsn(pour) * (0.5 if ch == 1 else 0.25)
+            mix.add_loop("gutter", chans, rev=0.3)
+        for tb in r.uniform(0, T, 300):
+            mix.add("gutter", tb, bubble(r, r.uniform(200.0, 700.0), r.uniform(0.01, 0.03), r.uniform(0.3, 0.8)),
+                    gain=r.uniform(0.1, 0.5), pan=r.uniform(0.2, 0.8), rev=0.4)
+        # the club in the basement below: a 120 bpm kick and an offbeat bass line in E minor (E E C D,
+        # a bar each), muffled through the floors
+        beat = T / 128
+        tk = tv(0.3, BSR)
+        kick = lp(tone(ga.sweep(120.0, 48.0, tk, 0.06), ((1, 1.0), (2, 0.2)), BSR) * ga.ad_env(tk, 0.002, 0.09), 180.0, 2, BSR)
+        roots = (40, 40, 36, 38)
+        mb = int(beat * 0.45 * BSR)
+        for b in range(128):
+            mix.add("club", b * beat, kick, gain=1.0, pan=0.0, rev=0.2)
+            bs = tone(np.full(mb, ga.mtof(roots[(b // 4) % 4])), ((1, 1.0), (2, 0.6), (3, 0.3)), BSR) * rcos_env(mb, 0.005, 0.05, BSR)
+            mix.add("club", b * beat + beat / 2, lp(bs, 220.0, 2, BSR), gain=0.6, pan=0.0, rev=0.2)
+            if b % 2 == 1:
+                mix.add("club", b * beat, noise_hit(r, 0.2, 150.0, 450.0, 0.03, BSR), gain=0.3, pan=0.0, rev=0.2)
+        levels = {"rain": 0.0, "city": -6.0, "gutter": -8.0, "whoosh": -11.0, "wind": -14.0, "neon": -15.0, "club": -14.0}
+    mix.render(BEDS[name][1], levels, t60=1.8, damp=2600.0, wet=0.35, predelay=0.03, hp_hz=40.0, lp_hz=8500.0)
+
+
+@bed("amb_neon", -25.0)
+def bed_neon():
+    neon_bed("amb_neon", spire=False)
+
+
+@bed("amb_neon_spire", -25.0)
+def bed_neon_spire():
+    neon_bed("amb_neon_spire", spire=True)
 
 
 # ==========================================================================
@@ -3839,6 +4232,718 @@ def shot_carrier_heli(r, i):
 @shots("amb_carrier_gull", 3)
 def shot_carrier_gull(r, i):
     return shot_gull(r, (0, 2, 3)[i])
+
+
+# ---- sakura ----------------------------------------------------------------
+def bonsho(r, f0, dur, tau_scale=1.0):
+    """A great temple bell struck with a hanging wooden beam: a deep, long hum whose partials each
+    beat slowly (the bell's pulsing 'oon ... oon'), the beam's soft thud, and no metallic click."""
+    t = tv(dur)
+    out = np.zeros(len(t))
+    for q, a, tau in ((1.0, 1.0, 9.0), (1.62, 0.55, 5.0), (2.07, 0.6, 4.0), (2.73, 0.35, 2.6), (3.42, 0.25, 1.8),
+                      (4.25, 0.15, 1.2), (5.1, 0.08, 0.8)):
+        fq = f0 * q
+        beat = r.uniform(0.4, 1.4) / q ** 0.3
+        for d in (-beat / 2, beat / 2):
+            out += 0.5 * a * np.sin(TAU * (fq + d) * t + r.uniform(0, TAU)) * np.exp(-t / (tau * tau_scale))
+    out *= np.minimum(t / 0.01, 1.0) * rcos_env(len(t), 0.0, min(0.4 * dur, 1.5))
+    thud = tone(ga.sweep(90.0, 55.0, t, 0.08), ((1, 1.0), (2, 0.3))) * ga.ad_env(t, 0.004, 0.08)
+    return unit(out) + 0.35 * thud + 0.1 * noise_hit(r, dur, 100.0, 1200.0, 0.02)
+
+
+@shots("amb_sakura_bell", 2)
+def shot_sakura_bell(r, i):
+    # a temple bell far off across the valley (D3, or A2), struck once; in the first it is struck again
+    # as the hum fades
+    x = zeros(9.5)
+    f0 = (ga.mtof(50), ga.mtof(45))[i]
+    place(x, 0.02, bonsho(r, f0, 9.4), SR)
+    if i == 0:
+        t2 = r.uniform(5.5, 6.5)
+        place(x, t2, bonsho(r, f0, 9.4 - t2), SR, 0.55)
+    return cap(trim(far(hp(x, 50.0), r, 3000.0, 3.0, 0.45, damp=1500.0, predelay=0.08)))
+
+
+@shots("amb_sakura_shishi", 3)
+def shot_sakura_shishi(r, i):
+    # a shishi-odoshi in the temple garden: water trickles into the bamboo arm until it tips, spills
+    # and swings back - a hollow 'tock' on its stone - echoing across the valley. In the second we
+    # come in as it tips; in the third it rocks and knocks a second time, softly
+    x = zeros(3.5)
+    n = len(x)
+    tk = 0.3 if i == 1 else r.uniform(1.0, 1.5)
+    trickle = bp(r.standard_normal(n), 600.0, 3500.0) * (0.5 + 0.5 * np.abs(smooth(r, n, 25.0)))
+    x += 0.15 * unit(trickle) * rcos_env(n, 0.3, 0.6)
+    for _ in range(int(r.integers(10, 25))):
+        place(x, r.uniform(0.0, 3.2), bubble(r, r.uniform(900.0, 2600.0), r.uniform(0.003, 0.008), r.uniform(0.3, 0.7), sr=SR),
+              SR, r.uniform(0.05, 0.2))
+    m = int(0.35 * SR)
+    gush = bp(r.standard_normal(m), 300.0, 2500.0) * pts_env([(0, 0), (0.2, 1), (1, 0)], m)
+    place(x, tk - 0.3, 0.4 * unit(gush), SR)
+    knock = bamboo_knock(r, r.uniform(300.0, 420.0)) + 0.6 * modal([r.uniform(800, 950), r.uniform(1500, 1800)],
+                                                                    [1.0, 0.5], [0.01, 0.006], 0.15, r=r)
+    place(x, tk, knock, SR)
+    if i == 2:
+        place(x, tk + r.uniform(0.16, 0.22), knock, SR, 0.3)
+    place(x, tk + r.uniform(0.35, 0.5), lp(knock, 2500.0), SR, 0.25)   # back off the far side of the valley
+    return trim(far(x, r, 7000.0, 2.4, 0.4, damp=2500.0, predelay=0.08))
+
+
+@shots("amb_sakura_chime", 3)
+def shot_sakura_chime(r, i):
+    # wind chimes on a temple eave caught by the breeze: metal tubes tuned to D minor pentatonic. 1 is
+    # a few lazy strikes, 2 a gust that sets them all going, 3 a glass wind bell (its clapper tinkling
+    # against the glass, its paper strip fluttering)
+    x = zeros(4.0)
+    if i < 2:
+        for _ in range(int(r.integers(4, 7)) if i == 0 else int(r.integers(10, 16))):
+            t0 = 0.02 + (r.uniform(0.0, 2.2) if i == 0 else r.beta(1.5, 3.0) * 2.0)
+            place(x, t0, glock(r, dpenta(74, r.integers(0, 8)), 2.6, 1.5), SR, r.uniform(0.4, 1.0))
+    else:
+        f = dpenta(86, r.integers(0, 4))
+        t0 = 0.02
+        for _ in range(int(r.integers(3, 7))):
+            ting = modal([f, f * 2.32, f * 3.9], [1.0, 0.35, 0.15], [0.6, 0.25, 0.12], 1.5, r=r)
+            place(x, t0, ting + 0.1 * noise_hit(r, 1.5, 3000.0, None, 0.0006), SR, r.uniform(0.4, 1.0))
+            t0 += r.uniform(0.08, 0.4)
+        m = int(1.2 * SR)
+        paper = bp(r.standard_normal(m), 1500.0, 6000.0) * np.abs(smooth(r, m, 20.0)) * np.sin(np.pi * np.arange(m) / m) ** 2
+        place(x, 0.0, 0.08 * unit(paper), SR)
+    return trim(reverb(x, r, 1.6, 5000.0, 0.25))
+
+
+def higurashi(r, dur, f0):
+    """An evening cicada: a ringing 'kana-kana-kana' - a run of 9-12 notes a second, each a buzzing
+    tone that sags a little, the run slowing and sinking in pitch as it dies away."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    rate = r.uniform(9.0, 12.0) * (1.0 - 0.3 * t / dur)
+    within = np.cumsum(rate) / SR % 1.0
+    f = f0 * (1.0 - 0.06 * t / dur) * (1.0 - 0.04 * within)
+    s = tone(f, ((1, 1.0), (2, 0.12)))
+    pulse = np.sin(np.pi * np.minimum(within / 0.7, 1.0)) ** 2
+    buzz = 0.6 + 0.4 * np.sin(TAU * r.uniform(180.0, 240.0) * t)
+    return s * pulse * buzz * pts_env([(0, 0), (0.12, 1), (0.6, 0.8), (1, 0)], n)
+
+
+@shots("amb_sakura_cicada", 3)
+def shot_sakura_cicada(r, i):
+    # evening cicadas in the trees; in the third another answers further off
+    x = zeros(5.0)
+    f0 = r.uniform(4200.0, 5200.0)
+    place(x, 0.02, higurashi(r, r.uniform(3.0, 4.2), f0), SR)
+    if i == 2:
+        place(x, r.uniform(1.2, 1.8), lp(higurashi(r, r.uniform(2.4, 3.0), f0 * r.uniform(0.9, 0.97)), 5000.0), SR, 0.45)
+    return trim(far(x, r, 9000.0, 1.2, 0.25, damp=4000.0, hp_hz=1500.0))
+
+
+@shots("amb_sakura_bamboo", 3)
+def shot_sakura_bamboo(r, i):
+    # a gust through the bamboo grove: leaves rushing and culms knocking together (hollow clacks); in
+    # the second a tall culm creaks as it bends; the third is a run of knocks as the wind drops
+    dur = r.uniform(2.4, 3.2)
+    n = int(dur * SR)
+    e = pts_env([(0, 0), (r.uniform(0.3, 0.5), 1), (1, 0)], n) ** 1.3
+    leaves = bp(r.standard_normal(n), 1500.0, 8000.0) * (0.3 + 0.7 * np.abs(smooth(r, n, 18.0)))
+    x = np.concatenate([0.35 * unit(leaves) * e * (0.3 if i == 2 else 1.0), zeros(0.3)])
+    culms = [r.uniform(380.0, 820.0) for _ in range(3)]
+    count = int(r.integers(8, 14)) if i == 2 else int(r.integers(6, 12))
+    placed = 0
+    while placed < count:
+        tb = r.uniform(0.0, dur - 0.1)
+        if r.random() < at(e, tb, SR) + (0.4 if i == 2 else 0.05):
+            place(x, tb, bamboo_knock(r, culms[int(r.integers(0, 3))] * r.uniform(0.98, 1.02)), SR, r.uniform(0.4, 1.0))
+            placed += 1
+    if i == 1:
+        cr = wood_creak(r, 1.2, lambda u: 20.0 + 40.0 * np.sin(np.pi * u), lo=1.4, bend=1.1)
+        place(x, dur * 0.3, cr, SR, 0.4)
+    return trim(far(x, r, 8000.0, 1.2, 0.25, damp=3500.0))
+
+
+@shots("amb_sakura_bird", 2)
+def shot_sakura_bird(r, i):
+    k = r.uniform(0.94, 1.06)
+    x = zeros(3.0)
+    if i == 0:
+        # a bush warbler: a long rising whistle, then a quick, bright 'ho-ke-kyo'
+        place(x, 0.02, syl([(0, 1000 * k), (0.7, 1150 * k), (1, 1250 * k)], 0.9, amp=[(0, 0.2), (0.3, 1), (1, 0.7)],
+                           smooth_s=0.02), SR)
+        t0 = 1.05
+        place(x, t0, syl([(0, 1400 * k), (0.4, 2900 * k), (1, 2200 * k)], 0.16, amp=[(0, 0.4), (0.3, 1), (1, 0.6)]), SR)
+        place(x, t0 + 0.2, syl([(0, 2700 * k), (1, 2000 * k)], 0.1), SR, 0.9)
+        place(x, t0 + 0.34, syl([(0, 1700 * k), (0.3, 3100 * k), (1, 2400 * k)], 0.32, amp=[(0, 0.3), (0.2, 1), (1, 0.2)]), SR)
+        return trim(far(x, r, 8000.0, 1.4, 0.3, damp=3500.0, hp_hz=400.0))
+    # a crow heading home at dusk: three hoarse 'kaa's
+    t0 = 0.02
+    for j in range(3):
+        place(x, t0, hawk_scream(r, [(0, 1050 * k), (0.3, 1150 * k), (1, 900 * k)], r.uniform(0.3, 0.4), 0.9), SR, 1.0 - 0.1 * j)
+        t0 += r.uniform(0.55, 0.75)
+    return trim(far(x, r, 5000.0, 1.6, 0.35, damp=3000.0, hp_hz=300.0))
+
+
+@shots("amb_sakura_koi", 2)
+def shot_sakura_koi(r, i):
+    # a koi rising in the pond: a gulp at the surface (a low plop), or a tail slap and a spray; then
+    # the drips and ripples
+    x = zeros(1.8)
+    if i == 0:
+        place(x, 0.02, bubble(r, r.uniform(250.0, 380.0), 0.03, 1.0, sr=SR), SR)
+        place(x, 0.02, noise_hit(r, 0.1, 400.0, 3000.0, 0.012), SR, 0.25)
+        t0 = 0.1
+    else:
+        tt = tv(0.3)
+        slap = noise_hit(r, 0.3, 300.0, 5000.0, 0.02) + 0.6 * tone(ga.sweep(160.0, 80.0, tt, 0.05)) * ga.ad_env(tt, 0.002, 0.04)
+        place(x, 0.02, slap, SR)
+        t0 = 0.05
+    for _ in range(int(r.integers(6, 15))):
+        place(x, t0 + r.gamma(1.5, 0.15), bubble(r, r.uniform(900.0, 2400.0), r.uniform(0.004, 0.01), 0.5, sr=SR), SR,
+              r.uniform(0.1, 0.5))
+    return trim(far(x, r, 8000.0, 1.0, 0.2, damp=4000.0))
+
+
+# ---- jungle ----------------------------------------------------------------
+def jungle_bonk(r):
+    """A bellbird's 'bonk': a loud, clanging note (a strong fundamental with inharmonic partials,
+    like a far anvil), on A5 or E5."""
+    f = ga.mtof((81, 76)[int(r.integers(0, 2))])
+    t = tv(0.5)
+    s = sum(a * np.sin(TAU * f * q * t + r.uniform(0, TAU)) * np.exp(-t / tau)
+            for q, a, tau in ((1.0, 1.0, 0.12), (2.02, 0.5, 0.06), (2.97, 0.35, 0.04), (4.1, 0.15, 0.025)))
+    return s * np.minimum(t / 0.002, 1.0) * rcos_env(len(t), 0.0, 0.15) + 0.2 * noise_hit(r, 0.5, 2000.0, 8000.0, 0.002)
+
+
+def jungle_gurgle(r):
+    """An oropendola: a run of quick liquid gurgles (blips leaping 0.8-2.6 kHz) ending in a loud,
+    falling 'glooop'."""
+    x = zeros(1.6)
+    t0 = 0.02
+    for _ in range(int(r.integers(4, 8))):
+        d = r.uniform(0.04, 0.07)
+        place(x, t0, syl([(0, r.uniform(800, 1400)), (1, r.uniform(1600, 2600))], d, harm=((1, 1.0), (2, 0.15))), SR,
+              r.uniform(0.4, 0.8))
+        t0 += d + r.uniform(0.01, 0.04)
+    place(x, t0 + 0.05, syl([(0, 1900), (0.2, 2300), (1, 480)], 0.5, amp=[(0, 0.3), (0.15, 1), (1, 0.2)],
+                            harm=((1, 1.0), (2, 0.25), (3, 0.08)), smooth_s=0.01), SR)
+    return x
+
+
+def jungle_tinamou(r):
+    """A tinamou's tremulous whistles: three or four long, pure notes stepping down A minor
+    (A5 G5 E5 D5), each wavering."""
+    x = zeros(4.0)
+    t0 = 0.02
+    for m in (81, 79, 76, 74)[:int(r.integers(3, 5))]:
+        f = ga.mtof(m)
+        d = r.uniform(0.55, 0.75)
+        place(x, t0, syl([(0, f * 0.97), (0.2, f), (1, f * 0.99)], d, amp=[(0, 0), (0.3, 1), (1, 0.1)],
+                         fm=(r.uniform(6.0, 9.0), 0.012), att=0.05, rel=0.1, smooth_s=0.02), SR)
+        t0 += d + r.uniform(0.15, 0.3)
+    return x
+
+
+def croak(r, dur, f0, formant):
+    """A croaking call (a toucan's 'kree-ok'): a buzzy pulse train through two formants, the pitch
+    rising then dropping."""
+    n = int(dur * SR)
+    f = contour([(0, f0 * 0.9), (0.3, f0 * 1.15), (1, f0 * 0.8)], n, SR, 0.01) * (1.0 + 0.03 * smooth(r, n, 40.0))
+    buzz = tone(f, [(k, 1.0 / k ** 0.6) for k in range(1, 30)])
+    fc = contour([(0, formant), (0.35, formant * 1.4), (1, formant * 0.8)], n, SR, 0.01)
+    s = unit(ga.svf_bandpass(buzz, fc, 3.0, SR)) + 0.5 * unit(ga.svf_bandpass(buzz, fc * 2.2, 4.0, SR))
+    return s * pts_env([(0, 0), (0.1, 1), (0.7, 0.8), (1, 0)], n)
+
+
+def squawk(r, dur, f0):
+    """A parrot's squawk: a harsh, rough harmonic voice (its pitch jittering) through a bright band,
+    with a noisy edge."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    f = contour([(0, f0 * 0.85), (0.25, f0 * 1.1), (1, f0 * 0.9)], n, SR, 0.008) * (1.0 + 0.06 * smooth(r, n, 120.0))
+    s = unit(tone(f, [(k, 1.0 / k ** 0.7) for k in range(1, 14)])) * (1.0 + 0.5 * np.sin(TAU * r.uniform(60.0, 110.0) * t))
+    s = unit(bp(s, 900.0, 6000.0)) + 0.4 * unit(ga.svf_bandpass(r.standard_normal(n), np.minimum(f * 3.0, 6500.0), 3.0, SR))
+    return s * pts_env([(0, 0), (0.08, 1), (0.7, 0.7), (1, 0)], n)
+
+
+@shots("amb_jungle_toucan", 3)
+def shot_jungle_toucan(r, i):
+    # toucans croaking ('kree-ok'); in the second another answers, duller; the third starts with a
+    # bill clatter
+    x = zeros(4.0)
+    k = r.uniform(0.92, 1.08)
+    t0 = 0.02
+    if i == 2:
+        f = r.uniform(1400.0, 2200.0)
+        for _ in range(int(r.integers(10, 17))):
+            place(x, t0, modal([f * r.uniform(0.95, 1.05), f * 2.4], [1.0, 0.4], [0.006, 0.003], 0.04, r=r), SR, r.uniform(0.4, 0.8))
+            t0 += r.uniform(0.045, 0.06)
+        t0 += 0.25
+    for _ in range(2 if i == 1 else int(r.integers(3, 6))):
+        d = r.uniform(0.25, 0.4)
+        place(x, t0, croak(r, d, r.uniform(110.0, 150.0) * k, r.uniform(800.0, 1100.0) * k), SR, r.uniform(0.7, 1.0))
+        t0 += d + r.uniform(0.15, 0.35)
+    if i == 1:
+        t0 += 0.3
+        for _ in range(2):
+            d = r.uniform(0.25, 0.35)
+            place(x, t0, lp(croak(r, d, r.uniform(100.0, 130.0), r.uniform(700.0, 950.0)), 2500.0), SR, 0.5)
+            t0 += d + r.uniform(0.15, 0.3)
+    return trim(far(x, r, 6000.0, 1.4, 0.3, damp=3000.0, hp_hz=200.0))
+
+
+@shots("amb_jungle_parrot", 3)
+def shot_jungle_parrot(r, i):
+    x = zeros(3.6)
+    if i == 0:
+        # two or three squawks
+        t0 = 0.02
+        f0 = r.uniform(700.0, 1100.0)
+        for _ in range(int(r.integers(2, 4))):
+            d = r.uniform(0.15, 0.3)
+            place(x, t0, squawk(r, d, f0 * r.uniform(0.9, 1.1)), SR, r.uniform(0.7, 1.0))
+            t0 += d + r.uniform(0.1, 0.3)
+    elif i == 1:
+        # a flock flying over, squawking: louder and brighter as they pass, then fading
+        n = len(x)
+        for _ in range(int(r.integers(8, 13))):
+            t0 = r.uniform(0.0, 3.0)
+            place(x, t0, squawk(r, r.uniform(0.12, 0.25), r.uniform(650.0, 1300.0)), SR, r.uniform(0.4, 1.0))
+        x *= np.exp(-((np.arange(n) / SR - 1.4) / 0.9) ** 2)
+    else:
+        # a macaw's long, raucous 'raaa-aah', twice
+        t0 = 0.02
+        for j in range(2):
+            d = r.uniform(0.55, 0.75)
+            place(x, t0, squawk(r, d, r.uniform(450.0, 600.0)), SR, 1.0 - 0.2 * j)
+            t0 += d + r.uniform(0.3, 0.5)
+    return trim(far(x, r, 8000.0, 1.2, 0.25, damp=3500.0, hp_hz=300.0))
+
+
+@shots("amb_jungle_howler", 2)
+def shot_jungle_howler(r, i):
+    # apes whooping far off through the canopy (gibbon-like, cheerful rather than menacing): a run of
+    # rising 'hoo' notes that climb and quicken into a whoop; in the second another voice joins in
+    x = zeros(7.0)
+
+    def run(t0, f0, gain, count):
+        gap = 0.45
+        for j in range(count):
+            u = j / max(count - 1, 1)
+            d = 0.28 - 0.1 * u
+            f_lo = f0 * (1.0 + 0.6 * u)
+            f_hi = f_lo * (1.3 + 0.4 * u)
+            s = syl([(0, f_lo), (0.7, f_hi), (1, f_hi * 0.9)], d, amp=[(0, 0.2), (0.5, 1), (1, 0.3)],
+                    harm=((1, 1.0), (2, 0.2), (3, 0.06)), att=0.02, rel=0.04, smooth_s=0.01)
+            place(x, t0, s, SR, gain * (0.6 + 0.4 * u))
+            t0 += d + gap
+            gap *= 0.82
+
+    run(0.02, r.uniform(380.0, 450.0), 1.0, int(r.integers(7, 10)))
+    if i == 1:
+        run(r.uniform(1.0, 1.6), r.uniform(480.0, 560.0), 0.6, int(r.integers(6, 9)))
+    return cap(trim(far(x, r, 2600.0, 2.4, 0.5, damp=2000.0, hp_hz=150.0, predelay=0.05)))
+
+
+@shots("amb_jungle_bird", 3)
+def shot_jungle_bird(r, i):
+    x = zeros(4.2)
+    if i == 0:
+        # a bellbird: two to four bonks
+        t0 = 0.02
+        for _ in range(int(r.integers(2, 5))):
+            place(x, t0, jungle_bonk(r), SR, r.uniform(0.7, 1.0))
+            t0 += r.uniform(0.8, 1.3)
+    elif i == 1:
+        place(x, 0.02, jungle_gurgle(r), SR)
+    else:
+        place(x, 0.02, jungle_tinamou(r), SR)
+    return trim(far(x, r, 7000.0, 1.6, 0.3, damp=3000.0, hp_hz=250.0))
+
+
+@shots("amb_jungle_thunder", 2)
+def shot_jungle_thunder(r, i):
+    # thunder over the hills, 2.5-3.5 km away; the second with a restrike
+    x = thunder(r, 7.5, r.uniform(2500.0, 3500.0), r.uniform(500.0, 800.0), restrike=r.uniform(0.25, 0.4) if i == 1 else 0.0)
+    return cap(trim(reverb(hp(lp(x, 2500.0), 45.0), r, 3.0, 900.0, 0.55, predelay=0.06), db_floor=-55.0))
+
+
+def leaf_drop(r):
+    """A big drop landing on a broad leaf: the leaf's soft, low thwack and a splash click."""
+    fl = r.uniform(250.0, 650.0)
+    return modal([fl, fl * 2.3, fl * 3.9], [1.0, 0.4, 0.15], [0.01, 0.005, 0.003], 0.06, r=r) + \
+        0.4 * noise_hit(r, 0.06, 1500.0, 7000.0, 0.0012)
+
+
+@shots("amb_jungle_drip", 3)
+def shot_jungle_drip(r, i):
+    # 1: a shower shaken off the canopy, drops on leaves and in a puddle, thinning out; 2: a few big,
+    # slow drops into a pool; 3: a branch shaking - leaves rustling and a burst of drops
+    x = zeros(3.0)
+    if i == 0:
+        count, span = int(r.integers(30, 55)), 2.2
+    elif i == 1:
+        count, span = int(r.integers(4, 8)), 2.6
+    else:
+        count, span = int(r.integers(40, 70)), 1.6
+        m = int(1.2 * SR)
+        rustle = bp(r.standard_normal(m), 1500.0, 7000.0) * np.abs(smooth(r, m, 25.0)) * pts_env([(0, 0), (0.15, 1), (1, 0)], m)
+        place(x, 0.02, 0.3 * unit(rustle), SR)
+    for j in range(count):
+        t0 = 0.02 + (j * span / count + r.uniform(0.0, 0.3) if i == 1 else min(r.exponential(span / 3.0), span))
+        if i == 1 or r.random() < 0.3:
+            place(x, t0, bubble(r, r.uniform(500.0, 1600.0) if i == 1 else r.uniform(900.0, 2500.0), r.uniform(0.006, 0.02),
+                                0.6, sr=SR), SR, r.uniform(0.4, 1.0))
+        else:
+            place(x, t0, leaf_drop(r), SR, r.uniform(0.2, 1.0) ** 1.5)
+    return trim(far(x, r, 8000.0, 1.0, 0.25, damp=4000.0))
+
+
+@shots("amb_jungle_insect", 2)
+def shot_jungle_insect(r, i):
+    if i == 0:
+        # a cicada winding up: its buzz swells and climbs, holds, and sputters out
+        dur = r.uniform(4.0, 5.5)
+        n = int(dur * SR)
+        e = pts_env([(0, 0), (0.35, 1), (0.8, 0.9), (1, 0)], n)
+        f = r.uniform(3200.0, 4200.0) * (1.0 + 0.15 * e)
+        am = (0.5 + 0.5 * np.sin(TAU * np.cumsum(r.uniform(140.0, 200.0) * (0.8 + 0.4 * e)) / SR)) ** 2
+        s = (tone(f, ((1, 1.0), (2, 0.2))) + 0.5 * unit(ga.svf_bandpass(r.standard_normal(n), f, 6.0, SR))) * am * e
+        u = np.arange(n) / n
+        sputter = np.where(u > 0.8, (smooth(r, n, 12.0) > -0.2).astype(float), 1.0)
+        x = s * np.convolve(sputter, np.ones(200) / 200, mode="same")
+    else:
+        # katydids: bursts of quick rasping ticks, one answering another
+        x = zeros(3.0)
+        t0 = 0.02
+        for b in range(int(r.integers(3, 6))):
+            rate = r.uniform(30.0, 50.0)
+            g = 1.0 if b % 2 == 0 else 0.5
+            for j in range(int(r.integers(6, 13))):
+                place(x, t0 + j / rate, noise_hit(r, 0.015, 5000.0, 12000.0, 0.0015), SR, g * r.uniform(0.6, 1.0))
+            t0 += r.uniform(0.4, 0.7)
+    return trim(far(x, r, 10000.0, 0.9, 0.2, damp=4500.0, hp_hz=1000.0))
+
+
+# ---- frontier --------------------------------------------------------------
+def steam_whistle(r, dur, chord=(67, 71, 74)):
+    """A locomotive's chime whistle: three pipes sounding a G major chord (G4 B4 D5), each a breathy
+    harmonic tone that sags as the steam valve opens, over the steam's own rush."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    s = np.zeros(n)
+    for m in chord:
+        f = ga.mtof(m) * (1.0 - 0.025 * np.exp(-t / 0.12)) * (1.0 + 0.002 * smooth(r, n, 6.0))
+        s += tone(f, ((1, 1.0), (2, 0.35), (3, 0.2), (4, 0.08)), SR, r.uniform(0, TAU))
+        s += 0.12 * unit(ga.svf_bandpass(r.standard_normal(n), f, 8.0, SR))
+    return (unit(s) + 0.1 * unit(bp(r.standard_normal(n), 1500.0, 7000.0))) * rcos_env(n, 0.06, 0.12)
+
+
+@shots("amb_frontier_whistle", 2)
+def shot_frontier_whistle(r, i):
+    # the engine's whistle up ahead, echoing off the canyon walls: 1 a long blow and a short one; 2
+    # the crossing call (long, long, short, long)
+    blows = ((1.6, 0.25), (0.5, 0.0)) if i == 0 else ((1.0, 0.25), (1.0, 0.25), (0.4, 0.25), (1.4, 0.0))
+    x = zeros(sum(d + g for d, g in blows) + 2.5)
+    t0 = 0.02
+    for d, g in blows:
+        place(x, t0, steam_whistle(r, d), SR)
+        t0 += d + g
+    y = x.copy()
+    for dly, g in ((r.uniform(0.6, 0.8), 0.3), (r.uniform(1.3, 1.6), 0.15)):
+        place(y, dly, lp(x, 1800.0), SR, g)
+    return cap(trim(far(y, r, 3500.0, 2.6, 0.45, damp=2000.0, predelay=0.05)))
+
+
+@shots("amb_frontier_hawk", 3)
+def shot_frontier_hawk(r, i):
+    return shot_desert_hawk(r, i)
+
+
+@shots("amb_frontier_creak", 3)
+def shot_frontier_creak(r, i):
+    x = zeros(3.4)
+    if i == 0:
+        # the car body working as it rocks: two or three creaks of old timber
+        t0 = 0.02
+        for _ in range(int(r.integers(2, 4))):
+            d = r.uniform(0.4, 0.9)
+            place(x, t0, wood_creak(r, d, lambda u: 15.0 + 45.0 * np.sin(np.pi * u), lo=r.uniform(0.7, 1.1),
+                                    bend=r.uniform(0.9, 1.1)), SR, r.uniform(0.6, 1.0))
+            t0 += d + r.uniform(0.15, 0.4)
+    elif i == 1:
+        # slack running in along the train: coupler after coupler taking up with a clank, each further off
+        t0 = 0.02
+        for j in range(int(r.integers(4, 7))):
+            place(x, t0, lp(clunk(r, 0.4, r.uniform(70.0, 95.0)), 4000.0 / (1.0 + 0.4 * j)), SR, 0.85 ** j * r.uniform(0.8, 1.0))
+            t0 += r.uniform(0.22, 0.32)
+    else:
+        # a boxcar door rattling in its track
+        dur = r.uniform(1.8, 2.6)
+        f = r.uniform(380.0, 520.0)
+        t0 = 0.02
+        while t0 < dur:
+            hit = modal([f * r.uniform(0.97, 1.03), f * 2.6, f * 4.3], [1.0, 0.5, 0.3], [0.03, 0.015, 0.008], 0.12, r=r)
+            place(x, t0, hit + 0.3 * noise_hit(r, 0.12, 800.0, 5000.0, 0.003), SR, r.uniform(0.3, 1.0) * np.sin(np.pi * t0 / dur) ** 0.5)
+            t0 += r.exponential(1.0 / 14.0) + 0.02
+        m = int(dur * SR)
+        place(x, 0.02, 0.2 * unit(bp(r.standard_normal(m), 100.0, 500.0)) * rcos_env(m, 0.3, 0.5), SR)
+    return trim(far(x, r, 6000.0, 1.0, 0.2, damp=3000.0))
+
+
+@shots("amb_frontier_steam", 2)
+def shot_frontier_steam(r, i):
+    if i == 0:
+        # the cylinder cocks blowing down: sharp bursts of steam in time with the drivers
+        x = zeros(3.0)
+        t0 = 0.02
+        for j in range(int(r.integers(4, 8))):
+            place(x, t0, steam(r, r.uniform(0.35, 0.5), body=0.6, bright=0.9), SR, 1.0 - 0.08 * j)
+            t0 += r.uniform(0.28, 0.34)
+    else:
+        # the safety valve lifting: a long, fluttering roar of steam that shuts off
+        x = steam(r, r.uniform(2.4, 3.2), body=0.3, bright=1.2)
+    return trim(far(x, r, 6000.0, 1.6, 0.3, damp=2500.0))
+
+
+@shots("amb_frontier_bell", 2)
+def shot_frontier_bell(r, i):
+    # the locomotive's bell on G: 1 rung steadily for a crossing; 2 a few strokes, the rope let go
+    x = zeros(8.0)
+    t0 = 0.02
+    strokes = int(r.integers(6, 8)) if i == 0 else 3
+    for j in range(strokes):
+        place(x, t0, loco_bell(r, 7.9 - t0), SR, (1.0 if j % 2 == 0 else 0.8) * (1.0 if i == 0 else 0.75 ** j))
+        t0 += r.uniform(0.95, 1.05) if i == 0 else r.uniform(1.1, 1.4)
+    return cap(trim(far(x, r, 5000.0, 1.6, 0.3, damp=3000.0)))
+
+
+def coyote_howl(r, f0, dur):
+    """A coyote's howl: a voice rising, holding with a waver and falling away."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    f = contour([(0, f0 * 0.8), (0.2, f0 * 1.25), (0.7, f0 * 1.15), (1, f0 * 0.75)], n, SR, 0.03) * \
+        (1.0 + 0.012 * np.sin(TAU * r.uniform(5.0, 7.0) * t))
+    s = tone(f, ((1, 1.0), (2, 0.3), (3, 0.12))) + 0.06 * unit(bp(r.standard_normal(n), 600.0, 3000.0))
+    return s * pts_env([(0, 0), (0.15, 1), (0.75, 0.85), (1, 0)], n)
+
+
+def yip(r, f0):
+    d = r.uniform(0.08, 0.12)
+    return syl([(0, f0), (0.4, f0 * 1.5), (1, f0 * 1.1)], d, amp=[(0, 0.3), (0.3, 1), (1, 0.2)],
+               harm=((1, 1.0), (2, 0.3), (3, 0.1)))
+
+
+@shots("amb_frontier_coyote", 2)
+def shot_frontier_coyote(r, i):
+    # coyotes far off across the canyon: 1 a few yips and a long howl; 2 a pack, howls overlapping
+    # and yips scattered among them
+    x = zeros(5.0)
+    if i == 0:
+        t0 = 0.02
+        for _ in range(int(r.integers(3, 6))):
+            place(x, t0, yip(r, r.uniform(700.0, 900.0)), SR, r.uniform(0.5, 0.9))
+            t0 += r.uniform(0.15, 0.3)
+        place(x, t0 + 0.2, coyote_howl(r, r.uniform(750.0, 900.0), r.uniform(1.6, 2.2)), SR)
+    else:
+        for j in range(3):
+            place(x, 0.02 + j * r.uniform(0.4, 0.8), coyote_howl(r, r.uniform(700.0, 1000.0), r.uniform(1.4, 2.0)), SR, 1.0 - 0.2 * j)
+        for _ in range(int(r.integers(6, 12))):
+            place(x, r.uniform(0.3, 3.2), yip(r, r.uniform(700.0, 1100.0)), SR, r.uniform(0.3, 0.7))
+    return cap(trim(far(x, r, 3000.0, 2.6, 0.5, damp=2000.0, hp_hz=200.0, predelay=0.06)))
+
+
+@shots("amb_frontier_squeal", 2)
+def shot_frontier_squeal(r, i):
+    # wheel flanges squealing round a curve: a thin, unstable screech hopping between the wheel's
+    # ringing modes, swelling and dying away
+    dur = r.uniform(2.5, 3.5)
+    n = int(dur * SR)
+    sel = smooth(r, n, 3.0)
+    s = np.zeros(n)
+    for j, f in enumerate(sorted(r.uniform(1800.0, 4200.0, 3))):
+        w = np.exp(-((sel - (j - 1) * 0.9) / 0.4) ** 2)
+        s += w * tone(f * (1.0 + 0.004 * smooth(r, n, 8.0)), ((1, 1.0), (2, 0.25), (3, 0.08)))
+    e = pts_env([(0, 0), (0.2, 1), (0.75, 0.8), (1, 0)], n)
+    s = s * (0.7 + 0.3 * np.abs(smooth(r, n, 20.0))) * e + 0.15 * unit(bp(r.standard_normal(n), 2000.0, 7000.0)) * e
+    return trim(far(s, r, 6000.0, 1.4, 0.35, damp=3000.0))
+
+
+# ---- neon ------------------------------------------------------------------
+def hover_car(r, dur, v, d, t_close, f_hum):
+    """A hover car flying past: an electric turbine hum and whine over a rush of air, through the
+    Doppler model (dull far off, bright as it passes)."""
+    n = int(dur * SR)
+    hum = tone(np.full(n, f_hum), ((1, 1.0), (2, 0.6), (3, 0.4), (4, 0.2), (6, 0.12)))
+    whine = tone(np.full(n, f_hum * r.uniform(9.5, 12.0)))
+    src = 0.5 * unit(hum) + 0.08 * whine + 0.7 * unit(bp(r.standard_normal(n), 300.0, 6000.0))
+    y, close = doppler_pass(src, SR, v, d, t_close)
+    dark = lp(y, 700.0)
+    return dark + (y - dark) * close ** 1.5
+
+
+@shots("amb_neon_hover", 3)
+def shot_neon_hover(r, i):
+    # hover cars on the traffic lanes: 1 one passing; 2 a fast one; 3 three in a stream
+    dur = 5.5
+    n = int(dur * SR)
+    if i == 0:
+        x = hover_car(r, dur, r.uniform(45.0, 70.0), r.uniform(12.0, 25.0), 2.5, r.uniform(160.0, 240.0))
+    elif i == 1:
+        x = hover_car(r, dur, r.uniform(85.0, 110.0), r.uniform(10.0, 18.0), 2.2, r.uniform(200.0, 280.0))
+    else:
+        x = np.zeros(n)
+        for j in range(3):
+            x += hover_car(r, dur, r.uniform(50.0, 65.0), r.uniform(14.0, 30.0), 1.6 + 0.9 * j + r.uniform(-0.1, 0.1),
+                           r.uniform(160.0, 260.0)) * r.uniform(0.6, 1.0)
+    return cap(trim(reverb(x * rcos_env(n, 0.5, 0.8), r, 1.6, 2500.0, 0.25, predelay=0.03)))
+
+
+@shots("amb_neon_siren", 2)
+def shot_neon_siren(r, i):
+    # a siren far down in the streets, softened by distance and the rain: 1 a slow two-tone (B4 / E5),
+    # 2 a lazy wail rising and falling; both fade in and out, dull and wet
+    dur = 6.0
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    if i == 0:
+        f = np.where((t // 0.75) % 2 == 0, ga.mtof(71), ga.mtof(76)).astype(float)
+        f = np.convolve(np.pad(f, 600, mode="edge"), np.ones(1200) / 1200, mode="same")[600:-600]
+    else:
+        f = 560.0 + 180.0 * (0.5 - 0.5 * np.cos(TAU * t / r.uniform(2.8, 3.4)))
+    x = hp(lp(siren_voice(f) * rcos_env(n, 1.8, 2.4), 1300.0), 300.0)
+    y = np.concatenate([x, np.zeros(int(1.0 * SR))])
+    for dly, g in ((0.23, 0.35), (0.5, 0.2), (0.85, 0.12)):
+        place(y, dly, lp(x, 1100.0), SR, g)
+    return cap(trim(reverb(y, r, 3.0, 1500.0, 0.6, predelay=0.04)))
+
+
+@shots("amb_neon_drone", 2)
+def shot_neon_drone(r, i):
+    # a delivery drone passing overhead: four small rotors buzzing a little apart, flown past by the
+    # Doppler model; the second chirps a two-note status beep (B5, E6) as it goes over
+    dur = 4.5
+    n = int(dur * SR)
+    src = np.zeros(n)
+    for fr in (232.0, 241.0, 255.0, 266.0):
+        f = fr * r.uniform(0.97, 1.05) * (1.0 + 0.02 * smooth(r, n, 2.0))
+        src += tone(f, [(k, 1.0 / k ** 0.8) for k in range(1, 12)])
+    src = unit(src) + 0.08 * unit(bp(r.standard_normal(n), 2000.0, 8000.0))
+    if i == 1:
+        tc = int(dur * 0.5 * SR)
+        place(src, tc / SR - 0.15, beep(ga.mtof(83), 0.08), SR, 0.25)
+        place(src, tc / SR - 0.03, beep(ga.mtof(88), 0.1), SR, 0.25)
+    y, close = doppler_pass(src, SR, r.uniform(9.0, 14.0), r.uniform(5.0, 9.0), dur * 0.5)
+    dark = lp(y, 1200.0)
+    return trim(reverb((dark + (y - dark) * close) * rcos_env(n, 0.6, 0.8), r, 1.2, 3000.0, 0.2))
+
+
+def neon_buzz(n):
+    return tone(np.full(n, 120.0), [(k, 1.0 / k ** 0.5) for k in range(1, 50)])
+
+
+@shots("amb_neon_spark", 3)
+def shot_neon_spark(r, i):
+    # neon in the rain: 1 a tube sputtering (bursts of buzz and crackle); 2 a transformer arcing - a
+    # sharp crack and a sizzle dying away over a hum surge; 3 a sign flickering on: relay ticks, failed
+    # sputters, then the buzz catching and holding
+    dur = 2.0
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    x = np.zeros(n)
+    buzz = bp(neon_buzz(n), 500.0, 6000.0)
+    if i == 0:
+        for _ in range(int(r.integers(3, 6))):
+            t0 = r.uniform(0.0, dur - 0.4)
+            d = r.uniform(0.05, 0.3)
+            gate = np.convolve(((t > t0) & (t < t0 + d)).astype(float) * (smooth(r, n, 80.0) > -0.3), np.ones(40) / 40, mode="same")
+            x += buzz * gate * r.uniform(0.3, 0.6)
+            for _ in range(int(r.integers(4, 14))):
+                place(x, t0 + r.uniform(0, d), noise_hit(r, 0.02, 2500.0, None, 0.0012), SR, r.uniform(0.4, 1.0))
+    elif i == 1:
+        place(x, 0.02, noise_hit(r, 0.1, 500.0, None, 0.004), SR, 1.2)
+        for _ in range(int(r.integers(40, 70))):
+            t0 = 0.03 + r.gamma(1.2, 0.2)
+            place(x, t0, noise_hit(r, 0.015, 3000.0, None, 0.0008), SR, r.uniform(0.2, 0.8) * np.exp(-t0 / 0.5))
+        x += 0.4 * unit(tone(np.full(n, 120.0), ((1, 1.0), (2, 0.6), (3, 0.3)))) * np.exp(-t / 0.6) * np.minimum(t / 0.02, 1.0)
+    else:
+        for j in range(int(r.integers(2, 4))):
+            place(x, 0.02 + 0.12 * j, modal([r.uniform(2600, 3400), r.uniform(4500, 5500)], [1.0, 0.5], [0.006, 0.004], 0.05, r=r),
+                  SR, 0.6)
+        t_on = r.uniform(0.9, 1.1)
+        for _ in range(int(r.integers(2, 4))):
+            t0 = r.uniform(0.4, t_on - 0.1)
+            gate = np.convolve(((t > t0) & (t < t0 + 0.05)).astype(float), np.ones(40) / 40, mode="same")
+            x += buzz * gate * 0.5
+        x += buzz * 0.35 * np.clip((t - t_on) / 0.05, 0.0, 1.0) * rcos_env(n, 0.0, 0.4)
+    return trim(reverb(lp(x, 9000.0), r, 0.5, 5000.0, 0.15))
+
+
+@shots("amb_neon_gutter", 3)
+def shot_neon_gutter(r, i):
+    x = zeros(3.0)
+    n = len(x)
+    if i == 0:
+        # a gutter overflowing onto a metal awning: a pouring stream and its splatter pinging the tin
+        m = int(2.5 * SR)
+        pour = bp(r.standard_normal(m), 300.0, 3000.0) * (0.6 + 0.4 * np.abs(smooth(r, m, 15.0))) * rcos_env(m, 0.3, 0.6)
+        place(x, 0.02, 0.5 * unit(pour), SR)
+        f = r.uniform(800.0, 1200.0)
+        for _ in range(int(r.integers(60, 100))):
+            ping = modal([f * r.uniform(0.95, 1.05), f * 1.9, f * 2.9], [1.0, 0.5, 0.3], [0.02, 0.012, 0.007], 0.08, r=r)
+            place(x, r.uniform(0.1, 2.4), ping + 0.4 * noise_hit(r, 0.08, 1500.0, 8000.0, 0.001), SR, r.uniform(0.1, 0.5))
+    elif i == 1:
+        # a storm drain gurgling: glugs of air coming up through the water, over a rush
+        m = int(2.6 * SR)
+        place(x, 0.02, 0.4 * unit(bp(r.standard_normal(m), 200.0, 1500.0)) * rcos_env(m, 0.3, 0.6), SR)
+        t0 = 0.1
+        while t0 < 2.4:
+            place(x, t0, bubble(r, r.uniform(150.0, 500.0), r.uniform(0.02, 0.05), 0.8, sr=SR), SR, r.uniform(0.4, 1.0))
+            t0 += r.exponential(0.12) + 0.03
+    else:
+        # drips on a tin can, slowing
+        f = r.uniform(1400.0, 2000.0)
+        t0, gap = 0.02, r.uniform(0.25, 0.35)
+        while t0 < 2.6:
+            place(x, t0, modal([f, f * 2.3, f * 3.8], [1.0, 0.45, 0.2], [0.08, 0.04, 0.02], 0.3, r=r) +
+                  0.3 * noise_hit(r, 0.3, 2000.0, 9000.0, 0.001), SR, r.uniform(0.5, 1.0))
+            t0 += gap * r.uniform(0.9, 1.1)
+            gap *= 1.12
+    return trim(far(x, r, 9000.0, 0.9, 0.2, damp=4000.0))
+
+
+def hover_horn(r, dur, notes=(64, 67)):
+    """A hover car's horn: a soft, synthy chord (E4 and G4) through a horn resonance."""
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    s = np.zeros(n)
+    for m in notes:
+        f = ga.mtof(m) * (1.0 + 0.003 * np.sin(TAU * 5.0 * t))
+        ph = TAU * np.cumsum(f) / SR + r.uniform(0, TAU)
+        for k in range(1, 12):
+            s += (0.3 + resonance(900.0, k * f, 2.0)) / k * np.sin(k * ph) * (k * f < 8000.0)
+    return s * rcos_env(n, 0.02, 0.06)
+
+
+@shots("amb_neon_horn", 2)
+def shot_neon_horn(r, i):
+    # a horn somewhere down the street: a quick double tap, or one long blare and a short one,
+    # echoing between the towers
+    x = zeros(3.5)
+    if i == 0:
+        place(x, 0.02, hover_horn(r, 0.18), SR)
+        place(x, 0.3, hover_horn(r, 0.25), SR)
+    else:
+        place(x, 0.02, hover_horn(r, 0.9), SR)
+        place(x, 1.15, hover_horn(r, 0.25), SR, 0.9)
+    y = x.copy()
+    for dly, g in ((0.25, 0.3), (0.55, 0.15)):
+        place(y, dly, lp(x, 1500.0), SR, g)
+    return trim(far(hp(y, 150.0), r, 2500.0, 2.2, 0.45, damp=2000.0, predelay=0.04))
+
+
+@shots("amb_neon_thunder", 2)
+def shot_neon_thunder(r, i):
+    # thunder above the city, 1.8-3 km off; the second with a restrike
+    x = thunder(r, 7.5, r.uniform(1800.0, 3000.0), r.uniform(500.0, 800.0), restrike=r.uniform(0.2, 0.35) if i == 1 else 0.0)
+    return cap(trim(reverb(hp(lp(x, 3000.0), 50.0), r, 2.8, 1000.0, 0.5, predelay=0.05), db_floor=-55.0))
 
 
 # ==========================================================================
