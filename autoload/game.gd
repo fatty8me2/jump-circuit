@@ -17,10 +17,10 @@ const LEVELS: Array[Dictionary] = [
 	{"id": "armada", "name": "Storm Armada", "scene": "res://levels/level_12_armada.tscn", "blurb": "Cross a sky-pirate fleet ship to ship through a thunderstorm. Mind the cannons.", "medals": {"gold": 190, "silver": 230, "bronze": 290}},
 	{"id": "candy", "name": "Sugar Rush", "scene": "res://levels/level_13_candy.tscn", "blurb": "A candy dreamworld. Sweet, bouncy, merciless.", "medals": {"gold": 185, "silver": 220, "bronze": 280}},
 	{"id": "carrier", "name": "Super Carrier", "scene": "res://levels/level_14_carrier.tscn", "blurb": "Launch day on a supercarrier. Stay out of the foam, off the catapults, up the tower.", "medals": {"gold": 190, "silver": 230, "bronze": 285}},
-	{"id": "sakura", "name": "Sakura Peaks", "scene": "res://levels/level_16_sakura.tscn", "blurb": "A feudal-Japan mountain at dusk, through blossoms and pagodas to the castle keep.", "medals": {"gold": 180, "silver": 220, "bronze": 280}},  # PROVISIONAL: placeholder course - the lead sets these once it is built and timed
-	{"id": "jungle", "name": "Jungle Temple", "scene": "res://levels/level_17_jungle.tscn", "blurb": "Overgrown ruins, a rolling boulder and a step pyramid. Do not touch the glyphs.", "medals": {"gold": 180, "silver": 220, "bronze": 280}},  # PROVISIONAL: placeholder course - the lead sets these once it is built and timed
+	{"id": "sakura", "name": "Sakura Peaks", "scene": "res://levels/level_16_sakura.tscn", "blurb": "A feudal-Japan mountain at dusk, through blossoms and pagodas to the castle keep.", "medals": {"gold": 200, "silver": 240, "bronze": 300}},
+	{"id": "jungle", "name": "Jungle Temple", "scene": "res://levels/level_17_jungle.tscn", "blurb": "Overgrown ruins, a rolling boulder and a step pyramid. Do not touch the glyphs.", "medals": {"gold": 185, "silver": 220, "bronze": 280}},
 	{"id": "frontier", "name": "Wild West Heist", "scene": "res://levels/level_18_frontier.tscn", "blurb": "Rob the train. Run the cars, ride the carts, beat the dynamite to the engine.", "medals": {"gold": 180, "silver": 220, "bronze": 280}},  # PROVISIONAL: placeholder course - the lead sets these once it is built and timed
-	{"id": "neon", "name": "Neon City", "scene": "res://levels/level_19_neon.tscn", "blurb": "Rain, neon and hover traffic. Ride the lanes to the top of the tallest tower.", "medals": {"gold": 180, "silver": 220, "bronze": 280}},  # PROVISIONAL: placeholder course - the lead sets these once it is built and timed
+	{"id": "neon", "name": "Neon City", "scene": "res://levels/level_19_neon.tscn", "blurb": "Rain, neon and hover traffic. Ride the lanes to the top of the tallest tower.", "medals": {"gold": 175, "silver": 210, "bronze": 265}},
 	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_20_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon.", "medals": {"gold": 180, "silver": 215, "bronze": 270}},
 ]
 ## Medal targets ("medals" in each LEVELS entry, whole seconds) come from the route bot:
@@ -32,7 +32,8 @@ const LEVELS: Array[Dictionary] = [
 const BOT_TIMES: Dictionary = {
 	"gardens": 150.3, "foundry": 136.4, "balance": 139.8, "clockwork": 172.1, "reef": 116.1,
 	"orbital": 142.5, "xeno": 136.3, "volcano": 144.1, "glacier": 163.4, "desert": 141.2,
-	"manor": 161.5, "armada": 168.5, "candy": 162.5, "carrier": 167.4, "ascent": 158.7,
+	"manor": 161.5, "armada": 168.5, "candy": 162.5, "carrier": 167.4, "sakura": 175.0, "jungle": 162.6, "neon": 153.4,
+	"ascent": 158.7,
 }
 const MEDAL_MULT: Dictionary = {"gold": 1.12, "silver": 1.35, "bronze": 1.7}
 const TITLE_SCENE: String = "res://ui/title.tscn"
