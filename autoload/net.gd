@@ -284,9 +284,11 @@ func _my_entry() -> Dictionary:
 	return e
 
 
-## Our equipped trail / finish, sent with the colour so the others see them.
+## Our equipped cosmetics, {kind: id} for every Cosmetics kind (character, hat, paint, trail,
+## finish, title), sent with the colour so the others see them. The dict rides the existing
+## registration (RPC argument / relay payload), so older clients simply miss the new keys.
 func _my_cosmetics() -> Dictionary:
-	return {"trail": Cosmetics.equipped_trail(), "finish": Cosmetics.equipped_finish()}
+	return Cosmetics.equipped_all()
 
 
 func _register_data() -> Dictionary:
@@ -627,7 +629,8 @@ func _register(player_name: String, color: int, cosmetics: Dictionary = {}) -> v
 	_register_player(multiplayer.get_remote_sender_id(), player_name, color, cosmetics)
 
 
-## `cosmetics` may hold "trail" / "finish" ids (anything else in it is ignored).
+## `cosmetics` may hold an id per Cosmetics kind ("character", "hat", "paint", "trail",
+## "finish", "title"); missing or unknown ids register as the defaults, anything else is ignored.
 func _register_player(id: int, player_name: String, color: int, cosmetics: Dictionary = {}) -> void:
 	if not is_host():
 		return
@@ -651,8 +654,8 @@ func _register_player(id: int, player_name: String, color: int, cosmetics: Dicti
 	entry["name"] = player_name.substr(0, 14)
 	# a newcomer gets a colour nobody else wears; later explicit picks are honoured
 	entry["color"] = _free_color(id, color) if joining else posmod(color, Settings.RACER_COLORS.size())
-	entry["trail"] = Cosmetics.clean("trail", cosmetics.get("trail"))
-	entry["finish"] = Cosmetics.clean("finish", cosmetics.get("finish"))
+	for kind: String in Cosmetics.kinds():
+		entry[kind] = Cosmetics.clean(kind, cosmetics.get(kind))
 	roster[id] = entry
 	if joining and game_mode == "team" and not teams.has(id):
 		teams[id] = PartyRules.smaller_team(teams)

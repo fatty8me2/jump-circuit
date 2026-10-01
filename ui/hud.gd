@@ -293,7 +293,7 @@ func _rebuild_board() -> void:
 		elif Net.race_laps.has(id) and float(e["finished"]) >= 0.0:
 			status += "  lap %d" % (int(Net.race_laps[id]["lap"]) + 1)
 		var me: String = "  <" if id == Net.my_id() else ("  - watching" if level != null and id == level.spectating_id else "")
-		var l: Label = UiKit.shadowed(UiKit.label("%d  %s   %s%s" % [place, e["name"], status, me], 20, col.lerp(Color.WHITE, 0.35)), 5)
+		var l: Label = UiKit.shadowed(UiKit.label("%d  %s   %s%s" % [place, Cosmetics.titled(str(e["name"]), e.get("title")), status, me], 20, col.lerp(Color.WHITE, 0.35)), 5)
 		_board.add_child(l)
 		if id == Net.my_id() and is_instance_valid(_race_place) and float(e["finished"]) >= 0.0:
 			_race_place.text = "%d%s place of %d" % [place, _ordinal(place), Net.roster.size()] if Net.roster.size() > 1 else ""
@@ -329,9 +329,9 @@ func _update_debug() -> void:
 
 # ---- end of level -------------------------------------------------------------------------
 
-## `prev_best` / `prev_ff` are the records from before this run (-1 = none), so a
-## new best time or fewest-falls record can be called out.
-func show_results(time: float, prev_best: float, is_best: bool, deaths: int, prev_ff: int = -1) -> void:
+## `prev_best` / `prev_ff` / `prev_medal` are the records from before this run (-1 = none /
+## unknown), so a new best time, fewest-falls record or medal can be called out.
+func show_results(time: float, prev_best: float, is_best: bool, deaths: int, prev_ff: int = -1, prev_medal: int = -1) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	var box: VBoxContainer = UiKit.vbox(12)
 	box.add_child(UiKit.label("COURSE CLEAR", 22, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER))
@@ -341,6 +341,7 @@ func show_results(time: float, prev_best: float, is_best: bool, deaths: int, pre
 	box.add_child(UiKit.label(sub, 22, UiKit.GOLD if is_best and prev_best >= 0.0 else UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER))
 	if prev_best >= 0.0:
 		box.add_child(UiKit.label(_delta_text(time, prev_best) + " s", 20, _delta_color(time, prev_best), HORIZONTAL_ALIGNMENT_CENTER))
+	var new_medal: int = _add_medal_lines(box, time, prev_medal)
 	var falls_text: String = "Falls: %d" % deaths
 	var falls_record: bool = deaths == 0 or (prev_ff >= 0 and deaths < prev_ff)
 	if deaths == 0:
@@ -371,6 +372,82 @@ func show_results(time: float, prev_best: float, is_best: bool, deaths: int, pre
 			b.disabled = false
 		_results_ready = true
 		next.grab_focus())
+	if new_medal > 0:
+		_celebrate_medal(new_medal)
+
+
+# ---- medals ----------------------------------------------------------------------------------
+
+## The results panel's medal block (when the course has medal times).
+var _medal_label: Label
+var _medal_next: Label
+
+
+static func medal_color(tier: int) -> Color:
+	match tier:
+		3:
+			return UiKit.GOLD
+		2:
+			return Color(0.82, 0.87, 0.95)
+		1:
+			return Color(0.88, 0.58, 0.34)
+	return Color(0.7, 0.74, 0.85)
+
+
+## A whole-second medal target as "2:40".
+@warning_ignore("integer_division")
+static func target_text(t: float) -> String:
+	var s: int = int(ceil(t))
+	return "%d:%02d" % [s / 60, s % 60]
+
+
+## "Next: Gold 2:40" for the tier above the level's medal ("" once Gold is held / no medals).
+static func next_target_text(level_id: String, have: int) -> String:
+	if have >= 3 or Game.medal_targets(level_id).is_empty():
+		return ""
+	return "Next: %s %s" % [Cosmetics.MEDAL_NAMES[have + 1], target_text(Game.medal_target(level_id, have + 1))]
+
+
+## Adds the medal this run earned and the next target; returns the tier newly earned for the
+## level (0 when its medal did not go up).
+func _add_medal_lines(box: VBoxContainer, time: float, prev_medal: int) -> int:
+	_medal_label = null
+	_medal_next = null
+	if level == null or Game.medal_targets(level.level_id).is_empty():
+		return 0
+	var run_tier: int = Game.medal_for(level.level_id, time)
+	var held: int = SaveData.medal(level.level_id)
+	var fresh: int = held if prev_medal >= 0 and held > prev_medal else 0
+	var text: String = "%s MEDAL" % Cosmetics.MEDAL_NAMES[run_tier].to_upper() if run_tier > 0 else "No medal this run"
+	if fresh > 0 and fresh == run_tier:
+		text = "NEW %s" % text
+	_medal_label = UiKit.label(text, 30 if run_tier > 0 else 20, medal_color(run_tier), HORIZONTAL_ALIGNMENT_CENTER)
+	_medal_label.name = "Medal"
+	box.add_child(_medal_label)
+	var nxt: String = next_target_text(level.level_id, held)
+	if nxt != "":
+		_medal_next = UiKit.label(nxt, 18, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER)
+		_medal_next.name = "MedalNext"
+		box.add_child(_medal_next)
+	return fresh
+
+
+## A new medal: a flash in its colour, the line springs in and a sting plays (higher for Gold).
+func _celebrate_medal(tier: int) -> void:
+	if _flash_tw != null and _flash_tw.is_valid():
+		_flash_tw.kill()
+	var c: Color = medal_color(tier)
+	_flash.color = Color(c.r, c.g, c.b, 0.35)
+	_flash_tw = create_tween()
+	_flash_tw.tween_interval(0.3)
+	_flash_tw.tween_property(_flash, "color:a", 0.0, 0.6)
+	Sfx.play("new_best", 0.0, 1.0, [1.0, 0.9, 1.05, 1.2][clampi(tier, 0, 3)])
+	if _medal_label != null and is_instance_valid(_medal_label):
+		_medal_label.pivot_offset = _medal_label.size * 0.5
+		_medal_label.scale = Vector2.ONE * 1.6
+		var tw: Tween = create_tween()
+		tw.tween_interval(0.3)
+		tw.tween_property(_medal_label, "scale", Vector2.ONE, 0.45).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 
 ## True once the results panel takes input (R / Y retries from then on).

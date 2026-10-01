@@ -16,7 +16,10 @@ var _facing: Vector3 = Vector3.FORWARD
 ## Teleport sequence of the last packet (a change means the racer respawned).
 var _seq: int = -1
 var racer_name: String = ""
+## Their title (Cosmetics.TITLES id), shown on the name tag under the name.
+var title_id: String = "rookie"
 var _shadow: Decal
+var _team_name: String = ""
 
 
 func _ready() -> void:
@@ -39,8 +42,15 @@ func _ready() -> void:
 func setup(p_name: String, color: Color) -> void:
 	racer_name = p_name
 	_visual.set_accent(color)
-	_label.text = p_name
+	_label.text = _tag_text()
 	_label.modulate = color.lerp(Color.WHITE, 0.4)
+
+
+## "Ada" over "Speed Demon" on the floating name tag.
+func _tag_text(team: String = "") -> String:
+	var top: String = racer_name if team == "" else "%s  [%s]" % [racer_name, team]
+	return "%s
+%s" % [top, Cosmetics.item_name("title", title_id)]
 
 
 ## The racer's unlocked trail and finish celebration, as they registered them (unknown ids
@@ -50,6 +60,22 @@ func set_cosmetics(trail: Variant, finish: Variant) -> void:
 	if t != _visual.trail_id:
 		_visual.set_trail(t)
 	_visual.finish_id = Cosmetics.clean("finish", finish)
+
+
+## Everything a roster entry carries ({"character", "hat", "paint", "trail", "finish", "title"}):
+## missing or unknown ids (an older or hand-edited client) fall back to the defaults.
+func apply_cosmetics(entry: Dictionary) -> void:
+	set_cosmetics(entry.get("trail"), entry.get("finish"))
+	_visual.set_character(Cosmetics.clean("character", entry.get("character")))
+	_visual.set_hat(Cosmetics.clean("hat", entry.get("hat")))
+	_visual.set_paint(Cosmetics.clean("paint", entry.get("paint")))
+	set_title(entry.get("title"))
+
+
+func set_title(id: Variant) -> void:
+	title_id = Cosmetics.clean("title", id)
+	if _label != null:
+		_label.text = _tag_text(_team_name)
 
 
 ## They crossed the line: their own finish celebration.
@@ -75,7 +101,8 @@ func is_grounded() -> bool:
 
 ## Team Party: the name tag shows the team colour and name.
 func set_team(team_name: String, color: Color) -> void:
-	_label.text = "%s  [%s]" % [racer_name, team_name]
+	_team_name = team_name
+	_label.text = _tag_text(team_name)
 	_label.modulate = color.lerp(Color.WHITE, 0.25)
 	_visual.set_accent(color)
 

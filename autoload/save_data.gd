@@ -8,6 +8,11 @@ const PATH: String = "user://progress.json"
 ## Ids not listed here (the playground) are rev 1.
 const LAYOUT_REV: Dictionary = {"gardens": 3, "foundry": 3, "balance": 3, "clockwork": 3, "reef": 1, "orbital": 1, "xeno": 1, "volcano": 1, "glacier": 1, "desert": 1, "manor": 1, "armada": 1, "candy": 1, "carrier": 1, "sakura": 1, "jungle": 1, "frontier": 1, "neon": 1, "ascent": 3}
 
+## Counters kept in data["stats"] (unlock rules read them, see Cosmetics "stat"):
+##   laps_dealt      times you lapped another racer (Run It Again)
+##   flawless_golds  Gold-medal runs finished without a single fall
+const STAT_KEYS: Array[String] = ["laps_dealt", "flawless_golds"]
+
 var data: Dictionary = {"levels": {}, "game_completed": false}
 ## Tests point this somewhere else so they never touch a real save.
 var path_override: String = ""
@@ -62,6 +67,14 @@ func _sanitize(v: Dictionary) -> Dictionary:
 			if k is String and not seen.has(k):
 				seen.append(k)
 		out["cosmetics_seen"] = seen
+	# small counters for unlock rules (Cosmetics "stat"): known keys, non-negative ints only
+	if v.get("stats") is Dictionary:
+		var stats: Dictionary = {}
+		for k: String in STAT_KEYS:
+			var n: Variant = (v["stats"] as Dictionary).get(k)
+			if _is_num(n) and is_finite(float(n)) and float(n) >= 0.0:
+				stats[k] = int(n)
+		out["stats"] = stats
 	var levels: Variant = v.get("levels")
 	if not (levels is Dictionary):
 		return out
@@ -164,8 +177,34 @@ func record_finish(level_id: String, time: float, falls: int = -1, splits: Array
 		else:
 			entry["splits"] = splits.duplicate()
 	data["levels"][level_id] = entry
+	if falls == 0 and Game.medal_for(level_id, time) == 3:
+		_bump_stat("flawless_golds", 1)
 	save_data()
 	return is_best
+
+
+## The medal this level's records hold (0-3): from the faster of the current-layout best
+## and an older layout's legacy best, so a layout rebuild never takes a medal away.
+func medal(level_id: String) -> int:
+	return Cosmetics.medal_of(data["levels"], level_id)
+
+
+func stat(key: String) -> int:
+	var s: Variant = data.get("stats", {})
+	return maxi(int((s as Dictionary).get(key, 0)), 0) if s is Dictionary else 0
+
+
+## Adds `n` to a counter and saves.
+func add_stat(key: String, n: int = 1) -> void:
+	_bump_stat(key, n)
+	save_data()
+
+
+func _bump_stat(key: String, n: int) -> void:
+	var s: Variant = data.get("stats", {})
+	var stats: Dictionary = s if s is Dictionary else {}
+	stats[key] = maxi(int(stats.get(key, 0)) + n, 0)
+	data["stats"] = stats
 
 
 func fewest_falls(level_id: String) -> int:

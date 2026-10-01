@@ -3,6 +3,26 @@ extends Node3D
 ## "Volt" - a round little courier robot. Purely cosmetic: squash/stretch, lean,
 ## foot cycle and particles are animated here and never touch the collider.
 ## Used both by the local Player and by RemoteRacer ghosts.
+##
+## ---- cosmetics hook API (Cosmetics kinds: character, hat, paint; trail / finish below) ----
+## Callers (LevelBase._spawn_player, RemoteRacer.set_cosmetics, the title / Locker preview) only
+## ever use these; ids are cleaned (unknown -> the kind's default) before anything is built:
+##   set_character(id)  Cosmetics.CHARACTERS id -> character_id. STUB: every id still builds Volt.
+##                      Art pass: split _build()'s body block into _build_body(id); every body
+##                      must provide _body, "Belt", "Pack", _eye_l/_eye_r, _antenna/_bulb, feet,
+##                      hands (invisible stubs where a body has none) and re-create _head_anchor,
+##                      then re-apply set_hat(hat_id) and set_paint(paint_id).
+##   set_hat(id)        Cosmetics.HATS id -> hat_id. Hats hang off _head_anchor (a Node3D on
+##                      _torso at the top of the head, so they bob / lean / flip with the body).
+##                      "none" removes it. STUB: a placeholder primitive tinted per id
+##                      (_build_hat(id) is the function to replace with real models).
+##   set_paint(id)      Cosmetics.PAINTS id -> paint_id. Swaps the body shell material
+##                      (_paint_material(id)). STUB: a flat tint per id ("ghost" translucent).
+##                      Art pass: chrome / galaxy / translucent looks (NaN-safe shaders or
+##                      StandardMaterial3D, emission bounded).
+##   set_trail(id), finish_id + play_finish(id)  unlockable trails / finish celebrations.
+## None of them touch the collider or the animation state; they are safe to call before or
+## after _ready() (calls before it are applied when the rig is built).
 
 ## A foot planted while moving on the ground (the local Player turns it into a quiet tick).
 signal footstep(speed: float)
@@ -32,6 +52,12 @@ var _trail_layers: Array[GPUParticles3D] = []
 ## Equipped cosmetics (Cosmetics ids). The finish celebration plays from on_cheer().
 var trail_id: String = "classic"
 var finish_id: String = "cheer"
+var character_id: String = "volt"
+var hat_id: String = "none"
+var paint_id: String = "white"
+## Where hats mount (top of the head, child of _torso). See set_hat().
+var _head_anchor: Node3D
+var _hat: Node3D
 
 var _squash: float = 0.0       # spring displacement: + stretch, - squash
 var _squash_vel: float = 0.0
@@ -219,6 +245,11 @@ func _build() -> void:
 	_part(_antenna, rod, _mat(Color(0.25, 0.27, 0.33), 0.4, 0.6), Vector3(0, 0.15, 0))
 	_bulb_mat = _mat(accent, 0.3, 0.0, 2.0)
 	_bulb = _part(_antenna, sphere, _bulb_mat, Vector3(0, 0.33, 0), Vector3.ONE * 0.12)
+	# hat mount: the crown of the shell, just in front of the antenna
+	_head_anchor = Node3D.new()
+	_head_anchor.name = "HeadAnchor"
+	_head_anchor.position = Vector3(0, 1.0, -0.04) + tz
+	_torso.add_child(_head_anchor)
 	# feet (dark rubber) and floating mitts (accent, like the belt)
 	var foot_mat := _mat(Color(0.16, 0.18, 0.26), 0.6)
 	_foot_l = _part(_rig, sphere, foot_mat, Vector3(-0.17, 0.09, 0), Vector3(0.24, 0.17, 0.34))
@@ -235,6 +266,11 @@ func _build() -> void:
 	_trail = _make_trail()
 	add_child(_trail)
 	_build_fx()
+	# picks made before the rig existed
+	if paint_id != "white":
+		set_paint(paint_id)
+	if hat_id != "none":
+		set_hat(hat_id)
 
 
 func _apply_colors() -> void:
@@ -246,6 +282,83 @@ func _apply_colors() -> void:
 	_bulb_mat.albedo_color = accent
 	_bulb_mat.emission = accent
 	_tint_fx()
+
+
+# ---- characters, hats, paints (see the hook API at the top) ---------------------------------
+
+## STUB: every character still builds as Volt (the art pass builds the real bodies).
+func set_character(id: String) -> void:
+	character_id = Cosmetics.clean("character", id)
+
+
+func set_hat(id: String) -> void:
+	hat_id = Cosmetics.clean("hat", id)
+	if _head_anchor == null:
+		return
+	if _hat != null and is_instance_valid(_hat):
+		_hat.get_parent().remove_child(_hat)
+		_hat.queue_free()
+	_hat = null
+	if hat_id == "none":
+		return
+	_hat = _build_hat(hat_id)
+	_hat.name = "Hat"
+	_head_anchor.add_child(_hat)
+
+
+## STUB placeholder: a short cylinder (a ring for the halo) tinted per hat id.
+func _build_hat(id: String) -> Node3D:
+	var holder := Node3D.new()
+	var col := Color.from_hsv(float(absi(hash(id)) % 1000) / 1000.0, 0.55, 0.9)
+	if id == "halo":
+		var ring := TorusMesh.new()
+		ring.inner_radius = 0.16
+		ring.outer_radius = 0.2
+		_part(holder, ring, _mat(Color(1.0, 0.92, 0.5), 0.3, 0.0, 1.5), Vector3(0, 0.22, 0))
+		return holder
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 0.17
+	cyl.bottom_radius = 0.22
+	cyl.height = 0.16
+	_part(holder, cyl, _mat(col, 0.5), Vector3(0, 0.06, 0))
+	return holder
+
+
+func set_paint(id: String) -> void:
+	paint_id = Cosmetics.clean("paint", id)
+	if _body != null:
+		_body.material_override = _paint_material(paint_id)
+
+
+## STUB placeholder looks: a flat tint per paint (Ghost is see-through, Neon Glow glows a little).
+func _paint_material(id: String) -> StandardMaterial3D:
+	match id:
+		"chrome":
+			return _mat(Color(0.82, 0.84, 0.88), 0.12, 0.9)
+		"camo":
+			return _mat(Color(0.42, 0.5, 0.3), 0.7)
+		"lava":
+			return _mat(Color(0.9, 0.35, 0.12), 0.5, 0.0, 0.6)
+		"galaxy":
+			return _mat(Color(0.25, 0.18, 0.5), 0.3, 0.2)
+		"candy":
+			return _mat(Color(1.0, 0.62, 0.8), 0.35)
+		"ghost":
+			var m: StandardMaterial3D = _mat(Color(0.85, 0.95, 1.0, 0.45), 0.3)
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			return m
+		"neon":
+			return _mat(Color(0.3, 1.0, 0.85), 0.3, 0.0, 0.8)
+	return _mat(Color(0.96, 0.94, 0.88), 0.4)
+
+
+## The hat node on the head (null for "none"); tests and the art pass inspect it.
+func hat_node() -> Node3D:
+	return _hat
+
+
+func head_anchor() -> Node3D:
+	return _head_anchor
 
 
 func _puff_material(color: Color) -> StandardMaterial3D:
