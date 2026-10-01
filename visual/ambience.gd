@@ -432,6 +432,35 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"pick": PackedColorArray([Color(2.0, 1.0, 1.6, 0.4), Color(1.0, 1.5, 2.2, 0.4), Color(2.2, 2.0, 1.0, 0.4)]),
 					"speed": Vector2(0.2, 0.6), "dir": Vector3.UP, "spread": 60.0, "curve": "pop"},
 			]
+		"sakura":
+			var petals := PackedColorArray([Color(1.0, 0.72, 0.82), Color(1.0, 0.86, 0.9), Color(0.96, 0.56, 0.7),
+					Color(1.0, 0.94, 0.95)])
+			return [
+				# near: cherry petals tumbling past on the evening breeze, warm lantern motes hanging
+				{"depth": "near", "amount": 150, "lifetime": 3.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.13,
+					"pick": petals, "dir": Vector3(0.6, -0.5, 0.2), "spread": 30.0, "speed": Vector2(0.5, 1.3),
+					"gravity": Vector3(0.25, -0.35, 0.05), "turbulence": 0.9, "turbulence_scale": 3.0,
+					"angle": Vector2(0, 360), "spin": Vector2(-260, 260), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 50, "lifetime": 2.6, "tex": Fx.Tex.DOT, "size": 0.09,
+					"pick": PackedColorArray([Color(2.4, 1.5, 0.6), Color(2.2, 1.9, 0.9)]), "speed": Vector2(0.05, 0.3),
+					"spread": 180.0, "turbulence": 1.2, "turbulence_scale": 3.0, "curve": "pop"},
+				# mid: drifts of blossom and fireflies blinking in the dusk
+				{"depth": "mid", "amount": 110, "lifetime": 6.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.22,
+					"pick": petals, "speed": Vector2(0.6, 1.4), "dir": Vector3(1, -0.3, 0.3), "spread": 30.0,
+					"gravity": Vector3(0.3, -0.3, 0.1), "turbulence": 1.1, "angle": Vector2(0, 360), "spin": Vector2(-200, 200),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 45, "lifetime": 4.0, "tex": Fx.Tex.DOT, "size": 0.3,
+					"pick": PackedColorArray([Color(2.2, 2.0, 0.8), Color(2.0, 1.4, 0.6)]), "speed": Vector2(0.1, 0.4),
+					"spread": 180.0, "turbulence": 1.5, "curve": "pop", "fade": PackedFloat32Array([0.0, 1.0, 0.1, 1.0, 0.0])},
+				# far: veils of valley mist lit rose by the low sun, and a slow rain of blossom over the skyline
+				{"depth": "far", "amount": 40, "lifetime": 10.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 16.0,
+					"radius": 80.0, "color": Color(0.95, 0.7, 0.75, 0.22), "speed": Vector2(1.0, 2.5), "dir": Vector3(1, 0.02, 0.2),
+					"spread": 12.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 60, "lifetime": 8.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 1.0,
+					"radius": 70.0, "pick": petals, "speed": Vector2(0.5, 1.2), "spread": 180.0,
+					"gravity": Vector3(0.3, -0.3, 0), "angle": Vector2(0, 360), "spin": Vector2(-120, 120),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking
