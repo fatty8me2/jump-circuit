@@ -164,12 +164,15 @@ const THEMES: Dictionary = {
 		"decor": Color(0.22, 0.18, 0.18), "decor2": Color(1.0, 0.76, 0.84), "metal": Color(0.55, 0.50, 0.42),
 		"cloud_light": Color(1.0, 0.82, 0.80), "cloud_shade": Color(0.48, 0.38, 0.52),
 	},
+	# Jungle Temple: overgrown temple ruins in a rainforest - weathered grey-green stone, moss,
+	# glowing jade inlay, gold accents. (levels/level_17_jungle.gd swaps in its own humid sky, a mossy
+	# carved-stone shader, the river and the canopy.)
 	"jungle": {
 		"sky_top": Color(0.30, 0.52, 0.62), "sky_horizon": Color(0.82, 0.90, 0.78), "sky_bottom": Color(0.16, 0.30, 0.20),
-		"sun": Color(1.0, 0.92, 0.70), "sun_energy": 1.6, "sun_rot": Vector3(-55, 160, 0),
+		"sun": Color(1.0, 0.92, 0.70), "sun_energy": 1.6, "sun_rot": Vector3(-52, 160, 0),
 		"ambient": Color(0.55, 0.72, 0.55), "ambient_energy": 0.8, "fog": Color(0.62, 0.76, 0.62), "fog_density": 0.003,
-		"top": Color(0.52, 0.52, 0.40), "side": Color(0.34, 0.36, 0.28), "trim": Color(0.30, 0.95, 0.70),
-		"alt_top": Color(0.36, 0.55, 0.26), "accent": Color(0.30, 0.95, 0.70), "accent2": Color(0.95, 0.70, 0.20),
+		"top": Color(0.62, 0.61, 0.50), "side": Color(0.40, 0.41, 0.33), "trim": Color(0.30, 0.95, 0.70),
+		"alt_top": Color(0.46, 0.55, 0.34), "accent": Color(0.30, 0.95, 0.70), "accent2": Color(0.95, 0.70, 0.20),
 		"decor": Color(0.16, 0.34, 0.14), "decor2": Color(0.80, 0.30, 0.20), "metal": Color(0.70, 0.58, 0.30),
 		"cloud_light": Color(0.95, 1.0, 0.95), "cloud_shade": Color(0.55, 0.66, 0.60),
 	},

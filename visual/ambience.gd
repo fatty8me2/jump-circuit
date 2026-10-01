@@ -351,6 +351,33 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"color": Color(0.2, 0.22, 0.25, 0.8), "speed": Vector2(2.0, 4.0), "dir": Vector3(1, 0.05, 0.3), "spread": 60.0,
 					"turbulence": 1.2, "angle": Vector2(80, 100), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
 			]
+		"jungle":
+			var greens := PackedColorArray([Color(0.3, 0.5, 0.14), Color(0.45, 0.58, 0.18), Color(0.56, 0.44, 0.16), Color(0.22, 0.4, 0.12)])
+			return [
+				# near: pollen and humid dust hanging in the warm light, a few tiny gnats darting
+				{"depth": "near", "amount": 160, "lifetime": 3.2, "tex": Fx.Tex.DOT, "size": 0.08,
+					"color": Color(2.0, 1.9, 1.2), "speed": Vector2(0.03, 0.25), "spread": 180.0,
+					"gravity": Vector3(0.05, 0.03, 0.02), "turbulence": 0.7, "curve": "pop"},
+				{"depth": "near", "amount": 40, "lifetime": 2.0, "tex": Fx.Tex.DOT, "additive": false, "size": 0.05,
+					"color": Color(0.1, 0.12, 0.08, 0.8), "speed": Vector2(0.4, 1.2), "spread": 180.0,
+					"turbulence": 2.5, "turbulence_scale": 1.5, "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# mid: leaves spiralling down from the canopy, butterflies flitting through
+				{"depth": "mid", "amount": 80, "lifetime": 6.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.3,
+					"pick": greens, "dir": Vector3(0.3, -1, 0.1), "spread": 25.0, "speed": Vector2(0.5, 1.2),
+					"gravity": Vector3(0.2, -0.4, 0.1), "turbulence": 1.4, "angle": Vector2(0, 360), "spin": Vector2(-220, 220),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 26, "lifetime": 5.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.34,
+					"pick": PackedColorArray([Color(0.2, 0.55, 1.0), Color(0.3, 0.75, 1.0), Color(1.0, 0.55, 0.12)]),
+					"speed": Vector2(0.8, 2.0), "spread": 180.0, "flatness": 0.4, "turbulence": 2.2, "turbulence_scale": 1.6,
+					"angle": Vector2(0, 360), "spin": Vector2(-900, 900), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# far: steam rising off the forest in slow veils, and birds wheeling far off
+				{"depth": "far", "amount": 45, "lifetime": 11.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 16.0,
+					"radius": 80.0, "color": Color(0.86, 0.92, 0.84, 0.3), "speed": Vector2(0.8, 2.0), "dir": Vector3(0.2, 0.4, 0.1),
+					"spread": 25.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 22, "lifetime": 9.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.9, "radius": 70.0,
+					"color": Color(0.08, 0.08, 0.07, 0.85), "speed": Vector2(2.0, 4.0), "dir": Vector3(1, 0.05, 0.3), "spread": 60.0,
+					"turbulence": 1.2, "angle": Vector2(80, 100), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
 		"armada":
 			return [
 				# near: storm rain slanting past on the wind, and spray glittering in the lamplight
