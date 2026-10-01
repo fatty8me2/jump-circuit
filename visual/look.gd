@@ -185,14 +185,17 @@ const THEMES: Dictionary = {
 		"decor": Color(0.40, 0.24, 0.16), "decor2": Color(0.24, 0.22, 0.22), "metal": Color(0.30, 0.30, 0.32),
 		"cloud_light": Color(1.0, 0.88, 0.72), "cloud_shade": Color(0.70, 0.46, 0.38),
 	},
+	# Neon City: a dense, rainy downtown at night - wet dark rooftops with mirror puddles, hot magenta
+	# neon trims, amber and teal accents, a plum-black overcast glowing with the city. (levels/
+	# level_19_neon.gd swaps in its own cloud-deck sky, the wet-roof shader and the rain.)
 	"neon": {
-		"sky_top": Color(0.04, 0.02, 0.08), "sky_horizon": Color(0.42, 0.10, 0.34), "sky_bottom": Color(0.08, 0.04, 0.10),
-		"sun": Color(0.80, 0.55, 1.0), "sun_energy": 0.7, "sun_rot": Vector3(-50, 120, 0),
-		"ambient": Color(0.60, 0.40, 0.75), "ambient_energy": 0.9, "fog": Color(0.20, 0.08, 0.20), "fog_density": 0.0035,
-		"top": Color(0.26, 0.26, 0.32), "side": Color(0.12, 0.12, 0.16), "trim": Color(1.0, 0.20, 0.70),
-		"alt_top": Color(0.20, 0.30, 0.36), "accent": Color(1.0, 0.20, 0.70), "accent2": Color(0.10, 0.95, 0.85),
-		"decor": Color(0.10, 0.10, 0.14), "decor2": Color(1.0, 0.70, 0.10), "metal": Color(0.45, 0.45, 0.52),
-		"cloud_light": Color(0.70, 0.30, 0.60), "cloud_shade": Color(0.12, 0.05, 0.14),
+		"sky_top": Color(0.035, 0.018, 0.05), "sky_horizon": Color(0.52, 0.16, 0.36), "sky_bottom": Color(0.12, 0.04, 0.08),
+		"sun": Color(0.62, 0.50, 0.90), "sun_energy": 0.5, "sun_rot": Vector3(-55, 135, 0),
+		"ambient": Color(0.55, 0.38, 0.62), "ambient_energy": 0.8, "fog": Color(0.30, 0.12, 0.26), "fog_density": 0.0042,
+		"top": Color(0.24, 0.23, 0.29), "side": Color(0.10, 0.09, 0.13), "trim": Color(1.0, 0.20, 0.70),
+		"alt_top": Color(0.20, 0.25, 0.30), "accent": Color(1.0, 0.62, 0.15), "accent2": Color(0.10, 0.95, 0.85),
+		"decor": Color(0.08, 0.07, 0.10), "decor2": Color(1.0, 0.62, 0.15), "metal": Color(0.38, 0.38, 0.44),
+		"cloud_light": Color(0.62, 0.30, 0.52), "cloud_shade": Color(0.14, 0.06, 0.14),
 	},
 	"ascent": {
 		"sky_top": Color(0.02, 0.03, 0.10), "sky_horizon": Color(0.20, 0.30, 0.58), "sky_bottom": Color(0.05, 0.08, 0.20),
