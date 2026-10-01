@@ -191,6 +191,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		UiKit.focus_first(_screen, _focus_pref)
 		get_viewport().set_input_as_handled()
 		return
+	if Game.title_screen == "locker" and not event.is_echo():
+		if event.is_action_pressed("spectate_prev") or event.is_action_pressed("spectate_next"):
+			set_locker_tab(locker_tab + (1 if event.is_action_pressed("spectate_next") else -1))
+			get_viewport().set_input_as_handled()
+			return
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	match Game.title_screen:
@@ -287,6 +292,11 @@ func _main_screen() -> Control:
 		var names: Array[String] = []
 		for f: Array in fresh:
 			names.append(Cosmetics.display_name(f[0], f[1]))
+		if names.size() > 5:
+			# a save from before medals can earn a pile at once: name a few
+			var more: int = names.size() - 4
+			names.resize(4)
+			names.append("and %d more" % more)
 		var note: Label = UiKit.shadowed(UiKit.label("Unlocked: %s!  See the Locker." % ", ".join(names), 18, UiKit.GOLD), 5)
 		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		note.custom_minimum_size = Vector2(420, 0)
@@ -383,21 +393,27 @@ func _levels_screen() -> Control:
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
 	var rows_h: float = float(Game.LEVELS.size()) * 58.0
-	scroll.custom_minimum_size = Vector2(532, clampf(rows_h, 180.0, get_viewport().get_visible_rect().size.y - 250.0))
+	scroll.custom_minimum_size = Vector2(712, clampf(rows_h, 180.0, get_viewport().get_visible_rect().size.y - 250.0))
 	box.add_child(scroll)
 	for i: int in Game.LEVELS.size():
 		var info: Dictionary = Game.LEVELS[i]
 		var unlocked: bool = Game.is_level_unlocked(i)
 		var best: float = SaveData.best_time(info["id"])
 		var text: String = "%d   %s" % [i + 1, info["name"]]
+		var medal: int = SaveData.medal(info["id"])
 		if not unlocked:
 			text += "     (clear %s to unlock)" % Game.LEVELS[i - 1]["name"]
-		elif best >= 0.0:
-			text += "     best %s" % SaveData.format_time(best)
-			var ff: int = SaveData.fewest_falls(info["id"])
-			if ff >= 0:
-				text += "   fewest falls %d" % ff
-		var b: Button = UiKit.button(text, func() -> void: Game.play_level(i), 520)
+		else:
+			if best >= 0.0:
+				text += "     best %s" % SaveData.format_time(best)
+				var ff: int = SaveData.fewest_falls(info["id"])
+				if ff >= 0:
+					text += "   falls %d" % ff
+			text += level_medal_text(info["id"], medal, best >= 0.0 or SaveData.is_completed(info["id"]))
+		var b: Button = UiKit.button(text, func() -> void: Game.play_level(i), 700)
+		b.set_meta("medal", medal)
+		if medal > 0:
+			b.add_theme_color_override("font_color", Hud.medal_color(medal).lerp(Color.WHITE, 0.35))
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.disabled = not unlocked
 		b.tooltip_text = info["blurb"]
@@ -408,8 +424,22 @@ func _levels_screen() -> Control:
 				first_open = b
 	# start on the first level still to clear (else the last unlocked one)
 	_focus_pref = first_open if first_open != null else last_unlocked
-	box.add_child(UiKit.button("Back", func() -> void: show_screen("main"), 520))
-	return _left_column(box, 540)
+	box.add_child(UiKit.button("Back", func() -> void: show_screen("main"), 700))
+	return _left_column(box, 720)
+
+
+## Level select's medal part of a row: "   SILVER  -  next Gold 2:40" (the medal is held
+## from the faster of the current best and a legacy one). `played` = the course has a clear,
+## so the first target is worth showing.
+static func level_medal_text(level_id: String, medal: int, played: bool) -> String:
+	if Game.medal_targets(level_id).is_empty():
+		return ""
+	var out: String = ""
+	if medal > 0:
+		out += "   %s" % Cosmetics.MEDAL_NAMES[medal].to_upper()
+	if (played or medal > 0) and medal < 3:
+		out += "  -  next %s %s" % [Cosmetics.MEDAL_NAMES[medal + 1], Hud.target_text(Game.medal_target(level_id, medal + 1))]
+	return out
 
 
 ## Party Practice: pick any unlocked course; the right column lists every power-up.
@@ -461,7 +491,17 @@ func _practice_screen() -> Control:
 	return _left_column(root, 1140)
 
 
-# ---- locker (unlockable trails and finish celebrations) ------------------------------------------
+# ---- locker (characters, hats, paints, trails, finishes, titles, colour) ---------------------------
+
+## Locker tabs, in order: one per Cosmetics kind, then the racer colour. LB / RB (Q / E)
+## switch tabs; the tab buttons are for the mouse (pad focus stays in the grid).
+const LOCKER_TABS: Array[String] = ["character", "hat", "paint", "trail", "finish", "title", "colour"]
+const LOCKER_COLUMNS: Dictionary = {"character": 5, "hat": 5, "paint": 4, "trail": 5, "finish": 3, "title": 4}
+var locker_tab: int = 0
+var _locker_body: VBoxContainer
+var _locker_tabs_row: HBoxContainer
+var _locker_tab_hint: Label
+
 
 ## The title Volt wears what is equipped (the Locker previews other things on it).
 func _wear_equipped() -> void:
@@ -470,6 +510,12 @@ func _wear_equipped() -> void:
 	if _volt.trail_id != Cosmetics.equipped_trail():
 		_volt.set_trail(Cosmetics.equipped_trail())
 	_volt.finish_id = Cosmetics.equipped_finish()
+	if _volt.character_id != Cosmetics.equipped("character"):
+		_volt.set_character(Cosmetics.equipped("character"))
+	if _volt.hat_id != Cosmetics.equipped("hat"):
+		_volt.set_hat(Cosmetics.equipped("hat"))
+	if _volt.paint_id != Cosmetics.equipped("paint"):
+		_volt.set_paint(Cosmetics.equipped("paint"))
 
 
 ## Locker preview: Volt laps the pad platform at a run so the trail streams out, framed
@@ -489,18 +535,94 @@ func _locker_preview(dt: float) -> void:
 func _locker_screen() -> Control:
 	var box: VBoxContainer = UiKit.vbox(10)
 	box.add_child(UiKit.shadowed(UiKit.label("LOCKER", 40, Color.WHITE), 8))
-	var blurb: Label = UiKit.label("Beat courses to unlock trails and finish celebrations. Racers online see yours too.", 17, UiKit.SOFT)
+	var blurb: Label = UiKit.label("Earn medals and beat courses to unlock characters, hats, paint jobs, trails, finishes and titles. Racers online see yours too.", 17, UiKit.SOFT)
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	blurb.custom_minimum_size = Vector2(600, 0)
+	blurb.custom_minimum_size = Vector2(720, 0)
 	box.add_child(blurb)
-	# colour, as on the Race Friends screen
-	box.add_child(UiKit.label("COLOUR", 16, UiKit.TEAL))
+	# the tab bar: clickable, never pad-focused (LB / RB switch)
+	_locker_tabs_row = UiKit.hbox(6)
+	_locker_tabs_row.name = "Tabs"
+	for i: int in LOCKER_TABS.size():
+		var tb: Button = UiKit.button(_tab_label(LOCKER_TABS[i]), func() -> void: set_locker_tab(i), 96)
+		tb.focus_mode = Control.FOCUS_NONE
+		tb.custom_minimum_size.y = 38
+		tb.add_theme_font_size_override("font_size", 15)
+		tb.set_meta("tab", LOCKER_TABS[i])
+		_locker_tabs_row.add_child(tb)
+	box.add_child(_locker_tabs_row)
+	_locker_tab_hint = UiKit.label("", 14, UiKit.SOFT)
+	box.add_child(_locker_tab_hint)
+	_locker_body = UiKit.vbox(8)
+	_locker_body.name = "TabBody"
+	_locker_body.custom_minimum_size = Vector2(720, 300)
+	box.add_child(_locker_body)
+	_locker_info = UiKit.shadowed(UiKit.label("", 18, UiKit.SOFT), 5)
+	_locker_info.custom_minimum_size = Vector2(720, 48)
+	_locker_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(_locker_info)
+	var back: Button = UiKit.button("Back", func() -> void: show_screen("main"), 720)
+	back.name = "Back"
+	back.focus_entered.connect(func() -> void: _set_locker_info("", UiKit.SOFT))
+	box.add_child(back)
+	var p: PanelContainer = UiKit.panel(Vector2(760, 0))
+	p.add_child(box)
+	locker_tab = clampi(locker_tab, 0, LOCKER_TABS.size() - 1)
+	_focus_pref = _build_locker_tab()
+	return _left_column(p, 780)
+
+
+static func _tab_label(tab: String) -> String:
+	return "Colour" if tab == "colour" else Cosmetics.kind_label(tab)
+
+
+## Switches the Locker to tab `i` (wraps), rebuilding its grid and focusing the worn item.
+func set_locker_tab(i: int) -> void:
+	if Game.title_screen != "locker" or _locker_body == null or not is_instance_valid(_locker_body):
+		return
+	locker_tab = posmod(i, LOCKER_TABS.size())
+	var first: Control = _build_locker_tab()
+	if first != null:
+		first.grab_focus()
+	Sfx.play("ui", 0.05, 0.7)
+
+
+## Fills the tab body; returns the control to focus first (the equipped item).
+func _build_locker_tab() -> Control:
+	var tab: String = LOCKER_TABS[locker_tab]
+	for c: Node in _locker_body.get_children():
+		_locker_body.remove_child(c)
+		c.queue_free()
+	for b: Node in _locker_tabs_row.get_children():
+		var on: bool = str(b.get_meta("tab")) == tab
+		(b as Button).modulate = Color.WHITE if on else Color(0.62, 0.65, 0.75)
+		(b as Button).text = ("[ %s ]" if on else "%s") % _tab_label(str(b.get_meta("tab")))
+	_locker_tab_hint.text = "%s / %s  switch tabs      %s  equip      %s  back" % [Game.prompt("spectate_prev"), Game.prompt("spectate_next"),
+		"A" if Game.using_pad else "Enter", Game.prompt("back")]
+	_set_locker_info("", UiKit.SOFT)
+	# the preview wears what is equipped, plus whatever is focused in this tab
+	_wear_equipped()
+	_locker_body.add_child(UiKit.label(_tab_label(tab).to_upper(), 16, UiKit.TEAL))
+	if tab == "colour":
+		return _locker_colours()
+	var grid: GridContainer = _locker_grid(tab, int(LOCKER_COLUMNS.get(tab, 4)))
+	_locker_body.add_child(grid)
+	var want: String = Cosmetics.equipped(tab)
+	for b: Node in grid.get_children():
+		if str(b.get_meta("item")) == want:
+			return b as Control
+	return grid.get_child(0) as Control if grid.get_child_count() > 0 else null
+
+
+## Colour swatches, as on the Race Friends screen.
+func _locker_colours() -> Control:
 	var colours: HBoxContainer = UiKit.hbox(8)
 	colours.name = "Colours"
 	var styles: Array[StyleBoxFlat] = []
+	var pick: Control = null
 	for i: int in Settings.RACER_COLORS.size():
 		var sw := Button.new()
-		sw.custom_minimum_size = Vector2(44, 44)
+		sw.custom_minimum_size = Vector2(52, 52)
+		sw.set_meta("colour", i)
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = Settings.RACER_COLORS[i]
 		sb.set_corner_radius_all(8)
@@ -509,7 +631,7 @@ func _locker_screen() -> Control:
 		styles.append(sb)
 		for state: String in ["normal", "hover", "pressed"]:
 			sw.add_theme_stylebox_override(state, sb)
-		sw.focus_entered.connect(func() -> void: _set_locker_info("Colour", UiKit.SOFT))
+		sw.focus_entered.connect(func() -> void: _set_locker_info("Colour %d  -  your belt, mitts and name" % (i + 1), UiKit.SOFT))
 		sw.pressed.connect(func() -> void:
 			Settings.color_index = i
 			Net.preferred_color = -1
@@ -519,43 +641,28 @@ func _locker_screen() -> Control:
 			_volt.set_accent(Settings.my_color())
 			Net.update_identity())
 		colours.add_child(sw)
-	box.add_child(colours)
-	var trails: GridContainer = _locker_grid("trail", 5)
-	box.add_child(UiKit.label("TRAILS", 16, UiKit.TEAL))
-	box.add_child(trails)
-	var finishes: GridContainer = _locker_grid("finish", 3)
-	box.add_child(UiKit.label("FINISH", 16, UiKit.TEAL))
-	box.add_child(finishes)
-	_locker_info = UiKit.shadowed(UiKit.label("", 18, UiKit.SOFT), 5)
-	_locker_info.custom_minimum_size = Vector2(600, 48)
-	_locker_info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	box.add_child(_locker_info)
-	var back: Button = UiKit.button("Back", func() -> void: show_screen("main"), 600)
-	back.name = "Back"
-	back.focus_entered.connect(func() -> void: _set_locker_info("", UiKit.SOFT))
-	box.add_child(back)
-	var p: PanelContainer = UiKit.panel(Vector2(640, 0))
-	p.add_child(box)
-	# start on the equipped trail
-	for b: Node in trails.get_children():
-		if str(b.get_meta("item")) == Cosmetics.equipped_trail():
-			_focus_pref = b as Button
-	return _left_column(p, 660)
+		if i == Settings.color_index:
+			pick = sw
+	_locker_body.add_child(colours)
+	return pick
 
 
 ## A grid of item buttons. Focusing one previews it on Volt and names how to unlock it;
 ## pressing equips it (a locked one is only previewed).
 func _locker_grid(kind: String, columns: int) -> GridContainer:
 	var grid := GridContainer.new()
-	grid.name = "Trails" if kind == "trail" else "Finishes"
+	grid.name = {"trail": "Trails", "finish": "Finishes"}.get(kind, Cosmetics.kind_label(kind) + "s")
 	grid.columns = columns
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 8)
+	var w: float = (720.0 - 8.0 * float(columns - 1)) / float(columns)
 	for id: String in Cosmetics.ids(kind):
-		var b: Button = UiKit.button("", func() -> void: _locker_pick(kind, id), 112.0 if kind == "trail" else 192.0)
+		var b: Button = UiKit.button("", func() -> void: _locker_pick(kind, id), w)
 		b.set_meta("item", id)
 		b.set_meta("kind", kind)
 		b.custom_minimum_size.y = 46
+		b.clip_text = true
+		b.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		b.add_theme_font_size_override("font_size", 16)
 		b.focus_entered.connect(func() -> void: _locker_focus(kind, id))
 		b.mouse_entered.connect(func() -> void: _locker_focus(kind, id))
@@ -565,7 +672,7 @@ func _locker_grid(kind: String, columns: int) -> GridContainer:
 
 
 static func _equipped(kind: String) -> String:
-	return Cosmetics.equipped_trail() if kind == "trail" else Cosmetics.equipped_finish()
+	return Cosmetics.equipped(kind)
 
 
 func _refresh_locker_grid(grid: GridContainer) -> void:
@@ -573,7 +680,7 @@ func _refresh_locker_grid(grid: GridContainer) -> void:
 		var b := n as Button
 		var kind: String = str(b.get_meta("kind"))
 		var id: String = str(b.get_meta("item"))
-		var item_name: String = str(Cosmetics.catalogue(kind)[id]["name"])
+		var item_name: String = Cosmetics.item_name(kind, id)
 		var unlocked: bool = Cosmetics.is_unlocked(kind, id)
 		if id == _equipped(kind):
 			b.text = "> %s <" % item_name
@@ -583,8 +690,11 @@ func _refresh_locker_grid(grid: GridContainer) -> void:
 		b.tooltip_text = item_name if unlocked else "%s  -  %s" % [item_name, Cosmetics.hint(kind, id)]
 
 
+## The info line for a focused item: "LOCKED  Ninja  -  Gold on Sakura Peaks  (best: Silver)".
 func _locker_focus(kind: String, id: String) -> void:
 	var item_name: String = Cosmetics.display_name(kind, id)
+	if kind == "title":
+		item_name = "%s  (%s)" % [item_name, Cosmetics.titled(Settings.player_name, id)]
 	if not Cosmetics.is_unlocked(kind, id):
 		var prog: String = Cosmetics.progress(kind, id)
 		_set_locker_info("LOCKED  %s  -  %s%s" % [item_name, Cosmetics.hint(kind, id), "  (%s)" % prog if prog != "" else ""], Color(1, 0.7, 0.55))
@@ -592,16 +702,29 @@ func _locker_focus(kind: String, id: String) -> void:
 		_set_locker_info("%s  -  equipped" % item_name, UiKit.GOLD)
 	else:
 		_set_locker_info(item_name, Color.WHITE)
-	if kind == "trail" and _volt.trail_id != id:
-		_volt.set_trail(id)
+	_preview(kind, id)
+
+
+## Puts a focused item on the preview Volt.
+func _preview(kind: String, id: String) -> void:
+	match kind:
+		"trail":
+			if _volt.trail_id != id:
+				_volt.set_trail(id)
+		"character":
+			if _volt.character_id != id:
+				_volt.set_character(id)
+		"hat":
+			if _volt.hat_id != id:
+				_volt.set_hat(id)
+		"paint":
+			if _volt.paint_id != id:
+				_volt.set_paint(id)
 
 
 func _locker_pick(kind: String, id: String) -> void:
 	if Cosmetics.is_unlocked(kind, id):
-		if kind == "trail":
-			Settings.trail_id = id
-		else:
-			Settings.finish_id = id
+		Settings.set(Cosmetics.setting_key(kind), id)
 		_save_locker()
 		Net.update_identity()
 		Sfx.play("ui", 0.05, 0.8)
@@ -836,11 +959,11 @@ func _refresh_lobby() -> void:
 		if mode != "race" and Net.party_round > 0 and Game.party != null and Game.party.cup.has(id):
 			cup = "     cup %d" % int(Game.party.cup[id])
 		if not team:
-			_roster_box.add_child(UiKit.label("%s%s%s%s" % [e["name"], tag, last, cup], 22, col.lerp(Color.WHITE, 0.3)))
+			_roster_box.add_child(UiKit.label("%s%s%s%s" % [Cosmetics.titled(str(e["name"]), e.get("title")), tag, last, cup], 22, col.lerp(Color.WHITE, 0.3)))
 			continue
 		var tm: int = Net.team_of(id)
 		var row: HBoxContainer = UiKit.hbox(10)
-		var l: Label = UiKit.label("[%s]  %s%s%s" % [PartyNames.team_name(tm), e["name"], tag, cup], 22, PartyNames.team_color(tm).lerp(Color.WHITE, 0.25))
+		var l: Label = UiKit.label("[%s]  %s%s%s" % [PartyNames.team_name(tm), Cosmetics.titled(str(e["name"]), e.get("title")), tag, cup], 22, PartyNames.team_color(tm).lerp(Color.WHITE, 0.25))
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(l)
 		if Net.is_host():

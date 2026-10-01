@@ -20,6 +20,10 @@ var _ended: bool = false
 func _ready() -> void:
 	Net.upnp_enabled = false   # hosting in test_r must never open a port on the real router
 	SaveData.path_override = "user://test_progress.json"
+	# -- --save=<name>: a private test save, so suites running side by side don't share one
+	for a: String in OS.get_cmdline_user_args():
+		if a.begins_with("--save=") and a.trim_prefix("--save=").is_valid_filename():
+			SaveData.path_override = "user://%s.json" % a.trim_prefix("--save=")
 	SaveData.wipe()
 	var only: String = ""
 	var skip: String = ""
@@ -3440,8 +3444,8 @@ func test_zc_cosmetics_retroactive_and_one_time_toast() -> void:
 	# a save from before cosmetics existed: two worlds beaten, no "cosmetics_seen"
 	var f: FileAccess = FileAccess.open(SaveData._path(), FileAccess.WRITE)
 	f.store_string(JSON.stringify({"game_completed": false, "levels": {
-		"reef": {"completed": true, "runs": 3, "best": 80.0, "rev": 1},
-		"glacier": {"completed": true, "runs": 1, "best": 120.0, "rev": 1}}}))
+		"reef": {"completed": true, "runs": 3, "best": 380.0, "rev": 1},
+		"glacier": {"completed": true, "runs": 1, "best": 420.0, "rev": 1}}}))   # (slower than Bronze: no medal rewards)
 	f.close()
 	SaveData.load_data()
 	check(Cosmetics.is_unlocked("trail", "bubbles") and Cosmetics.is_unlocked("trail", "frost"), "an old save unlocks what it already earned")
@@ -3473,7 +3477,7 @@ func test_zc_cosmetics_retroactive_and_one_time_toast() -> void:
 	title.queue_free()
 	await ticks(2)
 	# a new finish unlocks exactly its own item
-	SaveData.record_finish("volcano", 100.0, 3)
+	SaveData.record_finish("volcano", 400.0, 3)   # (slower than Bronze)
 	fresh = Cosmetics.check_unlocks()
 	check(fresh.size() == 1 and fresh[0] == ["trail", "flame"], "beating Cinder Peak announces the Flame trail (%s)" % [fresh])
 	# a hand-edited seen list keeps strings only
@@ -3551,9 +3555,14 @@ func test_zc_locker_pad_navigation() -> void:
 	await send.call(JOY_BUTTON_A)
 	await ticks(2)
 	check(Game.title_screen == "locker", "A opens the Locker")
+	check(focus.call() != null and focus.call().get_meta("kind", "") == "character" and focus.call().get_meta("item", "") == "volt",
+		"it opens on the Character tab, on the worn character")
+	# RB to the Trail tab (Character > Hat > Paint > Trail)
+	for i: int in 3:
+		await send.call(JOY_BUTTON_RIGHT_SHOULDER)
 	var volt: PlayerVisual = title.get("_volt")
 	var f: Control = focus.call()
-	check(f != null and f.get_meta("item", "") == "classic", "it starts on the equipped trail")
+	check(f != null and f.get_meta("kind", "") == "trail" and f.get_meta("item", "") == "classic", "RB x3 reaches the Trail tab, on the equipped trail")
 	await send.call(JOY_BUTTON_DPAD_RIGHT)
 	f = focus.call()
 	check(f != null and f.get_meta("item", "") == "sparkle" and volt.trail_id == "sparkle", "right moves along the trails and previews each on Volt")
@@ -3567,12 +3576,11 @@ func test_zc_locker_pad_navigation() -> void:
 		"a locked trail can be focused and names its unlock (%s)" % info.text)
 	await send.call(JOY_BUTTON_A)
 	check(Settings.trail_id == "flame", "A on a locked trail only previews it")
-	# down into the finish row, then to Back
-	guard = 0
-	while not (focus.call() != null and focus.call().get_meta("kind", "") == "finish") and guard < 4:
-		await send.call(JOY_BUTTON_DPAD_DOWN)
-		guard += 1
-	check(focus.call() != null and focus.call().get_meta("kind", "") == "finish", "down reaches the Finish row")
+	# RB to the Finish tab
+	await send.call(JOY_BUTTON_RIGHT_SHOULDER)
+	check(focus.call() != null and focus.call().get_meta("kind", "") == "finish", "RB reaches the Finish tab")
+	check(volt.trail_id == "flame", "switching tabs puts the equipped trail back on the preview")
+	await send.call(JOY_BUTTON_DPAD_RIGHT)
 	var fin_id: String = str(focus.call().get_meta("item", ""))
 	await send.call(JOY_BUTTON_A)
 	var want_fin: String = fin_id if Cosmetics.is_unlocked("finish", fin_id) else "cheer"
@@ -3582,9 +3590,13 @@ func test_zc_locker_pad_navigation() -> void:
 	while not (focus.call() is Button and (focus.call() as Button).text == "Back") and guard < 4:
 		await send.call(JOY_BUTTON_DPAD_DOWN)
 		guard += 1
-	check(focus.call() is Button and (focus.call() as Button).text == "Back", "down again reaches Back")
+	check(focus.call() is Button and (focus.call() as Button).text == "Back", "down reaches Back")
 	await send.call(JOY_BUTTON_DPAD_UP)
 	check(focus.call() != null and focus.call().get_meta("kind", "") == "finish", "and up goes back to the Finish row")
+	# LB goes back a tab
+	await send.call(JOY_BUTTON_LEFT_SHOULDER)
+	check(focus.call() != null and focus.call().get_meta("kind", "") == "trail" and focus.call().get_meta("item", "") == "flame",
+		"LB goes back to the Trail tab, on the newly equipped Flame")
 	await send.call(JOY_BUTTON_B)
 	await ticks(2)
 	check(Game.title_screen == "main", "B leaves the Locker")
@@ -3703,3 +3715,605 @@ func test_zc_remote_racer_cosmetics() -> void:
 	world.queue_free()
 	world = null
 	await ticks(2)
+
+
+
+# ---- medal times and rewards (characters, hats, paints, titles) --------------------------------
+
+## The four worlds still being built carry provisional medal times (no bot time yet).
+const _ZM_PROVISIONAL: Array[String] = ["sakura", "jungle", "frontier", "neon"]
+
+
+## A levels dict with these bests (id -> seconds), as SaveData stores them.
+func _zm_levels(bests: Dictionary, legacy: bool = false) -> Dictionary:
+	var lv: Dictionary = {}
+	for id: Variant in bests:
+		lv[id] = {"completed": true, "runs": 1, ("legacy_best" if legacy else "best"): float(bests[id])}
+	return lv
+
+
+## Every course at `tier` (its target time exactly).
+func _zm_all_at(tier: int) -> Dictionary:
+	var b: Dictionary = {}
+	for info: Dictionary in Game.LEVELS:
+		b[info["id"]] = Game.medal_target(str(info["id"]), tier)
+	return _zm_levels(b)
+
+
+func test_zm_medal_for_edges() -> void:
+	for info: Dictionary in Game.LEVELS:
+		var id: String = info["id"]
+		var m: Dictionary = info.get("medals", {})
+		check(m.has("gold") and m.has("silver") and m.has("bronze") and m["gold"] is int and m["silver"] is int and m["bronze"] is int,
+			"%s has whole-second gold / silver / bronze targets" % id)
+		check(int(m["gold"]) < int(m["silver"]) and int(m["silver"]) < int(m["bronze"]), "%s: gold < silver < bronze %s" % [id, m])
+		var g: float = float(m["gold"])
+		var s: float = float(m["silver"])
+		var b: float = float(m["bronze"])
+		var ok: bool = Game.medal_for(id, g) == 3 and Game.medal_for(id, g - 30.0) == 3 and Game.medal_for(id, g + 0.01) == 2 \
+			and Game.medal_for(id, s) == 2 and Game.medal_for(id, s + 0.01) == 1 and Game.medal_for(id, b) == 1 \
+			and Game.medal_for(id, b + 0.01) == 0 and Game.medal_for(id, 9999.0) == 0
+		check(ok, "%s: a time on a target earns it, a hundredth over drops a tier" % id)
+	check(Game.medal_for("gardens", -1.0) == 0 and Game.medal_for("gardens", INF) == 0 and Game.medal_for("gardens", NAN) == 0,
+		"no time / a non-finite time earns nothing")
+	check(Game.medal_for("playground", 1.0) == 0 and Game.medal_for("nope", 1.0) == 0, "the playground and unknown ids have no medals")
+	# 1/120 s ticks summed: 170 s arrives as 169.99999999 and must still be Gold
+	var t: float = 0.0
+	for i: int in 170 * 120:
+		t += 1.0 / 120.0
+	check(Game.medal_for("gardens", t) == 3, "a time that is the target up to float error counts (%.9f)" % t)
+	check(Game.medal_target("gardens", 3) == float(Game.medal_targets("gardens")["gold"]) and Game.medal_target("gardens", 0) == -1.0,
+		"medal_target reads a tier's time")
+	check(Hud.target_text(170.0) == "2:50" and Hud.next_target_text("gardens", 2) == "Next: Gold 2:50" and Hud.next_target_text("gardens", 3) == "",
+		"next target reads '%s'" % Hud.next_target_text("gardens", 2))
+
+
+func test_zm_medal_targets_follow_bot_times() -> void:
+	for info: Dictionary in Game.LEVELS:
+		var id: String = info["id"]
+		if not Game.BOT_TIMES.has(id):
+			check(id in _ZM_PROVISIONAL, "%s has a bot time reference (only the placeholder worlds may not)" % id)
+			continue
+		var bot: float = float(Game.BOT_TIMES[id])
+		var m: Dictionary = info["medals"]
+		check(float(m["gold"]) >= bot, "%s: Gold %d is never below the fastest bot route (%.1f s)" % [id, int(m["gold"]), bot])
+		for k: String in ["gold", "silver", "bronze"]:
+			var raw: float = bot * float(Game.MEDAL_MULT[k])
+			check(float(m[k]) >= raw - 0.001 and float(m[k]) < raw + 5.0 and int(m[k]) % 5 == 0,
+				"%s %s = bot x %.2f rounded up to 5 s (%d vs %.1f)" % [id, k, float(Game.MEDAL_MULT[k]), int(m[k]), raw])
+	for id: String in Game.BOT_TIMES:
+		check(not Game.level_by_id(id).is_empty(), "bot time %s belongs to a course" % id)
+
+
+func test_zm_medals_retroactive_and_legacy() -> void:
+	# an old save: Launch Gardens beaten on layout rev 1 (now rev 3) in Gold time, Coral Depths
+	# on the current layout in Silver time, from before medals existed
+	var gold: float = Game.medal_target("gardens", 3)
+	var f: FileAccess = FileAccess.open(SaveData._path(), FileAccess.WRITE)
+	f.store_string(JSON.stringify({"game_completed": false, "levels": {
+		"gardens": {"completed": true, "runs": 4, "best": gold - 1.0, "rev": 1},
+		"reef": {"completed": true, "runs": 2, "best": Game.medal_target("reef", 2) - 0.5, "rev": 1}}}))
+	f.close()
+	SaveData.load_data()
+	check(SaveData.best_time("gardens") < 0.0 and SaveData.data["levels"]["gardens"].has("legacy_best"), "the old-layout best moved to legacy_best")
+	check(SaveData.medal("gardens") == 3, "... and still holds its Gold")
+	check(SaveData.medal("reef") == 2, "an old save earns Silver retroactively")
+	check(SaveData.medal("orbital") == 0, "an unplayed course has no medal")
+	# a slower run on the new layout never takes the medal away
+	SaveData.record_finish("gardens", gold + 60.0, 4)
+	check(SaveData.best_time("gardens") == gold + 60.0 and SaveData.medal("gardens") == 3, "min(best, legacy_best): a slower new best keeps the Gold")
+	# ... and a faster current best than the legacy one counts too
+	SaveData.data["levels"]["reef"]["legacy_best"] = 999.0
+	check(SaveData.medal("reef") == 2, "the faster of the two counts")
+	check(Cosmetics.is_unlocked("hat", "sunhat") and Cosmetics.is_unlocked("hat", "snorkel"), "the medal hats are unlocked from the old save")
+	var fresh: Array[Array] = Cosmetics.check_unlocks()
+	var keys: Array[String] = []
+	for x: Array in fresh:
+		keys.append("%s:%s" % [x[0], x[1]])
+	check(keys.has("hat:sunhat") and keys.has("hat:snorkel") and not keys.has("hat:none"), "check_unlocks announces medal rewards once (%s)" % [keys])
+	check(Cosmetics.check_unlocks().is_empty(), "and only once")
+	# the level select shows medals and the next target
+	Game.title_screen = "levels"
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	title.set("persist_settings", false)
+	add_child(title)
+	await ticks(3)
+	var rows: Dictionary = {}
+	for n: Node in (title.get("_screen") as Control).find_children("*", "Button", true, false):
+		if n.has_meta("medal"):
+			rows[(n as Button).text.get_slice("   ", 1)] = n
+	var g_row: Button = rows.get("Launch Gardens")
+	var r_row: Button = rows.get("Coral Depths")
+	check(g_row != null and int(g_row.get_meta("medal")) == 3 and g_row.text.contains("GOLD") and not g_row.text.contains("next"),
+		"level select: Gold on Launch Gardens, nothing further to chase (%s)" % (g_row.text if g_row != null else "missing"))
+	check(r_row != null and r_row.text.contains("SILVER") and r_row.text.contains("next Gold %s" % Hud.target_text(Game.medal_target("reef", 3))),
+		"level select: Silver on Coral Depths with the Gold target (%s)" % (r_row.text if r_row != null else "missing"))
+	title.queue_free()
+	await ticks(2)
+	Game.title_screen = "main"
+	SaveData.wipe()
+
+
+func test_zm_reward_rules_hints_progress() -> void:
+	var none: Dictionary = {}
+	var no_stats: Dictionary = {}
+	for kind: String in Cosmetics.kinds():
+		for id: String in Cosmetics.ids(kind):
+			var is_default: bool = Cosmetics.catalogue(kind)[id]["rule"]["type"] == "default"
+			check(Cosmetics.is_unlocked(kind, id, none, no_stats) == is_default, "%s %s: %s on a fresh save" % [kind, id, "owned" if is_default else "locked"])
+			if not is_default:
+				check(Cosmetics.hint(kind, id) != "", "%s %s has a hint (%s)" % [kind, id, Cosmetics.hint(kind, id)])
+	# medal{level, tier}
+	var g_sak: float = Game.medal_target("sakura", 3)
+	check(Cosmetics.is_unlocked("character", "ninja", _zm_levels({"sakura": g_sak})), "Gold on Sakura Peaks: Ninja")
+	check(not Cosmetics.is_unlocked("character", "ninja", _zm_levels({"sakura": g_sak + 0.01})), "Silver there is not enough")
+	check(Cosmetics.is_unlocked("hat", "kasa", _zm_levels({"sakura": Game.medal_target("sakura", 2)})), "Silver on Sakura Peaks: Straw Kasa")
+	check(Cosmetics.is_unlocked("hat", "kasa", _zm_levels({"sakura": g_sak})), "... and Gold counts as Silver or better")
+	check(Cosmetics.is_unlocked("paint", "ghost", _zm_levels({"manor": Game.medal_target("manor", 2)}, true)), "a legacy best counts for medals")
+	check(Cosmetics.hint("character", "ninja") == "Gold on Sakura Peaks", "medal hint: %s" % Cosmetics.hint("character", "ninja"))
+	check(Cosmetics.hint("hat", "witch") == "Silver or better on Phantom Manor", "medal hint: %s" % Cosmetics.hint("hat", "witch"))
+	check(Cosmetics.progress("character", "ninja", _zm_levels({"sakura": Game.medal_target("sakura", 2)})) == "best: Silver",
+		"medal progress names the best medal held (%s)" % Cosmetics.progress("character", "ninja", _zm_levels({"sakura": Game.medal_target("sakura", 2)})))
+	check(Cosmetics.progress("character", "ninja", none) == "best: no medal", "... or none")
+	# medals{tier, n}
+	var ids: Array[String] = []
+	for info: Dictionary in Game.LEVELS:
+		ids.append(str(info["id"]))
+	var golds: Dictionary = {}
+	for i: int in 4:
+		golds[ids[i]] = Game.medal_target(ids[i], 3)
+	check(not Cosmetics.is_unlocked("paint", "chrome", _zm_levels(golds)) and Cosmetics.progress("paint", "chrome", _zm_levels(golds)) == "Golds 4/5",
+		"4 Golds: no Chrome yet (%s)" % Cosmetics.progress("paint", "chrome", _zm_levels(golds)))
+	golds[ids[4]] = Game.medal_target(ids[4], 3)
+	check(Cosmetics.is_unlocked("paint", "chrome", _zm_levels(golds)) and Cosmetics.is_unlocked("title", "speed_demon", _zm_levels(golds)),
+		"5 Golds: Chrome paint and the Speed Demon title")
+	check(Cosmetics.is_unlocked("paint", "camo", _zm_levels(golds)), "Golds count towards 'Silver on 5 courses' (Camo)")
+	check(Cosmetics.hint("paint", "camo") == "Silver or better on 5 courses" and Cosmetics.hint("character", "knight") == "Bronze or better on 10 courses",
+		"medals hints: %s / %s" % [Cosmetics.hint("paint", "camo"), Cosmetics.hint("character", "knight")])
+	var bronzes: Dictionary = {}
+	for i: int in 10:
+		bronzes[ids[i]] = Game.medal_target(ids[i], 1)
+	check(Cosmetics.is_unlocked("character", "knight", _zm_levels(bronzes)) and not Cosmetics.is_unlocked("character", "catbot", _zm_levels(bronzes)),
+		"10 Bronzes: Knight, but not the Cat-bot (Silver on 10)")
+	check(Cosmetics.progress("character", "catbot", _zm_levels(bronzes)) == "Silvers 0/10", "progress: %s" % Cosmetics.progress("character", "catbot", _zm_levels(bronzes)))
+	# all_medals{tier}
+	var every_gold: Dictionary = _zm_all_at(3)
+	check(Cosmetics.is_unlocked("character", "golden", every_gold) and Cosmetics.is_unlocked("title", "gold_rush", every_gold), "every Gold: Golden Volt and Gold Rush")
+	var one_short: Dictionary = every_gold.duplicate(true)
+	one_short["ascent"]["best"] = Game.medal_target("ascent", 2)
+	check(not Cosmetics.is_unlocked("character", "golden", one_short), "one Silver among the Golds: no Golden Volt")
+	check(Cosmetics.progress("character", "golden", one_short) == "Golds %d/%d" % [Game.LEVELS.size() - 1, Game.LEVELS.size()],
+		"all_medals progress: %s" % Cosmetics.progress("character", "golden", one_short))
+	check(Cosmetics.hint("character", "golden") == "Gold on every course", "all_medals hint: %s" % Cosmetics.hint("character", "golden"))
+	check(Cosmetics.is_unlocked("hat", "crown", every_gold) and Cosmetics.is_unlocked("title", "globetrotter", every_gold), "and the Crown and Globetrotter")
+	# stat{key, n}
+	check(not Cosmetics.is_unlocked("hat", "party", none, {"laps_dealt": 2}) and Cosmetics.is_unlocked("hat", "party", none, {"laps_dealt": 3}),
+		"lapping racers 3 times: the Party Hat")
+	check(Cosmetics.progress("hat", "party", none, {"laps_dealt": 2}) == "2/3" and Cosmetics.progress("title", "lap_king", none, {"laps_dealt": 25}) == "10/10",
+		"stat progress counts up and caps")
+	check(Cosmetics.is_unlocked("title", "lap_king", none, {"laps_dealt": 10}), "10 laps: Lap King")
+	check(Cosmetics.is_unlocked("hat", "halo", none, {"flawless_golds": 1}) and not Cosmetics.is_unlocked("hat", "halo", none, {"flawless_golds": 0}),
+		"a flawless Gold: the Halo")
+	check(Cosmetics.hint("hat", "party").contains("3 times") and Cosmetics.hint("hat", "halo") != "", "stat hints: %s / %s" % [Cosmetics.hint("hat", "party"), Cosmetics.hint("hat", "halo")])
+	check(Cosmetics.stat_value("runs", {"gardens": {"runs": 7}, "reef": {"runs": 3}}, {}) == 10, "the 'runs' stat is the total run count")
+	check(Cosmetics.is_unlocked("title", "marathoner", {"gardens": {"completed": true, "runs": 100}}) and Cosmetics.progress("title", "marathoner", {"gardens": {"runs": 40}}) == "40/100",
+		"100 runs: Marathoner")
+	check(Cosmetics.is_unlocked("title", "flawless", {"gardens": {"completed": true, "fewest_falls": 0}}), "a run without a fall: the Flawless title")
+	check(not Cosmetics.rule_met({"type": "stat", "key": "laps_dealt", "n": 1}, none, {"laps_dealt": -5}), "a negative counter counts as zero")
+	check(not Cosmetics.rule_met({"type": "bogus"}, none, {}), "an unknown rule type unlocks nothing")
+	check(Cosmetics.medal_reward_text(3, "character", "ninja") == "GOLD! New reward: Ninja", "the medal banner reads '%s'" % Cosmetics.medal_reward_text(3, "character", "ninja"))
+
+
+func test_zm_catalogue_and_kinds() -> void:
+	check(Cosmetics.kinds() == ["character", "hat", "paint", "trail", "finish", "title"], "KINDS order: %s" % [Cosmetics.kinds()])
+	for kind: String in Cosmetics.kinds():
+		var d: String = Cosmetics.default_id(kind)
+		check(Cosmetics.has_item(kind, d) and Cosmetics.catalogue(kind)[d]["rule"]["type"] == "default", "%s default %s is in its catalogue and always owned" % [kind, d])
+		check(Cosmetics.setting_key(kind) in Settings._props() and Settings.get(Cosmetics.setting_key(kind)) is String, "%s is saved as Settings.%s" % [kind, Cosmetics.setting_key(kind)])
+		check(Cosmetics.clean(kind, "<junk>") == d and Cosmetics.clean(kind, 12) == d and Cosmetics.clean(kind, null) == d, "%s: junk ids clean to the default" % kind)
+	# the old trail / finish helpers still answer exactly as before
+	check(Cosmetics.default_id("trail") == Cosmetics.DEFAULT_TRAIL and Cosmetics.default_id("finish") == Cosmetics.DEFAULT_FINISH, "trail / finish defaults unchanged")
+	check(Cosmetics.display_name("trail", "flame") == "Flame trail" and Cosmetics.display_name("finish", "jet") == "Jet Flyover finish", "trail / finish display names unchanged")
+	check(Cosmetics.display_name("character", "ninja") == "Ninja" and Cosmetics.display_name("paint", "chrome") == "Chrome paint" and Cosmetics.display_name("title", "lap_king") == "Lap King title",
+		"new kinds name themselves")
+	check(Cosmetics.catalogue("nope").is_empty() and Cosmetics.default_id("nope") == "", "an unknown kind is empty")
+	# the catalogue as planned
+	check(Cosmetics.ids("character") == ["volt", "knight", "ninja", "astronaut", "dino", "skeleton", "catbot", "outlaw", "cyber", "golden"], "characters: %s" % [Cosmetics.ids("character")])
+	check(Cosmetics.ids("paint") == ["white", "chrome", "camo", "lava", "galaxy", "candy", "ghost", "neon"], "paints: %s" % [Cosmetics.ids("paint")])
+	check(Cosmetics.ids("title") == ["rookie", "globetrotter", "speed_demon", "gold_rush", "flawless", "lap_king", "marathoner"], "titles: %s" % [Cosmetics.ids("title")])
+	# one hat per world, for Silver on it
+	var worlds: Dictionary = {}
+	for id: String in Cosmetics.ids("hat"):
+		var r: Dictionary = Cosmetics.catalogue("hat")[id]["rule"]
+		if r["type"] == "medal":
+			check(int(r["tier"]) == 2 and not worlds.has(r["level"]), "hat %s: Silver on %s" % [id, r["level"]])
+			worlds[r["level"]] = id
+	for info: Dictionary in Game.LEVELS:
+		check(worlds.has(info["id"]), "%s has its own Silver hat" % info["name"])
+	check(worlds.size() == Game.LEVELS.size(), "%d world hats for %d worlds" % [worlds.size(), Game.LEVELS.size()])
+	for id: String in ["crown", "halo", "party"]:
+		check(Cosmetics.has_item("hat", id), "special hat %s" % id)
+	# every rule names a real course
+	for kind: String in Cosmetics.kinds():
+		for id: String in Cosmetics.ids(kind):
+			var r: Dictionary = Cosmetics.catalogue(kind)[id]["rule"]
+			var lid: String = str(r.get("level", r.get("id", "")))
+			if lid != "":
+				check(not Game.level_by_id(lid).is_empty(), "%s %s names a real course (%s)" % [kind, id, lid])
+	check(Cosmetics.titled("Ada", "speed_demon") == "Ada · Speed Demon" and Cosmetics.titled("Bo", "???") == "Bo · Rookie", "titled names")
+
+
+func test_zm_settings_sanitize_reward_ids() -> void:
+	var keep: Dictionary = {}
+	for kind: String in Cosmetics.kinds():
+		keep[kind] = Settings.get(Cosmetics.setting_key(kind))
+	Settings.character_id = "dragon"
+	Settings.hat_id = ""
+	Settings.paint_id = "chrome"
+	Settings.title_id = "lap_king"
+	Settings.call("_sanitize")
+	check(Settings.character_id == "volt" and Settings.hat_id == "none", "unknown character / hat ids fall back to the defaults")
+	check(Settings.paint_id == "chrome" and Settings.title_id == "lap_king", "known ids are kept (even if still locked)")
+	var path: String = "user://test_settings_rewards.cfg"
+	var cf := ConfigFile.new()
+	cf.set_value("s", "character_id", 7)
+	cf.set_value("s", "hat_id", "witch")
+	cf.set_value("s", "paint_id", "polka")
+	cf.set_value("s", "title_id", ["x"])
+	cf.save(path)
+	Settings.load_settings(path)
+	check(Settings.character_id == "volt" and Settings.hat_id == "witch" and Settings.paint_id == "white" and Settings.title_id == "lap_king",
+		"from a file: wrong types ignored, bad strings reset (%s / %s / %s / %s)" % [Settings.character_id, Settings.hat_id, Settings.paint_id, Settings.title_id])
+	for k: String in ["character_id", "hat_id", "paint_id", "title_id"]:
+		check(k in Settings._props(), "%s is saved with the settings" % k)
+	# a locked pick is never worn
+	SaveData.wipe()
+	Settings.hat_id = "witch"
+	check(Cosmetics.equipped("hat") == "none", "a locked hat in settings wears No Hat")
+	SaveData.data["levels"]["manor"] = {"completed": true, "runs": 1, "best": Game.medal_target("manor", 2)}
+	check(Cosmetics.equipped("hat") == "witch", "once earned it is worn")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	for kind: String in keep:
+		Settings.set(Cosmetics.setting_key(kind), keep[kind])
+	SaveData.wipe()
+
+
+func test_zm_stats_and_flawless_gold() -> void:
+	SaveData.wipe()
+	check(SaveData.stat("laps_dealt") == 0, "a fresh save has no laps dealt")
+	SaveData.add_stat("laps_dealt")
+	SaveData.add_stat("laps_dealt", 2)
+	SaveData.load_data()
+	check(SaveData.stat("laps_dealt") == 3, "laps_dealt is counted and saved")
+	check(Cosmetics.is_unlocked("hat", "party"), "3 laps dealt unlock the Party Hat from the real save")
+	var clean: Dictionary = SaveData._sanitize({"levels": {}, "stats": {"laps_dealt": 4.0, "flawless_golds": -2, "bogus": 9, "runs": "x"}})
+	check(clean.get("stats") == {"laps_dealt": 4}, "stats are sanitized to known non-negative counters (%s)" % [clean.get("stats")])
+	check(not SaveData._sanitize({"levels": {}, "stats": "nope"}).has("stats"), "a non-dictionary stats entry is dropped")
+	# a Gold with falls is not flawless; a flawless Silver is not a Gold
+	SaveData.record_finish("gardens", Game.medal_target("gardens", 3) - 1.0, 2)
+	SaveData.record_finish("gardens", Game.medal_target("gardens", 2), 0)
+	check(SaveData.stat("flawless_golds") == 0, "neither counts as a flawless Gold")
+	SaveData.record_finish("gardens", Game.medal_target("gardens", 3) + 5.0, 0)
+	SaveData.record_finish("reef", Game.medal_target("reef", 3), 0)
+	check(SaveData.stat("flawless_golds") == 1 and Cosmetics.is_unlocked("hat", "halo"), "a Gold with no falls counts and unlocks the Halo")
+	SaveData.wipe()
+
+
+## A race level with Ada (2) and Bo (3) registered with every cosmetic.
+func _zm_race_level() -> LevelBase:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	check(Net.host(24611) == OK, "hosting a race")
+	Net._register_player(2, "Ada", 1, {"character": "ninja", "hat": "witch", "paint": "chrome", "trail": "wisps", "finish": "ghost", "title": "speed_demon"})
+	Net._register_player(3, "Bo", 2, {"character": "dragon", "hat": 5, "title": "<b>"})
+	for id: int in [2, 3]:
+		Net.roster[id]["cp_at"] = 0.0
+	Game.level_index = 0
+	Game.race_mode = true
+	Net.race_start_time = Net.now() - 1.0
+	var lvl: LevelBase = (load(Game.LEVELS[0]["scene"]) as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	return lvl
+
+
+func _zm_end_race() -> void:
+	Net.leave()
+	Game.race_mode = false
+	if world != null:
+		world.queue_free()
+		world = null
+	await ticks(2)
+
+
+func test_zm_remote_racer_all_ids() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var r := RemoteRacer.new()
+	add_child(r)
+	await ticks(1)
+	r.setup("Ada", Settings.RACER_COLORS[1])
+	r.apply_cosmetics({"character": "astronaut", "hat": "cowboy", "paint": "lava", "trail": "frost", "finish": "jet", "title": "lap_king"})
+	var v: PlayerVisual = r.visual()
+	check(v.character_id == "astronaut" and v.hat_id == "cowboy" and v.paint_id == "lava" and v.trail_id == "frost" and v.finish_id == "jet",
+		"a remote racer wears every id they sent")
+	check(v.hat_node() != null and v.head_anchor().is_ancestor_of(v.hat_node()), "the hat hangs off the head anchor")
+	check(r.title_id == "lap_king" and r._label.text == "Ada\nLap King", "the name tag shows the title (%s)" % r._label.text.c_escape())
+	r.apply_cosmetics({"character": "<script>", "hat": 7, "paint": null, "title": "emperor"})
+	check(v.character_id == "volt" and v.hat_id == "none" and v.paint_id == "white" and v.trail_id == "classic" and v.finish_id == "cheer" and r.title_id == "rookie",
+		"unknown or missing ids fall back to every default")
+	check(v.hat_node() == null, "No Hat removes the hat")
+	r.set_team("Red", Color.RED)
+	check(r._label.text == "Ada  [Red]\nRookie", "team tags keep the title (%s)" % r._label.text.c_escape())
+	r.queue_free()
+	# registration, the relay JSON roster and the race ghosts carry every kind
+	var lvl: LevelBase = await _zm_race_level()
+	for kind: String in Cosmetics.kinds():
+		check(Net.roster[1].has(kind), "the host's own entry carries its %s" % kind)
+		check(Net._register_data().get(kind) == Cosmetics.equipped(kind), "our relay registration sends our %s" % kind)
+		check(Net._my_cosmetics().get(kind) == Cosmetics.equipped(kind), "our direct registration sends our %s" % kind)
+	check(Net.roster[2]["character"] == "ninja" and Net.roster[2]["hat"] == "witch" and Net.roster[2]["paint"] == "chrome" and Net.roster[2]["title"] == "speed_demon",
+		"registration stores character / hat / paint / title")
+	check(Net.roster[3]["character"] == "volt" and Net.roster[3]["hat"] == "none" and Net.roster[3]["paint"] == "white" and Net.roster[3]["title"] == "rookie",
+		"an older client (no keys) or junk ids register as the defaults")
+	var wire: Variant = JSON.parse_string(JSON.stringify({"players": Net._roster_to_wire()}))
+	var back: Dictionary = Net._roster_from_wire((wire as Dictionary)["players"])
+	check(back.has(2) and back[2]["hat"] == "witch" and back[2]["title"] == "speed_demon" and back[2]["character"] == "ninja", "the ids survive the relay's JSON roster")
+	var g: RemoteRacer = lvl._ghosts.get(2)
+	check(g != null and g.visual().character_id == "ninja" and g.visual().hat_id == "witch" and g.visual().paint_id == "chrome" and g.title_id == "speed_demon",
+		"the race ghost wears Ada's character, hat, paint and title")
+	var g3: RemoteRacer = lvl._ghosts.get(3)
+	check(g3 != null and g3.visual().character_id == "volt" and g3.visual().hat_id == "none", "Bo's ghost wears the defaults")
+	await _zm_end_race()
+
+
+func test_zm_titles_on_roster_and_board() -> void:
+	var lvl: LevelBase = await _zm_race_level()
+	lvl.hud._rebuild_board()
+	var board: String = ""
+	for l: Node in lvl.hud._board.get_children():
+		board += (l as Label).text + "|"
+	check(board.contains("Ada · Speed Demon") and board.contains("Bo · Rookie"), "the race board shows titles (%s)" % board)
+	await _zm_end_race()
+	# the lobby roster
+	check(Net.host(24612) == OK, "hosting a lobby")
+	Net._register_player(2, "Ada", 1, {"title": "gold_rush"})
+	Game.title_screen = "lobby"
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	title.set("persist_settings", false)
+	add_child(title)
+	await ticks(4)
+	var roster: String = ""
+	for l: Node in (title.get("_screen") as Control).find_children("*", "Label", true, false):
+		roster += (l as Label).text + "|"
+	check(roster.contains("Ada · Gold Rush") and roster.contains("%s · " % Settings.player_name), "the lobby roster shows titles (%s)" % roster)
+	title.queue_free()
+	await ticks(2)
+	Net.leave()
+	Game.title_screen = "main"
+
+
+func test_zm_laps_dealt_counts_in_race() -> void:
+	SaveData.wipe()
+	var lvl: LevelBase = await _zm_race_level()
+	var me: int = Net.my_id()
+	Net.roster[me]["finished"] = 40.0
+	Net._apply_lap_msg(me, {"k": "x", "victim": 2, "count": 1})
+	check(SaveData.stat("laps_dealt") == 1 and lvl.hud._toast.text == "You lapped Ada", "lapping Ada counts a lap dealt (%d)" % SaveData.stat("laps_dealt"))
+	Net._apply_lap_msg(me, {"k": "x", "victim": 2, "count": 2})
+	Net._apply_lap_msg(me, {"k": "x", "victim": 3, "count": 1})
+	check(SaveData.stat("laps_dealt") == 3, "every lap dealt counts (%d)" % SaveData.stat("laps_dealt"))
+	Net._apply_lap_msg(me, {"k": "x", "victim": 3, "count": 1})
+	check(SaveData.stat("laps_dealt") == 3, "a repeated lap message is not counted twice")
+	# being lapped is not dealing a lap
+	Net.roster[2]["finished"] = 41.0
+	Net.roster[me]["finished"] = -1.0
+	Net._apply_lap_msg(2, {"k": "x", "victim": me, "count": 1})
+	check(SaveData.stat("laps_dealt") == 3, "being lapped counts nothing")
+	await seconds(2.3)
+	check(lvl.hud._toast.text == "Unlocked: Party Hat!", "the third lap announces the Party Hat (%s)" % lvl.hud._toast.text)
+	await _zm_end_race()
+	SaveData.wipe()
+
+
+func test_zm_results_medal_and_banner() -> void:
+	await new_world()
+	world.queue_free()
+	world = null
+	SaveData.wipe()
+	Game.level_index = 0
+	Game.race_mode = false
+	var lvl: LevelBase = (load(Game.LEVELS[0]["scene"]) as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	var id: String = lvl.level_id
+	# a first clear in Silver time: the panel names the medal and the Gold target
+	var t_silver: float = Game.medal_target(id, 2) - 2.0
+	var prev: int = SaveData.medal(id)
+	SaveData.record_finish(id, t_silver, 3)
+	lvl.hud.show_results(t_silver, -1.0, true, 3, -1, prev)
+	var ml: Label = lvl.hud._medal_label
+	check(ml != null and ml.text == "NEW SILVER MEDAL", "the results panel shows the new medal (%s)" % (ml.text if ml != null else "none"))
+	check(lvl.hud._medal_next != null and lvl.hud._medal_next.text == "Next: Gold %s" % Hud.target_text(Game.medal_target(id, 3)), "... and the next target")
+	check(lvl.hud._flash.color.a > 0.2, "a new medal flashes the screen")
+	await seconds(0.9)   # (the panel's buttons go live first)
+	lvl.hud._results.queue_free()
+	lvl.hud._results = null
+	# a slower run: its own medal, no NEW, the target still Gold
+	prev = SaveData.medal(id)
+	SaveData.record_finish(id, Game.medal_target(id, 1), 1)
+	lvl.hud.show_results(Game.medal_target(id, 1), t_silver, false, 1, 3, prev)
+	check(lvl.hud._medal_label.text == "BRONZE MEDAL", "a slower run shows its own medal without NEW (%s)" % lvl.hud._medal_label.text)
+	await seconds(0.9)   # (the panel's buttons go live first)
+	lvl.hud._results.queue_free()
+	lvl.hud._results = null
+	prev = SaveData.medal(id)
+	SaveData.record_finish(id, 900.0, 1)
+	lvl.hud.show_results(900.0, t_silver, false, 1, 1, prev)
+	check(lvl.hud._medal_label.text == "No medal this run", "too slow: no medal")
+	await seconds(0.9)   # (the panel's buttons go live first)
+	lvl.hud._results.queue_free()
+	lvl.hud._results = null
+	# Gold, as the fifth: the unlock toast (Chrome / Speed Demon) becomes the medal banner
+	for other: String in ["foundry", "balance", "clockwork", "reef"]:
+		SaveData.data["levels"][other] = {"completed": true, "runs": 1, "best": Game.medal_target(other, 3)}
+	Cosmetics.check_unlocks()   # (announce what those earned first)
+	prev = SaveData.medal(id)
+	lvl.deaths = 4
+	lvl.run_time = Game.medal_target(id, 3) - 1.0
+	lvl._on_finish()
+	await seconds(1.2)
+	check(lvl.hud._medal_label != null and lvl.hud._medal_label.text == "NEW GOLD MEDAL" and lvl.hud._medal_next == null, "Gold: nothing further to chase")
+	await seconds(0.6)
+	check(lvl.hud._toast.text.begins_with("GOLD! New reward: "), "the first unlock is the medal banner (%s)" % lvl.hud._toast.text)
+	world.queue_free()
+	world = null
+	await ticks(2)
+	SaveData.wipe()
+
+
+func test_zm_player_visual_hooks() -> void:
+	await new_world()
+	var v := PlayerVisual.new()
+	v.set_hat("crown")   # before _ready: applied when the rig is built
+	v.set_paint("ghost")
+	world.add_child(v)
+	await ticks(1)
+	check(v.head_anchor() != null and v.hat_node() != null and v.hat_id == "crown", "a hat picked before the rig exists is mounted on build")
+	check((v._body.material_override as StandardMaterial3D).transparency == BaseMaterial3D.TRANSPARENCY_ALPHA, "the Ghost paint is see-through")
+	var e0: int = trap.count()
+	for c: String in Cosmetics.ids("character"):
+		v.set_character(c)
+		for h: String in Cosmetics.ids("hat"):
+			v.set_hat(h)
+			check((h == "none") == (v.hat_node() == null), "%s wears hat %s" % [c, h])
+		for p: String in Cosmetics.ids("paint"):
+			v.set_paint(p)
+		for i: int in 30:
+			v.animate(1.0 / 60.0, Vector3(6, 0, 0) if i < 20 else Vector3(0, 9, 0), i < 20, Vector3.FORWARD)
+		v.on_jump()
+		v.on_land(8.0)
+		v.on_cheer()
+		await ticks(1)
+	check(trap.count() == e0, "every character x hat x paint applies and animates without errors %s" % trap.since(e0))
+	v.set_character("zzz")
+	v.set_hat("zzz")
+	v.set_paint("zzz")
+	check(v.character_id == "volt" and v.hat_id == "none" and v.paint_id == "white", "unknown ids fall back to the defaults")
+	await ticks(1)
+	var hats: int = 0
+	for n: Node in v.head_anchor().get_children():
+		if not n.is_queued_for_deletion():
+			hats += 1
+	check(hats == 0, "old hats are removed, not stacked (%d left)" % hats)
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+func test_zm_locker_tabs() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var keep: Dictionary = {}
+	for kind: String in Cosmetics.kinds():
+		keep[kind] = Settings.get(Cosmetics.setting_key(kind))
+	var keep_colour: int = Settings.color_index
+	SaveData.wipe()
+	# Silver on Phantom Manor: the Witch Hat and the Ghost paint
+	SaveData.data["levels"]["manor"] = {"completed": true, "runs": 1, "best": Game.medal_target("manor", 2)}
+	for kind: String in Cosmetics.kinds():
+		Settings.set(Cosmetics.setting_key(kind), Cosmetics.default_id(kind))
+	Game.title_screen = "locker"
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	title.set("persist_settings", false)
+	add_child(title)
+	await ticks(3)
+	var send := func(button: JoyButton) -> void:
+		var ev := InputEventJoypadButton.new()
+		ev.device = 1
+		ev.button_index = button
+		ev.pressed = true
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+		var up: InputEventJoypadButton = ev.duplicate()
+		up.pressed = false
+		Input.parse_input_event(up)
+		await ticks(2)
+	var focus := func() -> Control:
+		return get_viewport().gui_get_focus_owner()
+	var info: Label = title.get("_locker_info")
+	var volt: PlayerVisual = title.get("_volt")
+	check(focus.call() != null and focus.call().get_meta("kind", "") == "character", "the Locker opens on the Character tab")
+	# a locked character names its unlock and progress
+	await send.call(JOY_BUTTON_DPAD_RIGHT)
+	check(focus.call().get_meta("item", "") == "knight" and info.text.begins_with("LOCKED") and info.text.contains("Bronze or better on 10 courses") and info.text.contains("Bronzes 1/10"),
+		"a locked character shows its hint and progress (%s)" % info.text)
+	check(volt.character_id == "knight", "focusing a character previews it")
+	await send.call(JOY_BUTTON_A)
+	check(Settings.character_id == "volt", "a locked character cannot be equipped")
+	# LB wraps round to Colour
+	await send.call(JOY_BUTTON_LEFT_SHOULDER)
+	check(int(title.get("locker_tab")) == 6 and focus.call() != null and focus.call().has_meta("colour"),
+		"LB from the first tab wraps to Colour, on a swatch")
+	check(int(focus.call().get_meta("colour")) == Settings.color_index, "... the worn colour")
+	await send.call(JOY_BUTTON_DPAD_RIGHT)
+	await send.call(JOY_BUTTON_A)
+	check(Settings.color_index == posmod(keep_colour + 1, Settings.RACER_COLORS.size()) or Settings.color_index == (int(focus.call().get_meta("colour"))),
+		"A on a swatch picks the colour")
+	check(volt.character_id == "volt", "leaving the tab puts the worn character back on the preview")
+	# RB wraps to Character, again to Hat
+	await send.call(JOY_BUTTON_RIGHT_SHOULDER)
+	check(focus.call().get_meta("kind", "") == "character", "RB from Colour wraps to Character")
+	await send.call(JOY_BUTTON_RIGHT_SHOULDER)
+	check(focus.call().get_meta("kind", "") == "hat" and focus.call().get_meta("item", "") == "none", "RB: the Hat tab, on No Hat")
+	# 5 hats a row: the Witch Hat is row 3, column 2
+	for b: JoyButton in [JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_RIGHT]:
+		await send.call(b)
+	check(focus.call().get_meta("item", "") == "witch" and volt.hat_id == "witch" and volt.hat_node() != null, "the D-pad reaches the Witch Hat and the preview wears it")
+	check(not info.text.begins_with("LOCKED"), "Silver on Phantom Manor owns the Witch Hat (%s)" % info.text)
+	await send.call(JOY_BUTTON_A)
+	check(Settings.hat_id == "witch" and (focus.call() as Button).text == "> Witch Hat <", "A equips it")
+	await send.call(JOY_BUTTON_DPAD_RIGHT)
+	check(info.text.begins_with("LOCKED") and info.text.contains("Silver or better on Storm Armada") and info.text.contains("best: no medal"),
+		"the next hat is locked with its hint (%s)" % info.text)
+	# Paint tab: Ghost
+	await send.call(JOY_BUTTON_RIGHT_SHOULDER)
+	check(focus.call().get_meta("kind", "") == "paint" and volt.hat_id == "witch", "RB: the Paint tab (the preview keeps the equipped hat)")
+	# 4 paints a row: Ghost is row 2, column 3
+	for b: JoyButton in [JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_RIGHT]:
+		await send.call(b)
+	await send.call(JOY_BUTTON_A)
+	check(Settings.paint_id == "ghost" and volt.paint_id == "ghost", "the Ghost paint equips and shows")
+	# Title tab (RB x3: Trail, Finish, Title)
+	for i: int in 3:
+		await send.call(JOY_BUTTON_RIGHT_SHOULDER)
+	check(focus.call().get_meta("kind", "") == "title" and focus.call().get_meta("item", "") == "rookie", "RB x3: the Title tab, on Rookie")
+	check(info.text.contains("%s · Rookie" % Settings.player_name), "a title previews beside your name (%s)" % info.text)
+	await send.call(JOY_BUTTON_DPAD_RIGHT)
+	check(info.text.begins_with("LOCKED") and info.text.contains("Beat all"), "Globetrotter is locked with its hint (%s)" % info.text)
+	# the tab bar is mouse-only: clicking a tab button switches too
+	var tabs: Node = (title.get("_screen") as Control).find_child("Tabs", true, false)
+	(tabs.get_child(1) as Button).pressed.emit()
+	await ticks(2)
+	check(focus.call().get_meta("kind", "") == "hat" and focus.call().get_meta("item", "") == "witch", "clicking the Hat tab opens it on the equipped hat")
+	check((tabs.get_child(1) as Button).focus_mode == Control.FOCUS_NONE, "tab buttons never take pad focus")
+	await send.call(JOY_BUTTON_B)
+	await ticks(2)
+	check(Game.title_screen == "main", "B leaves the Locker from any tab")
+	check(volt.hat_id == "witch" and volt.paint_id == "ghost", "the title Volt wears the equipped hat and paint")
+	title.queue_free()
+	await ticks(2)
+	for kind: String in keep:
+		Settings.set(Cosmetics.setting_key(kind), keep[kind])
+	Settings.color_index = keep_colour
+	Net.preferred_color = -1
+	Game.title_screen = "main"
+	SaveData.wipe()

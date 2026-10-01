@@ -110,6 +110,9 @@ func _spawn_player() -> void:
 	player.visual.set_accent(Settings.my_color())
 	player.visual.set_trail(Cosmetics.equipped_trail())
 	player.visual.finish_id = Cosmetics.equipped_finish()
+	player.visual.set_character(Cosmetics.equipped("character"))
+	player.visual.set_hat(Cosmetics.equipped("hat"))
+	player.visual.set_paint(Cosmetics.equipped("paint"))
 	camera = OrbitCamera.new()
 	add_child(camera)
 	camera.target = player
@@ -201,7 +204,7 @@ func _add_ghost(id: int, at: Vector3) -> void:
 	var g := RemoteRacer.new()
 	add_child(g)
 	g.setup(str(Net.roster[id]["name"]), Settings.RACER_COLORS[int(Net.roster[id]["color"]) % Settings.RACER_COLORS.size()])
-	g.set_cosmetics(Net.roster[id].get("trail"), Net.roster[id].get("finish"))
+	g.apply_cosmetics(Net.roster[id])
 	g.global_position = at
 	_ghosts[id] = g
 
@@ -490,13 +493,15 @@ func _on_finish() -> void:
 			Net.send_finished(time)
 		party.on_local_finish(time)
 		return
+	# medals are derived from the records, so read the tier before and after recording
+	var prev_medal: int = SaveData.medal(level_id)
 	if Game.race_mode:
 		laps_done = 1
 		Net.send_checkpoint(checkpoints.size() + 1)
 		Net.send_finished(time)
 		SaveData.record_finish(level_id, time, deaths, splits)
 		hud.show_race_results(time)
-		announce_unlocks()
+		announce_unlocks(0.4, _new_medal(prev_medal))
 		return
 	var prev_best: float = SaveData.best_time(level_id)
 	var prev_ff: int = SaveData.fewest_falls(level_id)
@@ -504,19 +509,29 @@ func _on_finish() -> void:
 	if Game.level_index >= 0:
 		is_best = SaveData.record_finish(level_id, time, deaths, splits)
 	await _finish_sequence()
-	hud.show_results(time, prev_best, is_best, deaths, prev_ff)
-	if is_best and prev_best >= 0.0:
-		Sfx.play("new_best")
-	announce_unlocks()
+	hud.show_results(time, prev_best, is_best, deaths, prev_ff, prev_medal)
+	if is_best and prev_best >= 0.0 and _new_medal(prev_medal) == 0:
+		Sfx.play("new_best")   # (a new medal plays its own sting on the results panel)
+	announce_unlocks(0.4, _new_medal(prev_medal))
+
+
+## The tier this finish newly earned (0 when the level's medal did not go up).
+func _new_medal(prev_medal: int) -> int:
+	var now: int = SaveData.medal(level_id)
+	return now if now > prev_medal else 0
 
 
 ## "Unlocked: Flame trail!" toasts for cosmetics this finish earned (each shows once ever).
-func announce_unlocks() -> void:
+## With `medal_tier` (a medal this run just earned) the first reads "GOLD! New reward: Ninja".
+func announce_unlocks(delay: float = 0.4, medal_tier: int = 0) -> void:
 	var fresh: Array[Array] = Cosmetics.check_unlocks()
 	for i: int in fresh.size():
-		get_tree().create_timer(0.4 + 2.0 * i).timeout.connect(func() -> void:
+		var text: String = Cosmetics.unlock_text(fresh[i][0], fresh[i][1])
+		if medal_tier > 0 and i == 0:
+			text = Cosmetics.medal_reward_text(medal_tier, fresh[i][0], fresh[i][1])
+		get_tree().create_timer(delay + 2.0 * i).timeout.connect(func() -> void:
 			if is_inside_tree():
-				hud.toast(Cosmetics.unlock_text(fresh[i][0], fresh[i][1]), "Equip it in the Locker", UiKit.GOLD, true))
+				hud.toast(text, "Equip it in the Locker", UiKit.GOLD, true))
 
 
 ## Override for a bespoke ending (level 5's beacon).
@@ -651,3 +666,6 @@ func _on_racer_lapped(lapper: int, victim: int, count: int) -> void:
 		hud.lapped_toast(str(Net.roster[lapper]["name"]), count)
 	elif lapper == me and victim != me and Net.roster.has(victim):
 		hud.toast("You lapped %s" % Net.roster[victim]["name"], "x%d!" % count if count >= 3 else "", UiKit.GOLD, true)
+		# counts towards the lap rewards (Party Hat, Lap King)
+		SaveData.add_stat("laps_dealt")
+		announce_unlocks(2.0)

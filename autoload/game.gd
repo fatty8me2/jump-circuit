@@ -3,26 +3,38 @@ extends Node
 ## input map setup.
 
 const LEVELS: Array[Dictionary] = [
-	{"id": "gardens", "name": "Launch Gardens", "scene": "res://levels/level_1_gardens.tscn", "blurb": "Sunny gardens. Not actually easy."},
-	{"id": "foundry", "name": "Bounce Foundry", "scene": "res://levels/level_2_foundry.tscn", "blurb": "Read the pads, steer the arcs, or burn."},
-	{"id": "balance", "name": "Balance Works", "scene": "res://levels/level_3_balance.tscn", "blurb": "Boards that answer to your weight - and tip you off."},
-	{"id": "clockwork", "name": "Clockwork Heights", "scene": "res://levels/level_4_clockwork.tscn", "blurb": "Watch the rhythm, commit, never stop."},
-	{"id": "reef", "name": "Coral Depths", "scene": "res://levels/level_5_reef.tscn", "blurb": "A sunken reef. Ride the currents, mind the eels."},
-	{"id": "orbital", "name": "Orbital Drift", "scene": "res://levels/level_6_orbital.tscn", "blurb": "A station in low orbit. Run the walls, don't drift."},
-	{"id": "xeno", "name": "Xeno Wilds", "scene": "res://levels/level_7_xeno.tscn", "blurb": "A glowing alien jungle under a ringed giant. Mind what bites."},
-	{"id": "volcano", "name": "Cinder Peak", "scene": "res://levels/level_8_volcano.tscn", "blurb": "The mountain is erupting. Outclimb the lava, dodge the bombs."},
-	{"id": "glacier", "name": "Frostbite Pass", "scene": "res://levels/level_9_glacier.tscn", "blurb": "An ice fortress in a blizzard. Mind the icicles, outrun the avalanche."},
-	{"id": "desert", "name": "Scarab Sands", "scene": "res://levels/level_10_desert.tscn", "blurb": "Dunes, mirages and a sun temple full of traps. When the plate clicks, run."},
-	{"id": "manor", "name": "Phantom Manor", "scene": "res://levels/level_11_manor.tscn", "blurb": "A haunted mansion under a blood moon. Not everything solid stays solid."},
-	{"id": "armada", "name": "Storm Armada", "scene": "res://levels/level_12_armada.tscn", "blurb": "Cross a sky-pirate fleet ship to ship through a thunderstorm. Mind the cannons."},
-	{"id": "candy", "name": "Sugar Rush", "scene": "res://levels/level_13_candy.tscn", "blurb": "A candy dreamworld. Sweet, bouncy, merciless."},
-	{"id": "carrier", "name": "Super Carrier", "scene": "res://levels/level_14_carrier.tscn", "blurb": "Launch day on a supercarrier. Stay out of the foam, off the catapults, up the tower."},
-	{"id": "sakura", "name": "Sakura Peaks", "scene": "res://levels/level_16_sakura.tscn", "blurb": "A feudal-Japan mountain at dusk, through blossoms and pagodas to the castle keep."},
-	{"id": "jungle", "name": "Jungle Temple", "scene": "res://levels/level_17_jungle.tscn", "blurb": "Overgrown ruins, a rolling boulder and a step pyramid. Do not touch the glyphs."},
-	{"id": "frontier", "name": "Wild West Heist", "scene": "res://levels/level_18_frontier.tscn", "blurb": "Rob the train. Run the cars, ride the carts, beat the dynamite to the engine."},
-	{"id": "neon", "name": "Neon City", "scene": "res://levels/level_19_neon.tscn", "blurb": "Rain, neon and hover traffic. Ride the lanes to the top of the tallest tower."},
-	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_20_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon."},
+	{"id": "gardens", "name": "Launch Gardens", "scene": "res://levels/level_1_gardens.tscn", "blurb": "Sunny gardens. Not actually easy.", "medals": {"gold": 170, "silver": 205, "bronze": 260}},
+	{"id": "foundry", "name": "Bounce Foundry", "scene": "res://levels/level_2_foundry.tscn", "blurb": "Read the pads, steer the arcs, or burn.", "medals": {"gold": 155, "silver": 185, "bronze": 235}},
+	{"id": "balance", "name": "Balance Works", "scene": "res://levels/level_3_balance.tscn", "blurb": "Boards that answer to your weight - and tip you off.", "medals": {"gold": 160, "silver": 190, "bronze": 240}},
+	{"id": "clockwork", "name": "Clockwork Heights", "scene": "res://levels/level_4_clockwork.tscn", "blurb": "Watch the rhythm, commit, never stop.", "medals": {"gold": 195, "silver": 235, "bronze": 295}},
+	{"id": "reef", "name": "Coral Depths", "scene": "res://levels/level_5_reef.tscn", "blurb": "A sunken reef. Ride the currents, mind the eels.", "medals": {"gold": 135, "silver": 160, "bronze": 200}},
+	{"id": "orbital", "name": "Orbital Drift", "scene": "res://levels/level_6_orbital.tscn", "blurb": "A station in low orbit. Run the walls, don't drift.", "medals": {"gold": 160, "silver": 195, "bronze": 245}},
+	{"id": "xeno", "name": "Xeno Wilds", "scene": "res://levels/level_7_xeno.tscn", "blurb": "A glowing alien jungle under a ringed giant. Mind what bites.", "medals": {"gold": 155, "silver": 185, "bronze": 235}},
+	{"id": "volcano", "name": "Cinder Peak", "scene": "res://levels/level_8_volcano.tscn", "blurb": "The mountain is erupting. Outclimb the lava, dodge the bombs.", "medals": {"gold": 165, "silver": 195, "bronze": 245}},
+	{"id": "glacier", "name": "Frostbite Pass", "scene": "res://levels/level_9_glacier.tscn", "blurb": "An ice fortress in a blizzard. Mind the icicles, outrun the avalanche.", "medals": {"gold": 185, "silver": 225, "bronze": 280}},
+	{"id": "desert", "name": "Scarab Sands", "scene": "res://levels/level_10_desert.tscn", "blurb": "Dunes, mirages and a sun temple full of traps. When the plate clicks, run.", "medals": {"gold": 160, "silver": 195, "bronze": 245}},
+	{"id": "manor", "name": "Phantom Manor", "scene": "res://levels/level_11_manor.tscn", "blurb": "A haunted mansion under a blood moon. Not everything solid stays solid.", "medals": {"gold": 185, "silver": 220, "bronze": 275}},
+	{"id": "armada", "name": "Storm Armada", "scene": "res://levels/level_12_armada.tscn", "blurb": "Cross a sky-pirate fleet ship to ship through a thunderstorm. Mind the cannons.", "medals": {"gold": 190, "silver": 230, "bronze": 290}},
+	{"id": "candy", "name": "Sugar Rush", "scene": "res://levels/level_13_candy.tscn", "blurb": "A candy dreamworld. Sweet, bouncy, merciless.", "medals": {"gold": 185, "silver": 220, "bronze": 280}},
+	{"id": "carrier", "name": "Super Carrier", "scene": "res://levels/level_14_carrier.tscn", "blurb": "Launch day on a supercarrier. Stay out of the foam, off the catapults, up the tower.", "medals": {"gold": 190, "silver": 230, "bronze": 285}},
+	{"id": "sakura", "name": "Sakura Peaks", "scene": "res://levels/level_16_sakura.tscn", "blurb": "A feudal-Japan mountain at dusk, through blossoms and pagodas to the castle keep.", "medals": {"gold": 180, "silver": 220, "bronze": 280}},  # PROVISIONAL: placeholder course - the lead sets these once it is built and timed
+	{"id": "jungle", "name": "Jungle Temple", "scene": "res://levels/level_17_jungle.tscn", "blurb": "Overgrown ruins, a rolling boulder and a step pyramid. Do not touch the glyphs.", "medals": {"gold": 180, "silver": 220, "bronze": 280}},  # PROVISIONAL: placeholder course - the lead sets these once it is built and timed
+	{"id": "frontier", "name": "Wild West Heist", "scene": "res://levels/level_18_frontier.tscn", "blurb": "Rob the train. Run the cars, ride the carts, beat the dynamite to the engine.", "medals": {"gold": 180, "silver": 220, "bronze": 280}},  # PROVISIONAL: placeholder course - the lead sets these once it is built and timed
+	{"id": "neon", "name": "Neon City", "scene": "res://levels/level_19_neon.tscn", "blurb": "Rain, neon and hover traffic. Ride the lanes to the top of the tallest tower.", "medals": {"gold": 180, "silver": 220, "bronze": 280}},  # PROVISIONAL: placeholder course - the lead sets these once it is built and timed
+	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_20_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon.", "medals": {"gold": 180, "silver": 215, "bronze": 270}},
 ]
+## Medal targets ("medals" in each LEVELS entry, whole seconds) come from the route bot:
+## Gold = the fastest bot route x 1.12, Silver x 1.35, Bronze x 1.7, each rounded UP to 5 s.
+## The bot is frame-perfect, so Gold asks for near-perfect play. This is the reference
+## table (fastest route, seconds, from the "(route N): bot completes the main route" lines
+## of the full bot runs); tests check every Gold against it. Re-time and update both when a
+## course is rebuilt. Levels missing here (the placeholder worlds) carry PROVISIONAL medals.
+const BOT_TIMES: Dictionary = {
+	"gardens": 150.3, "foundry": 136.4, "balance": 139.8, "clockwork": 172.1, "reef": 116.1,
+	"orbital": 142.5, "xeno": 136.3, "volcano": 144.1, "glacier": 163.4, "desert": 141.2,
+	"manor": 161.5, "armada": 168.5, "candy": 162.5, "carrier": 167.4, "ascent": 158.7,
+}
+const MEDAL_MULT: Dictionary = {"gold": 1.12, "silver": 1.35, "bronze": 1.7}
 const TITLE_SCENE: String = "res://ui/title.tscn"
 ## Party Mode actions and their default bindings (Settings can rebind the key / mouse and pad
 ## button). None of them clash with jump / retry / pause / camera; in the main mode nothing
@@ -375,6 +387,41 @@ func level_info() -> Dictionary:
 	if level_index >= 0:
 		return LEVELS[level_index]
 	return {"id": "playground", "name": "Playground", "blurb": ""}
+
+
+## The level's catalogue entry by id ({} for the playground or an unknown id).
+static func level_by_id(level_id: String) -> Dictionary:
+	for info: Dictionary in LEVELS:
+		if info["id"] == level_id:
+			return info
+	return {}
+
+
+## {"gold", "silver", "bronze"} target seconds for a level ({} when it has none).
+static func medal_targets(level_id: String) -> Dictionary:
+	return level_by_id(level_id).get("medals", {})
+
+
+## The medal a time earns on a level: 3 gold, 2 silver, 1 bronze, 0 none (or no time,
+## time < 0). A time exactly on a target earns it (compared at the shown hundredths).
+static func medal_for(level_id: String, time: float) -> int:
+	var m: Dictionary = medal_targets(level_id)
+	if m.is_empty() or time < 0.0 or not is_finite(time):
+		return 0
+	var cs: int = SaveData.centiseconds(time)
+	var tier: int = 3
+	for k: String in ["gold", "silver", "bronze"]:
+		if cs <= int(round(float(m[k]) * 100.0)):
+			return tier
+		tier -= 1
+	return 0
+
+
+## The target for a tier (1-3) on a level, -1 if none.
+static func medal_target(level_id: String, tier: int) -> float:
+	var m: Dictionary = medal_targets(level_id)
+	var key: String = ["", "bronze", "silver", "gold"][clampi(tier, 0, 3)]
+	return float(m[key]) if key != "" and m.has(key) else -1.0
 
 
 func is_level_unlocked(index: int) -> bool:
