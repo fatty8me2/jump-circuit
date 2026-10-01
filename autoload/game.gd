@@ -17,7 +17,11 @@ const LEVELS: Array[Dictionary] = [
 	{"id": "armada", "name": "Storm Armada", "scene": "res://levels/level_12_armada.tscn", "blurb": "Cross a sky-pirate fleet ship to ship through a thunderstorm. Mind the cannons."},
 	{"id": "candy", "name": "Sugar Rush", "scene": "res://levels/level_13_candy.tscn", "blurb": "A candy dreamworld. Sweet, bouncy, merciless."},
 	{"id": "carrier", "name": "Super Carrier", "scene": "res://levels/level_14_carrier.tscn", "blurb": "Launch day on a supercarrier. Stay out of the foam, off the catapults, up the tower."},
-	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_15_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon."},
+	{"id": "sakura", "name": "Sakura Peaks", "scene": "res://levels/level_16_sakura.tscn", "blurb": "A feudal-Japan mountain at dusk, through blossoms and pagodas to the castle keep."},
+	{"id": "jungle", "name": "Jungle Temple", "scene": "res://levels/level_17_jungle.tscn", "blurb": "Overgrown ruins, a rolling boulder and a step pyramid. Do not touch the glyphs."},
+	{"id": "frontier", "name": "Wild West Heist", "scene": "res://levels/level_18_frontier.tscn", "blurb": "Rob the train. Run the cars, ride the carts, beat the dynamite to the engine."},
+	{"id": "neon", "name": "Neon City", "scene": "res://levels/level_19_neon.tscn", "blurb": "Rain, neon and hover traffic. Ride the lanes to the top of the tallest tower."},
+	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_20_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon."},
 ]
 const TITLE_SCENE: String = "res://ui/title.tscn"
 ## Party Mode actions and their default bindings (Settings can rebind the key / mouse and pad
