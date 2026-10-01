@@ -1865,6 +1865,296 @@ def piece_carrier():
     T.render(rms_db=-14.5, hi_gain=1.7)
 
 
+# --------------------------------------------------------------------------
+# Shared voices for the new-worlds-3 scores
+# --------------------------------------------------------------------------
+def _koto(r, freq, dur, vel=0.8, pan=0.0):
+    """A koto: a bright, close pluck (near the bridge) with a quick bloom and a woody body."""
+    t1 = float(np.clip(1.5 * (261.6 / freq) ** 0.5, 0.35, 2.8))
+    x = me.plucked(r, freq, dur, vel, pos=0.11, t1=t1, k_max=26, inharm=1.4e-4, ring=True, pick=0.12, bright=1.25,
+                   body=lambda f: me.bump(f, 320, 3, 0.6) * me.bump(f, 1900, 4, 0.45) * me.lp(f, 7800))
+    return me.stereo(x, pan)
+
+
+M_KOTO = me.memo(_koto, 3, "koto")
+SHAKUHACHI = I(me.woodwind, kind="panflute", vib=0.009)
+HARMONICA = I(me.accordion, musette=False)
+
+
+def _section(ch, bar0, nb):
+    """The chords of `ch` (repeated as needed) laid from bar0, cut to nb bars."""
+    out = []
+    reps = 1
+    while True:
+        P = prog(ch * reps, 4, bar0)
+        if P and P[-1][0] + P[-1][1] >= (bar0 + nb) * 4 - 1e-6:
+            break
+        reps += 1
+    for b, d, sym in P:
+        if b < (bar0 + nb) * 4 - 1e-6:
+            out.append((b, min(d, (bar0 + nb) * 4 - b), sym))
+    return out
+
+
+# --------------------------------------------------------------------------
+# SAKURA PEAKS - D minor pentatonic, 84 bpm, 32 bars. A storybook mountain at dusk: koto arpeggios,
+# a breathy shakuhachi theme, soft strings, temple bells and a taiko heartbeat; the JUMP theme as a
+# pentatonic climb. Hi layer: a taiko ensemble, shime clatter, choir and full strings.
+# --------------------------------------------------------------------------
+SAK_CH = "| Dm | C | Bb | C | Dm | F | Gm C | Dm |"
+SAK_A = "D5q F5q G5q A5q | C6h. A5q | G5q A5q F5q D5q | C5w | D5q F5q G5q A5q | C6q D6q C6q A5q | G5q F5q D5q C5q | D5w |"
+SAK_B = "A5h. G5q | F5q G5q A5h | D6h. C6q | A5w | G5h. F5q | D5q F5q G5h | A5q G5q F5q D5q | D5w |"
+SAK_J = ("A4e D5e F5e G5e A5h | C6q. A5e G5q F5q | G5q. F5e D5q F5q | A5w | A4e D5e F5e G5e A5h | D6q. C6e A5q G5q | "
+         "F5q. G5e A5q C6q | D6w |")
+
+
+def piece_sakura():
+    T = me.Track("sakura", 84, 32, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("valley", me.make_ir(r, rt60=3.4, predelay=0.04, damp=4200, er=0.4, er_span=0.08))
+    T.delay("echo", beats=0.75, fb=0.35, damp=3500, ret=0.35)
+    for b_, e in (("keys", std_eq(120, 11000)), ("lead", std_eq(220, 9000)), ("strings", std_eq(50, 11000)),
+                  ("choir", std_eq(100, 8000)), ("perc", std_eq(30)), ("bass", std_eq(30, 3000))):
+        T.bus(b_, eq=e)
+    V = {"valley": 0.4}
+    P = prog(SAK_CH * 4, 4, 0)
+    # koto: a rolling arpeggio under everything, a slow strum on each phrase start
+    arp(T, "base", "keys", P, [0, 1, 2, 3, 4, 3, 2, 1], 0.5, M_KOTO, lo=62, hi=86, gain=0.13, sends=V,
+        vels=(0.8, 0.5, 0.6, 0.5))
+    bass(T, "base", "bass", P, [(0, 0, 1.8, 0.8), (2, 7, 1.8, 0.55)], M_PIZZ, lo=38, hi=50, gain=0.3, sends=V)
+    pad(T, "base", "strings", P, STRINGS_SOFT, center=60, count=3, gain=0.07, sends=V, vel=0.5)
+    # the shakuhachi theme (A), the koto answer (B), the JUMP climb on both
+    line(T, "base", "lead", SAK_A, 4, SHAKUHACHI, 0.36, {"valley": 0.45, "echo": 0.25})
+    line(T, "base", "keys", SAK_B, 12, M_KOTO, 0.3, {"valley": 0.4, "echo": 0.2}, legato=False)
+    line(T, "base", "lead", SAK_J, 20, SHAKUHACHI, 0.34, {"valley": 0.45, "echo": 0.2})
+    line(T, "base", "keys", SAK_J, 20, M_KOTO, 0.16, V, legato=False, transpose=-12)
+    line(T, "base", "lead", SAK_A, 28, SHAKUHACHI, 0.3, {"valley": 0.5, "echo": 0.3})
+    # taiko heartbeat and rim clicks; a temple bell every eight bars
+    od = bank("odaiko", lambda r: me.taiko(r, "odaiko"), 3)
+    ka = bank("ka", lambda r: me.taiko(r, "ka"), 4)
+    kit(T, "base", "perc", range(0, 32), {"od": (od, "x.......x.......", 0.4), "ka": (ka, "....x.......x.g.", 0.08)}, sends=V)
+    for bar in (0, 8, 16, 24):
+        ring(T, "base", "perc", bar * 4, me.bell(r, float(mtof(50)), 6.0, 0.55, kind="church"), 0.12, -0.3, {"valley": 0.6})
+    # hi: the ensemble
+    na = bank("nagado", lambda r: me.taiko(r, "nagado"), 3)
+    shime = bank("shime", lambda r: me.taiko(r, "shime"), 4)
+    kit(T, "hi", "perc", range(4, 32), {"na": (na, "x..x..x.x...x.x.", 0.32), "shime": (shime, "g.g.o.g.g.g.o.gg", 0.1)}, sends=V)
+    pad(T, "hi", "strings", P, I(me.strings, att=0.15, rel=0.5, bright=0.5), center=65, count=3, gain=0.11, sends=V, vel=0.7)
+    line(T, "hi", "strings", SAK_A, 4, VIOLINS, 0.14, V, transpose=-12)
+    pad(T, "hi", "choir", prog(SAK_CH, 4, 20), CHOIR_O, center=62, count=3, gain=0.14, sends={"valley": 0.6}, vel=0.7)
+    line(T, "hi", "lead", SAK_J, 20, FLUTE, 0.16, V, transpose=12)
+    T.render(rms_db=-14.5, hi_gain=0.85)
+
+
+# --------------------------------------------------------------------------
+# JUNGLE TEMPLE - A minor, 108 bpm, 40 bars. An expedition: a marimba ostinato over log drums,
+# frame drums and shakers, a panflute theme, kalimba sparkle; the JUMP theme as an adventure
+# horn call. Hi layer: horns and trumpets, strings, toms and taiko.
+# --------------------------------------------------------------------------
+JUN_CH = "| Am | Am | F | G | Am | Am | Dm | E |"
+JUN_J_CH = "| Am | C | Dm | E | Am | Am | Dm E | Am |"
+JUN_A = "A4q C5e D5e E5q G5q | A5h. G5q | E5q D5e C5e D5q E5q | A4w | A4q C5e D5e E5q G5q | A5q C6q B5q G5q | A5q. G5e E5q D5q | E5w |"
+JUN_J = ("E4e A4e C5e E5e A5h | G5q. E5e D5q C5q | D5q. E5e F5q A5q | G#5w | E4e A4e C5e E5e A5h | C6q. B5e A5q E5q | "
+         "F5q. E5e D5q B4q | A4w |")
+
+
+def piece_jungle():
+    T = me.Track("jungle", 108, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("canopy", me.make_ir(r, rt60=1.8, predelay=0.02, damp=5000, er=0.6, er_span=0.05))
+    T.reverb("temple", me.make_ir(r, rt60=3.0, predelay=0.04, damp=3800, er=0.5))
+    T.delay("echo", beats=0.75, fb=0.3, damp=4000, ret=0.3)
+    C = {"canopy": 0.3}
+    TM = {"temple": 0.4}
+    logs = [me.tom(me.rng_for("log%d" % i), f, 1.0) for i, f in enumerate((180.0, 240.0, 320.0))]
+    wb = [me.woodblock(me.rng_for("jwb%d" % i), 1.0, p) for i, p in enumerate((0.8, 1.0, 1.25))]
+    fd = [me.frame_drum(me.rng_for("jfd%d" % i), 1.0, i % 2 == 0) for i in range(3)]
+    shk = [me.shaker(me.rng_for("jshk%d" % i), 1.0, False) for i in range(4)]
+    sections = [("intro", 0, 4), ("a", 4, 8), ("a2", 12, 8), ("jump", 20, 8), ("break", 28, 4), ("jump2", 32, 8)]
+    for name, bar0, nb in sections:
+        P = _section(JUN_J_CH if name.startswith("jump") else JUN_CH, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        arp(T, "base", "keys", P, [0, 2, 1, 3, 2, 4, 3, 1], 0.25, M_MARIMBA, lo=57, hi=81,
+            gain=0.12 if name != "break" else 0.08, sends=C, vels=(0.85, 0.55, 0.7, 0.55))
+        if name not in ("intro", "break"):
+            bass(T, "base", "bass", P, [(0, 0, 0.9, 0.85), (1.5, 0, 0.4, 0.6), (2, 7, 0.9, 0.7), (3.5, 12, 0.4, 0.55)],
+                 M_UPRIGHT, lo=33, hi=45, gain=0.32, sends=C)
+        kit(T, "base", "perc", bars, {
+            "log": (logs, "x..o..x.o.x.o..." if name != "intro" else "x.....x.....o...", 0.28),
+            "wb": (wb, "..g...g...g...g.", 0.1),
+            "fd": (fd, "x.......x..x....", 0.32 if name != "break" else 0.4),
+            "shk": (shk, "gogogogogogogogo" if name != "intro" else "................", 0.09),
+        }, sends=C)
+        if name not in ("intro",):
+            kit(T, "hi", "drums", bars, {
+                "tom": ([me.tom(me.rng_for("jt%d" % i), f, 1.0) for i, f in enumerate((90.0, 120.0))], "x...x.x.x...x.xx", 0.3),
+                "od": (bank("odaiko", lambda r: me.taiko(r, "odaiko"), 3), "x.......x.......", 0.35),
+            }, sends=TM)
+            pad(T, "hi", "strings", P, I(me.strings, att=0.2, rel=0.5, bright=0.5), center=64, count=3, gain=0.1, sends=TM, vel=0.7)
+    pf = I(me.woodwind, kind="panflute", vib=0.005)
+    line(T, "base", "lead", JUN_A, 4, pf, 0.38, {"canopy": 0.3, "echo": 0.25})
+    line(T, "base", "lead", JUN_A, 12, pf, 0.34, {"canopy": 0.3, "echo": 0.25})
+    line(T, "base", "keys", JUN_A, 12, M_KALIMBA, 0.14, C, legato=False, transpose=12)
+    line(T, "base", "brass", JUN_J, 20, HORNS, 0.38, TM)
+    line(T, "base", "brass", JUN_J, 32, HORNS, 0.38, TM)
+    line(T, "base", "lead", JUN_J, 32, pf, 0.22, C, transpose=12)
+    # hi: trumpets on the call, strings an octave under the theme
+    line(T, "hi", "brass", JUN_J, 20, TRUMPETS, 0.24, TM, transpose=12)
+    line(T, "hi", "brass", JUN_J, 32, TRUMPETS, 0.26, TM, transpose=12)
+    line(T, "hi", "strings", JUN_A, 12, CELLOS, 0.2, TM, transpose=-12)
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    for bar in (20, 32):
+        ring(T, "hi", "drums", bar * 4, crash[bar % 2], 0.14, 0.3, TM)
+    T.render(rms_db=-14.5, hi_gain=0.95)
+
+
+# --------------------------------------------------------------------------
+# WILD WEST HEIST - G major, 132 bpm, 40 bars. A train-robbery romp: brushed snare on the train
+# rhythm, a boom-chick bass and steel guitar, a whistled theme, a harmonica B section, clip-clop
+# woodblocks; the JUMP theme as a full-gallop trumpet call. Hi layer: trumpets, strings, timpani.
+# --------------------------------------------------------------------------
+FRO_CH = "| G | G | C | D | G | G | C D | G |"
+FRO_B_CH = "| Em | Em | C | G | Em | Em | Am | D |"
+FRO_A = "D5q G5q. A5e B5q | D6h. B5q | C6q B5q A5q G5q | A5w | D5q G5q. A5e B5q | D6h. E6q | D6q B5q A5q F#5q | G5w |"
+FRO_B = "E5h. D5q | B4q D5q E5h | G5h. E5q | D5w | E5h. D5q | B4q D5q G5h | A5q G5q E5q D5q | D5w |"
+
+
+def piece_frontier():
+    T = me.Track("frontier", 132, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("canyon", me.make_ir(r, rt60=2.6, predelay=0.06, damp=4200, er=0.3, er_span=0.1))
+    T.delay("slap", beats=0.5, fb=0.25, damp=3500, ret=0.3)
+    CY = {"canyon": 0.3}
+    brush = bank("snare_brush", lambda r: me.snare(r, "brush"), 4)
+    clop = [me.woodblock(me.rng_for("clop%d" % i), 1.0, p) for i, p in enumerate((1.0, 1.15))]
+    kickb = bank("kick_soft", lambda r: me.kick(r, "soft"), 2)
+    sections = [("intro", 0, 4, FRO_CH), ("a", 4, 8, FRO_CH), ("b", 12, 8, FRO_B_CH),
+                ("jump", 20, 8, tx_chords(JUMP_A_CHORDS, 7)), ("a2", 28, 8, FRO_CH), ("out", 36, 4, FRO_CH)]
+    for name, bar0, nb, ch in sections:
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        # the train: brushed sixteenths with the chuff on the off-beats, a soft kick on 1 and 3
+        kit(T, "base", "drums", bars, {"brush": (brush, "x.g.o.g.x.g.o.gg", 0.2), "kick": (kickb, "x.......x.......", 0.4)}, sends=CY)
+        if name != "intro":
+            kit(T, "base", "drums", bars, {"clop": (clop, "x..x..x.x..x..x.", 0.1)}, sends=CY, pans={"clop": 0.3})
+        # boom-chick: upright on 1 and 3 (root, fifth), steel guitar chords on 2 and 4
+        bass(T, "base", "bass", P, [(0, 0, 0.9, 0.85), (2, 7, 0.9, 0.7)], M_UPRIGHT, lo=36, hi=48, gain=0.34, sends=CY)
+        stabs(T, "base", "keys", P, (1.0, 3.0), M_GUITAR_STEEL, center=60, count=4, gain=0.09, sends=CY, vel=0.7, dur=0.35)
+        if name not in ("intro", "out"):
+            pad(T, "hi", "strings", P, I(me.strings, att=0.15, rel=0.4, bright=0.55), center=66, count=3, gain=0.09, sends=CY, vel=0.7)
+            for k in range(0, nb, 4):
+                ring(T, "hi", "drums", (bar0 + k) * 4, me.timpani(r, float(mtof(43)), 0.8), 0.24, 0.0, CY)
+    line(T, "base", "lead", FRO_A, 4, WHISTLE, 0.34, {"canyon": 0.35, "slap": 0.25})
+    line(T, "base", "lead", FRO_B, 12, HARMONICA, 0.26, {"canyon": 0.3, "slap": 0.2})
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_A, 20, WHISTLE, 0.3, {"canyon": 0.35, "slap": 0.2}, pickup=1.0, transpose=7)
+    line(T, "base", "lead", FRO_A, 28, HARMONICA, 0.22, {"canyon": 0.3})
+    line(T, "base", "lead", FRO_A, 28, WHISTLE, 0.26, {"canyon": 0.35, "slap": 0.2}, transpose=12)
+    # hi: the gallop call on trumpets
+    line(T, "hi", "brass", FRO_A, 4, TRUMPETS, 0.18, CY, transpose=-12)
+    line(T, "hi", "brass", JUMP_PICKUP + " | " + JUMP_A, 20, TRUMPETS, 0.3, CY, pickup=1.0, transpose=7)
+    line(T, "hi", "brass", FRO_A, 28, TRUMPETS, 0.24, CY)
+    line(T, "hi", "strings", FRO_B, 12, CELLOS, 0.2, CY, transpose=-12)
+    T.render(rms_db=-14.5, hi_gain=1.2)
+
+
+# --------------------------------------------------------------------------
+# NEON CITY - E minor, 100 bpm, 40 bars. Synthwave in the rain: a pulsing octave bass, gated drums,
+# a supersaw bed and a glassy pluck arp through an echo, a soaring saw lead; the JUMP theme's B
+# phrase in E minor. Hi layer: open hats, claps and toms, a glass pad, saw stabs, choir.
+# --------------------------------------------------------------------------
+NEO_CH = "| Em | C | G | D | Em | C | Am | B |"
+NEO_A = "E5q. G5e B5q A5q | G5h E5h | C5q. E5e G5q F#5q | E5h D5h | E5q. G5e B5q D6q | C6h B5q A5q | G5q. A5e B5q F#5q | E5w |"
+
+
+def piece_neon():
+    T = me.Track("neon", 100, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("hall", me.make_ir(r, rt60=2.6, predelay=0.03, damp=5000, er=0.4))
+    T.reverb("gate", me.make_ir(r, rt60=0.9, predelay=0.0, damp=7000, er=0.9, er_span=0.03))
+    T.delay("echo", beats=0.75, fb=0.4, damp=4000, ret=0.4)
+    H = {"hall": 0.3}
+    kick = bank("kick_punch", lambda r: me.kick(r, "punch"), 2)
+    snr = bank("snare_gated", lambda r: me.snare(r, "gated"), 3)
+    hatc = bank("hat_c", lambda r: me.hat(r, "closed"), 4)
+    hato = bank("hat_o", lambda r: me.hat(r, "open"), 2)
+    clp = bank("clap", lambda r: me.clap(r), 3)
+    sections = [("intro", 0, 4, NEO_CH), ("a", 4, 8, NEO_CH), ("a2", 12, 8, NEO_CH),
+                ("jump", 20, 8, tx_chords(JUMP_B_CHORDS, 7)), ("break", 28, 4, NEO_CH), ("a3", 32, 8, NEO_CH)]
+    for name, bar0, nb, ch in sections:
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        pad(T, "base", "synth", P, I(me.supersaw, voices=5, detune=14.0, cutoff=2000.0 if name != "break" else 1200.0,
+                                    att=0.25, rel=0.6, sub=0.0), center=62, count=3, gain=0.1, sends=H, vel=0.6)
+        arp(T, "base", "keys", P, [0, 1, 2, 3, 2, 1, 3, 2], 0.25, M_SPLUCK, lo=64, hi=88, gain=0.07,
+            sends={"echo": 0.35, "hall": 0.2}, vels=(0.9, 0.5, 0.7, 0.5))
+        if name in ("intro", "break"):
+            continue
+        bass(T, "base", "bass", P, [(k * 0.5, 0 if k % 2 == 0 else 12, 0.45, 0.9 if k % 2 == 0 else 0.7) for k in range(8)],
+             M_SBASS, lo=28, hi=40, gain=0.36, cutoff=800.0)
+        kit(T, "base", "drums", bars, {"kick": (kick, "x.......x.......", 0.6), "snare": (snr, "....x.......x...", 0.42),
+                                      "hat": (hatc, "g.g.g.g.g.g.g.g.", 0.1)}, sends={"gate": 0.35}, pump=("kick",))
+        kit(T, "hi", "drums", bars, {"hato": (hato, "..x...x...x...x.", 0.1), "clap": (clp, "....x.......x..x", 0.22),
+                                    "hat": (hatc, ".g.g.g.g.g.g.g.g", 0.08)}, sends={"gate": 0.3})
+        pad(T, "hi", "synth", P, I(me.pad_glass, att=0.6, rel=1.2), center=69, count=3, gain=0.09, sends=H, vel=0.6)
+        stabs(T, "hi", "keys", P[::2], (0.0, 1.5), I(me.supersaw, voices=5, detune=18.0, cutoff=3500.0, att=0.005, rel=0.15, sub=0.0),
+              center=67, count=3, gain=0.05, sends=H, vel=0.7, dur=0.3)
+    lead_fx = {"hall": 0.3, "echo": 0.3}
+    line(T, "base", "lead", NEO_A, 4, SYNTH_LEAD, 0.24, lead_fx, cutoff=3200.0)
+    line(T, "base", "lead", NEO_A, 12, SYNTH_LEAD, 0.24, lead_fx, cutoff=3800.0)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_B, 20, SYNTH_LEAD, 0.24, lead_fx, pickup=1.0, transpose=7, cutoff=3800.0)
+    line(T, "base", "lead", NEO_A, 32, SYNTH_LEAD, 0.24, lead_fx, cutoff=4200.0)
+    line(T, "hi", "lead", NEO_A, 12, SQUARE_LEAD, 0.1, {"echo": 0.3}, transpose=-12, cutoff=2400.0)
+    pad(T, "hi", "choir", prog(tx_chords(JUMP_B_CHORDS, 7), 4, 20), CHOIR_A, center=62, count=3, gain=0.12,
+        sends={"hall": 0.5}, vel=0.7)
+    line(T, "hi", "lead", NEO_A, 32, SQUARE_LEAD, 0.1, {"echo": 0.3}, transpose=12, cutoff=2600.0)
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    for bar in (4, 12, 20, 32):
+        ring(T, "hi", "drums", bar * 4, crash[bar % 2], 0.12, 0.3, H)
+    T.render(rms_db=-14.5, hi_gain=2.1)
+
+
+def _ff_sakura(B, r, k):
+    for i, m in enumerate((62, 65, 67, 69, 72, 74, 77, 79, 81, 86)):
+        B.add(0.18 * i, _koto(r, float(mtof(m)), 1.2, 0.8), 0.22, (i / 9 - 0.5) * 0.6, {"hall": 0.4})
+    B.notes(mel("A5e C6e D6h.", 4, 0, 1.0), SHAKUHACHI, r, 0.34, sends={"hall": 0.5}, legato=True)
+    B.add(2.0, me.taiko(r, "odaiko"), 0.5, 0.0, {"hall": 0.3})
+    B.add(2.0, me.bell(r, float(mtof(62)), 4.0, 0.7, kind="church"), 0.25, 0.0, {"hall": 0.6})
+    for m in (50, 57, 62, 65):
+        B.add(2.0, me.strings(r, float(mtof(m)), 2.2, 0.8, voices=3), 0.14, sends={"hall": 0.4})
+
+
+def _ff_jungle(B, r, k):
+    B.notes(mel("E5e A5e C6e E6h.", 4, 0, 0.5), I(me.woodwind, kind="panflute"), r, 0.36, sends={"hall": 0.35}, legato=True)
+    for i, f in enumerate((180.0, 240.0, 320.0, 240.0, 180.0)):
+        B.add(0.25 * i, me.tom(r, f, 1.0), 0.3, (i / 4 - 0.5) * 0.5, {"hall": 0.2})
+    for m in (57, 64, 69, 72, 76):
+        B.add(2.0, me.brass(r, float(mtof(m)), 2.2, 0.9, "horn", voices=2), 0.14, sends={"hall": 0.4})
+        B.add(2.0, me.mallet(r, float(mtof(m + 12)), 1.0, 0.8, "marimba"), 0.12, sends={"hall": 0.3})
+    B.add(2.0, me.taiko(r, "odaiko"), 0.45)
+    B.add(2.0, me.cymbal(r, "crash"), 0.18, 0.3, {"hall": 0.3})
+
+
+def _ff_frontier(B, r, k):
+    B.notes(mel("D5t E5t F#5t G5q D6q G6h", 4, 0, 0), WHISTLE, r, 0.4, sends={"hall": 0.35}, legato=True)
+    for i, m in enumerate((43, 50, 55, 59, 62, 67)):
+        B.add(2.0 + 0.03 * i, me.guitar(r, float(mtof(m)), 2.0, 0.85, steel=True), 0.2, (i / 5 - 0.5) * 0.4, {"hall": 0.3})
+    for m in (55, 59, 62, 67):
+        B.add(2.0, me.brass(r, float(mtof(m)), 2.0, 0.9, "trumpet", voices=2), 0.14, sends={"hall": 0.4})
+    B.add(2.0, me.timpani(r, float(mtof(43)), 1.0), 0.4, sends={"hall": 0.3})
+    B.add(2.0, me.cymbal(r, "crash"), 0.18, 0.3, {"hall": 0.3})
+
+
+def _ff_neon(B, r, k):
+    for i, m in enumerate((64, 67, 71, 76, 79, 83, 88)):
+        B.add(0.25 * i, me.synth_pluck(r, float(mtof(m)), 0.4, 0.9), 0.24, (i / 6 - 0.5) * 0.6, {"hall": 0.3})
+    for m in (52, 59, 64, 67, 71, 76):
+        B.add(1.75, me.supersaw(r, float(mtof(m)), 2.4, 0.8, voices=5, detune=16.0, cutoff=3200.0, att=0.01, rel=0.8, sub=0.0),
+              0.08, sends={"hall": 0.4})
+    B.add(1.75, me.kick(r, "punch"), 0.5)
+    B.add(1.75, me.snare(r, "gated"), 0.35, 0.0, {"hall": 0.3})
+    B.add(1.75, me.cymbal(r, "crash"), 0.18, 0.3, {"hall": 0.3})
+
+
 def _ff_manor(B, r, k):
     for m in (50, 57, 62, 65, 69):
         B.add(0.0, me.organ(r, float(mtof(m)), 3.5, 0.8, leslie=False, rel=1.0), 0.16, sends={"hall": 0.6})
@@ -2021,6 +2311,10 @@ def stingers():
     fanfare("armada", 67, _ff_armada, 4.5, bpm=116.0)
     fanfare("candy", 72, _ff_candy, 3.5, bpm=140.0)
     fanfare("carrier", 69, _ff_carrier, 4.8, bpm=120.0)
+    fanfare("sakura", 62, _ff_sakura, 5.2, bpm=84.0)
+    fanfare("jungle", 69, _ff_jungle, 4.8, bpm=108.0)
+    fanfare("frontier", 67, _ff_frontier, 4.6, bpm=132.0)
+    fanfare("neon", 64, _ff_neon, 4.8, bpm=100.0)
     fanfare("ascent", 62, _ff_ascent, 7.0, bpm=128.0, rms=-12.0)
     # checkpoint chimes (tonic of each map's key; the game steps them up its scale)
     chime("gardens", lambda B, r: (B.add(0, me.mallet(r, float(mtof(79)), 0.8, 0.8, "glockenspiel"), 0.4, 0.2, {"small": 0.3}),
@@ -2072,6 +2366,18 @@ def stingers():
                                  B.add(0.24, me.mallet(r, float(mtof(91)), 0.6, 0.8, "glockenspiel"), 0.35, 0.2, {"small": 0.3})))
     chime("carrier", lambda B, r: (B.add(0, me.brass(r, float(mtof(69)), 0.4, 0.9, "trumpet", voices=2, fp=True), 0.3, 0.0, {"hall": 0.3}),
                                    B.add(0.18, me.brass(r, float(mtof(76)), 0.5, 0.9, "trumpet", voices=2, fp=True), 0.3, 0.1, {"hall": 0.3})))
+    chime("sakura", lambda B, r: (B.add(0, _koto(r, float(mtof(74)), 1.0, 0.85), 0.4, -0.2, {"hall": 0.4}),
+                                  B.add(0.16, _koto(r, float(mtof(81)), 1.0, 0.8), 0.35, 0.2, {"hall": 0.4}),
+                                  B.add(0.0, me.bell(r, float(mtof(86)), 1.2, 0.4), 0.1, 0.0, {"hall": 0.5})))
+    chime("jungle", lambda B, r: (B.add(0, me.mallet(r, float(mtof(81)), 0.6, 0.85, "marimba"), 0.4, -0.2, {"small": 0.3}),
+                                  B.add(0.14, me.mallet(r, float(mtof(88)), 0.6, 0.8, "marimba"), 0.35, 0.2, {"small": 0.3}),
+                                  B.add(0.0, me.woodblock(r, 0.8, 1.2), 0.15, 0.0, {"small": 0.3})))
+    chime("frontier", lambda B, r: (B.add(0, me.guitar(r, float(mtof(79)), 0.8, 0.85, steel=True), 0.4, -0.2, {"hall": 0.3}),
+                                    B.add(0.15, me.guitar(r, float(mtof(86)), 0.8, 0.8, steel=True), 0.35, 0.2, {"hall": 0.3}),
+                                    B.add(0.0, me.triangle(r, 0.6, 0.8), 0.06, 0.3, {"hall": 0.4})))
+    chime("neon", lambda B, r: (B.add(0, me.synth_pluck(r, float(mtof(76)), 0.4, 0.9), 0.4, -0.2, {"hall": 0.3}),
+                                B.add(0.16, me.synth_pluck(r, float(mtof(83)), 0.5, 0.85), 0.38, 0.2, {"hall": 0.35}),
+                                B.add(0.0, me.fm_bell(r, float(mtof(88)), 1.0, 0.35), 0.1, 0.0, {"hall": 0.4})))
     chime("ascent", lambda B, r: (B.add(0, me.synth_pluck(r, float(mtof(71)), 0.4, 0.9), 0.4, 0.2, {"hall": 0.3}),
                                   B.add(0.18, me.synth_pluck(r, float(mtof(78)), 0.4, 0.9), 0.4, -0.2, {"hall": 0.3}),
                                   B.add(0.36, me.synth_pluck(r, float(mtof(83)), 0.5, 0.8), 0.35, 0.0, {"hall": 0.4}),
@@ -2102,6 +2408,10 @@ PIECES = {
     "armada": piece_armada,
     "candy": piece_candy,
     "carrier": piece_carrier,
+    "sakura": piece_sakura,
+    "jungle": piece_jungle,
+    "frontier": piece_frontier,
+    "neon": piece_neon,
     "ascent": piece_ascent,
     "title": piece_title,
     "lobby": piece_lobby,
@@ -2109,7 +2419,7 @@ PIECES = {
     "victory": piece_victory,
     "stingers": stingers,
 }
-LAYERED = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert", "manor", "armada", "candy", "carrier", "ascent")
+LAYERED = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert", "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "ascent")
 
 
 def verify():
