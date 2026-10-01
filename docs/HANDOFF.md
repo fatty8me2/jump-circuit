@@ -1,3 +1,119 @@
+# HANDOFF - 2026-10-01 (session 4): PAUSED mid-round. Four more worlds, medal times, earnable characters
+
+Read this first when picking the work up. **Everything is paused on purpose; the owner asked for it.** No agents or
+processes are running. All unfinished agent work is saved as `WIP (paused)` commits.
+
+## Shipped since session 3
+- **v1.4.1:** Frostbite Pass's avalanche finale made beatable; the Particles slider; calmer title music.
+- **v1.5.0:** four new worlds, Phantom Manor, Storm Armada, Sugar Rush and Super Carrier (levels 11-14; The
+  Final Ascent moved to level 15).
+  - Released at the owner's request **before any windowed screenshot pass**, so none of maps 11-14 has been
+    looked at rendered yet.
+  - Storm Armada's hardest jump is only 83%. The owner hasn't said whether to make it harder.
+
+## BLOCKER: GitHub auth
+`GH_TOKEN` is invalid or expired (`gh auth status` says the token is invalid, and `git push` fails with
+"Authentication failed"). Nothing from this session is pushed. The owner must renew the token before any push or
+`gh release`.
+
+## Branches (all local; nothing pushed)
+| Branch / worktree | State |
+|---|---|
+| `extras` (fb22cb2), worktree `.claude/worktrees/agent-a6587586702cfa6e6` | **DONE and fully tested; ready to become v1.6.0.** Run It Again (lapping) + Locker with unlockable trails & finish effects. Non-bot suite 969/0, every bot level and route passed (0-14). Not merged to main. |
+| `new-worlds-3`, lead worktree `.claude/worktrees/lead-nw3`, HEAD 04f084e | Built on `extras`. Holds everything below that is merged. |
+| `wild-west`, worktree `agent-af49ba4887b7d7df2`, **WIP 85834eb** | Level 18 is built (78ba03d), but the bot needs respawns. Fix in progress, then paused. **Not merged.** |
+| `new-worlds-3-mech`, worktree `agent-a8dca2e0595020100`, **WIP 19bf706** | 71 mechanic clips generated for sakura/jungle/frontier/neon. Not yet verified, imported or tested. **Not merged.** |
+
+## Merged into `new-worlds-3`
+The plan is `C:\Users\fatty\.claude\plans\abundant-hugging-lark.md`, approved by the owner. They asked for "3 more
+thematically unique maps" and then picked all 4 themes, plus earnable characters and cosmetics (they picked all 4
+reward types).
+
+- **Groundwork:**
+  - levels 16-19 slotted before the finale; The Final Ascent is now `levels/level_20_ascent.*`;
+  - `Game.LEVELS`, `SaveData.LAYOUT_REV` and `Look.THEMES` entries;
+  - the spec, `docs/NEW_WORLDS_3_BRIEF.md`.
+
+  New 0-based indices: 14 sakura, 15 jungle, 16 frontier, 17 neon, 18 ascent.
+- **Scores (lead):** `piece_sakura`, `piece_jungle`, `piece_frontier` and `piece_neon` in `tools/gen_music.py`,
+  each with a fanfare and chimes. All pass `--verify` and are documented in `docs/AUDIO.md`.
+  `Sfx.MINOR_THEMES` includes sakura, jungle and neon.
+- **Soundscapes + footsteps** (c99ded1):
+  - ambience 30.94 / 34 MB;
+  - world SFX 18.5 / 30 MB before the mechanic clips.
+- **Rewards framework** (8854a5a):
+  - **Medals:** `Game.medal_for()`, `medals` on every `Game.LEVELS` entry, and `Game.BOT_TIMES`. Gold is the
+    fastest bot route ×1.12, Silver ×1.35, Bronze ×1.7, each rounded up to 5 s.
+  - **Cosmetics:** `Cosmetics` is now a `KINDS` table with rules `medal`, `medals`, `all_medals` and `stat`.
+  - **Catalogue:** 10 characters, 22 hats, 8 paints and 7 titles.
+  - **UI:** a tabbed Locker (LB/RB), medals on level select and the results panel, the unlock banner.
+  - **Online:** titles on the roster, and every id synced on both the relay and the direct path.
+  - **Saves:** `SaveData.stats` (`laps_dealt`, `flawless_golds`).
+  - **Tests:** `run_tests.gd --save=<name>` gives parallel runs separate test saves.
+- **Character art** (36f5b74): `player/cosmetic_art.gd`, plus `set_character`, `set_hat` and `set_paint` in
+  `player_visual.gd`, with 13 shaders.
+  - **Owner decisions pending:**
+    - "Factory White" currently means each character's stock look, not literal white.
+    - Cat-bot's ears poke through hats on purpose.
+- **Levels** (bot: 0 respawns on every route, with and without the 1.0 s human pause):
+  - **Neon City** (9dd1931): hardest jump 88%. Hover traffic, searchlight drones, glitching holograms.
+  - **Jungle Temple** (0b14f08): hardest jump 79% on the main line, 87% with the shortcut. Vines, rafts, darts,
+    glyph gates, the boulder chase.
+    - Possibly easier than intended (it should be harder than Sakura).
+  - **Sakura Peaks** (a9f96e3): hardest jump 91%. Koi stones, sinking petals, bamboo springs, bell logs,
+    shuriken, paper doors, two swaying rope bridges with gusts.
+    - Harder than intended for the first of the four. Ask the owner whether to swap difficulty with Jungle or
+      tune both.
+
+## Next steps, in order
+1. **Wild West Heist:** resume the fix in `agent-af49ba4887b7d7df2` (branch `wild-west`, WIP 85834eb).
+   - Goal: 0 respawns on all 3 routes, with and without the temporary 1.0 s pause hook, run on the final commit.
+     Remove the hook before committing.
+   - Where it stood: on the final commit, routes 0/1/2 needed 1/1/3 respawns without the pause and 4 each with it.
+   - The agent had started on the signal arms and the stage 10 gondola wait. Other suspects: the dynamite chain,
+     the trestle collapse, the cattle-run fuse.
+   - Then merge into `new-worlds-3`. Expect the usual `visual/ambience.gd` conflict: keep both cases, with
+     `\t\t\t]` between them.
+2. **Mechanic clips:** finish `new-worlds-3-mech` (WIP 19bf706):
+   - run `python tools/gen_world_sfx.py --verify`;
+   - headless `--import`, then commit the new `.import` files;
+   - extend `WORLD_CLIPS` / `WORLD_LOOPS` and the "every WorldAudio clip the newer maps name exists" check for the
+     4 themes;
+   - run `--only=test_z_world` and `--only=test_zs`, then merge.
+
+   The clip name lists are in the WIP commit's generator code.
+3. **Real medal targets for levels 16-19:** run their bots, then update `Game.BOT_TIMES` and `medals`. They are
+   marked `# PROVISIONAL`.
+4. **Full suite on `new-worlds-3`, split:**
+   - every bot level 0-18, one at a time: `--only=test_n_bot --level=N --route=all --save=<name>`;
+   - the rest: `--skip=test_n_bot`.
+
+   Run a headless `--import` first after merges.
+5. **Ask the owner for a windowed screenshot pass** (never without asking). It is now owed for:
+   - maps 11-14 and 16-19;
+   - all 13 character/paint shaders plus every level shader (headless runs never compile shaders);
+   - the Locker, the medal UI, and the trails and finish effects.
+
+   Every agent's report lists its camera setups.
+6. **Releases, each only with the owner's OK:**
+   - **v1.6.0** = `extras`. It can ship now that the token is fixed: merge to main, bump `config/version`, export,
+     zip, `gh release`.
+   - **v1.7.0** = `new-worlds-3`.
+
+   Release notes must be 600 characters or fewer.
+
+## Test and tool tips learned this session
+- **The full suite is too long for one run.** The bot test takes more than 90 min with 15+ levels, so split it as
+  above.
+- **Test saves:** every run wipes `user://test_progress.json` unless it uses `--save=<name>` (on `new-worlds-3`
+  and later). Concurrent runs without it clobber each other.
+- **Background limits:** background shell commands hit a time limit. Run bot levels in batches of about three.
+- **`tools/gen_music.py` has no `--help`.** Any unknown `--flag` with no piece name re-renders **every** score.
+  Use `--list`, or name the pieces.
+- **Paths:** Windows Python can't open `/c/...` paths. Write scripts with Windows paths.
+- **Merges:** after merging branches, a headless `--import` is required before tests, or new `class_name`s and
+  assets fail to load.
+
 # HANDOFF - 2026-09-24 (session 3): sound update, updater fix, relay resume, four new worlds
 
 Read this first when picking the work up (new session, other account, or after a usage-limit pause).
