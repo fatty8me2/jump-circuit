@@ -4186,7 +4186,8 @@ func test_zm_player_visual_hooks() -> void:
 	world.add_child(v)
 	await ticks(1)
 	check(v.head_anchor() != null and v.hat_node() != null and v.hat_id == "crown", "a hat picked before the rig exists is mounted on build")
-	check((v._body.material_override as StandardMaterial3D).transparency == BaseMaterial3D.TRANSPARENCY_ALPHA, "the Ghost paint is see-through")
+	var ghost: Material = v.paint_parts()[0].material_override if not v.paint_parts().is_empty() else null
+	check(ghost is ShaderMaterial and (ghost as ShaderMaterial).shader.code.contains("ALPHA"), "the Ghost paint is see-through")
 	var e0: int = trap.count()
 	for c: String in Cosmetics.ids("character"):
 		v.set_character(c)
@@ -4215,6 +4216,234 @@ func test_zm_player_visual_hooks() -> void:
 	world.queue_free()
 	world = null
 	await ticks(2)
+
+
+## The character art pass: every body has the named parts the animation drives, every hat
+## sits on every head at a sane height, every paint covers the shell (and only the shell),
+## picks survive a body swap, the full move cycle animates cleanly, remote racers wear it all
+## and no body + hat goes over the mesh budget.
+const ZM_MESH_BUDGET: int = 40
+
+func test_zm_character_art() -> void:
+	await new_world()
+	var e0: int = trap.count()
+	# a rig that is never animated: rest-pose measurements
+	var r := PlayerVisual.new()
+	world.add_child(r)
+	await ticks(1)
+	var worst: int = 0
+	var worst_what: String = ""
+	var paint_mats: Array[Material] = []
+	for p: String in Cosmetics.ids("paint"):
+		var m: Material = CosmeticArt.paint_material(p)
+		check((p == "white") == (m == null), "paint %s has its own material (white is the factory finish)" % p)
+		if m != null:
+			paint_mats.append(m)
+			check(m == CosmeticArt.paint_material(p), "paint %s is cached" % p)
+	for c: String in Cosmetics.ids("character"):
+		r.set_character(c)
+		await ticks(1)
+		check(r.built_character == c, "%s builds its own body" % c)
+		_zm_check_named_parts(r, c)
+		var accents: Array[Material] = [r.accent_material("base"), r.accent_material("dark"), r.accent_material("hand"), r.accent_material("glow"), r._bulb_mat]
+		var shows_accent: bool = false
+		for mi: MeshInstance3D in _zm_meshes(r._root):
+			if mi.is_visible_in_tree() and mi.material_override in accents:
+				shows_accent = true
+		check(shows_accent, "%s shows the racer colour somewhere" % c)
+		var body_top: float = _zm_aabb(r._body).end.y
+		var anchor_y: float = r.head_anchor().global_position.y
+		check(anchor_y >= body_top - 0.06 and anchor_y < body_top + 0.45, "%s: the hat anchor sits on the head (anchor %.2f, body top %.2f)" % [c, anchor_y, body_top])
+		var base_count: int = _zm_meshes(r._root).size()
+		metrics["zm_meshes_" + c] = base_count
+		for h: String in Cosmetics.ids("hat"):
+			if h == "none":
+				continue
+			r.set_hat(h)
+			var box: AABB = _zm_aabb(r.hat_node())
+			var sane: bool = box.size != Vector3.ZERO and box.end.y > body_top + 0.01 and box.position.y > anchor_y - 0.6 and box.end.y < anchor_y + 0.8
+			check(sane, "%s's %s sits on the head (hat %.2f..%.2f, anchor %.2f, body top %.2f)" % [c, h, box.position.y, box.end.y, anchor_y, body_top])
+			var n: int = _zm_meshes(r._root).size()
+			if n > worst:
+				worst = n
+				worst_what = "%s + %s" % [c, h]
+		for p: String in Cosmetics.ids("paint"):
+			r.set_paint(p)
+			var want: Material = CosmeticArt.paint_material(p)
+			var ok: bool = not r.paint_parts().is_empty() and r.paint_parts().has(r._body)
+			for mi: MeshInstance3D in r.paint_parts():
+				if want != null and mi.material_override != want:
+					ok = false
+				if want == null and mi.material_override in paint_mats:
+					ok = false
+			# the eyes, visor and accent pieces never take the paint
+			for mi: MeshInstance3D in [r._eye_l, r._eye_r, r._hand_l, r._hand_r]:
+				if mi.material_override in paint_mats:
+					ok = false
+			check(ok, "%s wears the %s paint on its shell only" % [c, p])
+	metrics["zm_meshes_worst"] = "%d (%s)" % [worst, worst_what]
+	check(worst <= ZM_MESH_BUDGET, "every body + hat stays within %d meshes (worst %d: %s)" % [ZM_MESH_BUDGET, worst, worst_what])
+	# a body swap keeps the hat and the paint
+	r.set_hat("viking")
+	r.set_paint("lava")
+	for c: String in Cosmetics.ids("character"):
+		r.set_character(c)
+		var kept: bool = r.hat_id == "viking" and r.hat_node() != null and r.head_anchor().is_ancestor_of(r.hat_node())
+		for mi: MeshInstance3D in r.paint_parts():
+			kept = kept and mi.material_override == CosmeticArt.paint_material("lava")
+		check(kept, "switching to %s keeps the Viking Helmet and the Lava paint" % c)
+	# no leaks: back on Volt with no hat, the rig is the size it started at
+	r.set_hat("none")
+	r.set_character("volt")
+	await ticks(1)
+	check(_zm_meshes(r._root).size() == int(metrics.get("zm_meshes_volt", -1)), "rebuilding bodies leaves nothing behind (%d meshes)" % _zm_meshes(r._root).size())
+	# the racer colour follows set_accent everywhere
+	r.set_character("dino")
+	r.set_accent(Color(0.2, 0.9, 0.3))
+	check(r.accent_material("base").albedo_color.is_equal_approx(Color(0.2, 0.9, 0.3)), "set_accent tints the shared accent materials")
+	r.set_character("volt")
+	r.set_hat("tophat")
+	var hidden: bool = not r._antenna.visible
+	r.set_hat("halo")
+	check(hidden and r._antenna.visible, "a covering hat hides Volt's antenna; the halo leaves it showing")
+	r.set_hat("none")
+	# the full move cycle on every body, wearing something that moves
+	var v := PlayerVisual.new()
+	world.add_child(v)
+	await ticks(1)
+	var hat_cycle: Array[String] = ["propeller", "halo", "antennae", "tophat", "witch"]
+	var paint_cycle: Array[String] = ["galaxy", "lava", "neon", "ghost", "camo", "candy", "chrome", "white"]
+	var ci: int = 0
+	for c: String in Cosmetics.ids("character"):
+		v.set_character(c)
+		v.set_hat(hat_cycle[ci % hat_cycle.size()])
+		v.set_paint(paint_cycle[ci % paint_cycle.size()])
+		ci += 1
+		var finite: bool = await _zm_move_cycle(v)
+		check(finite, "%s runs, jumps, wall runs, mantles, respawns and cheers with a finite pose" % c)
+	# secondary motion: the propeller spins with speed, the halo floats, a tail swings
+	v.set_character("dino")
+	v.set_hat("propeller")
+	var spinner: Node3D = v._hat_spin[0] if not v._hat_spin.is_empty() else null
+	var tail: Node3D = v._sways[0].node if not v._sways.is_empty() else null
+	check(spinner != null and tail != null, "the propeller and the dino's tail are animated parts")
+	if spinner != null and tail != null:
+		var b0: Basis = spinner.basis
+		var t0: Vector3 = tail.rotation
+		for i: int in 20:
+			v.animate(1.0 / 60.0, Vector3(0, 0, -10), true, Vector3.FORWARD)
+		check(not spinner.basis.is_equal_approx(b0), "the propeller turns")
+		check(not tail.rotation.is_equal_approx(t0), "the tail swings")
+	v.set_hat("halo")
+	var bob: Node3D = v._hat_bob
+	var y0: float = bob.position.y if bob != null else 0.0
+	for i: int in 30:
+		v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(bob != null and not is_equal_approx(bob.position.y, y0), "the halo floats")
+	# a remote racer builds what it was sent, and animates it
+	var rr := RemoteRacer.new()
+	world.add_child(rr)
+	await ticks(1)
+	rr.setup("Ada", Settings.RACER_COLORS[2])
+	rr.apply_cosmetics({"character": "skeleton", "hat": "pharaoh", "paint": "galaxy"})
+	var rv: PlayerVisual = rr.visual()
+	var dressed: bool = rv.built_character == "skeleton" and rv.hat_node() != null and rv.head_anchor().is_ancestor_of(rv.hat_node())
+	for mi: MeshInstance3D in rv.paint_parts():
+		dressed = dressed and mi.material_override == CosmeticArt.paint_material("galaxy")
+	check(dressed, "a remote racer builds the Skeleton in the Pharaoh Headdress and Galaxy paint")
+	for i: int in 6:
+		rr.push_state(Vector3(0, 0.05, -float(i) * 0.3), Vector3(0, 0, -9), true, 1)
+		await ticks(2)
+	rr.apply_cosmetics({"character": "astronaut", "hat": "bubble", "paint": "chrome"})
+	check(rv.built_character == "astronaut" and rv.hat_id == "bubble" and rv.paint_parts()[0].material_override == CosmeticArt.paint_material("chrome"),
+		"a remote racer re-dresses when its picks change")
+	check(trap.count() == e0, "the character art builds and animates without errors %s" % trap.since(e0))
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+func _zm_check_named_parts(v: PlayerVisual, c: String) -> void:
+	var live := func(n: Node) -> bool: return n != null and is_instance_valid(n) and n.is_inside_tree() and not n.is_queued_for_deletion()
+	var belt: Node = v._torso.get_node_or_null("Belt")
+	var pack: Node = v._torso.get_node_or_null("Pack")
+	var ok: bool = live.call(v._body) and belt is MeshInstance3D and live.call(belt) and pack is MeshInstance3D and live.call(pack)
+	ok = ok and live.call(v._eye_l) and live.call(v._eye_r) and live.call(v._antenna) and live.call(v._bulb) and v._bulb_mat != null
+	ok = ok and live.call(v._foot_l) and live.call(v._foot_r) and live.call(v._hand_l) and live.call(v._hand_r)
+	ok = ok and live.call(v._head_anchor) and v._head_anchor.get_parent() == v._torso
+	ok = ok and v._eye_l.get_parent() == v._torso and v._antenna.is_ancestor_of(v._bulb)
+	ok = ok and v._foot_l.get_parent() == v._rig and v._hand_l.get_parent() == v._rig
+	check(ok, "%s has every named part the animation drives" % c)
+
+
+## Every MeshInstance3D under `n` that is not on its way out.
+func _zm_meshes(n: Node) -> Array[MeshInstance3D]:
+	var out: Array[MeshInstance3D] = []
+	var stack: Array[Node] = [n]
+	while not stack.is_empty():
+		var k: Node = stack.pop_back()
+		if k.is_queued_for_deletion():
+			continue
+		if k is MeshInstance3D:
+			out.append(k)
+		stack.append_array(k.get_children())
+	return out
+
+
+## World-space bounds of the visible meshes under `n` (n itself included).
+func _zm_aabb(n: Node) -> AABB:
+	var box := AABB()
+	var first: bool = true
+	for mi: MeshInstance3D in _zm_meshes(n):
+		if mi.mesh == null or not mi.is_visible_in_tree():
+			continue
+		var b: AABB = mi.global_transform * mi.get_aabb()
+		box = b if first else box.merge(b)
+		first = false
+	return box
+
+
+## Run, jump, land, wall run + wall jump, mantle, a pad launch, a knock, respawn, a checkpoint,
+## the finish cheer and an idle long enough for fidgets; true when the pose stays finite.
+func _zm_move_cycle(v: PlayerVisual) -> bool:
+	var dt: float = 1.0 / 60.0
+	var fwd := Vector3.FORWARD
+	var finite: bool = true
+	var step := func(n: int, vel: Vector3, floor_on: bool) -> void:
+		for i: int in n:
+			v.animate(dt, vel, floor_on, fwd)
+	step.call(40, Vector3(0, 0, -9), true)
+	v.on_jump()
+	for i: int in 30:
+		v.animate(dt, Vector3(0, 9.0 - float(i) * 0.6, -9), false, fwd)
+	v.on_land(16.0)
+	step.call(10, Vector3(0, 0, -9), true)
+	v.on_wall_run(Vector3.RIGHT)
+	v.wall_roll = -1.0
+	step.call(30, Vector3(0, 0.5, -10), true)
+	v.wall_roll = 0.0
+	v.on_wall_jump()
+	step.call(20, Vector3(4, 6, -8), false)
+	v.on_mantle()
+	v.on_mantle_grab(v.global_position + Vector3(0, 1.2, -0.5), Vector3.FORWARD)
+	step.call(50, Vector3(0, 2, -1), false)
+	v.on_land(4.0)
+	v.on_bounce(22.0)
+	step.call(40, Vector3(0, 14, -6), false)
+	v.on_knock(Vector3(8, 4, 0))
+	step.call(30, Vector3(4, -6, 0), false)
+	v.on_respawn()
+	step.call(30, Vector3.ZERO, true)
+	v.on_checkpoint()
+	step.call(30, Vector3(0, 0, -6), true)
+	v.on_cheer()
+	step.call(230, Vector3.ZERO, true)
+	step.call(260, Vector3.ZERO, true)   # idle: fidgets
+	await ticks(1)
+	for mi: MeshInstance3D in _zm_meshes(v._root):
+		if not (mi.global_transform.origin.is_finite() and mi.global_transform.basis.x.is_finite() and mi.global_transform.basis.y.is_finite()):
+			finite = false
+	return finite
 
 
 func test_zm_locker_tabs() -> void:
