@@ -432,6 +432,35 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"pick": PackedColorArray([Color(2.0, 1.0, 1.6, 0.4), Color(1.0, 1.5, 2.2, 0.4), Color(2.2, 2.0, 1.0, 0.4)]),
 					"speed": Vector2(0.2, 0.6), "dir": Vector3.UP, "spread": 60.0, "curve": "pop"},
 			]
+		"neon":
+			return [
+				# near: heavy city rain - pale grey streaks (not glowing), warmed pink and amber by the
+				# signs - and fine spray drifting through the lamplight
+				{"depth": "near", "amount": 230, "lifetime": 0.6, "facing": "velocity", "tex": Fx.Tex.SPARK, "additive": false,
+					"size": Vector2(0.022, 0.75), "pick": PackedColorArray([Color(0.8, 0.8, 0.9, 0.5), Color(1.0, 0.72, 0.88, 0.45), Color(1.0, 0.84, 0.66, 0.45)]),
+					"dir": Vector3(0.14, -1, 0.06), "spread": 3.0, "speed": Vector2(17.0, 22.0),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 70, "lifetime": 2.0, "tex": Fx.Tex.DOT, "size": 0.06, "additive": false,
+					"color": Color(0.9, 0.88, 1.0, 0.55), "speed": Vector2(0.1, 0.5), "dir": Vector3(1, -0.2, 0.2), "spread": 60.0,
+					"gravity": Vector3(0.3, -0.4, 0.1), "turbulence": 0.9, "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# mid: steam and drizzle-mist rolling between the roofs, lit magenta / amber / teal, and
+				# blurred sign-coloured glints (bokeh of the signs through the rain)
+				{"depth": "mid", "amount": 40, "lifetime": 6.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 3.6,
+					"pick": PackedColorArray([Color(0.6, 0.3, 0.5, 0.2), Color(0.6, 0.45, 0.32, 0.18), Color(0.28, 0.48, 0.5, 0.16)]),
+					"dir": Vector3(1, 0.15, 0.3), "spread": 20.0, "speed": Vector2(0.8, 1.8), "angle": Vector2(0, 360),
+					"spin": Vector2(-15, 15), "curve": "puff", "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 70, "lifetime": 3.5, "tex": Fx.Tex.DOT, "size": 0.35,
+					"pick": PackedColorArray([Color(2.4, 0.5, 1.5, 0.6), Color(2.4, 1.3, 0.4, 0.6), Color(0.4, 2.2, 2.0, 0.6)]),
+					"speed": Vector2(0.0, 0.2), "spread": 180.0, "curve": "pop"},
+				# far: grey veils of rain sweeping the skyline, and the glow of a thousand signs smeared
+				# into soft blobs of colour
+				{"depth": "far", "amount": 45, "lifetime": 8.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 18.0,
+					"radius": 80.0, "color": Color(0.42, 0.34, 0.46, 0.28), "speed": Vector2(2.0, 4.0), "dir": Vector3(0.6, -0.4, 0.2),
+					"spread": 12.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 60, "lifetime": 6.0, "tex": Fx.Tex.DOT, "size": 3.5, "radius": 95.0,
+					"pick": PackedColorArray([Color(1.6, 0.3, 1.0, 0.35), Color(1.6, 0.9, 0.3, 0.35), Color(0.3, 1.4, 1.3, 0.3)]),
+					"speed": Vector2(0.1, 0.4), "spread": 180.0, "curve": "pop"},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking
