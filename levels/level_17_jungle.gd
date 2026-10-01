@@ -1200,8 +1200,9 @@ func _dress_stages() -> void:
 	deco.falls(Vector3(fp.x, WATER_Y, fp.z), fd, fp.y - WATER_Y + 14.0, 8.0, true)
 	# 6: the canopy - giant trees holding the branches
 	for p: Vector3 in (_anchor["canopy"] as Array):
-		deco.giant_tree(Vector3(p.x + 9.0, WATER_Y, p.z), 46.0, 2.4)
-		deco.giant_tree(Vector3(p.x - 9.0, WATER_Y, p.z - 4.0), 42.0, 2.2)
+		# (the canopy run heads along world x: the trees stand either side of it)
+		deco.giant_tree(Vector3(p.x, WATER_Y, p.z - 9.0), 46.0, 2.4)
+		deco.giant_tree(Vector3(p.x - 4.0, WATER_Y, p.z + 9.0), 42.0, 2.2)
 	# 7: the great trunk whose bark you run along
 	var tk: Vector3 = _anchor["trunk"]
 	_trunk(Vector3(tk.x, WATER_Y, tk.z), 52.0, 3.5)
