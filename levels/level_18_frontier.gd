@@ -407,11 +407,15 @@ func _stage_3() -> Vector3:
 	_boxcar(-25.4, -39.4, BOX_RED)
 	_boxcar(-44.2, -58.2, BOX_OCHRE)
 	var sig: FrontierSignals = _signals(-50.0, -6.0, ROOF + 0.35, 0.3, 26.0, 3.7, 0.0)
+	# knee-high bars: a missed hop trips you up (costs time), it does not throw you off the train
+	sig.lethal = false
 	_cp(Vector3(0, ROOF, -55.6))
 	r_jump(_w(Vector3(0, ROOF, -2.25)), _w(Vector3(0, ROOF, -7.8)))
-	_stream(sig, _w(Vector3(0, ROOF, -20.3)))
+	# hop the arms along each roof; the last few metres to the coupling are a plain run-up (a bar
+	# clipping you there only trips you, so you never hop yourself off the edge)
+	_stream(sig, _w(Vector3(0, ROOF, -16.5)))
 	r_jump(_w(Vector3(0, ROOF, -20.45)), _w(Vector3(0, ROOF, -26.4)))
-	_stream(sig, _w(Vector3(0, ROOF, -39.0)))
+	_stream(sig, _w(Vector3(0, ROOF, -35.2)))
 	r_jump(_w(Vector3(0, ROOF, -39.05)), _w(Vector3(0, ROOF, -45.2)))
 	_stream(sig, _w(Vector3(0, ROOF, -55.6)))
 	r_checkpoint()
@@ -475,13 +479,19 @@ func _stage_5() -> Vector3:
 	_flatcar(-6.2, -28.2)
 	var s1: Crusher = _stamp(Vector3(0, DECK, -12.0), 0.0)
 	var s2: Crusher = _stamp(Vector3(0, DECK, -18.6), 0.806)
-	# SHORTCUT: the mill's side wall is a wall run straight past both stamps
-	kit.wallrun(_w(Vector3(-2.4, 3.3, -16.0)), Vector3(16.0, 5.4, 0.5), 90.0)
+	# SHORTCUT: the millwright's plank - a 0.5 m beam slung outside the stamps' frames, over the drop:
+	# no waiting for the stamps, but one slip and you are under the wheels
+	_slab(Vector3(2.75, DECK, -17.2), Vector3(0.5, 0.3, 22.0), Color(0.5, 0.36, 0.22), Color(0.3, 0.2, 0.13), 3)
+	for z: float in [-8.0, -14.0, -20.0, -26.0]:
+		deco.box(_w(Vector3(2.35, DECK - 0.25, z)), Vector3(0.9, 0.12, 0.2), Look.flat(Color(0.14, 0.12, 0.11), 0.6, 0.4))
 	_boxcar(-31.6, -43.6, BOX_RED, true)
 	_cp(Vector3(0, ROOF, -41.0))
 	r_jump(_w(Vector3(0, DECK, -2.25)), _w(Vector3(0, DECK, -7.4)))
 	if route_variant == 2:
-		r_wallrun(_w(Vector3(-0.3, DECK, -7.4)), _w(Vector3(-2.0, 2.6, -11.2)), _w(Vector3(-2.0, 2.8, -21.0)), _w(Vector3(-0.3, DECK, -26.4)))
+		r_walk(_w(Vector3(1.3, DECK, -8.4)))
+		r_jump(_w(Vector3(1.65, DECK, -8.6)), _w(Vector3(2.75, DECK, -10.2)))
+		r_walk(_w(Vector3(2.75, DECK, -25.6)))
+		r_jump(_w(Vector3(2.75, DECK, -25.8)), _w(Vector3(1.0, DECK, -27.0)))
 	else:
 		_wait(func() -> bool: return _press_ok(s1, 0.0, 1.7) and _press_ok(s2, 0.7, 2.5))
 		r_walk(_w(Vector3(0, DECK, -26.4)))
@@ -726,8 +736,9 @@ func _stage_9() -> Vector3:
 	_flatcar(-6.0, -17.0)
 	_flatcar(-26.6, -40.6)
 	_flatcar(-49.2, -61.2)
-	var cart1: FrontierCart = _cart(Vector3(0, 2.3, -15.4), -12.6, 9.0, 0.0)
-	var cart2: FrontierCart = _cart(Vector3(0, 2.3, -38.8), -11.4, 8.4, 0.5)
+	# long dwells at each end (1.8 s): plenty of time to step on, and to step off
+	var cart1: FrontierCart = _cart(Vector3(0, 2.3, -15.4), -12.6, 12.0, 0.0)
+	var cart2: FrontierCart = _cart(Vector3(0, 2.3, -38.8), -11.4, 12.0, 0.5)
 	# the narrow-gauge rails the carts run on, across the long couplings
 	var rail: StandardMaterial3D = Look.flat(Color(0.45, 0.42, 0.4), 0.3, 0.9)
 	for seg: Vector2 in [Vector2(-13.0, -30.0), Vector2(-36.4, -52.0)]:
@@ -766,7 +777,7 @@ func _cart(top: Vector3, travel: float, period: float, phase: float) -> Frontier
 	c.points = [Vector3.ZERO, Vector3(0, 0, travel)]
 	c.period = period
 	c.phase = phase
-	c.dwell = 0.14
+	c.dwell = 0.3
 	c.position = _w(top) - Vector3(0, 0.4, 0)
 	add_child(c)
 	return c
@@ -782,11 +793,17 @@ func _stage_10() -> Vector3:
 		_slab(Vector3(0, 3.3, g.x - 2.25), Vector3(3.0, 1.8, 3.5), COAL.lightened(0.15), COAL, 3)
 		_slab(Vector3(0, 3.3, g.y + 2.25), Vector3(3.0, 1.8, 3.5), COAL.lightened(0.15), COAL, 3)
 	_flatcar(-59.6, -73.6)
-	var sig: FrontierSignals = _signals(-56.5, -5.6, 5.5, 2.4, 60.0, -3.7, 0.0)
+	# boards 75 m apart: 7.5 s between them, so there is always a long, calm window to climb out
+	var sig: FrontierSignals = _signals(-56.5, -5.6, 5.5, 2.4, 75.0, -3.7, 0.0)
 	sig.arm_depth = 0.4
 	_cp(Vector3(0, DECK, -71.0))
-	r_jump(_w(Vector3(0, DECK, -2.25)), _w(Vector3(0, 3.3, -6.8)))
 	var feet: float = 3.3
+	var s0: FrontierSignals = sig
+	var e0: float = _wz(-11.0)
+	var e1: float = _wz(-4.0)
+	# into the first pit only with no board coming over the first heap
+	_wait(func() -> bool: return s0.clear_for(e0, e1, feet, 0.0, 4.0))
+	r_jump(_w(Vector3(0, DECK, -2.25)), _w(Vector3(0, 3.3, -6.8)))
 	for i: int in gons.size():
 		var g: Vector2 = gons[i]
 		var pit: Vector3 = Vector3(0, DECK, (g.x + g.y) * 0.5)
@@ -798,7 +815,7 @@ func _stage_10() -> Vector3:
 		var s: FrontierSignals = sig
 		var a: float = minf(z0, z1)
 		var b: float = maxf(z0, z1)
-		_wait(func() -> bool: return s.clear_for(a - 1.0, b + 1.0, feet, 0.0, 3.6), _w(pit))
+		_wait(func() -> bool: return s.clear_for(a - 1.5, b + 1.5, feet, 0.0, 4.6), _w(pit))
 		r_jump(_w(pit + Vector3(0, 0, -1.1)), _w(Vector3(0, 3.3, g.y + 3.0)))
 		if i + 1 < gons.size():
 			r_jump(_w(Vector3(0, 3.3, g.y + 0.35)), _w(Vector3(0, 3.3, gons[i + 1].x - 1.2)))

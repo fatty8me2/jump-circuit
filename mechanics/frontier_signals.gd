@@ -6,8 +6,10 @@ extends Node3D
 ## arm. Out ahead the arm stands up; as the post nears the stretch of roofs this line guards (the
 ## window) its lamps start blinking, its bell rings and the arm swings down level across the train
 ## ahead of the window, so a lowered arm is always seen coming. While it is down the arm sweeps
-## back over the roofs at `arm_y` and sends anyone it touches back to the checkpoint: hop a LOW arm
-## (a knee-high bar), or get down below a HIGH one (into a gondola, onto a deck). Past the window it
+## back over the roofs at `arm_y`. A LOW arm (a knee-high bar, `lethal` off) only trips you: it
+## bumps you up off your feet and your run is gone (a missed hop costs time, not a life). A HIGH one
+## (a tall low-bridge board) sends you back to the checkpoint: get down below it (into a gondola's
+## pit, onto a deck). Past the window it
 ## swings up again; far behind, the post sinks out of sight and comes round again in front.
 ## Every post is a pure function of Game.course_time (z = front + (speed * t + i * spacing) mod span).
 ## The node sits at the level origin (it is not moved); all numbers are level coordinates.
@@ -30,6 +32,8 @@ extends Node3D
 @export var speed: float = FrontierScroll.SPEED
 ## Seconds the arm takes to swing down (all of it ahead of the window) and up again.
 @export var swing: float = 0.9
+## Whether the arm kills (tall boards) or just trips you up (knee-high bars).
+@export var lethal: bool = true
 
 const RISE: float = 14.0
 const SINK_DEPTH: float = 18.0
@@ -44,6 +48,7 @@ var _lamp_mat_on: StandardMaterial3D
 var _lamp_mat_off: StandardMaterial3D
 var _was_down: Array[bool] = []
 var _was_swinging: Array[bool] = []
+var _trip_cool: float = 0.0
 
 
 func _ready() -> void:
@@ -126,13 +131,27 @@ func clear_for(z0: float, z1: float, feet_y: float, a: float, b: float) -> bool:
 
 # ---- gameplay ----------------------------------------------------------------------------------------
 
-func _physics_process(_dt: float) -> void:
+func _physics_process(dt: float) -> void:
 	var t: float = Game.course_time
 	_pose(t)
+	_trip_cool = maxf(_trip_cool - dt, 0.0)
 	for i: int in _posts.size():
 		if not deadly_at_z(post_z(i, t)):
 			continue
 		for body: Node3D in _areas[i].get_overlapping_bodies():
+			if body is Player and not lethal:
+				if _trip_cool <= 0.0:
+					# tripped: popped up off your feet, your run gone, nudged back the way the arm goes.
+					# Clipped in mid-air (over a coupling) it only bumps you up and lets your jump carry on.
+					var pl := body as Player
+					if pl.grounded:
+						pl.knockback(Vector3(0, 5.5, 1.5))
+					else:
+						pl.knockback(Vector3(pl.velocity.x, maxf(pl.velocity.y, 5.5), pl.velocity.z))
+					_trip_cool = 0.6
+					# SOUND: the bar clipping your boots
+					WorldAudio.at(self, "frontier_signal_thwack", (body as Node3D).global_position + Vector3(0, 0.5, 0), 0.8, 30.0)
+				return
 			if body is Player:
 				var n: Node = self
 				while n != null and not n.has_method("fail"):
