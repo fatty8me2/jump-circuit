@@ -218,12 +218,15 @@ const THEMES: Dictionary = {
 		"decor": Color(0.06, 0.10, 0.14), "decor2": Color(0.50, 0.30, 0.70), "metal": Color(0.35, 0.40, 0.42),
 		"cloud_light": Color(0.10, 0.30, 0.40), "cloud_shade": Color(0.01, 0.05, 0.08),
 	},
+	# Tempest Tower: the outside of a mile-high tower under construction in a daytime hurricane - storm
+	# grey steel walkways with safety-yellow edges, red-oxide primer, sky-blue machine trims. (levels/
+	# level_22_tempest.gd swaps in its own storm sky, the glass and bare-frame tower skins and the rain.)
 	"tempest": {
 		"sky_top": Color(0.10, 0.12, 0.16), "sky_horizon": Color(0.36, 0.40, 0.46), "sky_bottom": Color(0.14, 0.16, 0.20),
 		"sun": Color(0.80, 0.85, 1.0), "sun_energy": 0.8, "sun_rot": Vector3(-50, 150, 0),
 		"ambient": Color(0.55, 0.60, 0.70), "ambient_energy": 0.8, "fog": Color(0.30, 0.34, 0.40), "fog_density": 0.0025,
-		"top": Color(0.55, 0.57, 0.60), "side": Color(0.28, 0.30, 0.34), "trim": Color(1.0, 0.80, 0.10),
-		"alt_top": Color(0.40, 0.44, 0.50), "accent": Color(1.0, 0.80, 0.10), "accent2": Color(0.55, 0.80, 1.0),
+		"top": Color(0.52, 0.55, 0.58), "side": Color(0.24, 0.26, 0.29), "trim": Color(1.0, 0.78, 0.10),
+		"alt_top": Color(0.55, 0.33, 0.25), "accent": Color(1.0, 0.78, 0.10), "accent2": Color(0.55, 0.80, 1.0),
 		"decor": Color(0.22, 0.24, 0.28), "decor2": Color(0.90, 0.30, 0.20), "metal": Color(0.60, 0.62, 0.66),
 		"cloud_light": Color(0.55, 0.58, 0.64), "cloud_shade": Color(0.16, 0.18, 0.22),
 	},
