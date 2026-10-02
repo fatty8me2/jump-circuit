@@ -747,6 +747,37 @@ static func hat(id: String, v: PlayerVisual) -> Node3D:
 			part(h, sphere(1), v.accent_material("base"), Vector3(0, -0.07, 0), Vector3(0.6, 0.46, 0.6))
 			part(h, torus(0.17, 0.33), std(Color(0.95, 0.95, 0.92), 1.0), Vector3(0, -0.13, 0), Vector3(1, 0.85, 1))
 			part(h, sphere(0), std(Color(0.95, 0.95, 0.92), 1.0), Vector3(0, 0.19, 0), Vector3.ONE * 0.16)
+		"welder":
+			# a welder's mask flipped up on the forehead: dark shell, amber window, leather band
+			var shell := std(Color(0.16, 0.16, 0.18), 0.5, 0.3)
+			part(h, sphere(1), shell, Vector3(0, -0.0, -0.13), Vector3(0.5, 0.2, 0.36), Vector3(-0.55, 0, 0))
+			part(h, box(), std(Color(1.0, 0.55, 0.12), 0.2, 0.0, 1.6), Vector3(0, 0.06, -0.28), Vector3(0.22, 0.06, 0.02), Vector3(-0.55, 0, 0))
+			part(h, torus(0.27, 0.3), std(Color(0.35, 0.22, 0.12), 0.8), Vector3(0, -0.09, 0), Vector3(1, 0.8, 1.04))
+			for side: float in [-1.0, 1.0]:
+				part(h, sphere(0), std(Color(0.55, 0.55, 0.58), 0.35, 0.8), Vector3(0.29 * side, -0.07, -0.06), Vector3.ONE * 0.06)
+		"diver":
+			# a brass diving helmet's dome with a round glass porthole and a valve on top
+			var brass := std(Color(0.85, 0.62, 0.3), 0.3, 0.85)
+			part(h, sphere(1), brass, Vector3(0, -0.02, 0), Vector3(0.56, 0.44, 0.56))
+			part(h, torus(0.24, 0.3), brass, Vector3(0, -0.13, 0), Vector3(1, 0.8, 1))
+			part(h, torus(0.06, 0.09, 16), brass, Vector3(0, 0.0, -0.27), Vector3.ONE, Vector3(PI * 0.5, 0, 0))
+			part(h, sphere(0), std(Color(0.3, 0.9, 1.0), 0.1, 0.0, 0.8), Vector3(0, 0.0, -0.27), Vector3(0.13, 0.13, 0.03))
+			part(h, cyl(0.5, 0.5, 10), brass, Vector3(0, 0.22, 0.02), Vector3(0.07, 0.07, 0.07))
+			part(h, sphere(0), brass, Vector3(0, 0.27, 0.02), Vector3(0.1, 0.04, 0.1))
+		"souwester":
+			# a yellow rubber storm hat, brim sloping down all round
+			var rubber := std(Color(1.0, 0.82, 0.12), 0.32)
+			part(h, sphere(1), rubber, Vector3(0, -0.03, 0), Vector3(0.52, 0.34, 0.54))
+			part(h, brim("pith"), rubber, Vector3(0, -0.08, 0.02))
+			part(h, torus(0.25, 0.28), std(Color(0.85, 0.65, 0.05), 0.4), Vector3(0, -0.07, 0), Vector3(1, 0.7, 1.05))
+		"dreamcap":
+			# a floppy nightcap whose tip bends over, ending in a little glowing star
+			var cloth := std(Color(0.45, 0.32, 0.85), 0.85)
+			part(h, torus(0.2, 0.3), std(Color(0.96, 0.95, 1.0), 1.0), Vector3(0, -0.1, 0), Vector3(1, 0.8, 1))
+			part(h, cyl(0.28, 0.5, 14), cloth, Vector3(0, 0.03, 0), Vector3(0.5, 0.26, 0.5))
+			var tip: Node3D = pivot(h, Vector3(0, 0.15, 0), Vector3(0.95, 0, 0.25))
+			part(tip, cyl(0.0, 0.5, 12), cloth, Vector3(0, 0.12, 0), Vector3(0.15, 0.26, 0.15))
+			part(tip, sphere(0), std(Color(1.0, 0.85, 1.0), 0.3, 0.0, 2.0), Vector3(0, 0.26, 0), Vector3.ONE * 0.07)
 		"crown":
 			var gold := std(Color(1.0, 0.78, 0.25), 0.2, 1.0)
 			part(h, cyl(0.5, 0.5, 20, false), std(Color(1.0, 0.78, 0.25), 0.2, 1.0, 0.0, DOUBLE), Vector3(0, -0.01, 0), Vector3(0.42, 0.13, 0.42))
