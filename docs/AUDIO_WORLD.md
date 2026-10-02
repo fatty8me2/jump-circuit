@@ -8,7 +8,7 @@ maths and seeded noise by `tools/gen_world_sfx.py` (which borrows the helpers in
 ## Regenerating
 
 ```
-python tools/gen_world_sfx.py            # generate all 321 clips into audio/, then verify
+python tools/gen_world_sfx.py            # generate all 393 clips into audio/, then verify
 python tools/gen_world_sfx.py --only=manor,carrier   # just those maps' generators (gen_<name>), then verify all
 python tools/gen_world_sfx.py --verify   # only check the files on disk
 ```
@@ -28,7 +28,7 @@ checks that the first and last samples are near zero. For loops it checks the se
 * the curvature (second difference) across the wrap must pass the same test;
 * the 40 ms window across the wrap must be no quieter than the quietest windows in the loop (a faded-out end would fail).
 
-It also checks the total size, which is about 18.5 MB of a 30 MB budget.
+It also checks the total size, which is about 25.5 MB of a 30 MB budget.
 
 ## Formats and levels
 
@@ -341,6 +341,105 @@ f = f_hi / (1 + t / t0)^2. The glacier soundscape uses the same model.
 | `carrier_jbd_raise` / `_lower` | 1.0 s | A hydraulic whine rising (falling) between 300 and 520 Hz, fluid hiss, and a deep lock clunk at 0.78 s. | The jet blast deflectors. |
 | `carrier_lift_move` | 1.0 s | A clunk, two warning beeps (A5, C#6) and an A2 motor hum rising. | Aircraft lifts. |
 | `carrier_flyover` | 1.8 s | Three jets thundering past in turn (peaks at 0.6, 0.8 and 1.0 s), whines dropping, with a sky echo. | The finish flyover. |
+
+The third set of maps (`gen_sakura`, `gen_jungle`, `gen_frontier`, `gen_neon`) adds a few shared
+building blocks: `bamboo_knock()` (a hollow culm), `wood_knock()` (a plank or frame), `coin_hit()`
+(a thin free disc, modes 1 : 1.73 : 2.33 : 3.91 : 4.11), `firework_shell()` (an optional mortar
+"pon", the rocket's whistle, the burst, crackling stars and glitter) and `water_roar()` (a
+circular, churning waterfall body). Render just these with
+`python tools/gen_world_sfx.py --only=sakura,jungle,frontier,neon`.
+
+**Sakura Peaks** (score in D minor pentatonic; pitched clips on D F G A C)
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `sakura_bamboo_creak` | 0.7 s | The lashing straining: stick-slip quickening through 230-3000 Hz fibre and culm resonances, a squeak of rope, the hollow culm knocked twice and the leaves shivering. | A bamboo pole about to snap (the tell). |
+| `sakura_bamboo_snap` | 0.9 s | A sharp crack through the culm's hollow modes, splinters, the swish of it whipping straight (peaking at 2.6 kHz), the pole thrumming at 7 Hz and the leaves thrashing. | The bamboo snapping. |
+| `sakura_bell_bong` | 2.2 s | A bonsho on D3 with its hum on D2, struck by a soft wooden beam. The partials are split by 0.3-0.6 %, so the bell wavers as it rings, in a 2.6 s valley reverb. | The great bell struck by the log (one boom per swing). |
+| `sakura_log_whoosh` | 0.8 s | A heavy, low push of air (a band rising 150 -> 700 Hz to the pass, then falling) and the ropes creaking at the top of the swing. | The swinging log. |
+| `sakura_log_thump` | 0.6 s | A 110 -> 50 Hz thump, the dense trunk's modes (about 180 / 420 / 770 / 1400 Hz) and the ropes jolting. | The log ramming a runner. |
+| `sakura_petal_sink` | 0.7 s | A soft papery sigh (a band falling 2.6 kHz -> 900 Hz), a rustle, a low whuff and a faint D6 sinking to C6. | A giant petal giving under you. |
+| `sakura_shuriken_ring` | 0.8 s | A flick, a bright "shing" (2.5 -> 7 kHz), and the steel star ringing on D6. Its paired modes (1 : 1.47 : 2.09 : 2.81 : 3.7) are split slightly by the points, so the ring shimmers. | A shuriken leaving its socket. |
+| `sakura_shuriken_whir` (loop) | 1.0 s | Air chopped by the four points 24 times a loop, a low flutter under it, and the faint ring of the steel. | The star in flight. |
+| `sakura_shoji_rattle` | 0.8 s | Light wooden ticks coming faster, the paper buzzing in the frames, and the frames sliding in their track. | Shoji frames before they slam (about 0.8 s ahead). |
+| `sakura_shoji_slam` | 0.6 s | A wooden clap, the frames' modes, the paper drumming (membrane modes from 115-135 Hz), a puff of air, and two small bounces. | The shoji clapping shut. |
+| `sakura_gust_rise` | 1.5 s | The wind rising upwind: a band climbing 250 -> 1100 Hz, the leaves rustling harder, a breathy whistle through the bamboo and a low push. | The gust's tell. |
+| `sakura_gust` | 1.4 s | A soft whoosh to the pass at 0.45 s, a flurry of leaves and petals, a breath of whistle, bamboo knocking and a low buffet. | The gust front sweeping across. |
+| `sakura_wind` (loop) | 2.0 s | A soft, broad rush with a band wandering round 550 Hz, leaves rustling in waves, culms knocking and a faint whistle near 820 Hz. | Inside a gust zone (its level follows the gust's strength). |
+| `sakura_mallet_creak` | 0.9 s | The heavy beam groaning (a 120 Hz timber), the rope bindings squeaking and the pawl clacking home. | The giant mallet, about a second before it strikes. |
+| `sakura_ram_creak` | 0.7 s | A hollow knock, a quicker, higher groan (a 165 Hz timber) and a hemp squeak. | The battering ram, about a second before it strikes. |
+| `sakura_bridge_creak` (loop) | 2.0 s | One sway each way: hemp ropes creaking at each end of the sway, the planks groaning (150 and 170 Hz timbers), loose boards tapping and wind in the gorge. | Rope bridges (one loop at mid-span). |
+| `sakura_waterfall` (loop) | 2.0 s | A bright rushing roar (90-8000 Hz, tilted -1.5 dB/oct), the plunge rumbling under it, splashes on the rocks, droplets and spray. | Mountain waterfalls, close up. |
+| `sakura_chime` | 1.4 s | A bronze wind chime tumbling through D6 F6 G6 A6 D7 C7 G6 F6 (free-bar modes), with a soft D5 temple bell under it. | Checkpoints. |
+| `sakura_fireworks` | 2.0 s | Two shells lobbed from mortars (hollow "pon"s), whistling up, bursting at 0.5 and 0.85 s, and their kamuro stars crackling and glittering down. | The finish. |
+| `sakura_finish_bell` | 2.6 s | The great D bell heard from far off: low-passed at 2.5 kHz, in a 3 s valley reverb, with two echoes off the far peaks (0.55 and 1.15 s). | The finish. |
+
+**Jungle Temple** (score in A minor)
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `jungle_vine_creak` | 0.7 s | Fibres stretching (stick-slip through 400-450 / 1000-1150 / 2200-2400 Hz), the branch above groaning (a 200 Hz timber) and a few leaves shaken loose, in a damp canopy. | A vine at each end of its arc. |
+| `jungle_raft_bump` | 0.6 s | A hollow log knock (130 -> 70 Hz, modes at about 210 / 485 / 910 Hz), a slap of water, a slosh and a few bubbles. | The raft bumping. |
+| `jungle_dart_click` | 0.12 s | A dry stone latch: a tick with 1.7-1.9 / 2.9-3.2 / 4.6-5 kHz modes and a small knock. | The dart trap's tell (it clicks faster as it builds). |
+| `jungle_dart_volley` | 0.7 s | Six blowpipe "fft"s in a ragged row (22 ms apart), each dart whizzing (a band rising to 4.2-5.2 kHz), and a few thocking into the far side. | The darts firing. |
+| `jungle_plate_click` | 0.4 s | A short stone scrape, a solid 180 -> 90 Hz clunk and the mechanism answering with a hollow click. | A glyph plate pressed. |
+| `jungle_gate_open` | 1.6 s | Stone dragging up its slot (stick-slip through 100-1300 Hz plus a rough scrape), the counterweight chain rattling, a deep rumble, dust and a clunk at 1.35 s, in the temple. | A glyph gate opening. |
+| `jungle_gate_tick` | 0.25 s | A hollow wooden "tok" on A5, like a temple block. | The gate's countdown (every 0.4 s through the warning). |
+| `jungle_gate_close` | 1.2 s | A quick slide down the slot, then a 90 -> 45 Hz stone thud with a crack at 0.26 s, the frame shuddering and grit trickling. | The gate dropping shut. |
+| `jungle_trap_tick` | 0.12 s | A dry little tick of stone teeth with a short E6 ring. | A trap tell's ticks. |
+| `jungle_boulder_rumble` | 2.0 s | The niche cracking, grit pouring, a deep rumble building as the ball rocks forward, the stone groaning and its first knocks coming faster. | The boulder breaking loose. |
+| `jungle_boulder_roll` (loop) | 2.0 s | A heavy 35-350 Hz rumble, knocks from six chips coming round twice a loop, grit, leaves and twigs crunching, and dust. | The rolling boulder (rides on the ball). |
+| `jungle_boulder_crash` | 1.4 s | A 90 -> 50 Hz thud and a crack, 34 pieces of rubble tumbling, splintered wood and debris, and dust, in the temple. | The boulder smashing. |
+| `jungle_boulder_splash` | 1.5 s | A deep "kerplunk" (a 70 Hz cavity bubble), the splash bursting up, spray raining back, big bubbles glugging and the wave slopping. | The boulder landing in the river. |
+| `jungle_waterfall` (loop) | 2.0 s | A deep, heavy roar (50-6000 Hz, tilted -2.5 dB/oct), the plunge pool thundering, spray and a mist hiss. It is darker and bigger than the sakura falls. | The big waterfall (heard from up to 45 m). |
+| `jungle_altar` | 2.4 s | A slit drum calling up A3 C4 E4 A4, a deep stone gong on A2 answering at 0.68 s, a shimmer of wooden chimes (A5 C6 E6 G6 A6) and a breath of wind. | The finish. |
+
+**Wild West Heist** (score in G major). The level's mechanics are on branch `wild-west`; the clips are ready for them.
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `frontier_fuse_light` | 0.5 s | A match scratched along the box, the head flaring and the fuse spitting into life. | A dynamite fuse catching. |
+| `frontier_fuse_hiss` (loop) | 1.0 s | A spitting 2.5-9 kHz hiss with a ragged edge, a 600-2500 Hz body, bright crackles and eight little pops of powder. | A burning fuse. |
+| `frontier_dynamite_boom` | 1.8 s | A crack and an 80 -> 34 Hz blast, a pressure wave, 36 rocks and splinters raining down, and the boom rolling round the canyon (echoes at 0.38 and 0.85 s). | The dynamite going off. |
+| `frontier_signal_bell` | 1.2 s | A bright gong bell on G5 struck five times, 0.2 s apart. | The crossing bell as a signal arm starts down. |
+| `frontier_signal_clank` | 0.6 s | An iron clank, the arm's bar ringing briefly (free-bar modes from 330-380 Hz) and a rattle. | The arm locking level. |
+| `frontier_signal_thwack` | 0.45 s | A short swish, a hard wooden thwack on the painted arm (wood modes from 280-320 Hz) with its iron strap ringing, and the arm juddering on its pivot. | The arm clipping your boots. |
+| `frontier_timber_crack` | 0.9 s | A big crack, a plank's plate modes (f11 170-200 Hz), splinters spraying, fibres tearing and the drop (a thud at 0.32 s). | A trestle flat giving way. |
+| `frontier_collapse_rumble` (loop) | 2.0 s | A deep rumble, two timber groans (95 and 120 Hz), two cracks, 40 planks and chunks clattering, and dust. | The collapse while it's running. |
+| `frontier_collapse_rebuild` | 1.5 s | Chains rattling through (90 link clinks), a winch pawl clacking, timbers creaking and a solid knock at 1.22 s as they seat. | The flats hauled back up. |
+| `frontier_door_creak` | 0.6 s | The spring hinge squealing up (stick-slip quickening from 80 to about 270 per second, so it becomes a tone) and the leaves swishing. | Saloon doors swinging open. |
+| `frontier_door_clack` | 0.4 s | The two leaves clacking together, then bouncing smaller. | The doors swinging shut. |
+| `frontier_door_rattle` | 0.5 s | The leaves flapping against each other faster and faster, and the hinges chattering. | The doors' tell before they shut. |
+| `frontier_door_slap` | 0.5 s | A fast swish, a hard wooden thwack and the leaves rattling back. | The doors knocking you out of the saloon. |
+| `frontier_steam_sputter` | 0.7 s | The valve chattering (about 30 times a second), five short spits of steam and a gurgle of condensate. | A steam valve before its jet fires. |
+| `frontier_steam_burst` | 0.9 s | A thump of pressure and a burst of 600-10000 Hz hiss settling down towards the jet. | The jet firing. |
+| `frontier_steam_hiss` (loop) | 1.0 s | A high-pressure hiss (600-10000 Hz, tilted -1.5 dB/oct) surging gently, a whistling edge near 2.2 kHz and the pipe's throat. | The jet while it's on. |
+| `frontier_cart_rumble` (loop) | 1.0 s | Iron wheels rumbling, the rail joints clacking under both axles twice a loop, ore rattling in the bed and a faint 2.8 kHz wheel squeal. | A moving mine cart. |
+| `frontier_cart_clunk` | 0.6 s | An iron clang (plate modes, f11 250-280 Hz), a 120 -> 55 Hz thud and the ore shifting. | The cart hitting its buffer. |
+| `frontier_vault_open` | 1.4 s | Three bolts drawing back (each a slide and a "ka-chunk"), then the heavy door groaning round on its hinges (stick-slip through 140-2100 Hz), in the bank. | The vault door opening. |
+| `frontier_vault_slam` | 1.0 s | A massive 95 -> 40 Hz steel thud, the door's plate modes booming (f11 150-170 Hz), and the bolts snapping home at 0.13 and 0.21 s. | The vault door shutting. |
+| `frontier_coins` | 0.8 s | 34 silver coins spilling into a pile (thin-disc modes from 1.9-3.2 kHz), a soft bag thud and a little till bell on G6. | Checkpoints. |
+| `frontier_whistle` | 2.0 s | A three-chime steam whistle on G4 B4 D5, blown for 1.45 s, scooping into pitch, breathy with steam, with an echo off the canyon at 0.42 s. | The locomotive's whistle at the finish. |
+| `frontier_fireworks` | 1.8 s | A rocket and its burst, a second, smaller rocket, and a string of firecrackers popping from 0.6 to 1.45 s. | The finish. |
+
+**Neon City** (score in E minor)
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `neon_car_hum` (loop) | 1.0 s | The thrusters' electric drone: an E2 harmonic stack against a copy 3 Hz sharp, beating, a turbine whine on B5 and the air pushed aside. | Hover cars streaming past. |
+| `neon_car_horn` | 0.8 s | Two blasts of a buzzy E4/G4 dyad through a horn formant (900 Hz and 2.4 kHz), climbing a little as the car closes in. | About a second before each car crosses. |
+| `neon_drone_hum` (loop) | 1.0 s | Four rotors buzzing at 182-195 Hz (so they beat), with their ramps staggered, the chopped air and a faint motor whine. | The searchlight drones. |
+| `neon_drone_chirp` | 0.35 s | Two synthetic blips climbing (E6 -> B6, G6 -> E7) and the rotors revving. | A drone setting off on a sweep. |
+| `neon_drone_zap` | 0.6 s | A sharp zap, a crackle of sparks and a buzz falling from E3 to E2. | Caught in the searchlight. |
+| `neon_holo_hum` (loop) | 1.0 s | The projector's soft 120 Hz hum, a shimmer of E6 G6 B6 breathing in and out, and a faint fizz of static. | A lit hologram slab. |
+| `neon_holo_glitch` | 0.9 s | Static bursts stuttering on and off, glitchy E-minor blips and the hum flickering, getting worse towards the end. | A hologram about to fail (about 0.9 s ahead). |
+| `neon_holo_off` | 0.4 s | A zip falling fast from 2 kHz, a soft pop and the hum cut off. | The slab blinking out. |
+| `neon_holo_on` | 0.4 s | A quick zip rising 200 -> 1600 Hz, a shimmer of E6/G6/B6 and a soft thump. | The slab snapping back. |
+| `neon_gondola_motor` (loop) | 1.0 s | An E3 motor hum, the gearbox whining (E6 and B6), the cable ticking over the pulleys 12 times a loop and the cradle rumbling. | A gondola while it moves. |
+| `neon_steam_hiss` (loop) | 1.5 s | A soft vent hiss (400-9000 Hz) surging gently, a hollow throat near 1.6 kHz, a low body and the odd sputter. | Rooftop vents. |
+| `neon_sign_buzz` (loop) | 1.0 s | The tubes' 120 Hz buzz (harmonics to 4.5 kHz), the ballast humming at 60 Hz, a slight flicker and the odd spark. | Big neon signs. |
+| `neon_checkpoint` | 1.0 s | An electric zap, an E-minor run of FM bells (E6 G6 B6 E7) and 140 sparks fizzing out. | Checkpoints. |
+| `neon_finish` | 2.4 s | Two shells bursting over the spire and crackling, and the city's sirens answering from the streets below (two wails gliding between E5 and B5, softened by distance). | The finish. |
 
 ### Deliberately silent
 

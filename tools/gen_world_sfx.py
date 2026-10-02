@@ -134,6 +134,33 @@ for _n, _d in (("manor_gaze_hum", 1.5), ("manor_possessed_creak", 1.5), ("manor_
                ("candy_soldier_march", 1.6), ("candy_train_chug", 1.6), ("candy_gumball_roll", 1.2),
                ("carrier_jet_roar", 1.5), ("carrier_elevator_hum", 1.0)):
     _reg(_n, _d, True)
+# the third set of new worlds: Sakura Peaks, Jungle Temple, Wild West Heist, Neon City
+for _n, _d in (("sakura_bamboo_creak", 0.7), ("sakura_bamboo_snap", 0.9), ("sakura_bell_bong", 2.2),
+               ("sakura_log_whoosh", 0.8), ("sakura_log_thump", 0.6), ("sakura_petal_sink", 0.7),
+               ("sakura_shuriken_ring", 0.8), ("sakura_shoji_rattle", 0.8), ("sakura_shoji_slam", 0.6),
+               ("sakura_gust_rise", 1.5), ("sakura_gust", 1.4), ("sakura_mallet_creak", 0.9), ("sakura_ram_creak", 0.7),
+               ("sakura_chime", 1.4), ("sakura_fireworks", 2.0), ("sakura_finish_bell", 2.6),
+               ("jungle_vine_creak", 0.7), ("jungle_raft_bump", 0.6), ("jungle_dart_click", 0.12),
+               ("jungle_dart_volley", 0.7), ("jungle_plate_click", 0.4), ("jungle_gate_open", 1.6),
+               ("jungle_gate_tick", 0.25), ("jungle_gate_close", 1.2), ("jungle_trap_tick", 0.12),
+               ("jungle_boulder_rumble", 2.0), ("jungle_boulder_crash", 1.4), ("jungle_boulder_splash", 1.5),
+               ("jungle_altar", 2.4),
+               ("neon_car_horn", 0.8), ("neon_drone_chirp", 0.35), ("neon_drone_zap", 0.6), ("neon_holo_glitch", 0.9),
+               ("neon_holo_off", 0.4), ("neon_holo_on", 0.4), ("neon_checkpoint", 1.0), ("neon_finish", 2.4),
+               ("frontier_fuse_light", 0.5), ("frontier_dynamite_boom", 1.8), ("frontier_signal_bell", 1.2),
+               ("frontier_signal_clank", 0.6), ("frontier_signal_thwack", 0.45),("frontier_timber_crack", 0.9), ("frontier_collapse_rebuild", 1.5),
+               ("frontier_door_creak", 0.6), ("frontier_door_clack", 0.4), ("frontier_door_rattle", 0.5),
+               ("frontier_door_slap", 0.5), ("frontier_steam_sputter", 0.7), ("frontier_steam_burst", 0.9),
+               ("frontier_cart_clunk", 0.6), ("frontier_vault_open", 1.4), ("frontier_vault_slam", 1.0),
+               ("frontier_coins", 0.8), ("frontier_whistle", 2.0), ("frontier_fireworks", 1.8)):
+    _reg(_n, _d)
+for _n, _d in (("sakura_shuriken_whir", 1.0), ("sakura_wind", 2.0), ("sakura_waterfall", 2.0), ("sakura_bridge_creak", 2.0),
+               ("jungle_boulder_roll", 2.0), ("jungle_waterfall", 2.0),
+               ("neon_car_hum", 1.0), ("neon_drone_hum", 1.0), ("neon_holo_hum", 1.0), ("neon_gondola_motor", 1.0),
+               ("neon_steam_hiss", 1.5), ("neon_sign_buzz", 1.0),
+               ("frontier_fuse_hiss", 1.0), ("frontier_collapse_rumble", 2.0), ("frontier_steam_hiss", 1.0),
+               ("frontier_cart_rumble", 1.0)):
+    _reg(_n, _d, True)
 
 
 # ---------------------------------------------------------------------------
@@ -3017,6 +3044,1146 @@ def gen_carrier():
 
 
 # ===========================================================================
+# the third set of new worlds: Sakura Peaks (D minor pentatonic), Jungle Temple (A minor),
+# Wild West Heist (G major), Neon City (E minor).  Pitched clips sit in their map's key.
+# ===========================================================================
+def bamboo_knock(r, secs, f0, hard=6000.0):
+    """A hollow bamboo culm knocked: a light, woody tube with a strong first mode and a tick."""
+    t = tv(secs)
+    x = modes(t, [(f0, 1.0, 0.06), (f0 * 2.03, 0.45, 0.035), (f0 * 3.1, 0.3, 0.02), (f0 * 4.6, 0.18, 0.01),
+                  (f0 * 6.9, 0.1, 0.005)], r, 0.01, hard)
+    return taper(x + 0.3 * click(r, secs, 800, 6000, 0.0015))
+
+
+def wood_knock(r, secs, f0, tau=0.03, hard=5000.0):
+    """A plank or a frame knocked: three low-Q wood modes and a short contact tick."""
+    t = tv(secs)
+    x = modes(t, [(f0, 1.0, tau), (f0 * 2.37, 0.6, tau * 0.6), (f0 * 4.1, 0.35, tau * 0.35),
+                  (f0 * 6.3, 0.15, tau * 0.2)], r, 0.03, hard)
+    return taper(x + 0.35 * click(r, secs, 500, 6000, 0.002))
+
+
+def coin_hit(r, secs, f0):
+    """A silver coin striking another: a thin free disc's modes (1 : 1.73 : 2.33 : 3.91 : 4.11)."""
+    t = tv(secs)
+    spec = [(f0, 1.0, 0.18), (f0 * 1.73, 0.6, 0.12), (f0 * 2.33, 0.5, 0.09), (f0 * 3.91, 0.25, 0.05),
+            (f0 * 4.11, 0.2, 0.045)]
+    return taper(modes(t, spec, r, 0.01, hard=8000) + 0.2 * click(r, secs, 3000, 10000, 0.0006))
+
+
+def firework_shell(r, secs, t_launch, rise, whistle=(1200.0, 3000.0), boom_f=90.0, stars=220, glitter=0.0,
+                   mortar=False):
+    """One shell: (a mortar's hollow "pon",) the rocket whistling up, the burst and its stars crackling."""
+    x = np.zeros(ns(secs))
+    if mortar:
+        tt = tv(0.3)
+        place(x, t_launch, taper(thud(tt, 170, 85, 0.03, 0.05) + 0.4 * noise(r, len(tt), 200, 2500) * env(tt, 0.001, 0.02)),
+              0.5)
+    tt = tv(rise)
+    wh = unit(svf(r.standard_normal(len(tt)), glide(whistle[0], whistle[1], tt, rise), 16.0))
+    place(x, t_launch, taper(wh * np.minimum(tt / 0.05, 1.0) * (0.4 + 0.6 * tt / rise), 0.02), 0.3)
+    tb = t_launch + rise
+    if tb < secs - 0.05:
+        place(x, tb, taper(cannon_boom(r, min(1.0, secs - tb), boom_f, 0.7), 0.02), 1.0)
+    cr = np.zeros(len(x))
+    for _ in range(stars):
+        t0 = tb + 0.04 + r.gamma(2.0, 0.16)
+        if t0 < secs - 0.02:
+            place(cr, t0, noise(r, ns(0.004), 2500, 10000) * np.exp(-tv(0.004) / 0.0007), r.uniform(0.2, 1.0) ** 2)
+    if stars:
+        x += 0.45 * unit(cr)
+    if glitter:
+        t = tv(secs)
+        u = np.maximum(t - tb, 0.0)
+        x += glitter * noise(r, len(x), 3000, 9000) * np.minimum(u / 0.08, 1.0) * np.exp(-u / 0.6) * (t > tb)
+    return x
+
+
+def water_roar(r, n, lo, hi, slope, churn):
+    """A waterfall's body: broadband noise (tilted), churning slowly - circular, for loops."""
+    return unit(tilt(cnoise(r, n, lo, hi, 1), slope, circular=True)) * (1.0 - churn + churn * crand(r, n, 30, 0.4))
+
+
+def gen_sakura():
+    # the bamboo's lashing creaking under the strain, just before it snaps: rope fibres groaning
+    # round the culm, the hollow culm answering, and the leaves shivering
+    name = "sakura_bamboo_creak"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    cr = creak(r, 0.55, lambda u: 35.0 + 60.0 * u ** 1.5,
+               [(r.uniform(520, 600), 1.0, 0.02), (r.uniform(1350, 1500), 0.7, 0.012), (r.uniform(2700, 3000), 0.3, 0.006),
+                (r.uniform(230, 260), 0.5, 0.03)])
+    place(x, 0.04, cr * np.sin(np.pi * np.linspace(0, 1, len(cr))) ** 0.7 * np.linspace(0.6, 1.0, len(cr)), 0.8)
+    fib = creak(r, 0.4, lambda u: 120.0 + 80.0 * u, [(r.uniform(1800, 2100), 1.0, 0.004), (r.uniform(3300, 3700), 0.5, 0.003)])
+    place(x, 0.2, fib * np.hanning(len(fib)), 0.2)
+    for t0 in (0.12, 0.42):
+        place(x, t0, bamboo_knock(r, 0.25, r.uniform(480, 540), 2500), 0.25)
+    grains(r, x, 60, 0.05, 0.62, 2500, 8000, 0.001, 0.004, 0.08)
+    save(name, space(r, x, 0.8, 0.15, 200, 8000), fin=0.004, fout=0.1)
+
+    # the culm whipping straight: a sharp wooden crack through its hollow tube, splinters, the
+    # swish of it whipping past, the pole thrumming and the leaves thrashing
+    name = "sakura_bamboo_snap"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.8 * click(r, dur(name), 1200, 10000, 0.002)
+    x += 0.7 * bamboo_knock(r, dur(name), r.uniform(560, 620), 9000)
+    grains(r, x, 25, 0.0, 0.04, 2000, 9000, 0.0005, 0.002, 0.5)
+    x += 0.45 * whoosh(r, dur(name), 400, 2600, 700, 0.07, 0.04, 1.4)
+    x += 0.3 * noise(r, n, 200, 900) * (0.5 + 0.5 * np.sin(TAU * 7 * t)) * env(t, 0.03, 0.2)
+    lv = np.zeros(n)
+    grains(r, lv, 200, 0.05, 0.75, 2000, 9000, 0.001, 0.004, 1.0, decay=0.2)
+    x += 0.3 * unit(lv)
+    save(name, space(r, x, 0.9, 0.2, 200, 8000), fin=0.0005, fout=0.15)
+
+    # the great temple bell (a bonsho) boomed by the swinging log: a soft wooden blow, a deep D with
+    # its hum an octave down, the partials slightly split so it wavers as it rings, in the valley
+    name = "sakura_bell_bong"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    f = midi(50)
+    x = modes(t, bell_modes(f, 1.3), r, 0.0, hard=2200)
+    x += 0.6 * modes(t, [(f * 0.5 * 1.004, 0.5, 1.8), (f * 1.006, 0.6, 1.1), (f * 2.0 * 1.003, 0.3, 0.6)], r)
+    x = x * (1.0 + 0.12 * np.sin(TAU * 1.7 * t))
+    x += 0.6 * thud(t, 120, 70, 0.02, 0.03) + 0.25 * band(click(r, dur(name), 200, 2500, 0.004), None, 2500)
+    save(name, space(r, x, 2.6, 0.35, 80, 5000, predelay=0.02), fin=0.001, fout=0.5)
+
+    # the log swinging past: a heavy, low push of air rising to the pass and falling, and the
+    # ropes creaking at the top of the swing
+    name = "sakura_log_whoosh"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = whoosh(r, dur(name), 150, 700, 250, 0.4, 0.15, 1.0)
+    x += 0.45 * noise(r, n, 40, 200) * np.exp(-0.5 * ((t - 0.4) / 0.15) ** 2)
+    cr = creak(r, 0.35, lambda u: 25.0 + 30.0 * u, [(r.uniform(300, 340), 1.0, 0.02), (r.uniform(800, 880), 0.6, 0.012),
+                                                   (1900, 0.3, 0.006)])
+    place(x, 0.0, cr * np.hanning(len(cr)), 0.2)
+    save(name, x, fin=0.02, fout=0.12)
+
+    # the log ramming the runner: a heavy wooden thump, the dense trunk's modes and the ropes jolting
+    name = "sakura_log_thump"
+    r = rng(name)
+    t = tv(dur(name))
+    x = 0.7 * thud(t, 110, 50, 0.05, 0.09, harm=(0.5, 0.2)) + 0.5 * click(r, dur(name), 300, 5000, 0.004)
+    x += 0.85 * modes(t, [(r.uniform(170, 190), 1.0, 0.06), (r.uniform(400, 440), 0.7, 0.035), (r.uniform(740, 800), 0.45, 0.02),
+                         (r.uniform(1300, 1450), 0.25, 0.01)], r, 0.0, hard=2500)
+    jolt = creak(r, 0.2, lambda u: 60.0, [(r.uniform(320, 360), 1.0, 0.015), (900, 0.5, 0.008)])
+    place(x, 0.05, jolt * np.hanning(len(jolt)), 0.15)
+    grains(r, x, 20, 0.02, 0.3, 600, 3000, 0.002, 0.006, 0.08, decay=0.1)
+    save(name, space(r, x, 0.8, 0.2, 100, 6000), fin=0.0008, fout=0.12)
+
+    # a giant petal starting to give under you: a soft, papery sigh falling away, a rustle and a
+    # faint D6 sinking to C6
+    name = "sakura_petal_sink"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    sw = np.sin(np.pi * t / dur(name)) ** 1.2
+    sigh = unit(svf(r.standard_normal(n), glide(2600, 900, t, 0.6), 2.5)) * sw
+    rustle = np.zeros(n)
+    grains(r, rustle, 150, 0.02, 0.6, 1500, 6000, 0.001, 0.004, 1.0)
+    whuff = noise(r, n, 150, 600) * sw ** 2
+    ping = tone(glide(midi(86), midi(84), t, 0.5), None) * np.minimum(t / 0.06, 1.0) * np.exp(-t / 0.3)
+    save(name, 0.7 * sigh + 0.3 * unit(rustle) * sw + 0.35 * whuff + 0.12 * ping, fin=0.02, fout=0.12)
+
+    # the shuriken flung off its socket: a flick, a bright "shing" and the steel star ringing
+    # (paired modes, slightly split by its points, so the ring shimmers), on D6
+    name = "sakura_shuriken_ring"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    f0 = midi(86)
+    spec = []
+    for k, (rat, a, tau) in enumerate(((1.0, 1.0, 0.4), (1.47, 0.6, 0.25), (2.09, 0.45, 0.15), (2.81, 0.3, 0.1),
+                                       (3.7, 0.2, 0.06))):
+        spec += [(f0 * rat, a, tau), (f0 * rat * (1.0 + 0.003 * (k + 1)), a * 0.8, tau)]
+    ring = modes(t, spec, r, 0.0, hard=6000)
+    shing = unit(svf(r.standard_normal(n), glide(2500, 7000, t, 0.06), 6.0)) * env(t, 0.003, 0.03)
+    x = band(0.6 * ring + 0.45 * shing + 0.3 * click(r, dur(name), 1500, 9000, 0.0008), None, 11000)
+    save(name, space(r, x, 0.9, 0.2, 300, 9000), fin=0.0005, fout=0.15)
+
+    # the star spinning in flight: air chopped by its four points 24 times a loop-second, a
+    # low flutter under it and the faint ring of the steel
+    name = "sakura_shuriken_whir"
+    r = rng(name)
+    n = ns(dur(name))
+    i = np.arange(n) / SR
+    pulse = (0.5 + 0.5 * clfo(n, 24)) ** 3
+    whir = cnoise(r, n, 700, 5000) * (0.25 + 0.75 * pulse) * (0.85 + 0.15 * crand(r, n, 6))
+    low = cnoise(r, n, 150, 700) * (0.5 + 0.5 * clfo(n, 24, 1.0)) ** 2
+    ring = (np.sin(TAU * cyc(midi(86), n) * i) + 0.4 * np.sin(TAU * cyc(midi(86) * 1.47, n) * i)) * (0.7 + 0.3 * clfo(n, 24))
+    save_loop(name, unit(whir) + 0.4 * unit(low) + 0.05 * ring)
+
+    # the shoji frames rattling in their track (the tell before they slam): light wooden ticks
+    # coming faster, the paper buzzing in the frames, the frames sliding
+    name = "sakura_shoji_rattle"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    tk = 0.02
+    while tk < 0.72:
+        g = 0.4 + 0.6 * tk / 0.72
+        place(x, tk, wood_knock(r, 0.06, r.uniform(800, 1100), 0.012, 4000) +
+              0.3 * taper(noise(r, ns(0.06), 250, 1800) * np.exp(-tv(0.06) / 0.008)), g * r.uniform(0.5, 1.0))
+        tk += r.uniform(0.03, 0.065) * (1.0 - 0.4 * tk)
+    slide = noise(r, n, 120, 900) * (0.3 + 0.7 * np.abs(noise(r, n, None, 25))) * np.sin(np.pi * np.clip(t / 0.76, 0, 1))
+    save(name, space(r, unit(x) + 0.35 * slide, 0.6, 0.15, 150, 7000), fin=0.006, fout=0.08)
+
+    # the shoji panels clapping shut: a wooden clap, the frames' modes, the paper drumming and a
+    # puff of air, then two small bounces
+    name = "sakura_shoji_slam"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.8 * click(r, dur(name), 600, 6000, 0.003)
+    x += 0.7 * modes(t, [(r.uniform(250, 275), 1.0, 0.05), (r.uniform(590, 640), 0.7, 0.03), (r.uniform(1050, 1150), 0.45, 0.02),
+                         (r.uniform(1850, 1990), 0.25, 0.01)], r, 0.0, hard=4000)
+    fm = r.uniform(115, 135)
+    x += 0.5 * modes(t, [(fm, 1.0, 0.04), (fm * 1.59, 0.6, 0.03), (fm * 2.14, 0.4, 0.02), (fm * 2.65, 0.25, 0.015)], r)
+    x += 0.4 * noise(r, n, 60, 300) * env(t, 0.002, 0.04)
+    for t0, g in ((0.09, 0.25), (0.15, 0.12)):
+        place(x, t0, wood_knock(r, 0.1, r.uniform(600, 700), 0.015), g)
+    save(name, space(r, x, 0.8, 0.25, 120, 7000), fin=0.0005, fout=0.12)
+
+    # the wind rising in the trees upwind (the gust's tell): a band climbing, the leaves
+    # rustling harder, a breathy whistle through the bamboo and a low push under it
+    name = "sakura_gust_rise"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    k = np.clip(t / 1.25, 0, 1)
+    e = k ** 1.6 * np.exp(-np.maximum(t - 1.25, 0) / 0.12)
+    wind = unit(svf(r.standard_normal(n), 250 * (1100 / 250) ** k, 1.1))
+    leaves = np.zeros(n)
+    grains(r, leaves, 500, 0.0, dur(name), 2000, 9000, 0.001, 0.004, 1.0)
+    whistle = unit(svf(r.standard_normal(n), 650 + 350 * k + 40 * np.sin(TAU * 1.3 * t), 18.0)) * k ** 2
+    low = noise(r, n, 40, 180)
+    save(name, (wind + 0.35 * unit(leaves) * k + 0.25 * whistle + 0.3 * low) * e, fin=0.05, fout=0.2)
+
+    # the gust front sweeping across: a soft whoosh to the pass, a flurry of leaves and petals,
+    # a breath of whistle, the bamboo knocking and a low buffet
+    name = "sakura_gust"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    tp = 0.45
+    ge = np.where(t < tp, np.exp(-0.5 * ((t - tp) / 0.2) ** 2), np.exp(-0.5 * ((t - tp) / 0.35) ** 2))
+    w = whoosh(r, dur(name), 220, 1300, 380, tp, 0.2, 1.1)
+    flurry = np.zeros(n)
+    grains(r, flurry, 700, 0.1, 1.2, 1800, 9000, 0.001, 0.004, 1.0)
+    whistle = unit(svf(r.standard_normal(n), np.interp(t, [0, tp, dur(name)], [600, 1050, 700]), 14.0)) * ge ** 1.5
+    knocks = np.zeros(n)
+    for _ in range(4):
+        place(knocks, r.uniform(0.35, 0.9), bamboo_knock(r, 0.2, r.uniform(420, 620), 2500), r.uniform(0.4, 1.0))
+    low = noise(r, n, 40, 200) * ge
+    save(name, w + 0.35 * unit(flurry) * ge + 0.2 * whistle + 0.12 * unit(knocks) + 0.3 * low, fin=0.02, fout=0.2)
+
+    # the giant mallet straining at the top of its stroke (the tell, about a second before it
+    # strikes): the heavy beam groaning, the rope bindings squeaking and the pawl clacking home
+    name = "sakura_mallet_creak"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.02, groan(r, 0.7, 120.0, 1.0, (16.0, 40.0)), 1.0)
+    rope = creak(r, 0.45, lambda u: 90.0 + 60.0 * np.sin(np.pi * u), [(r.uniform(1100, 1250), 1.0, 0.006),
+                                                                      (r.uniform(2400, 2700), 0.5, 0.004)])
+    place(x, 0.2, rope * np.hanning(len(rope)), 0.18)
+    place(x, 0.68, wood_knock(r, 0.12, r.uniform(380, 420), 0.025), 0.35)
+    save(name, space(r, x, 0.8, 0.2, 120, 6000), fin=0.006, fout=0.1)
+
+    # the battering ram drawn back (its tell): a quicker, higher timber creak as the ropes take
+    # the weight, a hemp squeak and a hollow knock as it settles
+    name = "sakura_ram_creak"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.0, wood_knock(r, 0.12, r.uniform(300, 340), 0.03), 0.4)
+    place(x, 0.04, groan(r, 0.55, 165.0, 1.0, (25.0, 60.0)), 0.9)
+    rope = creak(r, 0.35, lambda u: 140.0 + 80.0 * u, [(r.uniform(1300, 1450), 1.0, 0.005), (r.uniform(2800, 3100), 0.45, 0.003)])
+    place(x, 0.25, rope * np.hanning(len(rope)), 0.2)
+    save(name, space(r, x, 0.7, 0.2, 120, 6000), fin=0.004, fout=0.1)
+
+    # a stage banked: a bronze wind chime tumbling through D minor pentatonic (D6 F6 G6 A6 C7) and a
+    # soft little temple bell on D5 under it
+    name = "sakura_chime"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.0, modes(tv(1.4), bell_modes(midi(74), 0.5), r, 0.0, hard=3000), 0.45)
+    notes = [86, 89, 91, 93, 98, 96, 91, 89]
+    t0 = 0.03
+    for m in notes:
+        g = r.uniform(0.35, 0.6)
+        place(x, t0, modes(tv(1.0), bar_modes(midi(m), 0.6, damp=0.8), r, 0.002, hard=7000), g)
+        place(x, t0, taper(click(r, 0.02, 3000, 9000, 0.0006)), 0.1 * g)
+        t0 += r.uniform(0.06, 0.11)
+    save(name, space(r, x, 1.4, 0.25, 300, 9000), fin=0.001, fout=0.3)
+
+    # the finish fireworks: two shells lobbed from mortars (hollow "pon"s), whistling up, bursting
+    # and their kamuro stars crackling and glittering down
+    name = "sakura_fireworks"
+    r = rng(name)
+    x = firework_shell(r, dur(name), 0.0, 0.5, (900, 2400), 85.0, 200, 0.12, True)
+    x += 0.8 * firework_shell(r, dur(name), 0.3, 0.55, (1000, 2800), 100.0, 180, 0.1, True)
+    save(name, space(r, x, 1.8, 0.35, 100, 7000, predelay=0.03), fin=0.002, fout=0.3)
+
+    # the great bell tolling from the valley at the finish: the deep D bell heard from far off (its
+    # brightness gone in the air), a long valley reverb and its echo off the far peaks
+    name = "sakura_finish_bell"
+    r = rng(name)
+    t = tv(dur(name))
+    f = midi(50)
+    b = modes(t, bell_modes(f, 1.6), r, 0.0, hard=1600) * (1.0 + 0.1 * np.sin(TAU * 1.3 * t))
+    b += 0.5 * modes(t, [(f * 0.5 * 1.003, 0.6, 2.2), (f * 1.005, 0.5, 1.4)], r)
+    b = band(b + 0.3 * thud(t, 100, 60, 0.02, 0.04), None, 2500)
+    x = b.copy()
+    place(x, 0.55, band(b, 120, 1500), 0.3)
+    place(x, 1.15, band(b, 150, 1100), 0.12)
+    save(name, space(r, x, 3.0, 0.45, 70, 3500, predelay=0.05), fin=0.002, fout=0.6)
+
+    # wind through the bamboo and pines (scaled by the gust's strength): a soft, broad rush with
+    # bands wandering, leaves rustling in waves, culms knocking and a faint breathy whistle
+    name = "sakura_wind"
+    r = rng(name)
+    n = ns(dur(name))
+    gust = 0.6 + 0.4 * crand(r, n, 5)
+    bed = unit(tilt(cnoise(r, n, 120, 7000, 1), -3.0, circular=True)) * gust
+    band1 = unit(csvf(r.standard_normal(n), 550 * 2.0 ** (0.8 * crand(r, n, 4)), 1.4)) * gust
+    leaves = np.zeros(n)
+    grains(r, leaves, 900, 0.0, dur(name), 2000, 9000, 0.001, 0.004, 1.0, wrap=True)
+    leaves = unit(leaves) * (0.4 + 0.6 * (0.5 + 0.5 * crand(r, n, 7))) * gust
+    whistle = unit(csvf(r.standard_normal(n), 820 * 2.0 ** (0.15 * crand(r, n, 3)), 16.0)) * (0.5 + 0.5 * clfo(n, 2, 0.7))
+    knocks = np.zeros(n)
+    for _ in range(3):
+        cplace(knocks, r.uniform(0, dur(name)), bamboo_knock(r, 0.2, r.uniform(420, 620), 2500), r.uniform(0.5, 1.0))
+    save_loop(name, bed + 0.5 * band1 + 0.3 * leaves + 0.12 * whistle + 0.1 * unit(knocks))
+
+    # a mountain waterfall close by: a bright, rushing roar, the plunge thundering under it, water
+    # splashing on the rocks, droplets and a fine spray
+    name = "sakura_waterfall"
+    r = rng(name)
+    n = ns(dur(name))
+    roar = water_roar(r, n, 90, 8000, -1.5, 0.2)
+    plunge = cnoise(r, n, 40, 300) * (0.7 + 0.3 * crand(r, n, 12))
+    splash = np.zeros(n)
+    grains(r, splash, 700, 0.0, dur(name), 900, 6000, 0.001, 0.005, 1.0, wrap=True)
+    drops = np.zeros(n)
+    for _ in range(30):
+        cplace(drops, r.uniform(0, dur(name)), bubble(r.uniform(500, 1500), 0.05, r.uniform(0.006, 0.012), 0.8),
+               r.uniform(0.3, 1.0))
+    spray = cnoise(r, n, 4000, 10000)
+    save_loop(name, roar + 0.45 * plunge + 0.3 * unit(splash) + 0.15 * unit(drops) + 0.1 * spray)
+
+    # the rope bridge swaying: one sway each way per loop - the hemp ropes creaking at each end of
+    # the sway, the planks groaning, loose boards tapping, and a little wind through the gorge
+    name = "sakura_bridge_creak"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    for t0 in (0.25, 1.25):
+        rope = creak(r, 0.5, lambda u: 40.0 + 70.0 * np.sin(np.pi * u),
+                     [(r.uniform(650, 760), 1.0, 0.012), (r.uniform(1500, 1700), 0.6, 0.007), (r.uniform(2900, 3200), 0.3, 0.004)])
+        cplace(x, t0, rope * np.sin(np.pi * np.linspace(0, 1, len(rope))), r.uniform(0.5, 0.7))
+    for t0, f0 in ((0.6, 170.0), (1.55, 150.0)):
+        cplace(x, t0, groan(r, 0.6, f0 * r.uniform(0.95, 1.05)), r.uniform(0.8, 1.0))
+    for _ in range(5):
+        cplace(x, r.uniform(0, dur(name)), wood_knock(r, 0.1, r.uniform(300, 650), 0.02), r.uniform(0.15, 0.35))
+    air = cnoise(r, n, 200, 2000) * (0.7 + 0.3 * crand(r, n, 4))
+    save_loop(name, unit(x) + 0.12 * air)
+
+
+def gen_jungle():
+    # a vine taking the swing at the end of its arc: the fibres stretching and the branch above
+    # creaking, with a few leaves shaken loose
+    name = "jungle_vine_creak"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    cr = creak(r, 0.5, lambda u: 30.0 + 45.0 * np.sin(np.pi * u),
+               [(r.uniform(400, 450), 1.0, 0.012), (r.uniform(1000, 1150), 0.6, 0.008), (r.uniform(2200, 2400), 0.25, 0.004)])
+    place(x, 0.04, cr * np.sin(np.pi * np.linspace(0, 1, len(cr))) ** 0.8, 0.8)
+    place(x, 0.08, groan(r, 0.45, 200.0, 1.0, (20.0, 40.0)), 0.5)
+    grains(r, x, 70, 0.05, 0.6, 2000, 8000, 0.001, 0.004, 0.06)
+    save(name, space(r, x, 0.7, 0.15, 150, 6000, hf_damp=0.35), fin=0.004, fout=0.1)
+
+    # the log raft bumping into something: a hollow log knock, a slap of water and a slosh
+    name = "jungle_raft_bump"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.7 * thud(t, 130, 70, 0.03, 0.06) + 0.5 * modes(t, [(r.uniform(200, 220), 1.0, 0.05), (r.uniform(470, 500), 0.6, 0.03),
+                                                             (r.uniform(880, 940), 0.35, 0.015)], r, 0.0, hard=3000)
+    x += 0.3 * click(r, dur(name), 400, 5000, 0.003)
+    slap = noise(r, n, 300, 3000) * env(t, 0.002, 0.03) + unit(svf(r.standard_normal(n), glide(1500, 400, t, 0.15), 3.0)) * env(t, 0.005, 0.08)
+    place(x, 0.015, slap, 0.5)
+    for _ in range(5):
+        place(x, r.uniform(0.05, 0.35), bubble(r.uniform(250, 600), 0.1, 0.018, 0.7), r.uniform(0.08, 0.2))
+    x += 0.25 * noise(r, n, 150, 900) * env(t, 0.05, 0.15)
+    save(name, x, fin=0.0008, fout=0.12)
+
+    # the dart trap's mechanism clicking through its tell: a dry stone latch tick
+    name = "jungle_dart_click"
+    r = rng(name)
+    t = tv(dur(name))
+    x = 0.6 * click(r, dur(name), 1500, 8000, 0.0012)
+    x += 0.6 * modes(t, [(r.uniform(1700, 1900), 1.0, 0.022), (r.uniform(2900, 3200), 0.5, 0.012), (r.uniform(4600, 5000), 0.2, 0.006)], r)
+    x += 0.4 * thud(t, 260, 160, 0.01, 0.02, harm=(0.3, 0.1))
+    save(name, x, fin=0.0005, fout=0.04)
+
+    # the darts spat out of the wall: a ragged row of blowpipe "fft"s, each dart whizzing across
+    # and a few thocking into the far side
+    name = "jungle_dart_volley"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    for j in range(6):
+        t0 = 0.01 + j * 0.022 + r.uniform(0, 0.012)
+        tt = tv(0.3)
+        puff = noise(r, len(tt), 500, 4000) * env(tt, 0.001, 0.012) + 0.6 * bubble(r.uniform(180, 240), 0.3, 0.01, 0.5)
+        zip_ = unit(svf(r.standard_normal(len(tt)), glide(r.uniform(2000, 2600), r.uniform(4200, 5200), tt, 0.12), 5.0)) * \
+            env(tt, 0.01, 0.06)
+        place(x, t0, taper(puff + 0.5 * zip_), r.uniform(0.6, 1.0))
+        if r.uniform() < 0.6:
+            place(x, t0 + r.uniform(0.18, 0.26), wood_knock(r, 0.08, r.uniform(700, 1000), 0.012), r.uniform(0.15, 0.3))
+    save(name, space(r, x, 0.9, 0.2, 200, 7000), fin=0.0005, fout=0.12)
+
+    # a pressure plate pressed: a short stone scrape as it sinks, a solid clunk and the mechanism
+    # below answering with a hollow click
+    name = "jungle_plate_click"
+    r = rng(name)
+    t = tv(dur(name))
+    x = np.zeros(len(t))
+    sc = noise(r, ns(0.07), 300, 3000) * np.hanning(ns(0.07))
+    place(x, 0.0, sc, 0.25)
+    place(x, 0.06, thud(tv(0.25), 180, 90, 0.02, 0.035) + 0.5 * modes(tv(0.25), [(r.uniform(680, 760), 1.0, 0.02),
+                                                                                (r.uniform(1250, 1400), 0.5, 0.01)], r) +
+          0.5 * click(r, 0.25, 500, 6000, 0.002), 1.0)
+    place(x, 0.17, wood_knock(r, 0.12, r.uniform(900, 1000), 0.02), 0.3)
+    save(name, space(r, x, 0.9, 0.2, 150, 6000), fin=0.0008, fout=0.08)
+
+    # the glyph gate grinding open: stone dragging up its slot, the counterweight chain rattling,
+    # a deep rumble and dust, and a clunk as it locks at the top, in the temple
+    name = "jungle_gate_open"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    grind = creak(r, 1.3, lambda u: 24.0 + 22.0 * np.sin(np.pi * u) ** 0.7,
+                  [(r.uniform(100, 125), 1.0, 0.03), (r.uniform(240, 290), 0.7, 0.02), (r.uniform(520, 620), 0.45, 0.012),
+                   (r.uniform(1100, 1300), 0.2, 0.006)])
+    m = len(grind)
+    rough = noise(r, m, 200, 2200) * (0.4 + 0.6 * np.abs(noise(r, m, None, 30)))
+    place(x, 0.02, (grind + 0.4 * rough) * np.sin(np.pi * np.linspace(0, 1, m)) ** 0.4, 0.9)
+    chain = np.zeros(n)
+    for _ in range(50):
+        place(chain, r.uniform(0.05, 1.25), modes(tv(0.08), bar_modes(r.uniform(1600, 2600), 0.02), r, 0.02, hard=6000),
+              r.uniform(0.2, 1.0))
+    x += 0.15 * unit(chain) + 0.35 * noise(r, n, 30, 200) * np.sin(np.pi * np.clip(t / 1.35, 0, 1))
+    grains(r, x, 50, 0.1, 1.4, 1500, 6000, 0.001, 0.004, 0.08)
+    place(x, 1.35, thud(tv(0.25), 120, 60, 0.03, 0.05, harm=(0.5, 0.2)) + 0.5 * click(r, 0.25, 400, 5000, 0.003), 0.8)
+    save(name, space(r, x, 1.5, 0.3, 100, 6000), fin=0.01, fout=0.06)
+
+    # the gate's countdown: a hollow wooden "tok" on A5, like a temple block
+    name = "jungle_gate_tick"
+    r = rng(name)
+    t = tv(dur(name))
+    f = midi(81)
+    x = modes(t, [(f, 1.0, 0.045), (f * 2.62, 0.25, 0.012), (f * 3.93, 0.2, 0.008), (f * 0.5, 0.2, 0.02)], r, 0.0, hard=5000)
+    x += 0.25 * click(r, dur(name), 1000, 7000, 0.001)
+    save(name, space(r, x, 0.9, 0.15, 300, 8000), fin=0.0005, fout=0.06)
+
+    # the gate dropping shut: a quick slide down its slot, a crushing stone thud with a crack, the
+    # frame shuddering and dust and grit trickling, in the temple
+    name = "jungle_gate_close"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    sl = noise(r, ns(0.26), 150, 1800) * np.linspace(0.2, 1.0, ns(0.26)) ** 2
+    place(x, 0.0, taper(sl), 0.35)
+    tt = tv(0.9)
+    hit = 0.7 * thud(tt, 90, 45, 0.08, 0.14, harm=(0.5, 0.25)) + 0.7 * click(r, 0.9, 300, 7000, 0.005)
+    hit += 0.65 * modes(tt, [(r.uniform(300, 340), 1.0, 0.03), (r.uniform(520, 580), 0.7, 0.02), (r.uniform(900, 1000), 0.4, 0.012)], r)
+    hit += 0.5 * noise(r, len(tt), 50, 400) * env(tt, 0.003, 0.1)
+    place(x, 0.26, hit, 1.0)
+    grains(r, x, 70, 0.3, 1.1, 800, 5000, 0.002, 0.006, 0.12, decay=0.25)
+    save(name, space(r, x, 1.4, 0.35, 90, 6000), fin=0.006, fout=0.2)
+
+    # a trap's tell: a dry little tick of stone teeth, a touch brighter than the dart latch
+    name = "jungle_trap_tick"
+    r = rng(name)
+    t = tv(dur(name))
+    x = 0.5 * click(r, dur(name), 2000, 9000, 0.0008)
+    x += 0.6 * modes(t, [(midi(88), 1.0, 0.03), (midi(88) * 2.4, 0.35, 0.014), (midi(88) * 3.9, 0.12, 0.007)], r)
+    save(name, x, fin=0.0005, fout=0.04)
+
+    # the boulder breaking loose: a crack of the niche, grit pouring, a deep rumble building as it
+    # rocks forward, the stone groaning and its first knocks coming faster
+    name = "jungle_boulder_rumble"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    k = np.clip(t / 1.7, 0, 1)
+    x = 0.6 * click(r, dur(name), 400, 6000, 0.006)
+    place(x, 0.0, thud(tv(0.4), 110, 55, 0.05, 0.08), 0.6)
+    x += 0.9 * noise(r, n, 30, 260) * (0.15 + 0.85 * k ** 1.3) * (0.8 + 0.2 * np.sin(TAU * 5 * t))
+    g = creak(r, 1.4, lambda u: 15.0 + 25.0 * u, [(r.uniform(85, 100), 1.0, 0.04), (r.uniform(210, 240), 0.6, 0.025),
+                                                  (r.uniform(480, 540), 0.3, 0.012)])
+    place(x, 0.25, g * np.sin(np.pi * np.linspace(0, 1, len(g))) ** 0.6, 0.35)
+    gr = np.zeros(n)
+    grains(r, gr, 220, 0.02, 1.9, 900, 5000, 0.001, 0.005, 1.0, decay=1.0)
+    x += 0.25 * unit(gr)
+    tk, gap = 0.6, 0.35
+    while tk < dur(name) - 0.1:
+        place(x, tk, thud(tv(0.2), r.uniform(110, 140), 55, 0.04, 0.05), 0.3 + 0.4 * tk / dur(name))
+        tk += gap
+        gap *= 0.8
+    save(name, space(r, x, 1.4, 0.3, 80, 5000), fin=0.002, fout=0.3)
+
+    # the boulder smashing: a huge thud and a crack, the ball bursting into rubble that tumbles and
+    # rattles, splintered wood and leaves, and dust, in the temple
+    name = "jungle_boulder_crash"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.9 * thud(t, 90, 50, 0.15, 0.2, harm=(0.5, 0.25)) + 0.6 * click(r, dur(name), 500, 8000, 0.008)
+    x += 0.7 * noise(r, n, 50, 450) * env(t, 0.003, 0.17)
+    for _ in range(34):
+        tj = 0.04 + r.gamma(1.5, 0.16)
+        f0 = r.uniform(250, 1300)
+        rock = modes(tv(0.12), [(f0, 1.0, 0.014), (f0 * 1.71, 0.6, 0.009), (f0 * 2.63, 0.4, 0.005)], r, 0.0)
+        place(x, tj, rock + 0.5 * click(r, 0.12, f0 * 0.8, min(f0 * 7, 11000), 0.002), r.uniform(0.1, 0.4) * np.exp(-tj / 0.5))
+    sp = np.zeros(n)
+    grains(r, sp, 40, 0.02, 0.25, 1500, 7000, 0.0006, 0.002, 1.0)
+    x += 0.2 * unit(sp)
+    grains(r, x, 80, 0.05, 1.1, 1500, 7000, 0.001, 0.004, 0.12, decay=0.4)
+    x += 0.12 * noise(r, n, 1000, 6000) * env(t, 0.05, 0.4)
+    save(name, space(r, x, 1.4, 0.35, 90, 6000), fin=0.0008, fout=0.3)
+
+    # the boulder plunging into the river: a deep "kerplunk" as it punches a cavity, the splash
+    # bursting up, spray raining back, big bubbles glugging up and the wave slopping
+    name = "jungle_boulder_splash"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.8 * thud(t, 85, 45, 0.08, 0.12, harm=(0.4, 0.15))
+    place(x, 0.02, bubble(70, 0.6, 0.12, 0.9), 0.7)
+    x += 0.8 * unit(svf(r.standard_normal(n), glide(800, 2500, t, 0.1) * np.exp(-np.maximum(t - 0.1, 0) / 0.5), 0.9)) * \
+        env(t, 0.008, 0.22)
+    x += 0.4 * noise(r, n, 2000, 8000) * env(t, 0.02, 0.18)
+    rain = np.zeros(n)
+    grains(r, rain, 300, 0.25, 1.3, 1000, 6000, 0.001, 0.004, 1.0, decay=0.45)
+    x += 0.3 * unit(rain)
+    for _ in range(14):
+        place(x, r.uniform(0.2, 1.1), bubble(r.uniform(120, 380), 0.25, r.uniform(0.03, 0.06), 0.7), r.uniform(0.15, 0.35))
+    x += 0.4 * noise(r, n, 80, 600) * np.exp(-0.5 * ((t - 0.6) / 0.25) ** 2)
+    save(name, space(r, x, 1.2, 0.25, 80, 6000), fin=0.0008, fout=0.3)
+
+    # the altar waking at the finish: a slit drum calling up A minor (A3 C4 E4 A4), a deep stone
+    # gong on A2 answering, a shimmer of wooden chimes and a breath of wind through the temple
+    name = "jungle_altar"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    for j, m in enumerate((57, 60, 64, 69)):
+        f = midi(m)
+        tt = tv(0.6)
+        drum = modes(tt, [(f, 1.0, 0.2), (f * 2.76, 0.22, 0.05), (f * 4.1, 0.08, 0.02)], r, 0.0, hard=2500)
+        drum += 0.4 * thud(tt, f * 1.5, f, 0.01, 0.02) + 0.1 * click(r, 0.6, 400, 4000, 0.002)
+        place(x, 0.02 + 0.16 * j, drum, 0.55 + 0.1 * j)
+    f = midi(45)
+    gong = modes(t, [(f, 1.0, 1.2), (f * 1.52, 0.6, 0.9), (f * 2.0, 0.5, 0.7), (f * 2.71, 0.35, 0.5), (f * 3.4, 0.2, 0.35),
+                     (f * 4.3, 0.12, 0.25)], r, 0.004, hard=1800)
+    place(x, 0.68, gong * np.minimum(t / 0.04, 1.0) + 0.5 * thud(t, 90, 50, 0.04, 0.06), 0.9)
+    for j, m in enumerate((81, 84, 88, 91, 93, 88)):
+        place(x, 0.75 + 0.09 * j + r.uniform(0, 0.03), wood_knock(r, 0.25, midi(m), 0.08, 7000), 0.12)
+    x += 0.15 * unit(svf(r.standard_normal(n), 700 * 2.0 ** (0.5 * np.sin(TAU * 0.6 * t)), 1.5)) * \
+        np.sin(np.pi * np.clip((t - 0.6) / 1.6, 0, 1)) ** 2
+    save(name, space(r, x, 2.0, 0.35, 80, 6000, predelay=0.02), fin=0.002, fout=0.4)
+
+    # the boulder rolling down the temple run: a heavy stone rumble, knocks from its chips coming
+    # round twice a loop, grit crushed under it, leaves and twigs crunching and a little dust
+    name = "jungle_boulder_roll"
+    r = rng(name)
+    n = ns(dur(name))
+    rumble = cnoise(r, n, 35, 350) * (0.6 + 0.4 * crand(r, n, 14, 0.5))
+    knocks = np.zeros(n)
+    marks = [(r.uniform(0, 1.0), r.uniform(0.4, 1.0), r.uniform(95, 135)) for _ in range(6)]
+    for rev in range(2):
+        for ph, g, f in marks:
+            tt = tv(0.2)
+            k = thud(tt, f, 50, 0.04, 0.055) + 0.25 * band(click(r, 0.2, 300, 3500, 0.004), None, 3000)
+            cplace(knocks, rev * 1.0 + ph, taper(k), g)
+    grit = crackle(r, dur(name), 300, 700, 4500, wrap=True, n=n)
+    leaves = np.zeros(n)
+    grains(r, leaves, 260, 0.0, dur(name), 1800, 6000, 0.001, 0.004, 1.0, wrap=True)
+    dust = cnoise(r, n, 1200, 4500)
+    save_loop(name, unit(rumble) + 0.6 * unit(knocks) + 0.3 * unit(grit) + 0.2 * unit(leaves) + 0.1 * dust)
+
+    # a big jungle waterfall (heard from a distance): a deep, heavy roar, the plunge pool
+    # thundering, spray and a mist hiss, darker and bigger than the mountain falls
+    name = "jungle_waterfall"
+    r = rng(name)
+    n = ns(dur(name))
+    roar = water_roar(r, n, 50, 6000, -2.5, 0.25)
+    thunder = cnoise(r, n, 30, 160) * (0.6 + 0.4 * crand(r, n, 10))
+    splash = np.zeros(n)
+    grains(r, splash, 500, 0.0, dur(name), 600, 4000, 0.002, 0.008, 1.0, wrap=True)
+    mist = cnoise(r, n, 3000, 8000) * (0.8 + 0.2 * crand(r, n, 8))
+    save_loop(name, roar + 0.55 * thunder + 0.25 * unit(splash) + 0.06 * mist)
+
+
+def gen_neon():
+    E2 = midi(40)
+    # a hover car streaming past: the thrusters' electric drone (an E2 stack against a slightly
+    # sharp copy, beating), a turbine whine on B5, the air it pushes
+    name = "neon_car_hum"
+    r = rng(name)
+    n = ns(dur(name))
+    i = np.arange(n) / SR
+    a = hum_stack(n, cyc(E2, n), 14, 1.0, 1.2, r)
+    b = hum_stack(n, cyc(E2, n) + 3.0, 10, 1.1, 1.0, r)
+    whine = np.sin(TAU * cyc(midi(83), n) * i) + 0.35 * np.sin(TAU * cyc(midi(83) * 2, n) * i)
+    air = cnoise(r, n, 300, 4000) * (0.7 + 0.3 * crand(r, n, 8))
+    save_loop(name, unit(a + 0.7 * b) + 0.06 * whine + 0.3 * unit(air))
+
+    # the searchlight drone's rotors: four props buzzing at slightly different rates (so they
+    # beat), the chopped air, and the motors' whine
+    name = "neon_drone_hum"
+    r = rng(name)
+    n = ns(dur(name))
+    i = np.arange(n) / SR
+    x = np.zeros(n)
+    for f in (182.0, 186.0, 191.0, 195.0):
+        x += np.roll(buzz_wave(cyc(f, n), n, 20, 1.3), int(r.integers(0, n)))   # stagger the saws' ramps
+    chop = cnoise(r, n, 400, 4000) * (0.4 + 0.6 * (0.5 + 0.5 * clfo(n, 186)) ** 2)
+    whine = np.sin(TAU * cyc(midi(88) * 2, n) * i) * (0.8 + 0.2 * clfo(n, 4))
+    save_loop(name, unit(x) + 0.35 * unit(chop) + 0.04 * whine)
+
+    # a hologram slab lit: the projector's soft electric hum, a shimmer of E-minor partials (E6 G6
+    # B6) breathing in and out, and a faint fizz of static
+    name = "neon_holo_hum"
+    r = rng(name)
+    n = ns(dur(name))
+    i = np.arange(n) / SR
+    hum = hum_stack(n, cyc(120.0, n), 8, 1.3, 1.3, r)
+    sh = np.zeros(n)
+    for m, cy in ((88, 3), (91, 5), (95, 4)):
+        sh += np.sin(TAU * cyc(midi(m), n) * i) * (0.6 + 0.4 * clfo(n, cy, r.uniform(0, TAU)))
+    fizz = crackle(r, dur(name), 40, 3000, 9000, wrap=True, n=n)
+    air = cnoise(r, n, 1500, 7000)
+    save_loop(name, 0.6 * hum + 0.25 * unit(sh) + 0.12 * unit(fizz) + 0.06 * air)
+
+    # the gondola winch: an E3 motor hum, the gearbox whining, the cable ticking over the pulleys
+    # and the cradle rumbling in its rails
+    name = "neon_gondola_motor"
+    r = rng(name)
+    n = ns(dur(name))
+    i = np.arange(n) / SR
+    hum = hum_stack(n, cyc(midi(52), n), 12, 1.0, 1.4, r)
+    gear = np.sin(TAU * cyc(midi(76) * 2, n) * i) * (0.7 + 0.3 * clfo(n, 12)) + 0.3 * np.sin(TAU * cyc(midi(83) * 2, n) * i)
+    ticks = np.zeros(n)
+    for k in range(12):
+        cplace(ticks, k / 12.0 * dur(name), taper(modes(tv(0.04), bar_modes(r.uniform(1400, 1600), 0.01), r, 0.02) +
+                                                  0.4 * click(r, 0.04, 1500, 6000, 0.001)), r.uniform(0.6, 1.0))
+    rumble = cnoise(r, n, 50, 400) * (0.8 + 0.2 * crand(r, n, 6))
+    save_loop(name, 0.6 * hum + 0.08 * gear + 0.3 * unit(ticks) + 0.4 * unit(rumble))
+
+    # a rooftop vent: a soft steam hiss surging gently, a hollow throat, and the odd sputter
+    name = "neon_steam_hiss"
+    r = rng(name)
+    n = ns(dur(name))
+    hiss = unit(tilt(cnoise(r, n, 400, 9000, 1), -1.5, circular=True)) * (0.8 + 0.2 * crand(r, n, 6))
+    throat = unit(csvf(r.standard_normal(n), 1600 * 2.0 ** (0.3 * crand(r, n, 3)), 4.0))
+    low = cnoise(r, n, 80, 300) * (0.7 + 0.3 * crand(r, n, 5))
+    sp = np.zeros(n)
+    grains(r, sp, 20, 0.0, dur(name), 800, 4000, 0.003, 0.01, 1.0, wrap=True)
+    save_loop(name, hiss + 0.25 * throat + 0.3 * low + 0.15 * unit(sp))
+
+    # a big neon sign: the tubes' 120 Hz buzz (rich in harmonics, softened by the glass), the
+    # ballast humming, a slight flicker and a spark now and then
+    name = "neon_sign_buzz"
+    r = rng(name)
+    n = ns(dur(name))
+    bz = buzz_wave(cyc(120.0, n), n, 30, 1.1, 0.6)
+    bz = cband(bz, 100, 4500)
+    ballast = hum_stack(n, cyc(60.0, n), 6, 1.2, 1.5, r)
+    flick = 0.85 + 0.15 * crand(r, n, 12)
+    sparks = crackle(r, dur(name), 6, 2000, 8000, wrap=True, n=n)
+    save_loop(name, unit(bz) * flick + 0.4 * ballast + 0.25 * unit(sparks))
+
+    # a hover car's horn, a second before it crosses: two quick blasts of a buzzy E4/G4 dyad through
+    # a horn formant, climbing a touch as it closes in
+    name = "neon_car_horn"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for t0, d in ((0.0, 0.18), (0.26, 0.42)):
+        tt = tv(d)
+        m = len(tt)
+        rise = 1.0 + 0.012 * (t0 + tt) / 0.7
+        v = np.zeros(m)
+        for mm, a in ((64, 1.0), (67, 0.8)):
+            ph = TAU * np.cumsum(midi(mm) * rise) / SR
+            for k in range(1, 14):
+                v += a / k * np.sin(k * ph)
+        v = unit(svf(v, 900.0, 1.6) + 0.5 * svf(v, 2400.0, 2.5))
+        place(x, t0, v * np.minimum(tt / 0.012, 1.0) * np.minimum((d - tt) / 0.025, 1.0), 1.0)
+    save(name, space(r, x, 1.0, 0.25, 200, 6000), fin=0.002, fout=0.12)
+
+    # the drone setting off on a sweep: two synthetic blips climbing E6 -> B6, the rotors revving
+    name = "neon_drone_chirp"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    for t0, f0, f1 in ((0.0, midi(88), midi(95)), (0.11, midi(91), midi(100))):
+        tt = tv(0.09)
+        f = glide(f0, f1, tt, 0.06)
+        place(x, t0, taper((tone(f) + 0.25 * tone(2 * f)) * np.minimum(tt / 0.004, 1.0) * np.exp(-tt / 0.05)), 0.6)
+    x += 0.4 * noise(r, n, 600, 4000) * (0.5 + 0.5 * np.sin(TAU * glide(60, 190, t, 0.3) * t)) ** 2 * env(t, 0.05, 0.12)
+    save(name, x, fin=0.001, fout=0.06)
+
+    # caught in the searchlight: a sharp electric zap, a crackle of sparks and a buzz falling from
+    # E3 to E2 as the charge dumps
+    name = "neon_drone_zap"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    f = glide(midi(52), midi(40), t, 0.35)
+    ph = TAU * np.cumsum(f) / SR
+    bz = np.zeros(n)
+    for k in range(1, 20):
+        bz += np.sin(k * ph) / k ** 0.9
+    cr = crackle(r, 0.35, 120, 1500, 9000)
+    z = np.zeros(n)
+    place(z, 0.0, cr * np.exp(-tv(0.35) / 0.12), 1.0)
+    x = 0.6 * band(unit(bz), None, 6000) * env(t, 0.003, 0.18) + 0.5 * unit(z)
+    x += 0.5 * noise(r, n, 1500, 8000) * env(t, 0.001, 0.02) + 0.3 * noise(r, n, 2000, 7000) * env(t, 0.01, 0.12)
+    save(name, x, fin=0.0005, fout=0.12)
+
+    # a hologram starting to fail (the warning, about 0.9 s before it goes): static bursts
+    # stuttering on and off, glitchy E-minor blips and the hum flickering, getting worse
+    name = "neon_holo_glitch"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    hum = hum_stack(n, 120.0, 8, 1.3, 1.3)
+    gate = np.zeros(n)
+    tk = 0.0
+    while tk < dur(name) - 0.04:
+        on = r.uniform(0.015, 0.05)
+        i0 = ns(tk)
+        gate[i0:i0 + ns(on)] = 1.0
+        tk += on + r.uniform(0.02, 0.09) * (1.0 - 0.6 * tk / dur(name))
+    gate = band(gate, None, 300)
+    stat = noise(r, n, 800, 7000)
+    blips = np.zeros(n)
+    for _ in range(9):
+        m = int(r.choice([88, 91, 95, 98, 100]))
+        tt = tv(r.uniform(0.02, 0.04))
+        sq = np.sign(np.sin(TAU * midi(m) * tt)) * 0.5 + 0.5 * np.sin(TAU * midi(m) * tt)
+        place(blips, r.uniform(0.05, 0.85), taper(band(sq, None, 6000) * np.minimum(tt / 0.002, 1.0), 0.003), r.uniform(0.3, 0.7))
+    rise = 0.4 + 0.6 * t / dur(name)
+    x = (0.5 * stat * gate + 0.25 * hum * (1.0 - 0.7 * gate) + 0.2 * unit(blips)) * rise
+    x += 0.2 * unit(crackle(r, dur(name), 80, 2000, 9000)) * rise
+    save(name, x, fin=0.004, fout=0.15)
+
+    # the slab blinking out: a zip falling fast from 2 kHz, a soft pop and the hum cut off
+    name = "neon_holo_off"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    f = 150.0 + 1850.0 * np.exp(-t / 0.035)
+    x = (tone(f) + 0.3 * tone(2 * f)) * env(t, 0.002, 0.08)
+    x += 0.5 * bubble(140, dur(name), 0.02, -0.3) + 0.3 * noise(r, n, 1000, 6000) * env(t, 0.001, 0.015)
+    x += 0.15 * hum_stack(n, 120.0, 8, 1.3, 1.3) * np.exp(-t / 0.03)
+    save(name, x, fin=0.0005, fout=0.08)
+
+    # the slab snapping back into being: a quick rising zip, a shimmer of E6/G6/B6 settling and a
+    # soft thump of the field taking
+    name = "neon_holo_on"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    f = 200.0 * (1600.0 / 200.0) ** np.clip(t / 0.08, 0, 1)
+    x = 0.6 * (tone(f) + 0.25 * tone(2 * f)) * np.minimum(t / 0.004, 1.0) * np.exp(-np.maximum(t - 0.08, 0) / 0.02)
+    for m in (88, 91, 95):
+        place(x, 0.07, tone(midi(m), tv(0.33)) * np.minimum(tv(0.33) / 0.01, 1.0) * np.exp(-tv(0.33) / 0.1), 0.25)
+    place(x, 0.075, thud(tv(0.15), 140, 80, 0.02, 0.03), 0.4)
+    save(name, x, fin=0.001, fout=0.08)
+
+    # a checkpoint: an electric zap, an E-minor chime run (E6 G6 B6 E7, FM bells) and a burst of
+    # sparks fizzing out, in the street
+    name = "neon_checkpoint"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.4 * noise(r, n, 1500, 8000) * env(t, 0.001, 0.015) + 0.3 * band(unit(buzz_wave(midi(40), n, 20, 1.0)), None, 5000) * env(t, 0.002, 0.05)
+    for j, m in enumerate((88, 91, 95, 100)):
+        tt = tv(0.7)
+        f = midi(m)
+        bell = np.sin(TAU * f * tt + 1.2 * np.exp(-tt / 0.08) * np.sin(TAU * f * 3.5 * tt)) * np.exp(-tt / 0.22)
+        place(x, 0.04 + 0.07 * j, taper(bell * np.minimum(tt / 0.002, 1.0), 0.02), 0.45)
+    sp = np.zeros(n)
+    for _ in range(140):
+        t0 = 0.02 + r.gamma(1.8, 0.12)
+        if t0 < dur(name) - 0.02:
+            place(sp, t0, noise(r, ns(0.004), 2500, 10000) * np.exp(-tv(0.004) / 0.0006), r.uniform(0.2, 1.0) ** 2)
+    x += 0.35 * unit(sp)
+    save(name, space(r, x, 1.2, 0.25, 200, 9000), fin=0.0008, fout=0.2)
+
+    # the finish: fireworks bursting over the spire, crackling, and the city's sirens answering
+    # from the streets below (two wails gliding between E5 and B5, softened by distance)
+    name = "neon_finish"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = firework_shell(r, dur(name), 0.0, 0.45, (1300, 3400), 95.0, 240, 0.1)
+    x += 0.8 * firework_shell(r, dur(name), 0.35, 0.5, (1100, 3000), 85.0, 200, 0.08)
+    sir = np.zeros(n)
+    for t0, rate, g in ((0.5, 0.9, 1.0), (0.75, 1.15, 0.7)):
+        u = np.maximum(t - t0, 0)
+        f = midi(76) * 2.0 ** ((7.0 / 12.0) * (0.5 - 0.5 * np.cos(TAU * rate * u)))
+        ph = TAU * np.cumsum(f) / SR
+        v = np.sin(ph) + 0.3 * np.sin(2 * ph) + 0.12 * np.sin(3 * ph)
+        sir += g * v * np.clip(u / 0.4, 0, 1) * (t > t0)
+    sir = band(sir, 300, 2500)
+    x += 0.25 * unit(sir)
+    save(name, space(r, x, 1.8, 0.35, 100, 7000, predelay=0.03), fin=0.002, fout=0.35)
+
+
+def gen_frontier():
+    # a lit fuse: a spitting hiss with a ragged edge, bright crackles and little pops of powder
+    name = "frontier_fuse_hiss"
+    r = rng(name)
+    n = ns(dur(name))
+    hiss = cnoise(r, n, 2500, 9000) * (0.6 + 0.4 * crand(r, n, 60, 0.3))
+    body = cnoise(r, n, 600, 2500) * (0.5 + 0.5 * crand(r, n, 40, 0.3))
+    cr = crackle(r, dur(name), 150, 2500, 9000, wrap=True, n=n)
+    pops = np.zeros(n)
+    for _ in range(8):
+        cplace(pops, r.uniform(0, dur(name)), bubble(r.uniform(250, 500), 0.04, 0.006, 0.4) +
+               0.5 * taper(noise(r, ns(0.04), 500, 4000) * np.exp(-tv(0.04) / 0.004)), r.uniform(0.4, 1.0))
+    save_loop(name, unit(hiss) + 0.4 * unit(body) + 0.4 * unit(cr) + 0.3 * unit(pops))
+
+    # the timber trestle collapsing (while it goes): a deep rumble, timbers groaning, planks and
+    # chunks clattering down, dust, and the odd crack
+    name = "frontier_collapse_rumble"
+    r = rng(name)
+    n = ns(dur(name))
+    rumble = cnoise(r, n, 30, 250) * (0.6 + 0.4 * crand(r, n, 16, 0.5))
+    wood = np.zeros(n)
+    for t0, f0 in ((0.2, 120.0), (1.1, 95.0)):
+        cplace(wood, t0, groan(r, 0.8, f0, 1.0, (14.0, 35.0)), r.uniform(0.6, 0.9))
+    for t0 in (0.75, 1.7):
+        cplace(wood, t0, taper(click(r, 0.15, 400, 8000, 0.004) + 0.5 * wood_knock(r, 0.15, r.uniform(180, 240), 0.03)), 0.7)
+    deb = np.zeros(n)
+    for _ in range(40):
+        cplace(deb, r.uniform(0, dur(name)), wood_knock(r, 0.08, r.uniform(250, 1100), 0.015, 4000), r.uniform(0.2, 1.0))
+    dust = cnoise(r, n, 1000, 5000) * (0.7 + 0.3 * crand(r, n, 6))
+    save_loop(name, unit(rumble) + 0.45 * unit(wood) + 0.3 * unit(deb) + 0.1 * dust)
+
+    # a steam jet: a high-pressure hiss surging gently, a whistling edge to it and the pipe's throat
+    name = "frontier_steam_hiss"
+    r = rng(name)
+    n = ns(dur(name))
+    hiss = unit(tilt(cnoise(r, n, 600, 10000, 1), -1.5, circular=True)) * (0.85 + 0.15 * crand(r, n, 8))
+    edge = unit(csvf(r.standard_normal(n), 2200 * 2.0 ** (0.1 * crand(r, n, 3)), 8.0))
+    throat = cnoise(r, n, 100, 500) * (0.8 + 0.2 * crand(r, n, 5))
+    save_loop(name, hiss + 0.15 * edge + 0.3 * throat)
+
+    # a mine cart running on the rails: iron wheels rumbling, the rail joints clacking under both
+    # axles twice a loop, ore rattling in the bed and a faint wheel squeal
+    name = "frontier_cart_rumble"
+    r = rng(name)
+    n = ns(dur(name))
+    rumble = cnoise(r, n, 50, 500) * (0.7 + 0.3 * crand(r, n, 10))
+    cl = np.zeros(n)
+    for t0 in (0.05, 0.17, 0.55, 0.67):
+        cplace(cl, t0, taper(thud(tv(0.08), 220, 140, 0.01, 0.015) + 0.5 * modes(tv(0.08), bar_modes(r.uniform(700, 820), 0.02), r, 0.02) +
+                             0.3 * click(r, 0.08, 800, 5000, 0.001)), r.uniform(0.8, 1.0))
+    ore = np.zeros(n)
+    grains(r, ore, 160, 0.0, dur(name), 600, 3000, 0.002, 0.006, 1.0, wrap=True)
+    squeal = unit(csvf(r.standard_normal(n), cyc(2800, n), 30.0)) * (0.5 + 0.5 * crand(r, n, 4)) ** 2
+    save_loop(name, unit(rumble) + 0.55 * unit(cl) + 0.3 * unit(ore) + 0.05 * squeal)
+
+    # the fuse catching: a match scratched along the box, the head flaring and the fuse spitting
+    # into life
+    name = "frontier_fuse_light"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    sc = noise(r, ns(0.07), 1000, 7000) * (0.3 + 0.7 * np.abs(noise(r, ns(0.07), None, 200))) * np.hanning(ns(0.07))
+    place(x, 0.0, sc, 0.6)
+    tt = tv(0.4)
+    flare = noise(r, len(tt), 200, 3000) * env(tt, 0.01, 0.1) + 0.5 * noise(r, len(tt), 2000, 8000) * env(tt, 0.005, 0.05)
+    place(x, 0.07, taper(flare), 0.9)
+    cr = crackle(r, 0.35, 70, 2500, 9000)
+    place(x, 0.12, cr * np.minimum(tv(0.35) / 0.1, 1.0), 0.6)
+    place(x, 0.12, noise(r, ns(0.35), 2500, 9000) * np.minimum(tv(0.35) / 0.15, 1.0), 0.2)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the dynamite going off: a crack and a deep blast, a pressure wave, rock and splinters raining
+    # down and the boom rolling round the canyon (two echoes)
+    name = "frontier_dynamite_boom"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.75 * thud(t, 80, 34, 0.15, 0.22, harm=(0.55, 0.25)) + 0.7 * band(click(r, dur(name), 300, 9000, 0.006), None, 8000)
+    x += 0.95 * unit(tilt(r.standard_normal(n), -3.0)) * env(t, 0.002, 0.09)
+    x += 0.5 * noise(r, n, 35, 300) * env(t, 0.02, 0.45)
+    for _ in range(36):
+        tj = 0.1 + r.gamma(1.6, 0.18)
+        f0 = r.uniform(300, 1400)
+        place(x, tj, modes(tv(0.1), [(f0, 1.0, 0.012), (f0 * 1.71, 0.5, 0.007), (f0 * 2.63, 0.3, 0.004)], r) +
+              0.4 * click(r, 0.1, f0, min(f0 * 6, 9000), 0.002), r.uniform(0.05, 0.25) * np.exp(-tj / 0.6))
+    dry = x.copy()
+    place(x, 0.38, band(dry, 40, 900), 0.3)
+    place(x, 0.85, band(dry, 40, 600), 0.15)
+    save(name, space(r, x, 1.6, 0.3, 50, 5000, predelay=0.03), fin=0.0005, fout=0.4)
+
+    # the crossing bell as the signal arm starts down: a bright gong bell on G5 struck five times
+    name = "frontier_signal_bell"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for k in range(5):
+        tt = tv(0.6)
+        place(x, k * 0.2, modes(tt, bell_modes(midi(79), 0.35), r, 0.001, hard=5000) + 0.15 * click(r, 0.6, 2000, 8000, 0.0008),
+              1.0 if k % 2 == 0 else 0.85)
+    save(name, space(r, x, 1.0, 0.2, 200, 8000), fin=0.0008, fout=0.35)
+
+    # the signal arm locking level: an iron clank, the arm's bar ringing briefly and a rattle
+    name = "frontier_signal_clank"
+    r = rng(name)
+    t = tv(dur(name))
+    x = 0.6 * thud(t, 160, 90, 0.02, 0.04) + 0.6 * click(r, dur(name), 400, 7000, 0.003)
+    x += 0.6 * modes(t, bar_modes(r.uniform(330, 380), 0.12), r, 0.02, hard=5000)
+    for t0, g in ((0.07, 0.25), (0.12, 0.12)):
+        place(x, t0, modes(tv(0.1), bar_modes(r.uniform(900, 1100), 0.02), r, 0.02) + 0.3 * click(r, 0.1, 800, 6000, 0.001), g)
+    save(name, space(r, x, 0.8, 0.2, 150, 7000), fin=0.0005, fout=0.12)
+
+    # the swinging signal arm clipping your boots: a short swish, a hard wooden thwack on the
+    # painted arm with its iron strap ringing, and the arm juddering on its pivot
+    name = "frontier_signal_thwack"
+    r = rng(name)
+    t = tv(dur(name))
+    x = 0.35 * whoosh(r, dur(name), 300, 1600, 500, 0.035, 0.02, 1.3)
+    hit = wood_knock(r, 0.4, r.uniform(280, 320), 0.035) + 0.6 * thud(tv(0.4), 170, 95, 0.015, 0.03)
+    hit += 0.3 * modes(tv(0.4), bar_modes(r.uniform(560, 620), 0.08), r, 0.02, hard=5000) + 0.5 * click(r, 0.4, 600, 7000, 0.002)
+    place(x, 0.035, hit, 1.0)
+    for t0, g in ((0.11, 0.2), (0.17, 0.1)):
+        place(x, t0, modes(tv(0.08), bar_modes(r.uniform(560, 620), 0.02), r, 0.02) + 0.3 * click(r, 0.08, 600, 5000, 0.001), g)
+    save(name, space(r, x, 0.8, 0.2, 150, 7000), fin=0.002, fout=0.1)
+
+    # a flat giving way: timbers splitting with a big crack, splinters spraying, fibres tearing,
+    # the boards' modes and the drop
+    name = "frontier_timber_crack"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.8 * band(click(r, dur(name), 400, 9000, 0.004), None, 9000)
+    x += 0.5 * modes(t, plate_modes(r.uniform(170, 200), 3.0, 0.05, 8, 0.7, r), r, 0.0, hard=3500)
+    sp = np.zeros(n)
+    grains(r, sp, 60, 0.0, 0.15, 1500, 7000, 0.0006, 0.003, 1.0)
+    x += 0.35 * unit(sp)
+    x += 0.3 * noise(r, n, 600, 3500) * (0.3 + 0.7 * np.abs(noise(r, n, None, 60))) * env(t, 0.01, 0.12)
+    place(x, 0.32, thud(tv(0.4), 110, 55, 0.04, 0.07) + 0.4 * click(r, 0.4, 300, 4000, 0.004), 0.5)
+    save(name, space(r, x, 1.2, 0.25, 80, 6000), fin=0.0005, fout=0.2)
+
+    # the flats hauled back up on their chains: the chains rattling through, a winch pawl
+    # clacking, the timbers creaking and a solid knock as they seat
+    name = "frontier_collapse_rebuild"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    ch = np.zeros(n)
+    for _ in range(90):
+        place(ch, r.uniform(0.02, 1.15), modes(tv(0.08), bar_modes(r.uniform(1500, 2800), 0.02), r, 0.02, hard=7000), r.uniform(0.2, 1.0))
+    x += 0.45 * unit(ch) * np.sin(np.pi * np.clip(t / 1.2, 0, 1)) ** 0.3
+    for k in range(9):
+        place(x, 0.05 + k * 0.13, modes(tv(0.05), bar_modes(r.uniform(1000, 1150), 0.012), r, 0.02) + 0.4 * click(r, 0.05, 800, 6000, 0.001), 0.3)
+    g = groan(r, 1.0, 140.0, 1.0, (15.0, 35.0))
+    place(x, 0.1, g, 0.35)
+    place(x, 1.22, thud(tv(0.25), 130, 70, 0.03, 0.05) + 0.5 * wood_knock(r, 0.25, 220, 0.04), 0.7)
+    save(name, space(r, x, 1.2, 0.25, 100, 6000), fin=0.006, fout=0.12)
+
+    # the saloon doors swinging open: the spring hinge squealing up (stick-slip quickening into a
+    # tone) and the leaves swishing
+    name = "frontier_door_creak"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    cr = creak(r, 0.45, lambda u: 80.0 + 200.0 * np.sin(np.pi * u * 0.8), [(r.uniform(850, 950), 1.0, 0.01), (r.uniform(1800, 2000), 0.6, 0.006),
+                                                                             (r.uniform(3000, 3300), 0.25, 0.003), (300, 0.4, 0.015)])
+    place(x, 0.02, cr * np.sin(np.pi * np.linspace(0, 1, len(cr))) ** 0.6, 0.7)
+    x += 0.35 * whoosh(r, dur(name), 200, 900, 300, 0.2, 0.1, 1.2)
+    save(name, space(r, x, 0.8, 0.2, 150, 7000), fin=0.004, fout=0.1)
+
+    # the saloon doors swinging shut: the two leaves clacking together, then bouncing smaller
+    name = "frontier_door_clack"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for t0, g in ((0.0, 1.0), (0.05, 0.8), (0.14, 0.35), (0.19, 0.25), (0.25, 0.1)):
+        place(x, t0, wood_knock(r, 0.12, r.uniform(420, 520), 0.025), g)
+    save(name, space(r, x, 0.8, 0.2, 150, 7000), fin=0.0005, fout=0.08)
+
+    # the doors rattling before they shut: the leaves flapping against each other faster, and the
+    # spring hinges chattering
+    name = "frontier_door_rattle"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    tk, gap = 0.01, 0.075
+    while tk < 0.42:
+        place(x, tk, wood_knock(r, 0.06, r.uniform(500, 700), 0.015, 4000), r.uniform(0.5, 1.0))
+        place(x, tk + 0.005, modes(tv(0.04), bar_modes(r.uniform(1900, 2300), 0.008), r, 0.02), 0.12)
+        tk += gap * r.uniform(0.85, 1.15)
+        gap *= 0.9
+    save(name, space(r, x, 0.7, 0.15, 150, 7000), fin=0.0005, fout=0.08)
+
+    # the doors slapping you out of the saloon: a fast swish and a hard wooden thwack, then the
+    # leaves rattling back
+    name = "frontier_door_slap"
+    r = rng(name)
+    t = tv(dur(name))
+    x = 0.4 * whoosh(r, dur(name), 300, 1500, 400, 0.05, 0.03, 1.2)
+    place(x, 0.06, 0.8 * thud(tv(0.3), 150, 80, 0.02, 0.04) + wood_knock(r, 0.3, r.uniform(330, 380), 0.04) +
+          0.5 * click(r, 0.3, 500, 7000, 0.002), 1.0)
+    for t0, g in ((0.16, 0.3), (0.24, 0.18), (0.3, 0.1)):
+        place(x, t0, wood_knock(r, 0.1, r.uniform(450, 600), 0.02), g)
+    save(name, space(r, x, 0.8, 0.2, 150, 7000), fin=0.001, fout=0.1)
+
+    # the steam valve rattling and spitting before the jet fires: the valve chattering, short
+    # spits of steam and a gurgle of condensate
+    name = "frontier_steam_sputter"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    tk = 0.0
+    while tk < 0.62:
+        place(x, tk, modes(tv(0.04), bar_modes(r.uniform(1300, 1600), 0.01), r, 0.03) + 0.4 * click(r, 0.04, 1000, 6000, 0.001),
+              r.uniform(0.15, 0.35))
+        tk += r.uniform(0.025, 0.05)
+    for t0 in r.uniform(0.02, 0.55, 5):
+        d = r.uniform(0.04, 0.09)
+        place(x, t0, noise(r, ns(d), 1000, 9000) * np.hanning(ns(d)), r.uniform(0.5, 1.0))
+    for _ in range(6):
+        place(x, r.uniform(0.05, 0.6), bubble(r.uniform(200, 500), 0.06, 0.012, 0.6), r.uniform(0.1, 0.25))
+    save(name, x, fin=0.002, fout=0.08)
+
+    # the steam jet firing: a thump of pressure and a burst of hiss that settles towards the jet
+    name = "frontier_steam_burst"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.6 * thud(t, 110, 60, 0.03, 0.05) + 0.4 * click(r, dur(name), 300, 4000, 0.004)
+    x += noise(r, n, 600, 10000) * np.minimum(t / 0.01, 1.0) * (0.45 + 0.55 * np.exp(-t / 0.15))
+    x += 0.3 * noise(r, n, 100, 600) * env(t, 0.005, 0.2)
+    save(name, x, fin=0.001, fout=0.25)
+
+    # the cart banging into the buffer: an iron clang, a heavy thud and the ore shifting in the bed
+    name = "frontier_cart_clunk"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.7 * thud(t, 120, 55, 0.03, 0.07, harm=(0.5, 0.2)) + 0.5 * click(r, dur(name), 400, 7000, 0.003)
+    x += 0.5 * modes(t, plate_modes(r.uniform(250, 280), 1.4, 0.08, 10, 0.7, r), r, 0.0, hard=4000)
+    ore = np.zeros(n)
+    grains(r, ore, 70, 0.02, 0.4, 600, 3500, 0.002, 0.006, 1.0, decay=0.12)
+    x += 0.35 * unit(ore)
+    save(name, space(r, x, 1.0, 0.2, 100, 6000), fin=0.0005, fout=0.12)
+
+    # the vault door opening: three bolts drawing back (each a slide and a ka-chunk), then the
+    # heavy door groaning round on its hinges, in the bank
+    name = "frontier_vault_open"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    for k in range(3):
+        t0 = 0.02 + k * 0.17
+        sl = noise(r, ns(0.06), 1500, 6000) * np.hanning(ns(0.06))
+        place(x, t0, sl, 0.2)
+        place(x, t0 + 0.06, modes(tv(0.15), bar_modes(r.uniform(700, 820), 0.05), r, 0.02, hard=5000) +
+              0.5 * thud(tv(0.15), 200, 120, 0.01, 0.02) + 0.4 * click(r, 0.15, 800, 6000, 0.0015), 0.7)
+    hinge = creak(r, 0.8, lambda u: 20.0 + 30.0 * np.sin(np.pi * u), [(r.uniform(140, 160), 1.0, 0.04), (r.uniform(380, 420), 0.7, 0.02),
+                                                                    (r.uniform(900, 1000), 0.35, 0.01), (r.uniform(1900, 2100), 0.15, 0.005)])
+    place(x, 0.55, hinge * np.sin(np.pi * np.linspace(0, 1, len(hinge))) ** 0.6, 0.7)
+    x += 0.3 * noise(r, n, 40, 200) * np.sin(np.pi * np.clip((t - 0.55) / 0.8, 0, 1))
+    save(name, space(r, x, 0.9, 0.25, 100, 6000), fin=0.002, fout=0.12)
+
+    # the vault door slamming: a massive steel thud, the door's plate modes booming and ringing, and
+    # the bolts snapping home
+    name = "frontier_vault_slam"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.9 * thud(t, 95, 40, 0.06, 0.12, harm=(0.5, 0.25)) + 0.6 * click(r, dur(name), 300, 7000, 0.004)
+    x += 0.5 * modes(t, plate_modes(r.uniform(150, 170), 1.3, 0.25, 10, 0.6, r), r, 0.0, hard=3000)
+    x += 0.3 * noise(r, n, 40, 300) * env(t, 0.003, 0.08)
+    for t0 in (0.13, 0.21):
+        place(x, t0, modes(tv(0.15), bar_modes(r.uniform(700, 820), 0.05), r, 0.02, hard=5000) + 0.4 * click(r, 0.15, 800, 6000, 0.0015), 0.4)
+    save(name, space(r, x, 1.0, 0.3, 80, 6000), fin=0.0005, fout=0.2)
+
+    # a stage of the heist banked: silver coins spilling into a pile and a little till bell on G6
+    name = "frontier_coins"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = np.zeros(n)
+    for _ in range(34):
+        t0 = 0.01 + r.gamma(1.6, 0.09)
+        if t0 < 0.6:
+            place(x, t0, coin_hit(r, 0.3, r.uniform(1900, 3200)), r.uniform(0.25, 1.0) * np.exp(-t0 / 0.4))
+    place(x, 0.02, thud(tv(0.2), 180, 110, 0.02, 0.03) + 0.4 * click(r, 0.2, 600, 4000, 0.003), 0.3)
+    place(x, 0.0, modes(tv(0.8), bell_modes(midi(91), 0.3), r, 0.0, hard=6000), 0.3)
+    save(name, space(r, x, 0.9, 0.15, 300, 9000), fin=0.0005, fout=0.15)
+
+    # the locomotive whistle: a three-chime steam whistle on G major (G4 B4 D5) blown long and
+    # loud, scooping into pitch, breathy with steam, echoing off the canyon walls
+    name = "frontier_whistle"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    d = 1.45
+    tt = tv(d)
+    m = len(tt)
+    scoop = 1.0 - 0.04 * np.exp(-tt / 0.06) - 0.012 * np.clip((tt - (d - 0.2)) / 0.2, 0, 1)
+    e = np.minimum(tt / 0.06, 1.0) * np.minimum((d - tt) / 0.15, 1.0)
+    v = np.zeros(m)
+    for mm, a in ((67, 1.0), (71, 0.85), (74, 0.7)):
+        f = midi(mm) * scoop * (1.0 + 0.002 * np.sin(TAU * 4.5 * tt + mm))
+        ph = TAU * np.cumsum(f) / SR
+        v += a * (np.sin(ph) + 0.35 * np.sin(2 * ph) + 0.15 * np.sin(3 * ph))
+    steam = unit(svf(r.standard_normal(m), midi(71), 6.0))
+    w = (unit(v) + 0.3 * steam + 0.15 * noise(r, m, 1500, 8000)) * e
+    x = np.zeros(n)
+    place(x, 0.0, w, 1.0)
+    place(x, 0.42, band(w, 200, 2500), 0.22)
+    save(name, space(r, x, 1.6, 0.3, 120, 6000, predelay=0.03), fin=0.004, fout=0.3)
+
+    # the finish fireworks over the cab: a rocket and its burst, then a string of firecrackers
+    # popping and a second, smaller rocket
+    name = "frontier_fireworks"
+    r = rng(name)
+    x = firework_shell(r, dur(name), 0.0, 0.45, (1100, 2900), 95.0, 200, 0.06)
+    x += 0.6 * firework_shell(r, dur(name), 0.55, 0.4, (1300, 3200), 110.0, 120, 0.0)
+    tk = 0.6
+    while tk < 1.45:
+        tt = tv(0.08)
+        pop = noise(r, len(tt), 300, 7000) * env(tt, 0.0005, 0.008) + 0.5 * thud(tt, 260, 140, 0.01, 0.01)
+        place(x, tk, taper(pop), r.uniform(0.35, 0.6))
+        tk += r.uniform(0.04, 0.09)
+    save(name, space(r, x, 1.6, 0.3, 100, 7000, predelay=0.03), fin=0.002, fout=0.3)
+
+
+# ===========================================================================
 # verification
 # ===========================================================================
 def verify():
@@ -3075,7 +4242,8 @@ def verify():
 
 GENERATORS = (gen_steps, gen_wall, gen_movement_loops, gen_lasers, gen_crusher_piston, gen_swings, gen_surfaces,
               gen_foundry, gen_reef, gen_orbital, gen_clockwork, gen_balance, gen_gardens, gen_ascent, gen_xeno,
-              gen_volcano, gen_glacier, gen_desert, gen_manor, gen_armada, gen_candy, gen_carrier)
+              gen_volcano, gen_glacier, gen_desert, gen_manor, gen_armada, gen_candy, gen_carrier,
+              gen_sakura, gen_jungle, gen_frontier, gen_neon)
 
 
 def main():
