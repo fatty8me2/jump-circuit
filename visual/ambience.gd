@@ -488,6 +488,33 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"pick": PackedColorArray([Color(1.6, 0.3, 1.0, 0.35), Color(1.6, 0.9, 0.3, 0.35), Color(0.3, 1.4, 1.3, 0.3)]),
 					"speed": Vector2(0.1, 0.4), "spread": 180.0, "curve": "pop"},
 			]
+		"doom":
+			return [
+				# near: hot embers and welding sparks drifting up through the halls, and fine black soot
+				{"depth": "near", "amount": 120, "lifetime": 2.2, "tex": Fx.Tex.DOT, "size": 0.07,
+					"pick": PackedColorArray([Color(3.0, 1.2, 0.3), Color(2.8, 0.7, 0.15), Color(3.0, 1.9, 0.7)]),
+					"dir": Vector3(0.1, 1, 0.05), "spread": 30.0, "speed": Vector2(0.6, 1.8), "gravity": Vector3(0.1, 0.5, 0),
+					"turbulence": 1.0, "turbulence_scale": 3.0, "curve": "pop"},
+				{"depth": "near", "amount": 70, "lifetime": 3.0, "tex": Fx.Tex.DOT, "additive": false, "size": 0.05,
+					"color": Color(0.06, 0.05, 0.05, 0.8), "speed": Vector2(0.1, 0.4), "dir": Vector3(0.3, -0.4, 0.1),
+					"spread": 70.0, "gravity": Vector3(0.1, -0.25, 0), "turbulence": 0.8, "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# mid: steam and furnace smoke rolling through, lit red by the alarms, and spark showers
+				# spilling from the machinery
+				{"depth": "mid", "amount": 40, "lifetime": 6.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 3.4,
+					"pick": PackedColorArray([Color(0.55, 0.2, 0.14, 0.2), Color(0.5, 0.45, 0.42, 0.16), Color(0.35, 0.1, 0.08, 0.22)]),
+					"dir": Vector3(0.6, 0.4, 0.2), "spread": 25.0, "speed": Vector2(0.6, 1.6), "angle": Vector2(0, 360),
+					"spin": Vector2(-15, 15), "curve": "puff", "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 60, "lifetime": 1.4, "facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.03, 0.3),
+					"color": Color(3.0, 1.5, 0.4), "dir": Vector3(0.2, -1, 0.1), "spread": 25.0, "speed": Vector2(2.0, 5.0),
+					"gravity": Vector3(0, -9.0, 0), "fade": PackedFloat32Array([1.0, 1.0, 0.0])},
+				# far: veils of smoke lit from the pits below, and the glow of the forges smeared into embers
+				{"depth": "far", "amount": 45, "lifetime": 9.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 16.0,
+					"radius": 80.0, "color": Color(0.3, 0.1, 0.07, 0.3), "speed": Vector2(1.0, 2.5), "dir": Vector3(0.5, 0.5, 0.2),
+					"spread": 15.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 70, "lifetime": 6.0, "tex": Fx.Tex.DOT, "size": 1.4, "radius": 90.0,
+					"pick": PackedColorArray([Color(2.6, 0.8, 0.2, 0.4), Color(2.2, 0.35, 0.1, 0.35), Color(2.8, 1.4, 0.5, 0.35)]),
+					"dir": Vector3.UP, "spread": 30.0, "speed": Vector2(0.4, 1.4), "curve": "pop"},
+			]
 		"sakura":
 			var petals := PackedColorArray([Color(1.0, 0.72, 0.82), Color(1.0, 0.86, 0.9), Color(0.96, 0.56, 0.7),
 					Color(1.0, 0.94, 0.95)])
