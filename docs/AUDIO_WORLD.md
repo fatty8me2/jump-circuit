@@ -8,7 +8,7 @@ maths and seeded noise by `tools/gen_world_sfx.py` (which borrows the helpers in
 ## Regenerating
 
 ```
-python tools/gen_world_sfx.py            # generate all 421 clips into audio/, then verify
+python tools/gen_world_sfx.py            # generate all 486 clips into audio/, then verify
 python tools/gen_world_sfx.py --only=manor,carrier   # just those maps' generators (gen_<name>), then verify all
 python tools/gen_world_sfx.py --verify   # only check the files on disk
 ```
@@ -28,7 +28,7 @@ checks that the first and last samples are near zero. For loops it checks the se
 * the curvature (second difference) across the wrap must pass the same test;
 * the 40 ms window across the wrap must be no quieter than the quietest windows in the loop (a faded-out end would fail).
 
-It also checks the total size, which is about 26.1 MB of a 36 MB budget.
+It also checks the total size, which is about 33.8 MB of a 36 MB budget.
 
 ## Formats and levels
 
@@ -65,6 +65,13 @@ processing after that is a gain, so the seam can't click. Loops are 1 to 2.5 s l
 * **Rooms**: `space()` convolves with a synthetic room impulse response whose high
   band decays faster than its low band (for the foundry hall, the clock tower and
   the station interior).
+* **Added for the very hard maps**: `fm_glass()` is struck glass or crystal (FM on an
+  inharmonic ratio whose brightness dies first). `voice()` is a sustained buzzy source that
+  follows a pitch curve, and `horn()` blows one or more notes through two formants (site
+  horns, the submarine, the beacon). `iron_creak()` is steel groaning (`creak()` through a
+  beam's stiff modes). `circ_creak()` is the same stick-slip for loops (convolved circularly).
+  `thunder()` is distant rolls without a crack. `sparks()` is a shower of ticks kept below
+  7 kHz. `uw()` is the Abyss's underwater low-pass.
 * Every building block ends with a 4 ms taper, so a ring cut off by its buffer
   can't leave a step in the mix.
 
@@ -445,6 +452,97 @@ circular, churning waterfall body). Render just these with
 | `neon_sign_buzz` (loop) | 1.0 s | The tubes' 120 Hz buzz (harmonics to 4.5 kHz), the ballast humming at 60 Hz, a slight flicker and the odd spark. | Big neon signs. |
 | `neon_checkpoint` | 1.0 s | An electric zap, an E-minor run of FM bells (E6 G6 B6 E7) and 140 sparks fizzing out. | Checkpoints. |
 | `neon_finish` | 2.4 s | Two shells bursting over the spire and crackling, and the city's sirens answering from the streets below (two wails gliding between E5 and B5, softened by distance). | The finish. |
+
+#### The very hard maps (levels 20-23)
+
+Each mechanic's `# SOUND:` comment in its script describes the hook. A tell clip lasts as long as
+its warning (about 1 s, or 1.2-1.4 s), builds to the end and stops just short of the strike.
+
+**Doom Fortress** (score in C minor). The level is still being built on branch `doom-fortress`;
+the clips are named from its scripts and are ready for it.
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `doom_press_warn` | 0.9 s | An iron warning bell on G5 clanged three times, 0.24 s apart, in the hall. | A press or ram's tell (about 1 s ahead). |
+| `doom_klaxon` | 1.2 s | Two whoops of a buzzy horn rising G3 -> Eb4 through a 1 kHz formant, in a 1.5 s hall. | The lockdown klaxon (1.2 s ahead). |
+| `doom_lockdown` | 1.2 s | A heavy contactor clunk (90 -> 35 Hz) with the plate ringing, a 100 Hz mains buzz biting in and a spit of sparks. | The grates going live. |
+| `doom_alarm_clear` | 1.0 s | The buzz sinking away (100 -> 40 Hz) and an FM chime rising C5 Eb5 G5. | The all-clear. |
+| `doom_grate_buzz` (loop) | 1.0 s | The grating's 100 Hz buzz (to 4 kHz) flickering, 120 spark crackles, a surging sizzle and four short arcs. | An electrified grate during lockdown. |
+| `doom_catwalk_creak` | 0.8 s | Two bolts shearing with a ping (free-bar modes from 1.5-1.9 kHz), the grating lurching and its steel groaning, a few sparks. | A catwalk section the beat before it goes. |
+| `doom_catwalk_fall` | 1.4 s | Steel ripping (a fast stick-slip), a big clang (plate modes, f11 210-240 Hz), and three clangs fading and dulling down the pit. | The section tearing loose. |
+| `doom_pour_tilt` | 1.2 s | The crucible's iron groaning (stick-slip from 120 Hz), chains clinking, slow gloops of melt and sparks spilling from 0.5 s. | The crucible tipping (about 1.2 s ahead). |
+| `doom_pour_splash` | 1.2 s | A thick splat (100 -> 45 Hz), a sizzle flaring (1.5-7 kHz), slag bubbles and 120 sparks. | The first gout hitting the lane. |
+| `doom_pour_loop` (loop) | 2.0 s | A thick, low molten roar (30-1500 Hz, -4 dB/oct), 25 viscous gloops, a sizzle and spitting sparks. | The tongue of metal running down the lane. |
+| `doom_reactor_charge` | 1.2 s | A whine climbing C4 -> C6, a C2 buzz throbbing from 4 to 20 Hz and 140 crackles thickening. | A tier's emitter charging (about 1.2 s ahead). |
+| `doom_reactor_pulse` | 1.2 s | An electric crack, a 95 -> 40 Hz boom, a "whum" sweeping 600 -> 80 Hz as the ring rushes out, and crackle. | The ring of energy firing. |
+| `doom_reactor_hum` (loop) | 2.0 s | A C2 harmonic stack against a copy 0.5 Hz away (beating), a C1 sub, a throb twice a second, a faint G5 whine and sparse crackle. | The reactor core. |
+| `doom_vent_hiss` | 1.0 s | Pressure hissing up (500-7000 Hz, swelling), the valve chattering 28 times a second, and a whistle rising G5 -> C6. | A steam vent's tell (1 s ahead). |
+| `doom_vent_blast` | 1.2 s | A thump of pressure, a burst of hiss (500-8000 Hz) settling, a roar under it and spits of water. | The jet firing. |
+| `doom_gear_grind` (loop) | 1.5 s | The bearing grinding (stick-slip at 70 per second through iron modes from 140 Hz), a deep rumble, three tooth knocks and one groan a loop. | The great gear turning. |
+| `doom_checkpoint` | 1.2 s | A heavy relay clunk with its plate ringing, a soft C4/G4 power-up tone and a hiss of steam venting. | Checkpoints. |
+| `doom_finish` | 2.8 s | A huge relay clunk and sparks, steam let go, and the machine spinning down: the core's hum sinking C2 -> C1 and a turbine whine falling 900 -> 70 Hz, with a last settling thud. | The off switch thrown. |
+
+**The Abyss** (score in D minor). Everything is heard through water: low-passed, bubbly and slow.
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `abyss_lamp_dim` | 1.0 s | A falling, wavering glassy chime (FM glass on A6 F6 D6 A5, each sagging and flickering), a fizz of spores and a few bubbles. | A glow cap starting to fail (about 1 s ahead). |
+| `abyss_lamp_out` | 0.5 s | A muffled pop (a bubble falling in pitch), a soft thump and a little glassy blip dropping away. | The cap going dark. |
+| `abyss_lamp_on` | 0.6 s | A burble of 14 bubbles climbing in pitch and a D-minor shimmer (D5 F5 A5 D6) blooming out of it. | The cap lighting again. |
+| `abyss_vent_rumble` | 1.0 s | A low gurgling rumble (20-140 Hz) swelling, gulps of gas coming faster and grit in the throat. | A vent's tell (about 1 s ahead). |
+| `abyss_vent_burst` | 1.2 s | A deep whump (75 -> 35 Hz), a roar of gas and 90 bubbles bursting up and away. | The vent erupting. |
+| `abyss_current_loop` (loop) | 2.0 s | A deep rush of moving water (40-1800 Hz, -3 dB/oct, churning), a slow swirl, a soft hiss and drifting bubbles. | A current. |
+| `abyss_angler_growl` | 1.0 s | A deep, wet, uneven growl (a ragged 30-60 Hz pulse train through throat resonances at 170/390/820 Hz) swelling, the lure's stalk creaking and a gurgle. | The angler about to strike (about 1 s ahead). |
+| `abyss_angler_snap` | 0.8 s | The water shoved aside, a massive bony clap (110 -> 45 Hz) at 0.14 s, 14 teeth crunching, a slosh and bubbles. | The jaw slamming shut. |
+| `abyss_anchor_creak` | 1.0 s | The anchor's iron groaning (stick-slip from 150 Hz), seven chain links clinking as the slack is taken up, and a deep stir. | The anchor drop's tell (1.1 s ahead). |
+| `abyss_shrimp_click` | 0.6 s | Two dry cocking clicks, then the snap at 0.24 s: a hard knock and a cavitation bubble collapsing, and a fizz of tiny bubbles. | The mantis-shrimp ram's tell. |
+| `abyss_leviathan_moan` | 2.6 s | A vast low voice gliding A1 -> D2 -> A1 through a slowly opening formant, low-passed at 1.5 kHz, in a 2.8 s reverb. | The surge's tell (about 1.4 s ahead, from upstream). |
+| `abyss_surge_whoosh` | 1.4 s | A huge underwater whoosh peaking at 0.35 s, a thump of pressure and 120 bubbles torn along. | The surge front breaking over the stage. |
+| `abyss_surge_loop` (loop) | 2.0 s | A heavier, lower roar of displaced water (25-1200 Hz, -4 dB/oct), churning and throbbing three times a loop, with bubbles. | The surge while it blows. |
+| `abyss_checkpoint` | 1.2 s | A glassy bloom (FM glass on D6 F6 A6 D7) over a soft D5/A5 swell, and 60 bubbles rushing up. | Checkpoints. |
+| `abyss_finish` | 3.0 s | The submarine's horn: a reedy D2/A2 blast for 1.7 s with echoes off the trench walls at 0.55 and 1.15 s; a swell of shimmering D-minor light and rising bubbles. | The finish. |
+
+**Tempest Tower** (score in B minor)
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `tempest_wind` (loop) | 2.0 s | A broad roar (80-6000 Hz, -3 dB/oct) gusting, two whistles through the frame (near B4 and F#5) rising with the gusts, and rain. | Around each gust zone (played very quietly). |
+| `tempest_gust_rise` | 1.4 s | The squall roaring in: a roar building to 1.25 s, its band sweeping 300 -> 1400 Hz, rain thickening, a whistle rising B4 -> F#5 and scraps rattling as it arrives. | A gust's tell (1.2 s ahead, from upwind). |
+| `tempest_gust` | 1.2 s | A hard whoosh, the steel frame thumping and booming, a tarp flapping wildly and rain spraying. | The gust front hitting. |
+| `tempest_rod_charge` | 1.4 s | A buzz climbing B2 -> B4 and trembling faster (8 -> 30 Hz), corona hiss and 170 crackles thickening. | A lightning rod charging (1.4 s ahead). |
+| `tempest_lightning_strike` | 1.2 s | A rounded crack, a 90 -> 38 Hz boom, the span sizzling live for half a second and a short rumble. | The bolt landing on a rod. |
+| `tempest_thunder` | 2.6 s | Thunder from a way off: no crack, rolls of low rumble tearing across the sky, each softer, low-passed at 1.8 kHz. | The storm's distant strikes (TempestStorm). |
+| `tempest_scaffold_creak` | 0.9 s | Steel tubes groaning, the boards creaking, ten coupler rattles and the bay lurching twice. | Failing scaffolding stood on. |
+| `tempest_scaffold_fall` | 1.6 s | Couplers snapping, the frame lurching, 16 tubes and 14 boards clanging and clattering as they fall, duller and fainter as they go. | The bay dropping away. |
+| `tempest_load_bell` | 1.0 s | A small hand bell on F#5 rung four times. | A crane load's tell (1 s ahead). |
+| `tempest_trolley` (loop) | 1.0 s | Wheels rumbling along the jib, two rail-joint knocks a loop, the winch on F#2 with a faint F#5 whine and the cable singing. | A crane load travelling. |
+| `tempest_gondola_start` | 1.0 s | A relay clunk, the brake letting go, and the hoist motor winding up to its B2 hum with the gearbox whining after it. | A gondola's tell (1 s ahead). |
+| `tempest_gondola_motor` (loop) | 1.0 s | A B2 motor hum, the gearbox whining, the cable ticking over the drum eight times a loop and the cradle rattling. | A gondola moving. |
+| `tempest_crane_horn` | 1.4 s | Two blasts of a B3/D4 site horn, echoing off the towers. | The crane's slew warning (1.2 s ahead). |
+| `tempest_crane_slew` (loop) | 1.5 s | The slewing ring's teeth meshing 18 times a second, a deep grinding rumble, the B1 drive motor and the jib creaking twice a loop. | The jib slewing. |
+| `tempest_ram_hiss` | 1.0 s | A valve clacking open, hydraulic oil hissing harder and harder (700-6000 Hz), the pump whining up F#4 -> F#5 and the seal creaking. | A ram's tell (1 s ahead). |
+| `tempest_driver_hiss` | 1.0 s | An exhaust valve clacking, three chuffs of steam as the hammer is hauled up, then a rising hiss as it hangs. | A pile driver's tell (1 s ahead). |
+| `tempest_checkpoint` | 1.2 s | A steel clank (a beam's plate modes ringing) and a short toot of the site horn on B4/D5. | Checkpoints. |
+| `tempest_finish_strike` | 1.8 s | A bigger crack and an 80 -> 30 Hz boom, the mast ringing (free-bar modes from 160-180 Hz), sparks, and thunder rolling away round the city. | The bolt striking the beacon mast at the finish. |
+| `tempest_beacon` | 2.4 s | The all-clear: a long site horn on B3, with F#4 and B4 joining at 0.35 and 0.7 s, echoing round the towers, with the wind behind it. | The finish (with the strike). |
+
+**The Void** (score in F# minor)
+
+| File | Length | Synthesis | Meant for |
+|------|--------|-----------|-----------|
+| `void_phase_warn` | 0.95 s | Glassy ticks (music-box tines on F#6 / C#6) coming faster and faster, and a shimmer flickering up behind them. | A phase tile about to fade (0.95 s ahead). |
+| `void_phase_swap` | 0.6 s | Two glass tones crossing (A5 rising to C#6, C#6 falling to A5), a soft breath of air and a hush of light. | The two sets trading places. |
+| `void_rift_hum` (loop) | 2.0 s | A deep choral drone (F#2 C#3 F#3 A3, each against a copy 0.5 Hz away) through a 650 Hz formant, breathing once a loop, with air and a faint high shimmer. | Inside a rift (close range). |
+| `void_rift_enter` | 0.8 s | A soft airy swell rising 400 -> 2500 Hz, an upward shimmer (F#5 A5 C#6 F#6) and a low F#3 bloom. | Entering a rift. |
+| `void_tumble_warn` | 1.0 s | Stone grinding and creaking deep in the frame (stick-slip through 90/210/470 Hz), the room shuddering at 12 Hz and grit trickling. | A tumbling room's tell (0.95 s ahead). |
+| `void_tumble_turn` | 0.8 s | A heavy rushing swing (a slow whoosh) and the deep rumble of the mass turning. | The room rolling over. |
+| `void_tumble_thud` | 0.8 s | A soft boom (95 -> 50 Hz) with the room's hollow modes (170/395/760 Hz), a puff of dust and a faint glassy F#5. | The room settling on its new floor. |
+| `void_collapse_start` | 2.0 s | A deep tearing groan, the sky ripping (a ragged band swelling), three glass cracks and a dissonant F#2/G2 pair sinking a fourth. | The collapse beginning. |
+| `void_collapse_rumble` (loop) | 2.0 s | A deep rumble, two groans, four glass cracks and 30 bits of debris tumbling, over a low F#1/G1 drone beating. | The collapse front (rides on it). |
+| `void_fragment_crack` | 0.6 s | Two dispersive glass cracks ("pew", 3 -> 0.8 kHz), a stony crack and a few tinkling shards. | A fragment starting to go (its tell). |
+| `void_fragment_fall` | 1.0 s | A hollow crash (a slab's modes from 180 Hz), 20 chips and 12 shards scattering, and a soft tone sliding 1200 -> 300 Hz as it falls and dissolves. | The fragment breaking away. |
+| `void_checkpoint` | 1.2 s | A glassy bell bloom (soft-attacked FM glass on F#5 A5 C#6 F#6) over an F#4 swell, and 60 points of light twinkling down. | Checkpoints. |
+| `void_finish` | 3.0 s | A choir of six voices entering one above another (F#3 C#4 F#4 A4 C#5 F#5, every 0.22 s), each scooping up into its note through two formants, so the chord rises; 80 glass shards and two cracks shimmering. | The door in the sky opening. |
 
 ### Deliberately silent
 
