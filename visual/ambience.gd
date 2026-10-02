@@ -544,6 +544,33 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"color": Color(0.1, 0.06, 0.05, 0.9), "speed": Vector2(2.0, 4.0), "dir": Vector3(1, 0.05, 0.3), "spread": 60.0,
 					"turbulence": 1.0, "angle": Vector2(80, 100), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
 			]
+		"abyss":
+			return [
+				# near: marine snow sinking for ever past the lens (pale, not glowing), and specks of
+				# bioluminescent plankton that blink cyan, green and violet as you pass them
+				{"depth": "near", "amount": 200, "lifetime": 4.0, "tex": Fx.Tex.DOT, "size": 0.06, "additive": false,
+					"color": Color(0.78, 0.86, 0.88, 0.6), "speed": Vector2(0.1, 0.35), "dir": Vector3(0.05, -1, 0.03),
+					"spread": 30.0, "gravity": Vector3(0.02, -0.12, 0.0), "turbulence": 0.6,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 60, "lifetime": 2.6, "tex": Fx.Tex.DOT, "size": 0.08,
+					"pick": PackedColorArray([Color(0.2, 2.4, 2.0), Color(0.7, 2.4, 0.9), Color(1.6, 0.8, 2.6)]),
+					"speed": Vector2(0.02, 0.15), "spread": 180.0, "turbulence": 0.8,
+					"fade": PackedFloat32Array([0.0, 1.0, 0.1, 1.0, 0.0])},
+				# mid: bigger glowing drifters and a few bubble trains rising out of the dark below
+				{"depth": "mid", "amount": 70, "lifetime": 5.0, "tex": Fx.Tex.DOT, "size": 0.26,
+					"pick": PackedColorArray([Color(0.2, 2.0, 1.8, 0.8), Color(1.4, 0.7, 2.2, 0.8), Color(2.0, 0.6, 1.5, 0.7)]),
+					"speed": Vector2(0.05, 0.3), "spread": 180.0, "turbulence": 0.7, "curve": "pop"},
+				{"depth": "mid", "amount": 40, "lifetime": 5.0, "tex": Fx.Tex.BUBBLE, "size": 0.2, "dir": Vector3.UP,
+					"spread": 8.0, "speed": Vector2(1.2, 2.4), "turbulence": 1.2, "turbulence_scale": 2.0,
+					"color": Color(0.6, 0.95, 1.05, 0.55), "scale": Vector2(0.4, 1.2), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# far: veils of stirred silt hanging in the black, and the slow blink of big things far off
+				{"depth": "far", "amount": 35, "lifetime": 12.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 16.0,
+					"radius": 75.0, "color": Color(0.05, 0.12, 0.15, 0.3), "speed": Vector2(0.3, 0.9), "dir": Vector3(1, 0.05, 0.3),
+					"spread": 25.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 40, "lifetime": 6.0, "tex": Fx.Tex.DOT, "size": 1.6, "radius": 90.0,
+					"pick": PackedColorArray([Color(0.2, 1.4, 1.3, 0.5), Color(1.0, 0.5, 1.4, 0.45), Color(1.4, 1.0, 0.4, 0.4)]),
+					"speed": Vector2(0.1, 0.4), "spread": 180.0, "curve": "pop", "fade": PackedFloat32Array([0.0, 1.0, 0.2, 1.0, 0.0])},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking
