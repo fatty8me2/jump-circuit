@@ -1104,7 +1104,7 @@ func _stage_13() -> Vector3:
 	var d1: Dictionary = _rpost(40.0, 6.6, 0.0)
 	var d2: Dictionary = _rpost(92.0, 6.6, 0.6)
 	var m1: Dictionary = _ledge(_pol(136.0, 6.6, TIER_H), Vector3(2.6, 8.0, 2.6))
-	var cp: Dictionary = _rcp(160.0, 12.4, TIER_H, 160.0 - 90.0)
+	var cp: Dictionary = _rcp(160.0, 12.4, TIER_H, 160.0 - 90.0 + 45.0)
 	_hop(_area(Vector3.ZERO, 2.5, 2.5), b0)
 	r_walk(_w(_pol(0.0, 10.6, 0.0)))
 	_wait(func() -> bool: return _reactor.zone_clear(0, 0.0, 4.1) and _reactor.zone_clear(1, 1.8, 5.3), _w(_pol(0.0, 10.6, 0.0)))
@@ -1127,7 +1127,7 @@ func _stage_14() -> Vector3:
 	var vphi: float = 342.0
 	var cphi: float = 6.0
 	_aimed_vent(vphi, 10.4, TIER_H * 2.0, _pol(cphi, 11.2, TIER_H * 3.0), 3.2)
-	var cp: Dictionary = _rcp(cphi, 11.2, TIER_H * 3.0, cphi - 90.0)
+	var cp: Dictionary = _rcp(cphi, 11.2, TIER_H * 3.0, cphi - 90.0 + 40.0)
 	_wait(func() -> bool: return _reactor.zone_clear(1, 0.0, 4.3) and _reactor.zone_clear(2, 2.0, 5.3), _w(_pol(160.0, 11.6, TIER_H)))
 	_hop(cp0, d3)
 	_hop(d3, d4)
