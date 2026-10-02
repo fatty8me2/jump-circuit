@@ -200,14 +200,17 @@ const THEMES: Dictionary = {
 		"decor": Color(0.08, 0.07, 0.10), "decor2": Color(1.0, 0.62, 0.15), "metal": Color(0.38, 0.38, 0.44),
 		"cloud_light": Color(0.62, 0.30, 0.52), "cloud_shade": Color(0.14, 0.06, 0.14),
 	},
+	# Doom Fortress: inside a doomsday machine tearing itself apart - gunmetal deck plates with hazard-
+	# stripe edges over black riveted iron, red alarm light, molten orange. (levels/level_20_doom.gd swaps
+	# in its own vault-of-girders sky and a riveted deck-plate shader for every walkable surface.)
 	"doom": {
-		"sky_top": Color(0.06, 0.03, 0.03), "sky_horizon": Color(0.42, 0.12, 0.05), "sky_bottom": Color(0.08, 0.04, 0.03),
-		"sun": Color(1.0, 0.45, 0.25), "sun_energy": 0.9, "sun_rot": Vector3(-35, 200, 0),
-		"ambient": Color(0.55, 0.40, 0.36), "ambient_energy": 0.7, "fog": Color(0.16, 0.07, 0.05), "fog_density": 0.003,
-		"top": Color(0.40, 0.38, 0.38), "side": Color(0.18, 0.16, 0.16), "trim": Color(1.0, 0.25, 0.10),
-		"alt_top": Color(0.50, 0.42, 0.30), "accent": Color(1.0, 0.25, 0.10), "accent2": Color(1.0, 0.75, 0.15),
-		"decor": Color(0.14, 0.12, 0.12), "decor2": Color(0.60, 0.45, 0.25), "metal": Color(0.45, 0.43, 0.42),
-		"cloud_light": Color(0.50, 0.25, 0.15), "cloud_shade": Color(0.12, 0.05, 0.04),
+		"sky_top": Color(0.03, 0.02, 0.02), "sky_horizon": Color(0.36, 0.11, 0.05), "sky_bottom": Color(0.30, 0.05, 0.02),
+		"sun": Color(1.0, 0.5, 0.32), "sun_energy": 0.75, "sun_rot": Vector3(-38, 200, 0),
+		"ambient": Color(0.60, 0.36, 0.30), "ambient_energy": 0.7, "fog": Color(0.20, 0.07, 0.05), "fog_density": 0.0055,
+		"top": Color(0.34, 0.34, 0.36), "side": Color(0.10, 0.10, 0.11), "trim": Color(1.0, 0.62, 0.06),
+		"alt_top": Color(0.30, 0.25, 0.22), "accent": Color(1.0, 0.12, 0.06), "accent2": Color(1.0, 0.45, 0.08),
+		"decor": Color(0.08, 0.08, 0.09), "decor2": Color(1.0, 0.45, 0.08), "metal": Color(0.26, 0.27, 0.29),
+		"cloud_light": Color(0.50, 0.22, 0.14), "cloud_shade": Color(0.14, 0.06, 0.05),
 	},
 	"abyss": {
 		"sky_top": Color(0.0, 0.01, 0.03), "sky_horizon": Color(0.02, 0.10, 0.16), "sky_bottom": Color(0.0, 0.02, 0.04),
