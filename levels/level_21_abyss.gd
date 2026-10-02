@@ -1131,14 +1131,14 @@ func _restyle_environment() -> void:
 	_env.sky = sky
 	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	_env.ambient_light_color = Color(0.2, 0.42, 0.55)
-	_env.ambient_light_energy = 0.35
+	_env.ambient_light_energy = 0.7   # polish: 0.35 left the trench itself invisible
 	_env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
 	_env.tonemap_mode = Environment.TONE_MAPPER_ACES
 	_env.tonemap_exposure = 1.15
 	_env.tonemap_white = 6.0
 	_env.fog_enabled = true
 	_env.fog_light_color = Color(0.008, 0.04, 0.06)
-	_env.fog_density = 0.016
+	_env.fog_density = 0.011
 	_env.fog_aerial_perspective = 0.0
 	_env.fog_sky_affect = 0.6
 	_env.fog_sun_scatter = 0.0
