@@ -96,7 +96,8 @@ func _process(dt: float) -> void:
 				var dir: Vector3 = (th["pos"] as Vector3) - l
 				dir.y = 0.0
 				var p: Vector3 = l + (dir.normalized() * 12.0 if dir.length() > 0.1 else Vector3.ZERO)
-				WorldAudio.at(self, "armada_thunder_near" if float(th["vol"]) > 0.8 else "armada_thunder_far", p, float(th["vol"]), 60.0, 0.12)
+				# the ambience's thunder takes (3 variants); a far strike is quieter (its volume falls with distance)
+				WorldAudio.at(self, "amb_armada_thunder", p, float(th["vol"]), 60.0, 0.12)
 			_thunder.remove_at(i)
 		else:
 			i += 1

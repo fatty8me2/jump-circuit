@@ -297,8 +297,9 @@ f = f_hi / (1 + t / t0)^2. The glacier soundscape uses the same model.
 | `armada_ship_bell` | 1.4 s | "Ding-ding": a small brass bell on E5, struck twice. | Ship's bells. |
 | `armada_salute` | 1.5 s | Three guns fired in turn (0, 0.38, 0.76 s), each rolling off the clouds. | The finish salute. |
 
-`armada_thunder_near` / `armada_thunder_far` were in the brief, but nothing calls them (the ambience's
-`amb_armada_thunder_*` covers thunder), so they were not made.
+`armada_thunder_near` / `armada_thunder_far` were never made; the storm's distant bolts
+(`visual/armada_storm.gd`) play the ambience's `amb_armada_thunder_*` takes instead (fixed after v1.5.0,
+where those strikes were silent).
 
 **Sugar Rush** (score in C major; pitched clips in C major)
 
