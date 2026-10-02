@@ -3201,8 +3201,8 @@ func test_z_world_sounds() -> void:
 	for f: String in DirAccess.get_files_at("res://mechanics"):
 		if f.ends_with(".gd") and prefixes.any(func(p: String) -> bool: return f.begins_with(p + "_")):
 			srcs.append("res://mechanics/" + f)
-	# the third set's decor scripts own their waterfalls, vents and signs (armada_storm.gd's
-	# armada_thunder_near / _far were never made, so the older maps' visual/ scripts stay out)
+	# the third set's decor scripts own their waterfalls, vents and signs (the older maps' visual/
+	# scripts stay out of this scan; armada_storm.gd now plays the ambience's thunder)
 	for f: String in DirAccess.get_files_at("res://visual"):
 		if f.ends_with(".gd") and ["sakura", "jungle", "frontier", "neon"].any(func(p: String) -> bool: return f.begins_with(p + "_")):
 			srcs.append("res://visual/" + f)
