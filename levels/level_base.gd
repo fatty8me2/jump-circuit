@@ -50,6 +50,10 @@ var _pause: PauseMenu
 
 func _ready() -> void:
 	headless_mode = DisplayServer.get_name() == "headless"
+	# the player exists at the world origin for a tick before the spawn teleport; a kill zone
+	# there (Wild West's under-car zone) reported that touch late and charged a fall at load.
+	# Treat the load like a respawn so the same stale-overlap guard in fail() covers it.
+	_respawn_tick = Engine.get_physics_frames() + 2
 	var info: Dictionary = Game.level_info()
 	if Game.level_index >= 0:
 		level_id = info["id"]
@@ -531,7 +535,7 @@ func announce_unlocks(delay: float = 0.4, medal_tier: int = 0) -> void:
 			text = Cosmetics.medal_reward_text(medal_tier, fresh[i][0], fresh[i][1])
 		get_tree().create_timer(delay + 2.0 * i).timeout.connect(func() -> void:
 			if is_inside_tree():
-				hud.toast(text, "Equip it in the Locker", UiKit.GOLD, true))
+				hud.unlock_note(text, "Equip it in the Locker"))
 
 
 ## Override for a bespoke ending (level 5's beacon).

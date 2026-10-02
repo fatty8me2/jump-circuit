@@ -511,14 +511,14 @@ func _body_volt(variant: String) -> void:
 ## Knight: a steel helm with a T-slit visor (eyes glowing behind it), a crest and a plume
 ## in the racer colour, a breastplate, a shield on the back and steel gauntlets.
 func _body_knight() -> void:
-	_body = _paintable(_tp(CosmeticArt.sphere(2), CosmeticArt.std(Color(0.7, 0.73, 0.78), 0.3, 0.75), Vector3(0, 0.62, 0), Vector3(0.78, 0.86, 0.78)))
-	_paintable(_tp(CosmeticArt.sphere(1), CosmeticArt.std(Color(0.8, 0.82, 0.86), 0.25, 0.8), Vector3(0, 0.46, -0.07), Vector3(0.72, 0.5, 0.66)))
+	_body = _paintable(_tp(CosmeticArt.sphere(2), CosmeticArt.std(Color(0.66, 0.68, 0.72), 0.42, 0.45), Vector3(0, 0.62, 0), Vector3(0.78, 0.86, 0.78)))
+	_paintable(_tp(CosmeticArt.sphere(1), CosmeticArt.std(Color(0.78, 0.8, 0.84), 0.35, 0.5), Vector3(0, 0.46, -0.07), Vector3(0.72, 0.5, 0.66)))
 	var dark_steel: Material = CosmeticArt.std(Color(0.45, 0.47, 0.52), 0.35, 0.8)
 	_tp(CosmeticArt.sphere(1), dark_steel, Vector3(0, 0.62, 0), Vector3(0.06, 0.9, 0.82))
 	var slit: Material = CosmeticArt.std(Color(0.02, 0.02, 0.03), 0.6)
-	_tp(CosmeticArt.sphere(1), slit, Vector3(0, 0.79, -0.2), Vector3(0.42, 0.055, 0.34))
-	_tp(CosmeticArt.sphere(1), slit, Vector3(0, 0.68, -0.25), Vector3(0.06, 0.22, 0.3))
-	_eyes(CosmeticArt.std(Color(1.0, 0.85, 0.4), 0.3, 0.0, 2.5), Vector3(0.08, 0.79, -0.365), Vector3(0.07, 0.035, 0.04))
+	_tp(CosmeticArt.sphere(1), slit, Vector3(0, 0.79, -0.25), Vector3(0.5, 0.085, 0.3))
+	_tp(CosmeticArt.sphere(1), slit, Vector3(0, 0.67, -0.28), Vector3(0.075, 0.24, 0.26))
+	_eyes(CosmeticArt.std(Color(1.0, 0.85, 0.4), 0.3, 0.0, 2.5), Vector3(0.09, 0.79, -0.39), Vector3(0.085, 0.045, 0.03))
 	_belt(CosmeticArt.torus(0.29, 0.35), Vector3(0, 0.36, 0))
 	# the shield (Pack) with a steel cross
 	var lean := Vector3(-0.12, 0, 0)

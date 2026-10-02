@@ -3855,6 +3855,9 @@ func test_zm_medals_retroactive_and_legacy() -> void:
 		"level select: Gold on Launch Gardens, nothing further to chase (%s)" % (g_row.text if g_row != null else "missing"))
 	check(r_row != null and r_row.text.contains("SILVER") and r_row.text.contains("next Gold %s" % Hud.target_text(Game.medal_target("reef", 3))),
 		"level select: Silver on Coral Depths with the Gold target (%s)" % (r_row.text if r_row != null else "missing"))
+	var unplayed: String = str(title.call("level_medal_text", "sakura", 0, false))
+	check(unplayed.contains("Gold target %s" % Hud.target_text(Game.medal_target("sakura", 3))),
+		"level select: a course not yet run shows its Gold target (%s)" % unplayed)
 	title.queue_free()
 	await ticks(2)
 	Game.title_screen = "main"
@@ -4198,7 +4201,22 @@ func test_zm_results_medal_and_banner() -> void:
 	await seconds(1.2)
 	check(lvl.hud._medal_label != null and lvl.hud._medal_label.text == "NEW GOLD MEDAL" and lvl.hud._medal_next == null, "Gold: nothing further to chase")
 	await seconds(0.6)
-	check(lvl.hud._toast.text.begins_with("GOLD! New reward: "), "the first unlock is the medal banner (%s)" % lvl.hud._toast.text)
+	# over the open results panel the banner sits inside it, above the buttons (not behind it)
+	var banner: String = ""
+	if lvl.hud._results_box != null:
+		for n: Node in lvl.hud._results_box.find_children("*", "Label", true, false):
+			if (n as Label).text.begins_with("GOLD! New reward: "):
+				banner = (n as Label).text
+	check(banner != "", "the first unlock is the medal banner, inside the results panel (%s)" % banner)
+	var buttons_after: bool = true
+	if lvl.hud._results_box != null:
+		var seen_note: bool = false
+		for c: Node in lvl.hud._results_box.get_children():
+			if c is VBoxContainer and c.find_children("*", "Label", true, false).any(func(l: Node) -> bool: return (l as Label).text.begins_with("GOLD!")):
+				seen_note = true
+			elif c is Button and not seen_note:
+				buttons_after = false
+	check(buttons_after, "the banner comes before the buttons")
 	world.queue_free()
 	world = null
 	await ticks(2)
@@ -4573,3 +4591,18 @@ func test_zm_locker_tabs() -> void:
 	Net.preferred_color = -1
 	Game.title_screen = "main"
 	SaveData.wipe()
+
+
+## Polish audit: nobody is charged a fall just for loading a course (the player sits at the
+## world origin for a tick before the spawn teleport; a kill zone there used to count it).
+func test_zz_no_fall_charged_at_load() -> void:
+	for i: int in Game.LEVELS.size():
+		if only_level >= 0 and i != only_level:
+			continue
+		var lvl: LevelBase = await load_level(i)
+		await seconds(1.0)
+		check(lvl.deaths == 0, "%s: no fall counted while standing at the start (%d)" % [Game.LEVELS[i]["name"], lvl.deaths])
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)

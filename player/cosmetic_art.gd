@@ -540,10 +540,12 @@ static func paint_material(id: String) -> Material:
 			var m: StandardMaterial3D = _mats.get(key)
 			if m == null:
 				m = StandardMaterial3D.new()
-				m.albedo_color = Color(0.9, 0.92, 0.95)
-				m.metallic = 1.0
-				m.roughness = 0.07
-				m.metallic_specular = 0.8
+				# polished but not a pure mirror: a pure mirror only shows the sky, so in the
+				# daylight worlds it read as a blue ball rather than silver
+				m.albedo_color = Color(0.8, 0.8, 0.82)
+				m.metallic = 0.65
+				m.roughness = 0.24
+				m.metallic_specular = 0.65
 				_mats[key] = m
 			return m
 	if id in PAINT_SHADERS:

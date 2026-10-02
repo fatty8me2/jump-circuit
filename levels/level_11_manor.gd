@@ -1638,7 +1638,7 @@ func _restyle_environment() -> void:
 	_env.fog_density = 0.0055
 	_env.fog_aerial_perspective = 0.3
 	_env.fog_sky_affect = 0.1
-	_env.fog_sun_scatter = 0.35
+	_env.fog_sun_scatter = 0.06   # 0.35 flooded every distant wall salmon-red toward the moon
 	_env.fog_height = -8.0
 	_env.fog_height_density = 0.06
 	_env.glow_enabled = true

@@ -1371,19 +1371,19 @@ func _restyle_environment() -> void:
 	_env.tonemap_white = 6.0
 	_env.fog_enabled = true
 	_env.fog_light_color = Color(0.9, 0.64, 0.66)
-	_env.fog_density = 0.0021
+	_env.fog_density = 0.0014
 	_env.fog_aerial_perspective = 0.35
 	_env.fog_sky_affect = 0.12
-	_env.fog_sun_scatter = 0.35
+	_env.fog_sun_scatter = 0.1
 	_env.fog_height = VALLEY_Y + 18.0
-	_env.fog_height_density = 0.05
+	_env.fog_height_density = 0.03
 	_env.glow_enabled = true
 	_env.glow_intensity = 0.6
 	_env.glow_bloom = 0.06
 	_env.glow_hdr_threshold = 1.15
 	_env.adjustment_enabled = true
 	_env.adjustment_saturation = 1.15
-	_env.adjustment_contrast = 1.05
+	_env.adjustment_contrast = 1.1
 	# the big low sun off to the west-north-west, warm and raking
 	_sun.light_color = Color(1.0, 0.7, 0.5)
 	_sun.light_energy = 1.55

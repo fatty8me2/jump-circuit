@@ -18,6 +18,9 @@ var _flash: ColorRect
 var _flash_tw: Tween
 var _debug: Label
 var _results: Control
+## The open results panel's column and the index its buttons start at (unlock notes go above them).
+var _results_box: VBoxContainer
+var _results_notes_at: int = 0
 var _results_ready: bool = false
 ## "2nd place of 4" on the race results panel; follows the live standings.
 var _race_place: Label
@@ -160,6 +163,23 @@ func toast(text: String, sub: String = "", sub_color: Color = UiKit.SOFT, pop: b
 		_toast_tw.parallel().tween_property(_toast, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	_toast_tw.tween_interval(1.3)
 	_toast_tw.tween_property(_toast, "modulate:a", 0.0, 0.5)
+
+
+## An unlock announcement. Over an open results panel the toast would sit behind it (its second
+## line hidden), so the note goes into the panel above the buttons instead; otherwise a toast.
+func unlock_note(text: String, sub: String) -> void:
+	if _results_box == null or not is_instance_valid(_results_box) or _results == null or not _results.visible:
+		toast(text, sub, UiKit.GOLD, true)
+		return
+	var note: VBoxContainer = UiKit.vbox(2)
+	note.add_child(UiKit.label(text, 24, UiKit.GOLD, HORIZONTAL_ALIGNMENT_CENTER))
+	note.add_child(UiKit.label(sub, 16, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER))
+	_results_box.add_child(note)
+	_results_box.move_child(note, _results_notes_at)
+	_results_notes_at += 1
+	note.modulate.a = 0.0
+	var tw: Tween = create_tween()
+	tw.tween_property(note, "modulate:a", 1.0, 0.3)
 
 
 ## Checkpoint banner: "STAGE n / N" (the stage you are now on, as the corner label
@@ -356,6 +376,8 @@ func show_results(time: float, prev_best: float, is_best: bool, deaths: int, pre
 	var buttons: Array[Button] = [next,
 		UiKit.button("Run It Again  (%s)" % Game.prompt("restart"), func() -> void: Game.restart_level()),
 		UiKit.button("Level Select", func() -> void: Game.goto_title("levels"))]
+	_results_box = box
+	_results_notes_at = box.get_child_count()
 	for b: Button in buttons:
 		b.disabled = true      # live once readable, so a jump mashed into the gate can't skip it
 		box.add_child(b)
@@ -473,6 +495,8 @@ func show_race_results(time: float) -> void:
 	_spectate_btn = UiKit.button("Spectate Racers  (%s / %s)" % [Game.prompt("spectate_prev"), Game.prompt("spectate_next")],
 		func() -> void: level.spectate(1))
 	_spectate_btn.visible = not level.spectate_candidates().is_empty()
+	_results_box = box
+	_results_notes_at = box.get_child_count()
 	box.add_child(_spectate_btn)
 	if level.party == null:
 		_run_again_btn = UiKit.button("Run It Again", func() -> void: level.run_again())
@@ -567,6 +591,7 @@ func close_race_results() -> void:
 	if _results != null:
 		_results.queue_free()
 	_results = null
+	_results_box = null
 	_results_ready = false
 	_spectate_btn = null
 	_run_again_btn = null

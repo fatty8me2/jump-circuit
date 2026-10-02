@@ -1473,11 +1473,11 @@ func _restyle_environment() -> void:
 	_env.tonemap_exposure = 1.05
 	_env.tonemap_white = 6.0
 	_env.fog_enabled = true
-	_env.fog_light_color = Color(0.7, 0.8, 0.68)
-	_env.fog_density = 0.0042
-	_env.fog_aerial_perspective = 0.35
+	_env.fog_light_color = Color(0.46, 0.58, 0.44)
+	_env.fog_density = 0.0026
+	_env.fog_aerial_perspective = 0.15
 	_env.fog_sky_affect = 0.15
-	_env.fog_sun_scatter = 0.35
+	_env.fog_sun_scatter = 0.1
 	_env.fog_height = WATER_Y + 7.0
 	_env.fog_height_density = 0.035
 	_env.glow_enabled = true
@@ -1486,7 +1486,7 @@ func _restyle_environment() -> void:
 	_env.glow_hdr_threshold = 1.2
 	_env.adjustment_enabled = true
 	_env.adjustment_saturation = 1.16
-	_env.adjustment_contrast = 1.07
+	_env.adjustment_contrast = 1.12
 	_sun.light_color = Color(1.0, 0.93, 0.76)
 	_sun.light_energy = 2.2
 	_sun.rotation_degrees = Vector3(-52, 160, 0)

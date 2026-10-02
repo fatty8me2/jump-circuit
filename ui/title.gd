@@ -218,7 +218,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	get_viewport().set_input_as_handled()
 
 
+## The Locker's key line follows the device in hand (LB / RB with a pad, Q / E on the keyboard).
+func _refresh_locker_hint() -> void:
+	if _locker_tab_hint == null or not is_instance_valid(_locker_tab_hint):
+		return
+	_locker_tab_hint.text = "%s / %s  switch tabs      %s  equip      %s  back" % [Game.prompt("spectate_prev"), Game.prompt("spectate_next"),
+		"A" if Game.using_pad else "Enter", Game.prompt("back")]
+
+
 func _update_controls_hint(pad: bool) -> void:
+	_refresh_locker_hint()
 	if _controls_hint == null or not is_instance_valid(_controls_hint):
 		return
 	_controls_hint.text = "Left stick move   A jump   Right stick look   Y retry   Start pause" if pad 		else "WASD move   Space jump   Mouse look   R retry   Esc pause"
@@ -243,8 +252,8 @@ func _left_column(content: Control, width: float = 420.0) -> Control:
 
 func _logo() -> Control:
 	var v: VBoxContainer = UiKit.vbox(0)
-	var l1: Label = UiKit.shadowed(UiKit.label("JUMP", 96, Color.WHITE), 12)
-	var l2: Label = UiKit.shadowed(UiKit.label("CIRCUIT", 96, UiKit.GOLD), 12)
+	var l1: Label = UiKit.shadowed(UiKit.label("JUMP", 84, Color.WHITE), 12)
+	var l2: Label = UiKit.shadowed(UiKit.label("CIRCUIT", 84, UiKit.GOLD), 12)
 	v.add_child(l1)
 	v.add_child(l2)
 	v.add_child(UiKit.shadowed(UiKit.label("read the course  -  build momentum  -  land it", 20, UiKit.SOFT), 6))
@@ -252,10 +261,12 @@ func _logo() -> Control:
 
 
 func _main_screen() -> Control:
-	var box: VBoxContainer = UiKit.vbox(12)
+	# everything must fit the 900 px canvas: logo, seven buttons, the hint line and an
+	# unlock note or update button (the column has no scroll)
+	var box: VBoxContainer = UiKit.vbox(8)
 	box.add_child(_logo())
 	var spacer := Control.new()
-	spacer.custom_minimum_size = Vector2(0, 24)
+	spacer.custom_minimum_size = Vector2(0, 14)
 	box.add_child(spacer)
 	var next_index: int = 0
 	for i: int in Game.LEVELS.size():
@@ -282,10 +293,14 @@ func _main_screen() -> Control:
 	if Game.title_message != "":
 		box.add_child(UiKit.shadowed(UiKit.label(Game.title_message, 18, Color(1, 0.6, 0.5))))
 		Game.title_message = ""
+	# the controls hint and the version share one line
+	var foot := HBoxContainer.new()
+	foot.add_theme_constant_override("separation", 18)
 	_controls_hint = UiKit.shadowed(UiKit.label("", 16, Color(1, 1, 1, 0.75)), 5)
-	box.add_child(_controls_hint)
+	foot.add_child(_controls_hint)
+	foot.add_child(UiKit.shadowed(UiKit.label("v%s" % Updater.current_version(), 15, UiKit.SOFT), 4))
+	box.add_child(foot)
 	_update_controls_hint(Game.using_pad)
-	box.add_child(UiKit.shadowed(UiKit.label("v%s" % Updater.current_version(), 15, UiKit.SOFT), 4))
 	# cosmetics earned by progress made before they existed (or not yet announced)
 	var fresh: Array[Array] = Cosmetics.check_unlocks()
 	if not fresh.is_empty():
@@ -297,11 +312,13 @@ func _main_screen() -> Control:
 			var more: int = names.size() - 4
 			names.resize(4)
 			names.append("and %d more" % more)
-		var note: Label = UiKit.shadowed(UiKit.label("Unlocked: %s!  See the Locker." % ", ".join(names), 18, UiKit.GOLD), 5)
+		var note: Label = UiKit.shadowed(UiKit.label("Unlocked: %s!  See the Locker." % ", ".join(names), 16, UiKit.GOLD), 5)
 		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		note.custom_minimum_size = Vector2(420, 0)
+		# it takes the spacer's place, so the buttons don't get pushed off the bottom
 		box.add_child(note)
-		box.move_child(note, 2)
+		box.move_child(note, 1)
+		spacer.queue_free()
 	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn, "practice": practice_btn, "locker": locker_btn}
 	_focus_pref = openers.get(_prev_screen, play)
 	return _left_column(box)
@@ -439,6 +456,9 @@ static func level_medal_text(level_id: String, medal: int, played: bool) -> Stri
 		out += "   %s" % Cosmetics.MEDAL_NAMES[medal].to_upper()
 	if (played or medal > 0) and medal < 3:
 		out += "  -  next %s %s" % [Cosmetics.MEDAL_NAMES[medal + 1], Hud.target_text(Game.medal_target(level_id, medal + 1))]
+	elif not played and medal == 0:
+		# a course not yet run still shows what Gold asks for
+		out += "     Gold target %s" % Hud.target_text(Game.medal_target(level_id, 3))
 	return out
 
 
@@ -596,8 +616,7 @@ func _build_locker_tab() -> Control:
 		var on: bool = str(b.get_meta("tab")) == tab
 		(b as Button).modulate = Color.WHITE if on else Color(0.62, 0.65, 0.75)
 		(b as Button).text = ("[ %s ]" if on else "%s") % _tab_label(str(b.get_meta("tab")))
-	_locker_tab_hint.text = "%s / %s  switch tabs      %s  equip      %s  back" % [Game.prompt("spectate_prev"), Game.prompt("spectate_next"),
-		"A" if Game.using_pad else "Enter", Game.prompt("back")]
+	_refresh_locker_hint()
 	_set_locker_info("", UiKit.SOFT)
 	# the preview wears what is equipped, plus whatever is focused in this tab
 	_wear_equipped()
