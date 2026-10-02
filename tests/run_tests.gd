@@ -3148,14 +3148,30 @@ const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_l
 	"carrier_cat_hiss", "carrier_cat_launch", "carrier_cat_retract", "carrier_jet_spool", "carrier_wire_twang",
 	"carrier_elevator_start", "carrier_elevator_stop", "carrier_door_klaxon", "carrier_door_grind",
 	"carrier_launch_spool", "carrier_launch_shot", "carrier_launch_flyby", "carrier_jbd_raise", "carrier_jbd_lower",
-	"carrier_lift_move", "carrier_flyover"]
+	"carrier_lift_move", "carrier_flyover",
+	"sakura_bamboo_creak", "sakura_bamboo_snap", "sakura_bell_bong", "sakura_log_whoosh", "sakura_log_thump",
+	"sakura_petal_sink", "sakura_shuriken_ring", "sakura_shoji_rattle", "sakura_shoji_slam", "sakura_gust_rise",
+	"sakura_gust", "sakura_mallet_creak", "sakura_ram_creak", "sakura_chime", "sakura_fireworks", "sakura_finish_bell",
+	"jungle_vine_creak", "jungle_raft_bump", "jungle_dart_click", "jungle_dart_volley", "jungle_plate_click",
+	"jungle_gate_open", "jungle_gate_tick", "jungle_gate_close", "jungle_trap_tick", "jungle_boulder_rumble",
+	"jungle_boulder_crash", "jungle_boulder_splash", "jungle_altar",
+	"neon_car_horn", "neon_drone_chirp", "neon_drone_zap", "neon_holo_glitch", "neon_holo_off", "neon_holo_on",
+	"neon_checkpoint", "neon_finish",
+	"frontier_fuse_light", "frontier_dynamite_boom", "frontier_signal_bell", "frontier_signal_clank", "frontier_signal_thwack",
+	"frontier_timber_crack", "frontier_collapse_rebuild", "frontier_door_creak", "frontier_door_clack",
+	"frontier_door_rattle", "frontier_door_slap", "frontier_steam_sputter", "frontier_steam_burst",
+	"frontier_cart_clunk", "frontier_vault_open", "frontier_vault_slam", "frontier_coins", "frontier_whistle",
+	"frontier_fireworks"]
 const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
 	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
 	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz",
 	"drift_hum", "lava_rise", "fumarole_loop", "lavafall_loop", "avalanche_roar", "sandfall_loop", "dustdevil_loop",
 	"boulder_roll", "manor_gaze_hum", "manor_possessed_creak", "manor_waltz_box", "armada_hull_creak",
 	"armada_prop_loop", "armada_winch_loop", "candy_soldier_march", "candy_train_chug", "candy_gumball_roll",
-	"carrier_jet_roar", "carrier_elevator_hum"]
+	"carrier_jet_roar", "carrier_elevator_hum",
+	"sakura_shuriken_whir", "sakura_wind", "sakura_waterfall", "sakura_bridge_creak", "jungle_boulder_roll",
+	"jungle_waterfall", "neon_car_hum", "neon_drone_hum", "neon_holo_hum", "neon_gondola_motor", "neon_steam_hiss",
+	"neon_sign_buzz", "frontier_fuse_hiss", "frontier_collapse_rumble", "frontier_steam_hiss", "frontier_cart_rumble"]
 
 
 func test_z_world_sounds() -> void:
@@ -3175,20 +3191,30 @@ func test_z_world_sounds() -> void:
 			missing.append(c)
 	check(missing.is_empty(), "every world sound clip exists %s" % str(missing))
 	# every clip the newer maps' scripts ask WorldAudio / Sfx for by name exists (a missing one is
-	# silently skipped at runtime, so only this catches a typo)
+	# silently skipped at runtime, so only this catches a typo). It scans whichever of these map
+	# files exist, so a map whose mechanics land later (the frontier's) is covered once they do.
+	var prefixes: Array[String] = ["manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon"]
 	var srcs: Array[String] = []
-	for f: String in ["level_11_manor.gd", "level_12_armada.gd", "level_13_candy.gd", "level_14_carrier.gd"]:
+	for f: String in ["level_11_manor.gd", "level_12_armada.gd", "level_13_candy.gd", "level_14_carrier.gd",
+			"level_16_sakura.gd", "level_17_jungle.gd", "level_18_frontier.gd", "level_19_neon.gd"]:
 		srcs.append("res://levels/" + f)
 	for f: String in DirAccess.get_files_at("res://mechanics"):
-		if f.ends_with(".gd") and (f.begins_with("manor_") or f.begins_with("armada_") or f.begins_with("candy_")
-				or f.begins_with("carrier_")):
+		if f.ends_with(".gd") and prefixes.any(func(p: String) -> bool: return f.begins_with(p + "_")):
 			srcs.append("res://mechanics/" + f)
-	var re := RegEx.create_from_string("\"((?:manor|armada|candy|carrier)_[a-z0-9_]+)\"")
+	# the third set's decor scripts own their waterfalls, vents and signs (armada_storm.gd's
+	# armada_thunder_near / _far were never made, so the older maps' visual/ scripts stay out)
+	for f: String in DirAccess.get_files_at("res://visual"):
+		if f.ends_with(".gd") and ["sakura", "jungle", "frontier", "neon"].any(func(p: String) -> bool: return f.begins_with(p + "_")):
+			srcs.append("res://visual/" + f)
+	var re := RegEx.create_from_string("\"((?:%s)_[a-z0-9_]+)\"" % "|".join(prefixes))
 	var asked: Dictionary = {}
 	for path: String in srcs:
+		if not FileAccess.file_exists(path):
+			continue
 		for line: String in FileAccess.get_file_as_string(path).split("
 "):
-			if not (line.contains("WorldAudio.") or line.contains("Sfx.")):
+			# a clip held in a table ({"clip": "sakura_ram_creak"}) and played later counts too
+			if not (line.contains("WorldAudio.") or line.contains("Sfx.") or line.contains("\"clip\"")):
 				continue
 			for m: RegExMatch in re.search_all(line):
 				asked[m.get_string(1)] = true
@@ -3196,7 +3222,7 @@ func test_z_world_sounds() -> void:
 	for c: String in asked:
 		if not Sfx.has_clip(c):
 			unknown.append(c)
-	check(asked.size() >= 40 and unknown.is_empty(),
+	check(asked.size() >= 100 and unknown.is_empty(),
 		"every WorldAudio clip the newer maps name exists (%d named) %s" % [asked.size(), str(unknown)])
 	var flat: Array[String] = []
 	for c: String in WORLD_LOOPS:
