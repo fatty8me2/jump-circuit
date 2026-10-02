@@ -544,6 +544,32 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"color": Color(0.1, 0.06, 0.05, 0.9), "speed": Vector2(2.0, 4.0), "dir": Vector3(1, 0.05, 0.3), "spread": 60.0,
 					"turbulence": 1.0, "angle": Vector2(80, 100), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
 			]
+		"void":
+			return [
+				# near: pale dust of the broken dream hanging almost still, drifting UP (gravity here
+				# is a suggestion), and pink / cyan glints winking in and out
+				{"depth": "near", "amount": 150, "lifetime": 3.2, "tex": Fx.Tex.DOT, "size": 0.08, "additive": false,
+					"color": Color(0.92, 0.9, 1.0, 0.7), "speed": Vector2(0.05, 0.25), "dir": Vector3.UP, "spread": 60.0,
+					"gravity": Vector3(0.0, 0.12, 0.0), "turbulence": 0.8, "turbulence_scale": 5.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 60, "lifetime": 2.2, "tex": Fx.Tex.STAR, "size": 0.12,
+					"pick": PackedColorArray([Color(2.4, 0.8, 1.7), Color(0.8, 2.2, 2.6), Color(2.2, 2.1, 2.5)]),
+					"speed": Vector2(0.0, 0.15), "spread": 180.0, "curve": "pop"},
+				# mid: slivers of the shattered sky tumbling slowly down past you, white and rose
+				{"depth": "mid", "amount": 70, "lifetime": 7.0, "facing": "mesh", "mesh": VoidFx.shard_mesh(),
+					"pick": PackedColorArray([Color(0.95, 0.93, 1.0), Color(1.0, 0.8, 0.92), Color(0.82, 0.95, 1.0)]),
+					"dir": Vector3.DOWN, "spread": 25.0, "speed": Vector2(0.4, 1.0), "scale": Vector2(0.6, 1.5),
+					"angle": Vector2(0, 360), "spin": Vector2(-60, 60), "turbulence": 0.4, "curve": "pop"},
+				# far: huge soft veils of violet haze rolling slowly, and long glints of light falling UP
+				# out of the dark below, like the dream leaking away
+				{"depth": "far", "amount": 40, "lifetime": 10.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 22.0,
+					"radius": 85.0, "pick": PackedColorArray([Color(0.4, 0.2, 0.55, 0.22), Color(0.6, 0.25, 0.5, 0.18)]),
+					"speed": Vector2(0.5, 1.5), "dir": Vector3(0.3, 0.2, 0.1), "spread": 40.0, "angle": Vector2(0, 360),
+					"spin": Vector2(-6, 6), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 14, "lifetime": 2.4, "facing": "velocity", "tex": Fx.Tex.SPARK,
+					"size": Vector2(0.25, 6.0), "radius": 100.0, "pick": PackedColorArray([Color(2.4, 0.8, 1.7), Color(0.8, 2.2, 2.6)]),
+					"dir": Vector3.UP, "spread": 6.0, "speed": Vector2(18.0, 30.0), "fade": PackedFloat32Array([0.0, 1.0, 0.0])},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking

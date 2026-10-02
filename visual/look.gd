@@ -227,14 +227,16 @@ const THEMES: Dictionary = {
 		"decor": Color(0.22, 0.24, 0.28), "decor2": Color(0.90, 0.30, 0.20), "metal": Color(0.60, 0.62, 0.66),
 		"cloud_light": Color(0.55, 0.58, 0.64), "cloud_shade": Color(0.16, 0.18, 0.22),
 	},
+	# The Void: clean white dream-geometry in a violet-black nothing, accented pink and cyan.
+	# (levels/level_23_void.gd swaps in its own shattered-sky shader and chessboard floors.)
 	"void": {
 		"sky_top": Color(0.02, 0.0, 0.05), "sky_horizon": Color(0.20, 0.08, 0.30), "sky_bottom": Color(0.0, 0.0, 0.02),
-		"sun": Color(0.90, 0.80, 1.0), "sun_energy": 0.9, "sun_rot": Vector3(-60, 30, 0),
-		"ambient": Color(0.50, 0.45, 0.70), "ambient_energy": 0.8, "fog": Color(0.06, 0.02, 0.10), "fog_density": 0.002,
-		"top": Color(0.85, 0.85, 0.92), "side": Color(0.25, 0.22, 0.35), "trim": Color(0.95, 0.95, 1.0),
-		"alt_top": Color(0.60, 0.50, 0.90), "accent": Color(0.95, 0.95, 1.0), "accent2": Color(1.0, 0.40, 0.70),
-		"decor": Color(0.15, 0.12, 0.25), "decor2": Color(0.60, 0.90, 1.0), "metal": Color(0.70, 0.70, 0.80),
-		"cloud_light": Color(0.40, 0.25, 0.55), "cloud_shade": Color(0.05, 0.02, 0.10),
+		"sun": Color(0.92, 0.86, 1.0), "sun_energy": 1.0, "sun_rot": Vector3(-58, 30, 0),
+		"ambient": Color(0.55, 0.48, 0.78), "ambient_energy": 0.85, "fog": Color(0.07, 0.03, 0.12), "fog_density": 0.002,
+		"top": Color(0.91, 0.90, 0.96), "side": Color(0.72, 0.68, 0.84), "trim": Color(1.0, 0.36, 0.72),
+		"alt_top": Color(0.80, 0.76, 0.94), "accent": Color(0.32, 0.90, 1.0), "accent2": Color(1.0, 0.36, 0.72),
+		"decor": Color(0.16, 0.12, 0.26), "decor2": Color(0.32, 0.90, 1.0), "metal": Color(0.86, 0.85, 0.93),
+		"cloud_light": Color(0.62, 0.46, 0.82), "cloud_shade": Color(0.10, 0.05, 0.18),
 	},
 	"ascent": {
 		"sky_top": Color(0.02, 0.03, 0.10), "sky_horizon": Color(0.20, 0.30, 0.58), "sky_bottom": Color(0.05, 0.08, 0.20),
