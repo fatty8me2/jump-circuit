@@ -3065,8 +3065,8 @@ func test_zp_party_finish_bar() -> void:
 ## on the Ambience bus, and every second layer (the reef's deep, the xeno jungle's depths, the
 ## volcano's crater, the glacier's blizzard, the desert's sandstorm, the manor's bell tower, the
 ## armada's flagship, the candy clouds, the carrier's island, the sakura keep, the jungle pyramid's
-## top, the frontier train's engine, the neon spire, the Ascent's summit wind) takes over as the
-## course runs out.
+## top, the frontier train's engine, the neon spire, the doom reactor core, the abyss wreck, the
+## tempest spire, the void's fracture, the Ascent's summit wind) takes over as the course runs out.
 func test_zs_soundscapes() -> void:
 	var unscored: Array[String] = []
 	for lv: Dictionary in Game.LEVELS:
@@ -3178,7 +3178,8 @@ func test_z_world_sounds() -> void:
 	# every map has its own footsteps and landings; anything else falls back to the plain ones
 	var old_theme: String = Sfx.get("_theme")
 	for th: String in ["gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert",
-			"manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "ascent"]:
+			"manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void",
+			"ascent"]:
 		Sfx.set_theme(th)
 		check(Sfx.themed("step") == "step_" + th and Sfx.themed("land") == "land_" + th,
 			"%s has its own footsteps and landings" % th)

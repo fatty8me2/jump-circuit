@@ -7,8 +7,10 @@ extends Node
 ## tower, the storm breaks over Storm Armada's flagship, Sugar Rush rises into the cotton-candy
 ## clouds, the wind howls round Super Carrier's island, the wind and a great bell take over at
 ## Sakura Peaks' castle keep, Jungle Temple opens out at the top of the pyramid, the engine
-## comes near on the Wild West Heist, the gale rises round Neon City's spire, the Final Ascent's
-## wind picks up near the summit), plus one-shots - birds, gulls,
+## comes near on the Wild West Heist, the gale rises round Neon City's spire, Doom Fortress's
+## reactor core hums and pulses louder, the wrecked submarine groans in The Abyss, the wind
+## grows fiercer round Tempest Tower's spire, The Void fractures under a held choir, the Final
+## Ascent's wind picks up near the summit), plus one-shots - birds, gulls,
 ## far-off clanks, whale song - scheduled at random and placed in 3D around the listener.
 ## Clips come from tools/gen_ambience.py. The beds keep playing while the game is paused (so
 ## the pause muffle on the Ambience bus is heard); the one-shot schedule pauses with the tree.
@@ -366,6 +368,86 @@ const THEMES: Dictionary = {
 				"dist": Vector2(200.0, 400.0), "height": Vector2(100.0, 300.0)},
 			{"clip": "amb_neon_siren", "every": Vector2(50.0, 110.0), "db": Vector2(-20.0, -14.0), "pitch": 0.03,
 				"dist": Vector2(150.0, 300.0), "height": Vector2(-120.0, -30.0), "chance": Vector2(1.0, 0.5)},
+		],
+	},
+	"doom": {
+		"bed": "amb_doom", "bed_db": 0.0,
+		"layer": "amb_doom_core", "from": 0.5, "to": 0.95,
+		"events": [
+			{"clip": "amb_doom_steam", "every": Vector2(6.0, 14.0), "db": Vector2(-20.0, -13.0), "pitch": 0.08,
+				"dist": Vector2(6.0, 20.0), "height": Vector2(-4.0, 8.0)},
+			{"clip": "amb_doom_gear", "every": Vector2(9.0, 20.0), "db": Vector2(-18.0, -12.0), "pitch": 0.05,
+				"dist": Vector2(10.0, 30.0), "height": Vector2(-10.0, 10.0)},
+			{"clip": "amb_doom_spark", "every": Vector2(10.0, 22.0), "db": Vector2(-22.0, -14.0), "pitch": 0.1,
+				"dist": Vector2(4.0, 14.0), "height": Vector2(-2.0, 8.0), "chance": Vector2(0.7, 1.0)},
+			{"clip": "amb_doom_groan", "every": Vector2(14.0, 30.0), "db": Vector2(-18.0, -12.0), "pitch": 0.06,
+				"dist": Vector2(15.0, 40.0), "height": Vector2(-10.0, 15.0)},
+			{"clip": "amb_doom_pour", "every": Vector2(25.0, 55.0), "db": Vector2(-18.0, -12.0), "pitch": 0.04,
+				"dist": Vector2(25.0, 60.0), "height": Vector2(-40.0, -15.0)},
+			{"clip": "amb_doom_clang", "every": Vector2(30.0, 70.0), "db": Vector2(-18.0, -12.0), "pitch": 0.0,
+				"dist": Vector2(30.0, 80.0), "height": Vector2(-20.0, 20.0), "chance": Vector2(0.5, 1.0)},
+			{"clip": "amb_doom_klaxon", "every": Vector2(40.0, 90.0), "db": Vector2(-22.0, -16.0), "pitch": 0.0,
+				"dist": Vector2(60.0, 140.0), "height": Vector2(-10.0, 20.0)},
+		],
+	},
+	"abyss": {
+		"bed": "amb_abyss", "bed_db": 0.0,
+		"layer": "amb_abyss_wreck", "from": 0.5, "to": 0.95,
+		"events": [
+			{"clip": "amb_abyss_bubbles", "every": Vector2(7.0, 16.0), "db": Vector2(-22.0, -15.0), "pitch": 0.08,
+				"dist": Vector2(3.0, 12.0), "height": Vector2(-4.0, 2.0)},
+			{"clip": "amb_abyss_creak", "every": Vector2(10.0, 24.0), "db": Vector2(-20.0, -13.0), "pitch": 0.06,
+				"dist": Vector2(10.0, 30.0), "height": Vector2(-10.0, 10.0)},
+			{"clip": "amb_abyss_whale", "every": Vector2(20.0, 45.0), "db": Vector2(-16.0, -10.0), "pitch": 0.0,
+				"dist": Vector2(120.0, 250.0), "height": Vector2(-60.0, 40.0), "answer": 0.3, "chance": Vector2(1.0, 0.6)},
+			{"clip": "amb_abyss_sonar", "every": Vector2(20.0, 45.0), "db": Vector2(-22.0, -15.0), "pitch": 0.0,
+				"dist": Vector2(40.0, 100.0), "height": Vector2(-20.0, 20.0), "chance": Vector2(0.5, 1.0)},
+			{"clip": "amb_abyss_vent", "every": Vector2(25.0, 55.0), "db": Vector2(-18.0, -12.0), "pitch": 0.05,
+				"dist": Vector2(20.0, 50.0), "height": Vector2(-30.0, -5.0)},
+			{"clip": "amb_abyss_groan", "every": Vector2(25.0, 55.0), "db": Vector2(-18.0, -12.0), "pitch": 0.04,
+				"dist": Vector2(30.0, 80.0), "height": Vector2(-20.0, 10.0), "chance": Vector2(0.3, 1.0)},
+			{"clip": "amb_abyss_rock", "every": Vector2(35.0, 80.0), "db": Vector2(-20.0, -14.0), "pitch": 0.05,
+				"dist": Vector2(60.0, 150.0), "height": Vector2(-80.0, -20.0)},
+		],
+	},
+	"tempest": {
+		"bed": "amb_tempest", "bed_db": 0.0,
+		"layer": "amb_tempest_spire", "from": 0.5, "to": 0.95,
+		"events": [
+			{"clip": "amb_tempest_gust", "every": Vector2(6.0, 14.0), "db": Vector2(-18.0, -11.0), "pitch": 0.06,
+				"dist": Vector2(8.0, 25.0), "height": Vector2(-5.0, 10.0), "travel": 30.0},
+			{"clip": "amb_tempest_tarp", "every": Vector2(8.0, 18.0), "db": Vector2(-20.0, -13.0), "pitch": 0.08,
+				"dist": Vector2(6.0, 20.0), "height": Vector2(-6.0, 6.0), "chance": Vector2(1.0, 0.5)},
+			{"clip": "amb_tempest_rain", "every": Vector2(10.0, 22.0), "db": Vector2(-20.0, -13.0), "pitch": 0.06,
+				"dist": Vector2(5.0, 15.0), "height": Vector2(-2.0, 6.0), "travel": 20.0},
+			{"clip": "amb_tempest_cable", "every": Vector2(12.0, 28.0), "db": Vector2(-20.0, -14.0), "pitch": 0.0,
+				"dist": Vector2(8.0, 25.0), "height": Vector2(0.0, 15.0), "chance": Vector2(0.6, 1.0)},
+			{"clip": "amb_tempest_debris", "every": Vector2(15.0, 35.0), "db": Vector2(-20.0, -14.0), "pitch": 0.08,
+				"dist": Vector2(8.0, 30.0), "height": Vector2(-15.0, 5.0)},
+			{"clip": "amb_tempest_thunder", "every": Vector2(30.0, 70.0), "db": Vector2(-16.0, -10.0), "pitch": 0.05,
+				"dist": Vector2(200.0, 400.0), "height": Vector2(50.0, 250.0)},
+			{"clip": "amb_tempest_crane", "every": Vector2(35.0, 80.0), "db": Vector2(-20.0, -14.0), "pitch": 0.04,
+				"dist": Vector2(60.0, 150.0), "height": Vector2(-20.0, 30.0), "chance": Vector2(1.0, 0.4)},
+		],
+	},
+	"void": {
+		"bed": "amb_void", "bed_db": 0.0,
+		"layer": "amb_void_fracture", "from": 0.5, "to": 0.95,
+		"events": [
+			{"clip": "amb_void_chime", "every": Vector2(8.0, 18.0), "db": Vector2(-20.0, -13.0), "pitch": 0.0,
+				"dist": Vector2(8.0, 25.0), "height": Vector2(-5.0, 10.0)},
+			{"clip": "amb_void_whisper", "every": Vector2(10.0, 24.0), "db": Vector2(-22.0, -15.0), "pitch": 0.05,
+				"dist": Vector2(6.0, 20.0), "height": Vector2(-4.0, 8.0), "travel": 12.0},
+			{"clip": "amb_void_crack", "every": Vector2(12.0, 28.0), "db": Vector2(-20.0, -13.0), "pitch": 0.08,
+				"dist": Vector2(40.0, 120.0), "height": Vector2(-40.0, 40.0), "chance": Vector2(0.5, 1.0)},
+			{"clip": "amb_void_clock", "every": Vector2(18.0, 40.0), "db": Vector2(-20.0, -14.0), "pitch": 0.04,
+				"dist": Vector2(15.0, 40.0), "height": Vector2(-10.0, 15.0), "chance": Vector2(1.0, 0.5)},
+			{"clip": "amb_void_fall", "every": Vector2(20.0, 45.0), "db": Vector2(-20.0, -14.0), "pitch": 0.0,
+				"dist": Vector2(20.0, 60.0), "height": Vector2(0.0, 30.0), "chance": Vector2(0.4, 1.0)},
+			{"clip": "amb_void_shimmer", "every": Vector2(25.0, 55.0), "db": Vector2(-20.0, -14.0), "pitch": 0.0,
+				"dist": Vector2(20.0, 50.0), "height": Vector2(0.0, 20.0)},
+			{"clip": "amb_void_choir", "every": Vector2(30.0, 70.0), "db": Vector2(-20.0, -14.0), "pitch": 0.0,
+				"dist": Vector2(30.0, 80.0), "height": Vector2(-10.0, 30.0), "chance": Vector2(0.3, 1.0)},
 		],
 	},
 	"ascent": {
