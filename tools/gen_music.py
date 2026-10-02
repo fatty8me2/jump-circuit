@@ -2155,6 +2155,219 @@ def _ff_neon(B, r, k):
     B.add(1.75, me.cymbal(r, "crash"), 0.18, 0.3, {"hall": 0.3})
 
 
+# --------------------------------------------------------------------------
+# DOOM FORTRESS - C minor, 132 bpm, 40 bars. A doomsday machine: a staccato cello riff over a pulsing
+# synth bass, pounding industrial drums with anvil strikes, a grim horn theme; the JUMP theme's B
+# phrase in C minor as a defiant brass call. Hi layer: choir, trumpets, timpani, metal crashes.
+# --------------------------------------------------------------------------
+DOOM_CH = "| Cm | Cm | Ab | G | Cm | Cm | Fm | G |"
+DOOM_RIFF = "C3e C3e Eb3e C3e G3e C3e F#3e G3e |"
+DOOM_A = "C5h. Eb5q | D5h G4h | C5q D5q Eb5q F5q | G5w | Ab5h. G5q | F5h Eb5h | D5q Eb5q F5q D5q | C5w |"
+
+
+def piece_doom():
+    T = me.Track("doom", 132, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("hall", me.make_ir(r, rt60=2.8, predelay=0.03, damp=3800, er=0.6, er_span=0.06))
+    T.reverb("gate", me.make_ir(r, rt60=0.8, predelay=0.0, damp=6000, er=0.9, er_span=0.03))
+    H = {"hall": 0.3}
+    kick = bank("kick_punch", lambda r: me.kick(r, "punch"), 2)
+    snr = bank("snare_gated", lambda r: me.snare(r, "gated"), 3)
+    anv = [me.anvil(me.rng_for("danv%d" % i), 1.0, p, 0.7) for i, p in enumerate((0.9, 1.0, 1.12))]
+    mh = [me.metal_hit(me.rng_for("dmh%d" % i), 1.0, f, 1.0) for i, f in enumerate((150.0, 190.0))]
+    sections = [("intro", 0, 4, DOOM_CH), ("a", 4, 8, DOOM_CH), ("a2", 12, 8, DOOM_CH),
+                ("jump", 20, 8, tx_chords(JUMP_B_CHORDS, 3)), ("break", 28, 4, DOOM_CH), ("a3", 32, 8, DOOM_CH)]
+    for name, bar0, nb, ch in sections:
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        if name != "break":
+            for k in range(nb):
+                line(T, "base", "strings", DOOM_RIFF, bar0 + k, M_CELLO_STAC, 0.26, H, legato=False)
+        bass(T, "base", "bass", P, [(k * 0.5, 0 if k % 4 != 3 else 12, 0.45, 0.9 if k % 2 == 0 else 0.7) for k in range(8)],
+             M_SBASS, lo=24, hi=36, gain=0.32, cutoff=700.0)
+        if name in ("intro", "break"):
+            kit(T, "base", "drums", bars, {"kick": (kick, "x.......x.......", 0.5), "anv": (anv, "....x.......x...", 0.12)}, sends=H)
+            continue
+        kit(T, "base", "drums", bars, {"kick": (kick, "x..x..x.x..x..x.", 0.55), "snare": (snr, "....x.......x...", 0.4),
+                                      "anv": (anv, "..x.......x.....", 0.1)}, sends={"gate": 0.3}, pump=("kick",))
+        pad(T, "hi", "choir", P, CHOIR_A, center=60, count=4, gain=0.12, sends={"hall": 0.5}, vel=0.75)
+        kit(T, "hi", "drums", bars, {"mh": (mh, "x...............", 0.14)}, sends=H)
+        for k in range(0, nb, 4):
+            ring(T, "hi", "drums", (bar0 + k) * 4, me.timpani(r, float(mtof(36)), 0.9), 0.3, 0.0, H)
+    line(T, "base", "brass", DOOM_A, 4, HORNS, 0.38, H, transpose=-12)
+    line(T, "base", "brass", DOOM_A, 12, HORNS, 0.38, H, transpose=-12)
+    line(T, "base", "brass", JUMP_PICKUP + " | " + JUMP_B, 20, HORNS, 0.38, H, pickup=1.0, transpose=-9)
+    line(T, "base", "brass", DOOM_A, 32, TROMBONES, 0.3, H, transpose=-12)
+    line(T, "hi", "brass", DOOM_A, 12, TRUMPETS, 0.22, H)
+    line(T, "hi", "brass", JUMP_PICKUP + " | " + JUMP_B, 20, TRUMPETS, 0.26, H, pickup=1.0, transpose=3)
+    line(T, "hi", "brass", DOOM_A, 32, TRUMPETS, 0.24, H)
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    for bar in (4, 12, 20, 32):
+        ring(T, "hi", "drums", bar * 4, crash[bar % 2], 0.14, 0.3, H)
+    T.render(rms_db=-14.5, hi_gain=1.8)
+
+
+# --------------------------------------------------------------------------
+# THE ABYSS - D minor, 66 bpm, 24 bars. The deep: a glassy pad and a sub drone, slow celesta and harp
+# figures through a long echo, a lonely theremin-and-choir theme, far-off booms like something huge
+# moving; the JUMP theme's B phrase slowed into D minor. Hi layer: swelling strings, low choir, taiko.
+# --------------------------------------------------------------------------
+ABY_CH = "| Dm | Bb | Gm | A | Dm | F | Gm | A |"
+ABY_A = "A4w | D5h. E5q | F5h E5h | D5w | A4w | F5h. G5q | A5h G5h | E5w |"
+
+
+def piece_abyss():
+    T = me.Track("abyss", 66, 24, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("deep", me.make_ir(r, rt60=5.5, predelay=0.06, damp=2400, er=0.3, er_span=0.12))
+    T.delay("echo", beats=1.5, fb=0.45, damp=2200, ret=0.4)
+    D = {"deep": 0.55}
+    P = prog(ABY_CH * 3, 4, 0)
+    pad(T, "base", "pad", P, I(me.pad_glass, att=2.0, rel=3.0), center=57, count=4, gain=0.1, sends=D, vel=0.55)
+    bass(T, "base", "bass", P, [(0, 0, 3.9, 0.7)], M_SUB, lo=26, hi=38, gain=0.3)
+    arp(T, "base", "keys", P, [0, 2, 1, 3, 2, 4, 3, 1], 0.5, M_CELESTA, lo=62, hi=84, gain=0.07,
+        sends={"deep": 0.5, "echo": 0.4}, vels=(0.7, 0.4, 0.5, 0.4))
+    line(T, "base", "lead", ABY_A, 4, I(me.theremin), 0.28, {"deep": 0.6, "echo": 0.3})
+    line(T, "base", "lead", ABY_A, 4, CHOIR_U, 0.12, D, transpose=-12)
+    line(T, "base", "keys", JUMP_PICKUP + " | " + JUMP_B, 12, M_HARP, 0.2, {"deep": 0.5, "echo": 0.35}, legato=False, pickup=1.0, transpose=5)
+    boom = me.boom(me.rng_for("aboom"), 1.0, 30.0, 4.0)
+    for bar in (3, 11, 19, 23):
+        ring(T, "base", "perc", bar * 4 + 2, boom, 0.2, -0.3, D)
+    # hi: strings swelling in, a low choir, slow taiko like a heartbeat in the dark
+    pad(T, "hi", "strings", P, I(me.strings, att=1.2, rel=1.5, bright=0.35, body="cello", voices=4), center=50, count=3,
+        gain=0.14, sends=D, vel=0.7)
+    pad(T, "hi", "choir", prog(tx_chords(JUMP_B_CHORDS, 5), 4, 12), CHOIR_O, center=55, count=3, gain=0.12, sends=D, vel=0.7)
+    od = bank("odaiko", lambda r: me.taiko(r, "odaiko"), 3)
+    kit(T, "hi", "perc", range(4, 24), {"od": (od, "x.......x.x.....", 0.3)}, sends=D)
+    line(T, "hi", "strings", ABY_A, 4, VIOLINS, 0.12, D)
+    T.render(rms_db=-14.5, hi_gain=0.85, master_eq=lambda f: me.shelf(f, 5000.0, -3.0))
+
+
+# --------------------------------------------------------------------------
+# TEMPEST TOWER - B minor, 150 bpm, 48 bars. A storm climb: sawing sixteenth-note violins, rock drums,
+# brass hits and cymbal swells like gusts; a heroic horn theme; the JUMP theme's B phrase in B minor.
+# Hi layer: trumpets, choir, timpani, crashes.
+# --------------------------------------------------------------------------
+TEM_CH = "| Bm | G | D | A | Bm | G | Em | F# |"
+TEM_A = "B4q. D5e F#5h | E5q. D5e A4h | B4q. D5e F#5q B5q | A5h F#5h | G5q. F#5e E5q D5q | E5h. D5q | C#5q D5q E5q C#5q | B4w |"
+
+
+def piece_tempest():
+    T = me.Track("tempest", 150, 48, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("hall", me.make_ir(r, rt60=2.2, predelay=0.02, damp=5000, er=0.5))
+    H = {"hall": 0.3}
+    kick = bank("kick_punch", lambda r: me.kick(r, "punch"), 2)
+    snr = bank("snare_ac", lambda r: me.snare(r, "acoustic"), 4)
+    hatc = bank("hat_c", lambda r: me.hat(r, "closed"), 4)
+    sections = [("intro", 0, 4, TEM_CH), ("a", 4, 8, TEM_CH), ("a2", 12, 8, TEM_CH), ("jump", 20, 8, tx_chords(JUMP_B_CHORDS, 2)),
+                ("break", 28, 4, TEM_CH), ("a3", 32, 8, TEM_CH), ("jump2", 40, 8, tx_chords(JUMP_B_CHORDS, 2))]
+    for name, bar0, nb, ch in sections:
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        arp(T, "base", "strings", P, [0, 0, 1, 0, 2, 0, 1, 0], 0.25, M_VLN_STAC, lo=59, hi=78, gain=0.12, sends=H,
+            vels=(0.9, 0.5, 0.65, 0.5))
+        bass(T, "base", "bass", P, [(k * 0.5, 0, 0.45, 0.9 if k % 2 == 0 else 0.7) for k in range(8)], M_CELLO_STAC, lo=35, hi=47,
+             gain=0.3, sends=H)
+        if name in ("intro", "break"):
+            swell_into(T, "base", "drums", bar0 + nb, 4, 0.3, H)
+            continue
+        kit(T, "base", "drums", bars, {"kick": (kick, "x.....x.x.....x.", 0.55), "snare": (snr, "....x.......x...", 0.42),
+                                      "hat": (hatc, "x.x.x.x.x.x.x.x.", 0.1)}, sends=H)
+        stabs(T, "base", "brass", P[::2], (0.0,), M_BRASS_STAB, center=59, count=3, gain=0.1, sends=H, vel=0.8)
+        pad(T, "hi", "choir", P, CHOIR_A, center=62, count=3, gain=0.1, sends={"hall": 0.45}, vel=0.7)
+        for k in range(0, nb, 4):
+            ring(T, "hi", "drums", (bar0 + k) * 4, me.timpani(r, float(mtof(35)), 0.9), 0.28, 0.0, H)
+    for bar0 in (4, 12, 32):
+        line(T, "base", "brass", TEM_A, bar0, HORNS, 0.36, H)
+    for bar0 in (20, 40):
+        line(T, "base", "brass", JUMP_PICKUP + " | " + JUMP_B, bar0, HORNS, 0.36, H, pickup=1.0, transpose=-10)
+        line(T, "hi", "brass", JUMP_PICKUP + " | " + JUMP_B, bar0, TRUMPETS, 0.26, H, pickup=1.0, transpose=2)
+    line(T, "hi", "brass", TEM_A, 12, TRUMPETS, 0.22, H, transpose=12)
+    line(T, "hi", "brass", TEM_A, 32, TRUMPETS, 0.22, H, transpose=12)
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    for bar in (4, 12, 20, 32, 40):
+        ring(T, "hi", "drums", bar * 4, crash[bar % 2], 0.14, 0.3, H)
+    T.render(rms_db=-14.5, hi_gain=1.9)
+
+
+# --------------------------------------------------------------------------
+# THE VOID - F# minor, 90 bpm, 32 bars. A dream coming apart: a music box and celesta over glass pads,
+# handless clocks ticking, reversed swells into every phrase, an fm bell; the JUMP theme's B phrase
+# in F# minor. Hi layer: gated toms, a pulsing synth arp, choir, sub drops.
+# --------------------------------------------------------------------------
+VOI_CH = "| F#m | D | Bm | C# | F#m | A | D | C#7 |"
+VOI_A = "C#5h. F#5q | E5h D5h | B4q. C#5e D5q F#5q | E#5w | C#5h. A5q | G#5h F#5h | D5q. E5e F#5q A5q | G#5w |"
+
+
+def piece_void():
+    T = me.Track("void", 90, 32, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("dream", me.make_ir(r, rt60=4.5, predelay=0.05, damp=4200, er=0.3, er_span=0.1))
+    T.delay("echo", beats=0.75, fb=0.45, damp=3500, ret=0.4)
+    DR = {"dream": 0.5}
+    P = prog(VOI_CH * 4, 4, 0)
+    pad(T, "base", "pad", P, I(me.pad_glass, att=1.5, rel=2.5), center=61, count=4, gain=0.09, sends=DR, vel=0.55)
+    bass(T, "base", "bass", P, [(0, 0, 3.9, 0.7)], M_SUB, lo=30, hi=42, gain=0.26)
+    arp(T, "base", "keys", P, [0, 1, 2, 3, 2, 1, 0, 2], 0.5, M_MUSICBOX, lo=66, hi=90, gain=0.07, sends={"dream": 0.4, "echo": 0.35},
+        vels=(0.8, 0.5, 0.6, 0.5))
+    tick = [me.clock_tick(me.rng_for("vtick%d" % i), 1.0, i == 1) for i in range(2)]
+    kit(T, "base", "perc", range(0, 32), {"tick": (tick, "x...x...x...x...", 0.07)}, sends=DR, pans={"tick": 0.4})
+    line(T, "base", "lead", VOI_A, 4, M_CELESTA, 0.24, {"dream": 0.5, "echo": 0.35}, legato=False)
+    line(T, "base", "lead", VOI_A, 12, M_CELESTA, 0.22, {"dream": 0.5, "echo": 0.35}, legato=False)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_B, 20, I(me.theremin), 0.24, {"dream": 0.5, "echo": 0.3}, pickup=1.0, transpose=9 - 12)
+    for bar in (4, 12, 20, 28):
+        T.add("base", "pad", bar * 4 - 2, me.reverse_swell(r, 2, T.spb, float(mtof(61)), 0.7), 0.14, 0.0, DR, 0.0)
+    for bar in (0, 8, 16, 24):
+        ring(T, "base", "keys", bar * 4, me.fm_bell(r, float(mtof(78)), 4.0, 0.5), 0.1, 0.3, DR)
+    # hi: the dream gets a pulse
+    tomz = [me.tom(me.rng_for("vtom%d" % i), f, 1.0) for i, f in enumerate((95.0, 130.0))]
+    kit(T, "hi", "perc", range(8, 32), {"tom": (tomz, "x..x..x...x.x...", 0.26)}, sends={"dream": 0.3})
+    arp(T, "hi", "keys", prog(VOI_CH * 3, 4, 8), [0, 1, 2, 3, 2, 1, 3, 2], 0.25, M_SPLUCK, lo=66, hi=90, gain=0.05,
+        sends={"echo": 0.35, "dream": 0.2}, vels=(0.85, 0.5, 0.65, 0.5))
+    pad(T, "hi", "choir", prog(VOI_CH * 3, 4, 8), CHOIR_U, center=61, count=3, gain=0.12, sends=DR, vel=0.65)
+    for bar in (8, 16, 24):
+        ring(T, "hi", "perc", bar * 4, me.boom(me.rng_for("vboom"), 1.0, 34.0, 2.5), 0.22, 0.0, DR)
+    T.render(rms_db=-14.5, hi_gain=1.1)
+
+
+def _ff_doom(B, r, k):
+    for i, m in enumerate((48, 51, 55, 60, 63, 67)):
+        B.add(0.2 * i, me.strings(r, float(mtof(m)), 0.25, 0.9, voices=3), 0.16, (i / 5 - 0.5) * 0.5, {"hall": 0.3})
+    for m in (36, 43, 48, 55, 60, 63):
+        B.add(1.5, me.brass(r, float(mtof(m)), 2.6, 0.95, "trombone" if m < 50 else "horn", voices=2), 0.15, sends={"hall": 0.4})
+    B.add(1.5, me.anvil(r, 1.0, 1.0, 1.2), 0.35, 0.2, {"hall": 0.4})
+    B.add(1.5, me.boom(r, 1.0, 32.0, 2.5), 0.45)
+    B.add(1.5, me.cymbal(r, "crash"), 0.2, 0.3, {"hall": 0.3})
+
+
+def _ff_abyss(B, r, k):
+    for i, m in enumerate((62, 65, 69, 74, 77, 81)):
+        B.add(0.3 * i, me.mallet(r, float(mtof(m)), 1.4, 0.75, "celesta"), 0.22, (i / 5 - 0.5) * 0.6, {"hall": 0.5})
+    for m in (50, 57, 62, 65, 69):
+        B.add(1.8, me.pad_glass(r, float(mtof(m)), 3.0, 0.7), 0.1, sends={"hall": 0.5})
+    B.add(1.8, me.boom(r, 1.0, 30.0, 3.0), 0.4)
+    B.add(1.8, me.taiko(r, "odaiko"), 0.3, 0.0, {"hall": 0.4})
+
+
+def _ff_tempest(B, r, k):
+    B.notes(mel("F#5t G5t A5t B5q F#6q B6h", 4, 0, 0), I(me.brass, kind="trumpet", voices=3), r, 0.4, sends={"hall": 0.4})
+    for m in (47, 54, 59, 62, 66, 71):
+        B.add(2.0, me.brass(r, float(mtof(m)), 2.4, 0.95, "horn", voices=2), 0.14, sends={"hall": 0.4})
+    B.add(2.0, me.timpani(r, float(mtof(35)), 1.0), 0.4, sends={"hall": 0.3})
+    B.add(2.0, me.cymbal(r, "crash"), 0.22, 0.3, {"hall": 0.3})
+    B.add(0.0, me.cymbal_swell(r, 2, 60.0 / 150.0, 0.7), 0.18, -0.3, {"hall": 0.3})
+
+
+def _ff_void(B, r, k):
+    B.add(0.0, me.reverse_swell(r, 2, 60.0 / 90.0, float(mtof(66)), 0.8), 0.2, 0.0, {"hall": 0.5})
+    for i, m in enumerate((66, 69, 73, 78, 81, 85)):
+        B.add(1.3 + 0.12 * i, me.mallet(r, float(mtof(m)), 1.0, 0.8, "musicbox"), 0.24, (i / 5 - 0.5) * 0.6, {"hall": 0.5})
+    B.add(1.3, me.fm_bell(r, float(mtof(78)), 3.0, 0.6), 0.16, 0.0, {"hall": 0.5})
+    for m in (54, 61, 66, 69, 73):
+        B.add(1.3, me.choir(r, float(mtof(m)), 2.6, 0.7, vowel="u"), 0.1, sends={"hall": 0.5})
+
+
 def _ff_manor(B, r, k):
     for m in (50, 57, 62, 65, 69):
         B.add(0.0, me.organ(r, float(mtof(m)), 3.5, 0.8, leslie=False, rel=1.0), 0.16, sends={"hall": 0.6})
@@ -2315,6 +2528,10 @@ def stingers():
     fanfare("jungle", 69, _ff_jungle, 4.8, bpm=108.0)
     fanfare("frontier", 67, _ff_frontier, 4.6, bpm=132.0)
     fanfare("neon", 64, _ff_neon, 4.8, bpm=100.0)
+    fanfare("doom", 60, _ff_doom, 5.0, bpm=132.0)
+    fanfare("abyss", 62, _ff_abyss, 5.6, bpm=66.0)
+    fanfare("tempest", 71, _ff_tempest, 4.8, bpm=150.0)
+    fanfare("void", 66, _ff_void, 5.6, bpm=90.0)
     fanfare("ascent", 62, _ff_ascent, 7.0, bpm=128.0, rms=-12.0)
     # checkpoint chimes (tonic of each map's key; the game steps them up its scale)
     chime("gardens", lambda B, r: (B.add(0, me.mallet(r, float(mtof(79)), 0.8, 0.8, "glockenspiel"), 0.4, 0.2, {"small": 0.3}),
@@ -2378,6 +2595,17 @@ def stingers():
     chime("neon", lambda B, r: (B.add(0, me.synth_pluck(r, float(mtof(76)), 0.4, 0.9), 0.4, -0.2, {"hall": 0.3}),
                                 B.add(0.16, me.synth_pluck(r, float(mtof(83)), 0.5, 0.85), 0.38, 0.2, {"hall": 0.35}),
                                 B.add(0.0, me.fm_bell(r, float(mtof(88)), 1.0, 0.35), 0.1, 0.0, {"hall": 0.4})))
+    chime("doom", lambda B, r: (B.add(0, me.anvil(r, 0.9, 1.0, 0.8), 0.3, -0.2, {"hall": 0.3}),
+                                B.add(0.0, me.brass(r, float(mtof(60)), 0.45, 0.9, "trombone", voices=2, fp=True), 0.25, 0.0, {"hall": 0.3}),
+                                B.add(0.16, me.brass(r, float(mtof(67)), 0.5, 0.9, "trumpet", voices=2, fp=True), 0.25, 0.2, {"hall": 0.3})))
+    chime("abyss", lambda B, r: (B.add(0, me.mallet(r, float(mtof(74)), 1.0, 0.85, "celesta"), 0.38, -0.2, {"hall": 0.5}),
+                                 B.add(0.18, me.mallet(r, float(mtof(81)), 1.0, 0.8, "celesta"), 0.34, 0.2, {"hall": 0.5}),
+                                 B.add(0.05, me.bubble(r, 0.7), 0.12, 0.0, {"hall": 0.4})))
+    chime("tempest", lambda B, r: (B.add(0, me.brass(r, float(mtof(71)), 0.4, 0.9, "trumpet", voices=2, fp=True), 0.3, -0.1, {"hall": 0.3}),
+                                   B.add(0.16, me.brass(r, float(mtof(78)), 0.5, 0.9, "trumpet", voices=2, fp=True), 0.3, 0.1, {"hall": 0.3})))
+    chime("void", lambda B, r: (B.add(0, me.mallet(r, float(mtof(78)), 0.9, 0.85, "musicbox"), 0.38, -0.2, {"hall": 0.5}),
+                                B.add(0.16, me.mallet(r, float(mtof(85)), 0.9, 0.8, "musicbox"), 0.34, 0.2, {"hall": 0.5}),
+                                B.add(0.0, me.fm_bell(r, float(mtof(90)), 1.0, 0.35), 0.1, 0.0, {"hall": 0.5})))
     chime("ascent", lambda B, r: (B.add(0, me.synth_pluck(r, float(mtof(71)), 0.4, 0.9), 0.4, 0.2, {"hall": 0.3}),
                                   B.add(0.18, me.synth_pluck(r, float(mtof(78)), 0.4, 0.9), 0.4, -0.2, {"hall": 0.3}),
                                   B.add(0.36, me.synth_pluck(r, float(mtof(83)), 0.5, 0.8), 0.35, 0.0, {"hall": 0.4}),
@@ -2412,6 +2640,10 @@ PIECES = {
     "jungle": piece_jungle,
     "frontier": piece_frontier,
     "neon": piece_neon,
+    "doom": piece_doom,
+    "abyss": piece_abyss,
+    "tempest": piece_tempest,
+    "void": piece_void,
     "ascent": piece_ascent,
     "title": piece_title,
     "lobby": piece_lobby,
@@ -2419,7 +2651,7 @@ PIECES = {
     "victory": piece_victory,
     "stingers": stingers,
 }
-LAYERED = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert", "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "ascent")
+LAYERED = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert", "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void", "ascent")
 
 
 def verify():
