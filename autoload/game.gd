@@ -21,7 +21,7 @@ const LEVELS: Array[Dictionary] = [
 	{"id": "jungle", "name": "Jungle Temple", "scene": "res://levels/level_17_jungle.tscn", "blurb": "Overgrown ruins, a rolling boulder and a step pyramid. Do not touch the glyphs.", "medals": {"gold": 185, "silver": 220, "bronze": 280}},
 	{"id": "frontier", "name": "Wild West Heist", "scene": "res://levels/level_18_frontier.tscn", "blurb": "Rob the train. Run the cars, ride the carts, beat the dynamite to the engine.", "medals": {"gold": 170, "silver": 205, "bronze": 255}},
 	{"id": "neon", "name": "Neon City", "scene": "res://levels/level_19_neon.tscn", "blurb": "Rain, neon and hover traffic. Ride the lanes to the top of the tallest tower.", "medals": {"gold": 175, "silver": 210, "bronze": 265}},
-	{"id": "doom", "name": "Doom Fortress", "scene": "res://levels/level_20_doom.tscn", "blurb": "Inside a doomsday machine that is tearing itself apart. Nothing here wants you alive.", "medals": {"gold": 200, "silver": 240, "bronze": 300}},  # PROVISIONAL: placeholder course - the lead sets these once it is built and timed
+	{"id": "doom", "name": "Doom Fortress", "scene": "res://levels/level_20_doom.tscn", "blurb": "Inside a doomsday machine that is tearing itself apart. Nothing here wants you alive.", "medals": {"gold": 160, "silver": 190, "bronze": 240}},
 	{"id": "abyss", "name": "The Abyss", "scene": "res://levels/level_21_abyss.tscn", "blurb": "Down a black ocean trench by the light of things that glow. The current is not your friend.", "medals": {"gold": 140, "silver": 165, "bronze": 210}},
 	{"id": "tempest", "name": "Tempest Tower", "scene": "res://levels/level_22_tempest.tscn", "blurb": "Climb the outside of a mile-high tower in a hurricane. Lightning picks the tallest thing.", "medals": {"gold": 180, "silver": 220, "bronze": 275}},
 	{"id": "void", "name": "The Void", "scene": "res://levels/level_23_void.tscn", "blurb": "Impossible geometry in a dream that is coming apart. Up is a suggestion.", "medals": {"gold": 120, "silver": 145, "bronze": 180}},
@@ -36,7 +36,7 @@ const LEVELS: Array[Dictionary] = [
 const BOT_TIMES: Dictionary = {
 	"gardens": 150.3, "foundry": 136.4, "balance": 139.8, "clockwork": 172.1, "reef": 116.1,
 	"orbital": 142.5, "xeno": 136.3, "volcano": 144.1, "glacier": 163.4, "desert": 141.2,
-	"manor": 161.5, "armada": 168.5, "candy": 162.5, "carrier": 167.4, "sakura": 175.0, "jungle": 162.6, "frontier": 150.0, "neon": 153.4, "abyss": 122.1, "tempest": 159.6, "void": 104.8,
+	"manor": 161.5, "armada": 168.5, "candy": 162.5, "carrier": 167.4, "sakura": 175.0, "jungle": 162.6, "frontier": 150.0, "neon": 153.4, "doom": 140.2, "abyss": 122.1, "tempest": 159.6, "void": 104.8,
 	"ascent": 158.7,
 }
 const MEDAL_MULT: Dictionary = {"gold": 1.12, "silver": 1.35, "bronze": 1.7}

@@ -3768,7 +3768,7 @@ func test_zc_remote_racer_cosmetics() -> void:
 # ---- medal times and rewards (characters, hats, paints, titles) --------------------------------
 
 ## The four worlds still being built carry provisional medal times (no bot time yet).
-const _ZM_PROVISIONAL: Array[String] = ["doom"]
+const _ZM_PROVISIONAL: Array[String] = []
 
 
 ## A levels dict with these bests (id -> seconds), as SaveData stores them.
