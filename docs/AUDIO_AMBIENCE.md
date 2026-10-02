@@ -28,19 +28,19 @@ target, peak under -3 dBFS, and less than 35 % of the energy below 80 Hz. It als
 loop seam on the *decoded* file: the sample step and the curvature across the wrap must be no
 larger than ordinary ones inside the file, and the level of the last 50 ms must match the first
 50 ms. For **one-shots**: 44.1 kHz mono, 0.2-10 s, peak about -3 dBFS, silent first and last
-samples. It fails on missing or stray `amb_*` files and when the total goes over 34 MB.
+samples. It fails on missing or stray `amb_*` files and when the total goes over 42 MB.
 
 ## Formats and levels
 
 | Group     | Files                            | Format                         | Level |
 |-----------|----------------------------------|--------------------------------|-------|
-| Beds      | `amb_<theme>.ogg` (+ layers)     | Ogg Vorbis, 32 kHz stereo      | -24 to -27 dBFS RMS (title -30; the glacier and desert storm layers, the manor's tower, the carrier's island, Sakura Peaks' keep and the frontier train's engine are 1 dB above their base beds, and the armada's flagship 1 dB below, as the storm breaks); a memoryless soft knee holds peaks under -4 dBFS; 40 Hz high-pass, 6-9 kHz low-pass |
+| Beds      | `amb_<theme>.ogg` (+ layers)     | Ogg Vorbis, 32 kHz stereo      | -24 to -27 dBFS RMS (title -30; the glacier and desert storm layers, the manor's tower, the carrier's island, Sakura Peaks' keep, the frontier train's engine, the doom reactor core, the abyss wreck, the tempest spire and the void's fracture are 1 dB above their base beds, and the armada's flagship 1 dB below, as the storm breaks); a memoryless soft knee holds peaks under -4 dBFS; 40 Hz high-pass, 6-9 kHz low-pass |
 | One-shots | `amb_<theme>_<event>_<n>.ogg`    | Ogg Vorbis, 44.1 kHz mono      | peak normalised to -3 dBFS; the runtime plays them 8-22 dB down |
 
-One-shots are Ogg rather than WAV to keep within the size budget: the 292 clips add up to about
-1090 s, which would be about 96 MB as 44.1 kHz 16-bit WAV, against 8.5 MB as Ogg. Nothing is
-timing-critical, so Ogg's decode latency doesn't matter. Total size: about 30.9 MB (34 beds 22.5 MB,
-292 one-shots 8.5 MB).
+One-shots are Ogg rather than WAV to keep within the size budget: the 361 clips add up to about
+1430 s, which would be about 126 MB as 44.1 kHz 16-bit WAV, against 10.8 MB as Ogg. Nothing is
+timing-critical, so Ogg's decode latency doesn't matter. Total size: about 37.9 MB (42 beds 27.1 MB,
+361 one-shots 10.8 MB).
 
 The beds sit well under the music and effects. They are rolled off at both ends, so there is
 no masking sub rumble and no fizzy top that tires the ear over a long session.
@@ -76,7 +76,11 @@ the score) and by the title diorama (`"title"`). An unknown theme builds a silen
   (`amb_sakura_keep`), Jungle Temple opens out into the wind at the top of the pyramid with the
   waterfall below (`amb_jungle_top`), the engine comes near as the Wild West Heist reaches the
   locomotive (`amb_frontier_loco`) and the gale rises round Neon City's spire as the rain thins
-  (`amb_neon_spire`). Near
+  (`amb_neon_spire`). The reactor core's pulsing hum rises as Doom Fortress nears its heart
+  (`amb_doom_core`), the wrecked submarine's hull groans and its sonar pings slowly at the bottom
+  of The Abyss (`amb_abyss_wreck`), the wind grows fiercer and the beacon ticks round Tempest
+  Tower's spire (`amb_tempest_spire`) and The Void fractures faster under a held choir
+  (`amb_void_fracture`). Near
   the top of the Final Ascent, `amb_ascent_high` takes over: stronger, howling wind with the city
   further away.
 * **One-shots:** each event counts down a random interval. When it is due, it plays with
@@ -131,6 +135,14 @@ the score) and by the title diorama (`"title"`). An unknown theme builds a silen
 | `amb_frontier_loco.ogg` | 64 s | On the engine: the chuffs loud and bright, steam hissing from the valves (2.5-8 kHz), the firebox roar, the side rods clanking twice a second, and the bell (G) rung 10-14 times for a crossing once a loop; the wheels and wind further back. It is 1 dB louder than the base bed. Crossfades in from 50 % to 95 % of the course. |
 | `amb_neon.ogg` | 64 s | Rooftops in a downpour. Rain: a 1.5-9 kHz hiss, 3200 drops a second (clicks 1-7 kHz), the heavier ones pinging on sheet metal (four modes, 0.9-4.8 kHz) and slapping into puddles. Gutters overflowing and a down pipe gurgling (300 low bubbles). The city's traffic hum (60-1100 Hz). 24 hover cars whooshing past (a 180-280 Hz turbine hum dropping in pitch as it passes, under a rush of air, panning across). Three neon signs buzzing (120 Hz harmonics and gas fizz), each flickering in its own way. The club in the basement, muffled through the floors: a 120 bpm kick (under 180 Hz) and an offbeat bass line in E minor (E E C D, a bar each, under 220 Hz). A light breeze between the buildings. |
 | `amb_neon_spire.ogg` | 64 s | The spire: a gale howling round it (a Q 9 whistle, 600 -> 1300 Hz), the rain thinner (900 drops a second), the city far below (to 600 Hz), 14 hover cars, one faint sign, no gutters and no club. Crossfades in from 50 % to 95 % of the course. |
+| `amb_doom.ogg` | 64 s | Inside a doomsday machine tearing itself apart. The machine's drone: C2 and its harmonics (G2, C3 ...) from two units a hair apart so it beats slowly, over a 70-400 Hz rumble, swelling three times a loop. Three gear trains turning in the dark, every tooth a heavy iron clunk on its gear's beat (1.25, 3.1 and 6.5 a second; low modes from 95, 170 and 380 Hz) under a grinding 300-2400 Hz rasp that swells as the teeth meet. Molten metal pouring into the channels below (an 80-900 Hz roar that surges, 60 low glugs and a sizzle). Steam bursts from valves and split pipes every 4-10 s. The frame groaning (a stick-slip through low steel resonances) every 7-14 s. Spark showers crackling. A klaxon far off down the halls four times a loop (Eb4 / C4 blasts, dulled at 1.4 kHz, in a long reverb, never piercing). |
+| `amb_doom_core.ogg` | 64 s | Near the reactor core: a hum on C (C2, G2, C3, Eb3, C4, G4) pulsing 40 times a loop, each pulse swelling and rising 6 % in pitch as it charges, with a 120 Hz electric buzz riding on it; the gears, pour and drone further back, steam and sparks more often. It is 1 dB louder than the base bed. Crossfades in from 50 % to 95 % of the course. |
+| `amb_abyss.ogg` | 64 s | The bottom of a black ocean trench. The pressure of the deep: a slow, heavy 50-240 Hz surge (two swells a loop). A hydrothermal vent off to one side (a roiling 60-500 Hz roar and 120 big, low bubbles). Bubbles drifting up from the seabed every 8-16 s. Whales far off down the trench, slow and majestic rather than eerie (horn-like gliding voices on D, F and A, dulled at 1.1 kHz, every 14-20 s). Metal on the trench wall creaking under the pressure. Everything low-passed at 2.4 kHz and in a 3.5 s reverb, as heard through deep water. |
+| `amb_abyss_wreck.ogg` | 64 s | At the wrecked submarine: its hull groaning deep and long every 5-9 s (a 55-100 Hz voice and a slow steel stick-slip), and its sonar still pinging slowly (A4, 8 times a loop, each echoing twice off the trench walls); the vent on the other side and quieter, the creaks closer, the whales further off. It is 1 dB louder than the base bed. Crossfades in from 50 % to 95 % of the course. |
+| `amb_tempest.ogg` | 64 s | The outside of a skyscraper in a daytime hurricane. A howling wind in great gust swells (a Q 6 howl, 480 -> 1050 Hz). Sheets of rain on glass and steel: a 1.2-9 kHz hiss that comes in sweeping sheets, 3000 drops a second, the heavier ones ticking on the glass (2.4-6.9 kHz modes) and ringing on steel (0.8-3.2 kHz). Cables and guy wires thrumming with the gusts (B2, F#3 and B3: B minor). Torn tarps snapping every 2.5-6 s. Thunder rolling round the storm wall (under 500 Hz) a few times a loop. A tower crane far across the site creaking as it weathervanes. |
+| `amb_tempest_spire.ogg` | 64 s | The spire: a fiercer, higher wind (a Q 9 howl, 620 -> 1400 Hz), the cables louder, thinner rain (1600 drops a second), fewer tarps, and the aircraft-warning beacon's relay ticking every 2 s with a short 120 Hz buzz. It is 1 dB louder than the base bed. Crossfades in from 50 % to 95 % of the course. |
+| `amb_void.ogg` | 64 s | A surreal dream void. Airy, shimmering pads: F#m(add9) turning into Dmaj7 and back once a loop, each note two sines a hair apart, swelling in its own time, with high F#5 / C#6 / F#6 tones flickering on top and breath-like air through narrow resonances on the chord tones. Ten sounds played backwards (a breath of noise on one fixed vowel colour, nothing word-like, or a glassy note), swelling out of nothing and sucked away. Three handless clocks ticking out of step (64, 85 and 48 ticks a loop), each heard in stretches. Glassy chimes on F# minor pentatonic drifting by. The world cracking far away every 9-18 s (a crack and glassy splinters, dulled at 3 kHz). A 3.5 s reverb. |
+| `amb_void_fracture.ogg` | 64 s | The collapse: a held choir-like hum (F#2, F#3, A3, C#4, two voices each on one "oo" vowel, each breathing in its own time so the chord never breaks), the cracking nearer and every 2.5-6 s, the pads, chimes, reversed sounds and clocks further back. It is 1 dB louder than the base bed. Crossfades in from 50 % to 95 % of the course. |
 
 ## One-shots
 
@@ -245,6 +257,34 @@ the score) and by the title diorama (`"title"`). An unknown theme builds a silen
 | `amb_neon_gutter_1..3` | 1 is a gutter overflowing onto a metal awning (a pouring stream and 60-100 drops pinging the tin); 2 a storm drain gurgling (low glugs over a rush); 3 drips on a tin can, slowing. |
 | `amb_neon_horn_1..2` | A hover car's horn down the street (a soft, synthy E4 + G4 chord through a horn resonance), echoing between the towers: 1 a quick double tap; 2 one long blare and a short one. |
 | `amb_neon_thunder_1..2` | Thunder above the city (1.8-3 km; 2 with a restrike). |
+| `amb_doom_gear_1..3` | Huge iron gears (each tooth a heavy clunk through low modes, under a grinding rasp that swells with the load), in a dark 2.6 s hall: 1 a giant gear grinding round slowly; 2 a gear train speeding up, then a tooth jamming with a bang (G2); 3 a gear slipping its teeth (a rasp and a clatter of quick clunks). |
+| `amb_doom_steam_1..3` | Steam (the foundry's model): 1 a split pipe venting long; 2 three quick valve bursts; 3 a vent sputtering. |
+| `amb_doom_klaxon_1..2` | The alarm far down the halls, **softened** (a buzzy horn through a 650 Hz resonance, dulled at 1.4 kHz, slap echoes and a 3 s reverb): 1 four blasts on Eb4 / C4, each scooping up into pitch; 2 two slow whoops rising C4 -> G4. |
+| `amb_doom_groan_1..3` | The machine's frame under strain (a stick-slip through low steel resonances, bending in pitch): 1 a long, low groan; 2 a groan and a rivet popping; 3 two groans, one answering deeper. |
+| `amb_doom_pour_1..2` | Molten metal: 1 a crucible tipping, a thick pour roaring into a channel (80-900 Hz) with low glugs and a sizzle; 2 a ladle of it splashing down and hissing as it quenches. |
+| `amb_doom_spark_1..3` | 1 a shower of sparks raining onto steel; 2 an arc crackling across a broken busbar (a rough 100 Hz buzz) and popping out; 3 sparks bouncing, a few pinging off the iron. |
+| `amb_doom_clang_1..2` | The machine coming apart somewhere far off: 1 a great chunk of iron falling onto a deck (struck metal on C3) and debris rattling after it; 2 a catwalk giving way, three clangs going down (G3, Eb3, C3). |
+| `amb_abyss_whale_1..3` | A great whale far off down the trench, **slow and majestic, not scary** (a gliding horn-like voice through one soft formant, dulled at 1.5 kHz, a 5 s reverb), in D minor: 1 a long call rising D3 -> A3 and settling on F3; 2 a low A2 -> D3 moan answered higher (F3 -> D4); 3 a falling phrase A3, F3, D3. |
+| `amb_abyss_bubbles_1..3` | Bubbles rising from the seabed (Minnaert bubbles, dulled at 2.2 kHz): 1 a burst of big, low ones; 2 a thin stream; 3 a cluster wobbling up. |
+| `amb_abyss_creak_1..3` | Metal creaking under the pressure: 1 a slow creak; 2 two short ones; 3 a creak and a plate re-seating with a dull tick. |
+| `amb_abyss_sonar_1..2` | A sonar in the dark (a pure tone with a faint octave and a long ring): 1 one ping on A5 echoing off the trench walls; 2 two pings on D5, the second answering. |
+| `amb_abyss_vent_1..2` | A hydrothermal vent (under 350 Hz, dulled at 1.2 kHz): 1 a surge of deep rumble and a roar of low bubbles; 2 a big, low belch of gas and the rumble trailing off. |
+| `amb_abyss_groan_1..2` | The wreck's hull: 1 a deep, long groan (a 55-100 Hz voice under a slow steel stick-slip); 2 the same ending in a bulkhead settling with a dull boom. |
+| `amb_abyss_rock_1..2` | Rocks tumbling far down the trench wall, muffled: knocks cascading in a rush of silt (1 a longer fall, 2 a shorter one). |
+| `amb_tempest_gust_1..3` | A gust swelling past the tower (wind noise with a howl that rises with it): 1 a rising howl; 2 a hard double gust; 3 a gust whistling round a girder, B4 -> D5. |
+| `amb_tempest_tarp_1..3` | Torn tarps (the canvas model): 1 one flogging hard; 2 a few loud snaps; 3 one tearing loose, flogging faster, then ripping. |
+| `amb_tempest_cable_1..2` | Cables in a gust: 1 a heavy cable slapping a girder and thrumming (B2 / F#3); 2 a guy wire singing higher (B3 / D4), wavering. |
+| `amb_tempest_thunder_1..2` | Thunder in the storm wall (the physical model, 2-3.5 km away; 2 with a restrike), in a 2.8 s reverb. |
+| `amb_tempest_crane_1..2` | A tower crane far across the site: 1 its slewing ring groaning as the wind swings the jib; 2 a creak and the hook block's chain rattling. |
+| `amb_tempest_rain_1..2` | 1 a sheet of rain sweeping across the glass (drops ticking the pane); 2 a squall lashing a steel panel. |
+| `amb_tempest_debris_1..3` | Debris in the gale: 1 a sheet of tin tumbling along a deck; 2 a scaffold pole falling and bouncing (free-bar modes); 3 grit and bits pattering against the glass. |
+| `amb_void_chime_1..3` | Glassy chimes on F# minor pentatonic (glass bars: a pure note with a few high, shimmering inharmonic partials), in a 3.5 s reverb: 1 a slow rising arpeggio; 2 a cluster tinkling; 3 one low glass bell (F#4) shimmering. |
+| `amb_void_whisper_1..3` | Sound running backwards, **no words**: 1 and 2 an unvoiced murmur (the manor's whisper model) reverberated and reversed, so it swells out of the dark and is sucked away; 3 a glass note reversed. |
+| `amb_void_clock_1..2` | A clock without hands somewhere in the void: 1 a heavy tick-tock, six beats; 2 a clock ticking, slowing and stopping, the last tick sinking. |
+| `amb_void_crack_1..3` | The world fracturing far away, in a 4 s reverb: 1 a sharp crack rolling away; 2 a long splitting creak ending in a crack; 3 a shatter, shards tinkling down. |
+| `amb_void_shimmer_1..2` | A pad swelling up and away, shimmering: 1 F# minor (F#3 A3 C#4 G#4); 2 D major 7 (D3 F#3 A3 C#4). |
+| `amb_void_choir_1..2` | A held, wordless choir hum swelling out of the void (voices on one vowel, fixed formants): 1 F#3 A3 C#4 on "oo"; 2 F#2 C#3 F#3 on "ah". |
+| `amb_void_fall_1..2` | Fragments falling away: 1 glass shards tumbling, their pings descending F# minor pentatonic; 2 a slow falling whoosh and a soft glassy impact far below. |
 
 ## Scheduling tables (`Soundscape.THEMES`)
 
@@ -450,6 +490,54 @@ dove every 25-50 s (-22 to -15 dB).
 | thunder | 40-90 | -16 to -10 | 0.05 | 200-400 | 100-300 | |
 | siren | 50-110 | -20 to -14 | 0.03 | 150-300 | -120 to -30 (the streets) | chance 100 % -> 50 % |
 
+**Doom Fortress** (bed `amb_doom`, layer `amb_doom_core` from 0.5 to 0.95)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| steam | 6-14 | -20 to -13 | 0.08 | 6-20 | -4 to 8 | |
+| gear | 9-20 | -18 to -12 | 0.05 | 10-30 | -10 to 10 | |
+| spark | 10-22 | -22 to -14 | 0.1 | 4-14 | -2 to 8 | chance 70 % -> 100 % |
+| groan | 14-30 | -18 to -12 | 0.06 | 15-40 | -10 to 15 | |
+| pour | 25-55 | -18 to -12 | 0.04 | 25-60 | -40 to -15 (the channels below) | |
+| clang | 30-70 | -18 to -12 | 0 (in tune) | 30-80 | -20 to 20 | chance 50 % -> 100 % |
+| klaxon | 40-90 | -22 to -16 | 0 (in tune) | 60-140 | -10 to 20 | |
+
+**The Abyss** (bed `amb_abyss`, layer `amb_abyss_wreck` from 0.5 to 0.95)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| bubbles | 7-16 | -22 to -15 | 0.08 | 3-12 | -4 to 2 | |
+| creak | 10-24 | -20 to -13 | 0.06 | 10-30 | -10 to 10 | |
+| whale | 20-45 | -16 to -10 | 0 (in tune) | 120-250 | -60 to 40 | answer 30 %, chance 100 % -> 60 % |
+| sonar | 20-45 | -22 to -15 | 0 (in tune) | 40-100 | -20 to 20 | chance 50 % -> 100 % |
+| vent | 25-55 | -18 to -12 | 0.05 | 20-50 | -30 to -5 | |
+| groan | 25-55 | -18 to -12 | 0.04 | 30-80 | -20 to 10 | chance 30 % -> 100 % |
+| rock | 35-80 | -20 to -14 | 0.05 | 60-150 | -80 to -20 | |
+
+**Tempest Tower** (bed `amb_tempest`, layer `amb_tempest_spire` from 0.5 to 0.95)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| gust | 6-14 | -18 to -11 | 0.06 | 8-25 | -5 to 10 | travel 30 m |
+| tarp | 8-18 | -20 to -13 | 0.08 | 6-20 | -6 to 6 | chance 100 % -> 50 % |
+| rain | 10-22 | -20 to -13 | 0.06 | 5-15 | -2 to 6 | travel 20 m |
+| cable | 12-28 | -20 to -14 | 0 (in tune) | 8-25 | 0-15 | chance 60 % -> 100 % |
+| debris | 15-35 | -20 to -14 | 0.08 | 8-30 | -15 to 5 | |
+| thunder | 30-70 | -16 to -10 | 0.05 | 200-400 | 50-250 | |
+| crane | 35-80 | -20 to -14 | 0.04 | 60-150 | -20 to 30 | chance 100 % -> 40 % |
+
+**The Void** (bed `amb_void`, layer `amb_void_fracture` from 0.5 to 0.95)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| chime | 8-18 | -20 to -13 | 0 (in tune) | 8-25 | -5 to 10 | |
+| whisper | 10-24 | -22 to -15 | 0.05 | 6-20 | -4 to 8 | travel 12 m |
+| crack | 12-28 | -20 to -13 | 0.08 | 40-120 | -40 to 40 | chance 50 % -> 100 % |
+| clock | 18-40 | -20 to -14 | 0.04 | 15-40 | -10 to 15 | chance 100 % -> 50 % |
+| fall | 20-45 | -20 to -14 | 0 (in tune) | 20-60 | 0-30 | chance 40 % -> 100 % |
+| shimmer | 25-55 | -20 to -14 | 0 (in tune) | 20-50 | 0-20 | |
+| choir | 30-70 | -20 to -14 | 0 (in tune) | 30-80 | -10 to 30 | chance 30 % -> 100 % |
+
 **The Final Ascent** (bed `amb_ascent`, layer `amb_ascent_high` from 0.3 to 0.95)
 
 | Event | every | dB | pitch +- | dist | height | extra |
@@ -466,6 +554,6 @@ soundscape, then builds every theme's soundscape headless and checks three thing
 bed and layer loads as a looping Ogg of 45 s or more and plays on the Ambience bus with
 `PROCESS_MODE_ALWAYS`. Second, every event has clips and plays in 3D on the Ambience bus. Third,
 every layer (reef, xeno, volcano, glacier, desert, manor, armada, candy, carrier, sakura, jungle,
-frontier, neon, ascent) has
+frontier, neon, doom, abyss, tempest, void, ascent) has
 taken over at the end of the course. In the real Coral Depths level, reaching the last checkpoint
 starts easing the deep bed in.

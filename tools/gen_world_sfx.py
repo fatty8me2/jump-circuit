@@ -31,10 +31,10 @@ SR = ga.SR
 TAU = ga.TAU
 PEAK_DB = ga.SFX_PEAK_DB
 OUT = ga.OUT
-SIZE_BUDGET = 30.0e6
+SIZE_BUDGET = 36.0e6
 
 THEMES = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent", "xeno", "volcano", "glacier", "desert",
-          "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon")
+          "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void")
 
 # ---------------------------------------------------------------------------
 # clip table: name -> (seconds, loop).  The verifier checks the files against it.
@@ -835,6 +835,74 @@ def surface_hit(theme, r, k, dur):
             place(x, 0.0, thud(t, 95, 45, 0.1, 0.09), 0.6)
             x += 0.2 * noise(r, n, 800, 7000) * env(t, 0.004, 0.06)   # the puddle thrown up
         x = space(r, x, 0.5, 0.12, 300, 8000)
+    elif theme == "doom":
+        # iron grating bolted over riveted steel beams: a dark, heavy clank of thick bars, the riveted
+        # plate under them booming, scale and grit crunching, and the grating rattling in its frame
+        f1 = r.uniform(230, 290)
+        bars = modes(t, bar_modes(f1, 0.05 + 0.05 * k, (1.0, 0.5, 0.3, 0.15, 0.08)), r, 0.03, hard=3500 + 2000 * k)
+        plate = modes(t, plate_modes(r.uniform(140, 170), 1.8, 0.05 + 0.05 * k, 8, 0.7, r), r, 0.02, hard=2500)
+        body = thud(t, r.uniform(120, 140), 65, 0.04, 0.03 + 0.04 * k, harm=(0.3, 0.1))
+        both(click(r, dur, 1500, 8000, 0.0012) * 0.7 + 0.5 * bars + 0.35 * plate + 0.8 * body)
+        grit = np.zeros(n)
+        grains(r, grit, int(12 + 30 * k), 0.0, 0.03 + 0.06 * k, 1500, 7000, 0.0006, 0.002, 1.0, decay=0.02 + 0.03 * k)
+        x += 0.2 * unit(grit)
+        if r.random() < 0.4 + 0.5 * k:
+            rat = modes(tv(0.08), bar_modes(f1 * r.uniform(0.97, 1.03), 0.02), r, 0.04, hard=3000)
+            place(x, r.uniform(0.025, 0.05), rat + 0.4 * click(r, 0.08, 1500, 7000, 0.001), 0.2 + 0.1 * k)
+        x = band(x, None, 9000)
+        if k:
+            place(x, 0.0, thud(t, 85, 40, 0.12, 0.13, harm=(0.3,)), 0.8)
+        x = space(r, x, 1.0 + 0.4 * k, 0.2 + 0.1 * k, 150, 5000)
+    elif theme == "abyss":
+        # soft silt over a bed of broken shells, deep under water: the foot sinks in with a muffled puff
+        # (silt billowing up), a soft body, shells crunching and cracking beneath; all of it dulled
+        puff = svf(r.standard_normal(n), glide(r.uniform(500, 650), r.uniform(180, 230), t, 0.06 + 0.04 * k), 1.6)
+        puff = unit(puff) * env(t, 0.006, 0.035 + 0.05 * k)
+        body = thud(t, r.uniform(95, 115), 55, 0.05, 0.03 + 0.04 * k, harm=(0.2,))
+        both(0.7 * puff + body)
+        shells = np.zeros(n)
+        grains(r, shells, int(10 + 30 * k), 0.006, 0.05 + 0.1 * k, 1500, 6000, 0.0008, 0.003, 1.0, decay=0.03 + 0.04 * k)
+        for _ in range(int(1 + 2 * k + r.integers(0, 2))):
+            sh = modes(tv(0.04), [(r.uniform(1800, 2600), 1.0, 0.004), (r.uniform(3500, 4800), 0.5, 0.0025)], r, 0.0)
+            place(shells, r.uniform(0.008, 0.04 + 0.05 * k), sh, r.uniform(0.4, 0.9))
+        x += 0.4 * unit(shells)
+        x = band(x, None, 4500, 3)
+        if k:
+            place(x, 0.0, thud(t, 75, 36, 0.12, 0.1), 0.8)
+            x += 0.15 * noise(r, n, 150, 900) * env(t, 0.03, 0.12)   # the silt settling
+    elif theme == "tempest":
+        # a rain-soaked steel girder (an I-beam ringing low, damped by the water on it), the boot slapping
+        # the film of water, droplets thrown off, and the curtain wall's glass beside it ticking
+        f1 = r.uniform(310, 380)
+        beam = modes(t, bar_modes(f1, 0.07 + 0.06 * k, (1.0, 0.55, 0.3, 0.15, 0.08), 0.7), r, 0.02, hard=4000 + 2000 * k)
+        body = thud(t, r.uniform(130, 150), 75, 0.03, 0.025 + 0.03 * k, harm=(0.3,))
+        slap = noise(r, n, 500, 6000) * env(t, 0.001, 0.01 + 0.015 * k)
+        glass = modes(t, plate_modes(r.uniform(700, 820), 1.3, 0.02 + 0.02 * k, 8, 0.4, r), r, 0.01, hard=8000)
+        both(click(r, dur, 2000, 10000, 0.0009) * 0.4 + 0.45 * beam + 0.7 * body + 0.55 * slap + 0.12 * glass)
+        splash = np.zeros(n)
+        grains(r, splash, int(16 + 40 * k), 0.004, 0.05 + 0.12 * k, 1500, 8000, 0.001, 0.004, 1.0, decay=0.03 + 0.05 * k)
+        for _ in range(int(1 + 5 * k)):
+            place(splash, r.uniform(0.01, 0.05 + 0.15 * k), bubble(r.uniform(1200, 3200), 0.03, 0.004, 0.8), r.uniform(0.3, 0.8))
+        x += 0.45 * unit(splash)
+        x = band(x, None, 11000)
+        if k:
+            place(x, 0.0, thud(t, 95, 45, 0.1, 0.1), 0.6)
+            place(x, 0.0, modes(t, bar_modes(f1 * 0.5, 0.15, (1.0, 0.5, 0.25, 0.1, 0.05), 0.7), r, 0.02, hard=3000), 0.2)
+            x += 0.2 * noise(r, n, 800, 7000) * env(t, 0.004, 0.06)   # the water thrown up
+        x = space(r, x, 0.4, 0.1, 300, 8000)
+    elif theme == "void":
+        # polished marble floating over nothing: a dense, hard stone knock, the hollow under the slab (a
+        # ringing cavity tone), a cool glassy shimmer from its veins, in a vast, empty space
+        marble = modes(t, [(r.uniform(520, 600), 1.0, 0.018), (r.uniform(1150, 1300), 0.7, 0.012),
+                           (r.uniform(1900, 2150), 0.45, 0.008), (r.uniform(3000, 3400), 0.25, 0.005)], r, 0.0)
+        hollow = thud(t, r.uniform(210, 250), r.uniform(195, 230), 0.03, 0.06 + 0.05 * k, harm=(0.3, 0.12))
+        glass = modes(t, plate_modes(r.uniform(1100, 1300), 1.2, 0.08 + 0.08 * k, 8, 0.3, r), r, 0.01, hard=10000)
+        both(click(r, dur, 2500, 12000, 0.0008) * 0.8 + 0.6 * marble + 0.5 * hollow + 0.12 * glass
+             + 0.5 * thud(t, 150, 90, 0.03, 0.02))
+        x = band(x, None, 12000)
+        if k:
+            place(x, 0.0, thud(t, 100, 50, 0.1, 0.09), 0.6)
+        x = space(r, x, 1.6 + 0.6 * k, 0.22 + 0.08 * k, 250, 9000, 0.6)
     return x
 
 

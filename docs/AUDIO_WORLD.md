@@ -8,7 +8,7 @@ maths and seeded noise by `tools/gen_world_sfx.py` (which borrows the helpers in
 ## Regenerating
 
 ```
-python tools/gen_world_sfx.py            # generate all 393 clips into audio/, then verify
+python tools/gen_world_sfx.py            # generate all 421 clips into audio/, then verify
 python tools/gen_world_sfx.py --only=manor,carrier   # just those maps' generators (gen_<name>), then verify all
 python tools/gen_world_sfx.py --verify   # only check the files on disk
 ```
@@ -28,7 +28,7 @@ checks that the first and last samples are near zero. For loops it checks the se
 * the curvature (second difference) across the wrap must pass the same test;
 * the 40 ms window across the wrap must be no quieter than the quietest windows in the loop (a faded-out end would fail).
 
-It also checks the total size, which is about 25.5 MB of a 30 MB budget.
+It also checks the total size, which is about 26.1 MB of a 36 MB budget.
 
 ## Formats and levels
 
@@ -129,6 +129,10 @@ model struck harder, with a heavier body, longer tails and more debris.
 | Jungle Temple | `step_jungle_*`, `land_jungle_*` | Mossy temple stone under leaf litter: a dull, dead stone knock (about 360 / 730 / 1220 Hz, 5-10 ms) and a 125-145 -> 70 Hz body, muffled by a damp pad of moss (a soft squelch rising from 300-380 Hz to about 0.9 kHz), with 30 to 100 crackling leaf grains (1.2-8 kHz) and a few twigs (0.4-1.5 kHz). The landing adds a thud and the leaves settling. |
 | Wild West Heist | `step_frontier_*`, `land_frontier_*` | The dry, dusty roof boards of a wooden boxcar: a plank knock (about 300 / 640 / 1120 / 1950 Hz), the hollow car under it booming low (115-135 Hz, ringing 50-110 ms), 20 to 60 dust and grit grains (1.5-7.5 kHz), and often a loose roofwalk board clacking a moment later. The landing adds a thud and a puff of dust. |
 | Neon City | `step_neon_*`, `land_neon_*` | A wet steel rooftop: a sheet-metal panel's dull ring (plate modes from f11 230-270 Hz, damped by the water on it), a 135-155 -> 80 Hz body, the boot slapping the puddle (0.6-6 kHz), 16 to 61 droplets spraying off with a few small bubbles, in a short open reverb. The landing adds a thud and the puddle thrown up. |
+| Doom Fortress | `step_doom_*`, `land_doom_*` | Iron grating bolted over riveted steel beams: a dark, heavy clank of thick bars (free-bar modes from 230-290 Hz), the riveted plate under them booming (plate modes from f11 140-170 Hz), a 120-140 -> 65 Hz body, scale and grit crunching (12 to 42 grains, 1.5-7 kHz), and often the grating rattling in its frame a moment later, in a 1-1.4 s iron hall. The landing adds a heavy 85 -> 40 Hz thud. |
+| The Abyss | `step_abyss_*`, `land_abyss_*` | Soft silt over a bed of broken shells, deep under water: the foot sinks in with a muffled puff (noise through a band falling from 500-650 to about 200 Hz as the silt billows up), a soft 95-115 -> 55 Hz body, 10 to 40 shell-crunch grains (1.5-6 kHz) and one or two brittle shell cracks (1.8-4.8 kHz modes; three or four on a landing), all low-passed at 4.5 kHz. The landing adds a thud and the silt settling. |
+| Tempest Tower | `step_tempest_*`, `land_tempest_*` | A rain-soaked steel girder: an I-beam ringing low (free-bar modes from 310-380 Hz, damped by the water on it), a 130-150 -> 75 Hz body, the boot slapping the film of water (0.5-6 kHz), 16 to 56 droplets thrown off with a few small bubbles, and the curtain wall's glass beside it ticking (plate modes from f11 700-820 Hz), in open air. The landing adds a thud, the beam's lower ring and the water thrown up. |
+| The Void | `step_void_*`, `land_void_*` | Polished marble floating over nothing: a dense, hard stone knock (about 560 / 1220 / 2000 / 3200 Hz, 5-18 ms), the hollow under the slab ringing (a 210-250 Hz cavity tone), a cool glassy shimmer from its veins (plate modes from f11 1100-1300 Hz), in a vast, empty 1.6-2.2 s space. The landing adds a thud. |
 
 ## Player: movement
 

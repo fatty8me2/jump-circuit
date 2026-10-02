@@ -41,7 +41,7 @@ BED_QUALITY = 0.85    # libsndfile Vorbis compression level (0 best .. 1 smalles
 SHOT_QUALITY = 0.55
 SHOT_PEAK_DB = -3.0
 BED_CEIL = 10.0 ** (-4.0 / 20.0)   # soft-knee ceiling for beds (-4 dBFS)
-SIZE_BUDGET = 34.0e6
+SIZE_BUDGET = 42.0e6
 place = ga.place
 
 
@@ -2277,6 +2277,439 @@ def bed_neon():
 @bed("amb_neon_spire", -25.0)
 def bed_neon_spire():
     neon_bed("amb_neon_spire", spire=True)
+
+
+MINOR_PENTA = (0, 3, 5, 7, 10)
+NAT_MINOR = (0, 2, 3, 5, 7, 8, 10)
+
+
+def in_key(base, step, scale=NAT_MINOR):
+    """The step-th note of a scale above MIDI note `base` (Hz)."""
+    octave, degree = divmod(int(step), len(scale))
+    return ga.mtof(base + 12 * octave + scale[degree])
+
+
+def iron_tooth(r, f0, dur=0.4, sr=BSR):
+    """One tooth of a huge iron gear meeting the next: a heavy, dull clunk through low modes."""
+    k = modal([f0 * q * r.uniform(0.98, 1.02) for q in (1.0, 1.52, 2.31, 3.4, 4.9)], [1.0, 0.6, 0.4, 0.25, 0.15],
+              [0.12, 0.08, 0.05, 0.03, 0.02], dur, sr, r=r)
+    return unit(k) + 0.25 * noise_hit(r, dur, 200.0, 2500.0, 0.008, sr)
+
+
+def hiss_burst(r, dur, lo=1500.0, hi=8500.0, sr=BSR):
+    """A burst of steam from a valve or a split pipe: bright hiss with pressure flutter."""
+    m = int(dur * sr)
+    tt = np.arange(m) / sr
+    e = np.minimum(tt / r.uniform(0.02, 0.06), 1.0) * np.exp(-tt / (dur * 0.5)) * rcos_env(m, 0.0, dur * 0.4, sr)
+    fl = 1.0 + 0.25 * smooth(r, m, 20.0, sr)
+    return unit(bp(r.standard_normal(m), lo, min(hi, 0.45 * sr), 2, sr)) * e * fl
+
+
+def metal_groan(r, dur, lo=1.0, rate=(18.0, 30.0), sr=SR):
+    """Steel under strain: a slow stick-slip through low plate resonances, bending in pitch."""
+    g = stick_slip(r, dur, lambda u: rate[0] + rate[1] * np.sin(np.pi * u),
+                   ((r.uniform(110, 160) * lo, 0.05, 1.0), (r.uniform(260, 340) * lo, 0.04, 0.6),
+                    (r.uniform(520, 680) * lo, 0.03, 0.35), (r.uniform(1100, 1400) * lo, 0.015, 0.15)),
+                   bend=r.uniform(0.9, 1.1), sr=sr)
+    return unit(hp(g, 40.0, 2, sr)) * rcos_env(len(g), min(0.3, dur * 0.3), min(0.5, dur * 0.4), sr)
+
+
+def klaxon(r, blasts, blast=0.7, gap=0.18, sr=SR, rise=0.08):
+    """An alarm klaxon far off down the halls: buzzy horn blasts on the given notes (Hz), each
+    scooping up into pitch, through a horn resonance; soft-edged so it never pierces."""
+    m = int(blast * sr)
+    tt = np.arange(m) / sr
+    out = np.zeros(int(len(blasts) * (blast + gap) * sr) + m)
+    for j, f0 in enumerate(blasts):
+        f = f0 * (1.0 - rise * np.exp(-tt / 0.06))
+        ph = TAU * np.cumsum(f) / sr + r.uniform(0, TAU)
+        s = np.zeros(m)
+        for k in range(1, 14):
+            s += (0.2 + resonance(650.0, k * f, 1.8)) / k * np.sin(k * ph) * (k * f < 4000.0)
+        place(out, j * (blast + gap), s * rcos_env(m, 0.04, 0.08, sr), sr)
+    return lp(out, 1400.0, 2, sr)
+
+
+def sonar_ping(r, f, dur=2.4, sr=SR):
+    """A sonar ping: a pure tone with a faint octave, a soft attack and a long ring."""
+    tt = tv(dur, sr)
+    s = (np.sin(TAU * f * tt) + 0.12 * np.sin(TAU * 2.0 * f * tt + r.uniform(0, TAU))) * ga.ad_env(tt, 0.006, 0.45)
+    return s * rcos_env(len(tt), 0.0, 0.5, sr)
+
+
+def abyss_call(r, pts, dur, formant, sr=SR, vib=0.006):
+    """A great whale far off in the trench: a slow, gliding, horn-like voice (harmonics through one
+    soft formant), majestic rather than eerie."""
+    n = int(dur * sr)
+    t = np.arange(n) / sr
+    f = contour(pts, n, sr, 0.08) * (1.0 + vib * np.sin(TAU * r.uniform(3.5, 5.0) * t))
+    ph = TAU * np.cumsum(f) / sr
+    s = np.zeros(n)
+    for k in range(1, 14):
+        s += (0.12 + resonance(formant, k * f, 1.4)) / k ** 0.8 * np.sin(k * ph) * (k * f < 2500.0)
+    return s * rcos_env(n, dur * 0.25, dur * 0.35, sr)
+
+
+def doom_bed(name, core):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    t = np.arange(n) / BSR
+    # the machine's drone: C2 and its harmonics (a power hum, two units a hair apart so it beats
+    # slowly) over dark noise, breathing slowly
+    swell = 0.75 + 0.25 * cbeat(n, 3, r.uniform(0, TAU))
+    for det, pan in ((0.0, -0.3), (0.35, 0.3)):
+        s = sum(a * csine((65.41 + det) * k, n, phase=r.uniform(0, TAU))
+                for k, a in ((1, 0.4), (1.5, 0.35), (2, 1.0), (3, 0.6), (4, 0.4), (5, 0.2), (6, 0.15), (8, 0.06)))
+        mix.add_loop("drone", st(s * swell, pan) * 0.5, rev=0.3)
+    for ch in range(2):
+        rum = cband(pink(r, n, BSR, slope=-0.8), 70.0, 400.0, 2) * swell
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(rum) * 0.5
+        mix.add_loop("drone", chans)
+    # huge gears turning in the dark: three trains, each tooth a heavy clunk on the beat of its gear,
+    # under a grinding rasp that swells as the teeth meet
+    gears = ((1.25, 95.0, -0.6, 1.0), (3.1, 170.0, 0.5, 0.6), (6.5, 380.0, 0.1, 0.35))
+    for rate, f0, pan, g in gears:
+        N = max(1, int(round(rate * T)))
+        for j in range(N):
+            mix.add("gears", j * T / N + r.uniform(-0.01, 0.01), iron_tooth(r, f0), gain=g * r.uniform(0.6, 1.0),
+                    pan=pan + r.uniform(-0.1, 0.1), rev=0.5)
+        rasp = cband(r.standard_normal(n), 300.0, 2400.0, 2) * (0.3 + 0.7 * cbeat(n, N, r.uniform(0, TAU)) ** 3)
+        rasp *= 0.6 + 0.4 * gusts(r, n, 0.1)
+        mix.add_loop("gears", st(rmsn(rasp) * 0.15 * g, pan), rev=0.4)
+    # steam hissing from valves and split pipes
+    for tb in spaced_times(r, T, 3.0, 8.0) if core else spaced_times(r, T, 4.0, 10.0):
+        mix.add("steam", tb, hiss_burst(r, r.uniform(0.6, 2.0)), gain=r.uniform(0.3, 1.0), pan=r.uniform(-0.8, 0.8), rev=0.5)
+    # the frame groaning under the strain
+    for tb in spaced_times(r, T, 7.0, 14.0):
+        mix.add("groans", tb, lp(metal_groan(r, r.uniform(1.5, 3.0), r.uniform(0.6, 0.9), sr=BSR), 2500.0, 2, BSR),
+                gain=r.uniform(0.5, 1.0), pan=r.uniform(-0.7, 0.7), rev=0.8)
+    # a klaxon far off down the halls (Eb4 and C4), every quarter of the loop
+    for q in range(4):
+        notes = [ga.mtof(63), ga.mtof(60)] * int(r.integers(2, 4))
+        mix.add("klaxon", q * T / 4 + r.uniform(0.0, 4.0), klaxon(r, notes, sr=BSR), gain=r.uniform(0.6, 1.0),
+                pan=r.uniform(-0.6, 0.6), rev=1.0)
+    # molten metal pouring into the channels far below: a thick roar that surges, low glugs and a sizzle
+    pour = 0.5 + 0.5 * gusts(r, n, 0.06, bias=-0.2 if core else 0.2)
+    for ch in range(2):
+        g = np.roll(pour, int(ch * 0.4 * BSR))
+        roar = cband(pink(r, n, BSR, slope=-0.6), 80.0, 900.0, 2) * g
+        sizzle = (r.random(n) < 90.0 * g / BSR) * r.lognormal(0.0, 0.6, n) * np.sign(r.standard_normal(n))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(roar) + 0.25 * rmsn(cband(sizzle, 1500.0, 6500.0, 2))
+        mix.add_loop("pour", chans, rev=0.4)
+    for tb in density_times(r, T, 60, pour + 0.1):
+        mix.add("pour", tb, bubble(r, r.uniform(70.0, 180.0), r.uniform(0.03, 0.08), r.uniform(0.3, 0.8)),
+                gain=r.uniform(0.3, 1.0), pan=r.uniform(-0.5, 0.5), rev=0.6)
+    # sparks: crackling showers off grinding metal
+    for tb in r.uniform(0, T, 14 if core else 9):
+        d = r.uniform(0.4, 1.2)
+        for _ in range(int(r.integers(15, 45))):
+            t0 = r.gamma(1.2, d * 0.25)
+            mix.add("sparks", tb + t0, noise_hit(r, 0.02, 2500.0, 9000.0, 0.0008, BSR),
+                    gain=r.uniform(0.2, 1.0) * np.exp(-t0 / d), pan=r.uniform(-0.8, 0.8), rev=0.3)
+    if core:
+        # the reactor core: a hum on C (C2, G2, C3, Eb3) pulsing 40 times a loop, each pulse swelling
+        # and rising in pitch as it charges, with an electric buzz riding on it
+        P = 40
+        pulse = cbeat(n, P, -np.pi / 2) ** 2
+        for det, pan in ((0.0, -0.25), (0.25, 0.25)):
+            s = sum(a * csine((f + det), n, phase=r.uniform(0, TAU))
+                    for f, a in ((65.41, 0.3), (98.0, 0.5), (130.81, 1.0), (155.56, 0.35), (261.63, 0.4), (392.0, 0.15)))
+            mix.add_loop("reactor", st(s * (0.3 + 0.7 * pulse), pan) * 0.5, rev=0.4)
+        m = int(T / P * 1.15 * BSR)
+        tt = np.arange(m) / BSR
+        for j in range(P):
+            f = 130.81 * (1.0 + 0.06 * tt / tt[-1])
+            ph = TAU * np.cumsum(f) / BSR
+            s = sum(a * np.sin(k * ph) for k, a in ((1, 1.0), (2, 0.5), (3, 0.4), (4, 0.2), (6, 0.12), (8, 0.06)))
+            s *= np.sin(np.pi * tt / tt[-1]) ** 3
+            mix.add("reactor", j * T / P, s, gain=0.35, pan=0.0, rev=0.6)
+        buzz = sum(a * csine(120.0 * k, n, phase=r.uniform(0, TAU)) for k, a in ((1, 1.0), (2, 0.4), (3, 0.5), (5, 0.25), (7, 0.15)))
+        mix.add_loop("reactor", st(buzz * pulse * 0.08, 0.0), rev=0.3)
+        levels = {"reactor": 0.0, "drone": -4.0, "gears": -6.0, "steam": -9.0, "groans": -11.0, "sparks": -12.0,
+                  "klaxon": -15.0, "pour": -13.0}
+    else:
+        levels = {"drone": 0.0, "gears": -1.0, "pour": -5.0, "steam": -9.0, "groans": -9.0, "sparks": -15.0,
+                  "klaxon": -15.0}
+    mix.render(BEDS[name][1], levels, t60=3.0, damp=1800.0, wet=0.45, predelay=0.04, hp_hz=40.0, lp_hz=7500.0)
+
+
+@bed("amb_doom", -25.0)
+def bed_doom():
+    doom_bed("amb_doom", core=False)
+
+
+@bed("amb_doom_core", -24.0)
+def bed_doom_core():
+    doom_bed("amb_doom_core", core=True)
+
+
+def abyss_bed(name, wreck):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    # the pressure of the deep: a slow, heavy surge of dark water
+    surge = 0.7 + 0.3 * cbeat(n, 2, r.uniform(0, TAU))
+    for ch in range(2):
+        press = cband(pink(r, n, BSR, slope=-0.7), 50.0, 240.0, 2)
+        mid = cband(r.standard_normal(n), 120.0, 500.0, 2)
+        chans = np.zeros((n, 2))
+        chans[:, ch] = (rmsn(press) * 0.8 + rmsn(mid) * 0.3) * np.roll(surge, int(ch * 0.8 * BSR))
+        mix.add_loop("pressure", chans)
+    # a hydrothermal vent rumbling off to one side: a roiling low roar and a stream of big, low bubbles
+    roil = 0.6 + 0.4 * np.tanh(1.5 * smooth(r, n, 0.8, BSR))
+    vent = cband(pink(r, n, BSR, slope=-0.9), 60.0, 500.0, 2) * roil
+    mix.add_loop("vent", st(rmsn(vent), 0.5 if wreck else -0.45), rev=0.4)
+    for tb in density_times(r, T, 120 if not wreck else 60, roil):
+        rmm = np.exp(r.uniform(np.log(4.0), np.log(12.0)))
+        mix.add("vent", tb, lp(bubble(r, 3260.0 / rmm, 0.006 + 0.004 * rmm, r.uniform(0.2, 0.5)), 1500.0, 2, BSR),
+                gain=r.uniform(0.2, 0.7), pan=(0.5 if wreck else -0.45) + r.uniform(-0.15, 0.15), rev=0.6)
+    # bubbles drifting up from the seabed now and then
+    for ts in spaced_times(r, T, 8.0, 16.0):
+        dur = r.uniform(2.0, 5.0)
+        pan = r.uniform(-0.8, 0.8)
+        tb = 0.0
+        while tb < dur:
+            rmm = np.exp(r.uniform(np.log(1.4), np.log(6.0)))
+            mix.add("bubbles", ts + tb, lp(bubble(r, 3260.0 / rmm, 0.004 + 0.004 * rmm, r.uniform(0.15, 0.5)), 2200.0, 2, BSR),
+                    gain=r.uniform(0.3, 1.0) * np.sin(np.pi * tb / dur) ** 0.5, pan=pan + r.uniform(-0.1, 0.1), rev=0.6)
+            tb += r.exponential(1.0 / 6.0)
+    # whales far off in the trench, singing slowly (D minor: D, F, A)
+    calls = (((0, 146.83), (0.5, 220.0), (1, 174.61)), ((0, 110.0), (0.6, 146.83), (1, 130.81)),
+             ((0, 220.0), (0.4, 174.61), (1, 146.83)), ((0, 87.31), (0.5, 110.0), (1, 146.83)))
+    for j, tb in enumerate(spaced_times(r, T, 14.0, 20.0)):
+        d = r.uniform(3.0, 4.5)
+        s = abyss_call(r, calls[j % len(calls)], d, r.uniform(380.0, 600.0), BSR)
+        mix.add("whales", tb, lp(s, 1100.0, 2, BSR), gain=r.uniform(0.6, 1.0), pan=r.uniform(-0.7, 0.7), rev=1.0)
+    # the trench wall's metal - old cable, a lost anchor - creaking under the pressure
+    for tb in spaced_times(r, T, 8.0, 15.0):
+        g = metal_groan(r, r.uniform(1.0, 2.2), r.uniform(0.8, 1.2), rate=(10.0, 25.0), sr=BSR)
+        mix.add("creaks", tb, lp(g, 1800.0, 2, BSR), gain=r.uniform(0.4, 1.0), pan=r.uniform(-0.8, 0.8), rev=0.9)
+    if wreck:
+        # the wrecked submarine close by: its hull groaning deep and long, and its sonar still
+        # pinging slowly (A4, 8 times a loop), each ping echoing off the trench walls
+        for tb in spaced_times(r, T, 5.0, 9.0):
+            d = r.uniform(2.5, 4.0)
+            m = int(d * BSR)
+            f = contour([(0, r.uniform(55, 70)), (0.5, r.uniform(75, 95)), (1, r.uniform(50, 62))], m, BSR, 0.2)
+            tone_g = tone(f, ((1, 0.5), (2, 1.0), (3, 0.6), (4, 0.3), (5, 0.15)), BSR) * rcos_env(m, d * 0.35, d * 0.5, BSR)
+            g = metal_groan(r, d, r.uniform(0.5, 0.7), rate=(8.0, 18.0), sr=BSR)
+            mix.add("hull", tb, lp(0.6 * unit(tone_g) + g, 900.0, 2, BSR), gain=r.uniform(0.6, 1.0),
+                    pan=r.uniform(-0.3, 0.3), rev=0.8)
+        for j in range(8):
+            p = sonar_ping(r, 440.0, 2.4, BSR)
+            for dly, g, pan in ((0.0, 1.0, 0.0), (0.55, 0.35, -0.5), (1.1, 0.18, 0.5)):
+                mix.add("sonar", j * T / 8 + 1.0 + dly, lp(p, 2000.0, 2, BSR), gain=g, pan=pan, rev=0.8)
+    # everything is dull under this much water
+    for s in mix.stems:
+        for ch in range(2):
+            mix.stems[s][:, ch] = cband(mix.stems[s][:, ch], None, 2400.0 if not wreck else 2000.0, 1)
+    if wreck:
+        levels = {"pressure": 0.0, "hull": -3.0, "vent": -9.0, "sonar": -13.0, "creaks": -10.0, "whales": -14.0,
+                  "bubbles": -16.0}
+    else:
+        levels = {"pressure": 0.0, "vent": -4.0, "whales": -10.0, "creaks": -13.0, "bubbles": -14.0}
+    mix.render(BEDS[name][1], levels, t60=3.5, damp=900.0, wet=0.6, predelay=0.03, hp_hz=40.0, lp_hz=5000.0)
+
+
+@bed("amb_abyss", -26.0)
+def bed_abyss():
+    abyss_bed("amb_abyss", wreck=False)
+
+
+@bed("amb_abyss_wreck", -25.0)
+def bed_abyss_wreck():
+    abyss_bed("amb_abyss_wreck", wreck=True)
+
+
+def storm_rain(mix, stem, r, gust, rate):
+    """Rain driven against a tower: a hiss that comes in sheets, a patter of drops, the heavier
+    ones ticking on the glass of the curtain wall and ringing on steel."""
+    n = mix.n
+    glass = modal([r.uniform(2400, 2800), r.uniform(4100, 4600), r.uniform(6200, 6900)], [1.0, 0.6, 0.35],
+                  [0.012, 0.008, 0.005], 0.05, BSR, r=r)
+    steel = modal([r.uniform(800, 1000), r.uniform(1700, 2000), r.uniform(2800, 3200)], [1.0, 0.6, 0.4],
+                  [0.02, 0.014, 0.01], 0.08, BSR, r=r)
+    sheets = 0.5 + 0.5 * np.tanh(2.0 * smooth(r, n, 0.4, BSR))
+    for ch in range(2):
+        g = 0.4 + 0.6 * np.roll(gust, int(ch * 0.35 * BSR))
+        sh = np.roll(sheets, int(ch * 0.25 * BSR))
+        hiss = cband(r.standard_normal(n), 1200.0, 9000.0, 2) * g * (0.4 + 0.6 * sh)
+        drops = (r.random(n) < rate * g / BSR) * r.lognormal(-0.3, 0.7, n) * np.sign(r.standard_normal(n))
+        gl = (r.random(n) < rate * 0.08 * g / BSR) * r.lognormal(0.0, 0.5, n)
+        stl = (r.random(n) < rate * 0.05 * g / BSR) * r.lognormal(0.0, 0.5, n)
+        chans = np.zeros((n, 2))
+        chans[:, ch] = (rmsn(hiss) * 0.7 + rmsn(cband(drops, 1200.0, 7500.0, 2)) * 0.7 + rmsn(cconv(gl, glass)) * 0.3 +
+                        rmsn(cconv(stl, steel)) * 0.25)
+        mix.add_loop(stem, chans)
+
+
+def tempest_bed(name, spire):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    # the hurricane: a howling wind in great gust swells (fiercer and higher round the spire)
+    gust = gusts(r, n, 0.09, bias=0.5 if spire else 0.0, sharp=1.6) * (0.7 + 0.3 * cbeat(n, 3, r.uniform(0, TAU)))
+    wind_layer(mix, "wind", r, gust, 120.0, 3000.0 if spire else 2200.0, howl=(620.0, 1400.0) if spire else (480.0, 1050.0),
+               howl_q=9.0 if spire else 6.0, howl_gain=0.8 if spire else 0.55, body_gain=1.0, howl_pow=1.5)
+    # sheets of rain on the glass and steel (the wind takes some of it at the spire)
+    storm_rain(mix, "rain", r, gust, 1600.0 if spire else 3000.0)
+    # cables and guy wires thrumming in the gusts (B2, F#3, B3: B minor)
+    for f0, pan in ((123.47, -0.6), (185.0, 0.5), (246.94, -0.1)):
+        g = np.roll(gust, int(r.uniform(0.5, 3.0) * BSR)) ** 2
+        fm = f0 * (1.0 + 0.004 * smooth(r, n, 0.5, BSR))
+        s = sum(a * cosc(fm * k, phase=r.uniform(0, TAU)) for k, a in ((1, 1.0), (2, 0.5), (3, 0.35), (4, 0.2), (5, 0.1)))
+        mix.add_loop("cables", st(s * (0.15 + 0.85 * g), pan), rev=0.5)
+    # torn tarps snapping on the scaffolding
+    for tb in spaced_times(r, T, 4.0, 9.0) if spire else spaced_times(r, T, 2.5, 6.0):
+        mix.add("tarps", tb, flap(r, r.uniform(1.2, 2.8), r.uniform(5.0, 9.0), BSR), gain=r.uniform(0.4, 1.0),
+                pan=r.uniform(-0.8, 0.8), rev=0.3)
+    # distant thunder rolling round the storm wall
+    for tb in spaced_times(r, T, 16.0, 26.0):
+        d = 5.0
+        tt = tv(d, BSR)
+        m = len(tt)
+        roll = bp(r.standard_normal(m), 40.0, 450.0, 2, BSR) * ga.ad_env(tt, r.uniform(0.2, 0.5), r.uniform(1.0, 1.6))
+        roll *= 0.7 + 0.3 * np.abs(smooth(r, m, 3.0, BSR))
+        mix.add("thunder", tb, lp(roll, 500.0, 2, BSR) * rcos_env(m, 0.0, 0.8, BSR), gain=r.uniform(0.6, 1.0),
+                pan=r.uniform(-0.6, 0.6), rev=1.0)
+    # a tower crane far across the site creaking as it weathervanes
+    for tb in spaced_times(r, T, 18.0, 30.0):
+        g = metal_groan(r, r.uniform(1.5, 2.5), r.uniform(0.9, 1.3), rate=(12.0, 20.0), sr=BSR)
+        mix.add("crane", tb, lp(g, 2000.0, 2, BSR), gain=r.uniform(0.6, 1.0), pan=r.uniform(-0.8, 0.8), rev=1.0)
+    if spire:
+        # the aircraft-warning beacon on the spire: its relay ticking every 2 s with a short buzz
+        tick = modal([2800.0, 4300.0, 6100.0], [1.0, 0.6, 0.3], [0.006, 0.004, 0.003], 0.04, BSR, r=r)
+        m = int(0.35 * BSR)
+        hum = tone(np.full(m, 120.0), ((1, 1.0), (2, 0.5), (3, 0.4), (5, 0.2)), BSR) * rcos_env(m, 0.01, 0.15, BSR)
+        for j in range(32):
+            mix.add("beacon", j * 2.0, unit(tick) + 0.3 * noise_hit(r, 0.04, 2000.0, 9000.0, 0.0008, BSR), gain=1.0,
+                    pan=0.3, rev=0.3)
+            mix.add("beacon", j * 2.0 + 0.01, hum, gain=0.25, pan=0.3, rev=0.3)
+        levels = {"wind": 0.0, "rain": -6.0, "cables": -9.0, "tarps": -12.0, "thunder": -10.0, "crane": -18.0,
+                  "beacon": -17.0}
+    else:
+        levels = {"wind": 0.0, "rain": -2.0, "cables": -12.0, "tarps": -9.0, "thunder": -9.0, "crane": -16.0}
+    mix.render(BEDS[name][1], levels, t60=1.4, damp=2500.0, wet=0.3, predelay=0.02, hp_hz=40.0, lp_hz=8500.0)
+
+
+@bed("amb_tempest", -25.0)
+def bed_tempest():
+    tempest_bed("amb_tempest", spire=False)
+
+
+@bed("amb_tempest_spire", -24.0)
+def bed_tempest_spire():
+    tempest_bed("amb_tempest_spire", spire=True)
+
+
+def reversed_swell(r, kind, sr=BSR):
+    """A sound played backwards, swelling out of nothing and sucked away: a breath of noise on one
+    fixed vowel colour (nothing word-like) or a glassy note, reverberated, then reversed."""
+    if kind == 0:
+        d = r.uniform(0.4, 0.9)
+        m = int(d * sr)
+        tt = np.arange(m) / sr
+        f1, f2 = ((700, 1200), (400, 2000), (300, 900), (550, 1700))[int(r.integers(0, 4))]
+        s = unit(bp(r.standard_normal(m), f1 * 0.8, f1 * 1.25, 2, sr)) + 0.7 * unit(bp(r.standard_normal(m), f2 * 0.85, f2 * 1.2, 2, sr))
+        s = unit(s) * ga.ad_env(tt, 0.01, d * 0.3)
+    else:
+        s = glock(r, in_key(66, r.integers(0, 10), MINOR_PENTA), 1.0, 0.5, sr)
+    y = trim(reverb(s, r, 2.5, 3000.0, 0.8, sr), sr=sr)[::-1]
+    return y * rcos_env(len(y), 0.05, 0.04, sr)
+
+
+def void_voices(mix, stem, r, notes, f1, f2, gain):
+    """A held, wordless choir: a voice per note on one vowel (fixed formants), each breathing in its
+    own time so the chord never breaks."""
+    n, T = mix.n, mix.T
+    t = np.arange(n) / BSR
+    for f0 in notes:
+        for det, pan in ((-0.2, -0.4), (0.2, 0.4)):
+            phrases = int(r.integers(4, 7))
+            breath = 0.5 + 0.5 * np.tanh(5.0 * (np.cos(TAU * phrases * t / T + r.uniform(0, TAU)) + 0.6))
+            voice = np.zeros(n)
+            for k in range(1, 14):
+                fk = (f0 + det) * k
+                g = (resonance(f1, fk, 3.0) + 0.5 * resonance(f2, fk, 4.0) + 0.02) / k ** 0.4
+                voice += g * csine(fk, n, phase=r.uniform(0, TAU))
+            vib = 1.0 + 0.05 * csine(r.uniform(4.5, 5.5), n)
+            mix.add_loop(stem, st(cband(rmsn(voice), None, 1800.0, 2) * breath * vib, pan) * gain, rev=0.9)
+
+
+def void_bed(name, fracture):
+    mix = Mix(name, 64.0)
+    r = mix.r
+    n = mix.n
+    T = mix.T
+    # airy, shimmering pads: F#m(add9) turning into Dmaj7 and back, slow-chorused, each note swelling
+    # in its own time, with a high shimmer flickering on top
+    hold = 0.5 + 0.5 * np.tanh(3.0 * np.cos(TAU * np.arange(n) / n))
+    for chord, w in (((92.5, 185.0, 220.0, 277.18, 415.3), hold), ((73.42, 146.83, 185.0, 220.0, 277.18), 1.0 - hold)):
+        for f in chord:
+            sw = 0.5 + 0.5 * cbeat(n, int(r.integers(2, 5)), r.uniform(0, TAU))
+            for det, pan in ((-0.15, -0.5), (0.15, 0.5)):
+                s = sum(a * csine((f + det) * k, n, phase=r.uniform(0, TAU)) for k, a in ((1, 1.0), (2, 0.25), (3, 0.08)))
+                mix.add_loop("pads", st(s * w * sw * 0.12, pan), rev=0.9)
+    for f in (739.99, 1108.73, 1479.98):
+        trem = 0.5 + 0.5 * np.tanh(2.0 * smooth(r, n, 3.0, BSR))
+        mix.add_loop("pads", st(csine(f, n, phase=r.uniform(0, TAU)) * trem * hold * 0.015, r.uniform(-0.7, 0.7)), rev=1.0)
+    for ch in range(2):
+        def gain(t, f):
+            return sum(resonance(fc, f, 10.0) for fc in (370.0, 554.4, 740.0, 1108.7, 1480.0)) + 0.02
+        air = stft_shape(r.standard_normal(n), gain) * (0.5 + 0.5 * gusts(r, n, 0.05))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(air) * 0.25
+        mix.add_loop("pads", chans, rev=0.8)
+    # sounds played backwards, swelling up and sucked away
+    for tb in r.uniform(0, T, 14 if fracture else 10):
+        mix.add("reversed", tb, reversed_swell(r, int(r.integers(0, 2))), gain=r.uniform(0.4, 1.0),
+                pan=r.uniform(-0.9, 0.9), rev=0.6)
+    # handless clocks ticking out of step with each other, each heard in stretches
+    for count, scale, wood, pan in ((64, 0.55, True, -0.6), (85, 0.9, False, 0.5), (48, 0.7, False, 0.0)):
+        on = cbeat(n, int(r.integers(1, 4)), r.uniform(0, TAU)) ** 2
+        off = r.uniform(0, T / count)
+        for j in range(count):
+            tj = off + j * T / count
+            mix.add("clocks", tj, tick_kernel(r, scale * (1.0 if j % 2 else 0.92), 0.12, BSR, wood=wood),
+                    gain=0.1 + 0.9 * at(on, tj), pan=pan, rev=0.7)
+    # glassy chimes on F# minor pentatonic, drifting by
+    for tb in r.uniform(0, T, 12):
+        for j in range(int(r.integers(2, 6))):
+            mix.add("chimes", tb + j * r.uniform(0.15, 0.4), glock(r, in_key(78, r.integers(0, 8), MINOR_PENTA), 2.5, 1.6, BSR),
+                    gain=r.uniform(0.3, 1.0), pan=r.uniform(-0.8, 0.8), rev=0.8)
+    # the world cracking far away as it fractures (nearer and more often in the collapse)
+    for tb in spaced_times(r, T, 2.5, 6.0) if fracture else spaced_times(r, T, 9.0, 18.0):
+        d = 1.2
+        x = zeros(d, BSR)
+        place(x, 0.0, noise_hit(r, 0.12, 400.0, 7000.0, r.uniform(0.004, 0.012), BSR), BSR)
+        for _ in range(int(r.integers(6, 20))):
+            f = r.uniform(2000.0, 6000.0)
+            place(x, r.gamma(1.5, 0.08), modal([f, f * 2.4], [1.0, 0.4], [0.03, 0.015], 0.1, BSR, r=r), BSR, r.uniform(0.05, 0.3))
+        mix.add("cracks", tb, lp(x, 6000.0 if fracture else 3000.0, 2, BSR), gain=r.uniform(0.4, 1.0),
+                pan=r.uniform(-0.9, 0.9), rev=1.0)
+    if fracture:
+        # a held choir-like hum on F# minor (F#3, A3, C#4) over the low F#2
+        void_voices(mix, "choir", r, (92.5, 185.0, 220.0, 277.18), 380.0, 760.0, 0.3)
+        levels = {"choir": 0.0, "pads": -3.0, "cracks": -5.0, "reversed": -12.0, "chimes": -13.0, "clocks": -16.0}
+    else:
+        levels = {"pads": 0.0, "reversed": -8.0, "chimes": -9.0, "clocks": -11.0, "cracks": -13.0}
+    mix.render(BEDS[name][1], levels, t60=3.5, damp=3500.0, wet=0.5, predelay=0.05, hp_hz=40.0, lp_hz=8500.0)
+
+
+@bed("amb_void", -26.0)
+def bed_void():
+    void_bed("amb_void", fracture=False)
+
+
+@bed("amb_void_fracture", -25.0)
+def bed_void_fracture():
+    void_bed("amb_void_fracture", fracture=True)
 
 
 # ==========================================================================
@@ -4944,6 +5377,568 @@ def shot_neon_thunder(r, i):
     # thunder above the city, 1.8-3 km off; the second with a restrike
     x = thunder(r, 7.5, r.uniform(1800.0, 3000.0), r.uniform(500.0, 800.0), restrike=r.uniform(0.2, 0.35) if i == 1 else 0.0)
     return cap(trim(reverb(hp(lp(x, 3000.0), 50.0), r, 2.8, 1000.0, 0.5, predelay=0.05), db_floor=-55.0))
+
+
+# ---- doom ------------------------------------------------------------------
+def gear_grind(r, dur, rate_fn, f0):
+    """A huge gear turning: a tooth meeting the next rate_fn(u) times a second (u = 0..1), each a
+    heavy iron clunk, under a grinding rasp of metal on metal that swells with the load."""
+    n = int(dur * SR)
+    x = np.zeros(n)
+    tt = 0.02
+    while tt < dur - 0.4:
+        place(x, tt, iron_tooth(r, f0, 0.4, SR), SR, r.uniform(0.6, 1.0))
+        tt += r.uniform(0.95, 1.05) / max(rate_fn(tt / dur), 0.5)
+    load = 0.6 + 0.4 * np.abs(smooth(r, n, 1.5))
+    rasp = bp(r.standard_normal(n), 350.0, 2600.0) * load
+    return unit(x) + 0.3 * unit(rasp) * rcos_env(n, 0.3, 0.5)
+
+
+@shots("amb_doom_gear", 3)
+def shot_doom_gear(r, i):
+    # 1 a giant gear grinding round slowly; 2 a gear train speeding up, then a tooth jamming with a
+    # bang; 3 a gear slipping its teeth: a rasp and a clatter of quick clunks
+    if i == 0:
+        x = gear_grind(r, 4.5, lambda u: 1.6, r.uniform(80.0, 95.0))
+    elif i == 1:
+        x = gear_grind(r, 4.0, lambda u: 2.0 + 4.0 * u, r.uniform(130.0, 160.0))
+        x = np.concatenate([x, np.zeros(int(1.6 * SR))])
+        place(x, 3.55, metal_hit(r, ga.mtof(43), 1.5, tau0=0.6), SR, 0.9)
+    else:
+        x = gear_grind(r, 2.0, lambda u: 2.2, r.uniform(110.0, 130.0))
+        for j in range(int(r.integers(4, 7))):
+            place(x, 1.0 + 0.07 * j + r.uniform(0, 0.02), iron_tooth(r, r.uniform(150.0, 200.0), 0.3, SR), SR, 0.6)
+    return cap(trim(far(x, r, 3500.0, 2.6, 0.55, damp=1800.0, predelay=0.04)))
+
+
+@shots("amb_doom_steam", 3)
+def shot_doom_steam(r, i):
+    # 1 a split pipe venting long; 2 three quick valve bursts; 3 a vent sputtering
+    if i == 0:
+        x = steam(r, r.uniform(1.8, 2.4), body=0.7)
+    elif i == 1:
+        x = zeros(2.2)
+        for j in range(3):
+            place(x, 0.02 + j * r.uniform(0.45, 0.6), steam(r, r.uniform(0.3, 0.45), body=0.6), SR, r.uniform(0.7, 1.0))
+    else:
+        s = steam(r, 2.0, body=0.4, bright=0.8)
+        n = len(s)
+        gate = np.convolve((smooth(r, n, 9.0) > -0.2).astype(float), np.ones(400) / 400, mode="same")
+        x = s * (0.15 + 0.85 * gate)
+    return trim(far(x, r, 6500.0, 2.0, 0.4, damp=2200.0))
+
+
+@shots("amb_doom_klaxon", 2)
+def shot_doom_klaxon(r, i):
+    # the alarm far down the halls, softened by distance (dulled at 1.4 kHz, a long reverb, slap
+    # echoes): 1 four blasts on Eb4 / C4; 2 two slow whoops rising C4 -> G4
+    if i == 0:
+        x = klaxon(r, [ga.mtof(63), ga.mtof(60)] * 2)
+    else:
+        x = zeros(3.6)
+        m = int(1.3 * SR)
+        tt = np.arange(m) / SR
+        for j in range(2):
+            f = ga.sweep(ga.mtof(60), ga.mtof(67), tt, 1.0)
+            ph = TAU * np.cumsum(f) / SR
+            s = sum((0.2 + resonance(650.0, k * f, 1.8)) / k * np.sin(k * ph) * (k * f < 4000.0) for k in range(1, 14))
+            place(x, j * 1.65, s * rcos_env(m, 0.06, 0.15), SR)
+        x = lp(x, 1400.0)
+    y = np.concatenate([x, np.zeros(int(1.0 * SR))])
+    for dly, g in ((0.31, 0.3), (0.68, 0.15)):
+        place(y, dly, lp(x, 1000.0), SR, g)
+    return cap(trim(far(hp(y, 150.0), r, 1600.0, 3.0, 0.55, damp=1500.0, predelay=0.05)))
+
+
+@shots("amb_doom_groan", 3)
+def shot_doom_groan(r, i):
+    # the machine's frame under strain: 1 a long, low groan; 2 a groan and a rivet popping; 3 two
+    # groans, one answering the other deeper
+    x = zeros(4.5)
+    if i == 0:
+        place(x, 0.02, metal_groan(r, 3.0, 0.7), SR)
+    elif i == 1:
+        place(x, 0.02, metal_groan(r, 2.0, 0.9), SR)
+        place(x, 2.0, metal_hit(r, r.uniform(900.0, 1300.0), 0.6, tau0=0.25), SR, 0.7)
+    else:
+        place(x, 0.02, metal_groan(r, 1.6, 1.0), SR)
+        place(x, 1.9, metal_groan(r, 2.2, 0.6), SR, 0.8)
+    return cap(trim(far(x, r, 3000.0, 2.8, 0.5, damp=1600.0, predelay=0.04)))
+
+
+@shots("amb_doom_pour", 2)
+def shot_doom_pour(r, i):
+    # molten metal: 1 a crucible tipping, a thick pour roaring into a channel, low glugs and a
+    # sizzle; 2 a ladle of it splashing down and hissing as it quenches
+    if i == 0:
+        dur = 5.0
+        n = int(dur * SR)
+        e = rcos_env(n, 0.8, 1.5) * (0.8 + 0.2 * smooth(r, n, 2.0))
+        x = unit(bp(r.standard_normal(n), 80.0, 900.0)) * e
+        for _ in range(int(r.integers(30, 50))):
+            place(x, r.uniform(0.3, 4.2), bubble(r, r.uniform(60.0, 160.0), r.uniform(0.03, 0.07), 0.6, sr=SR), SR, r.uniform(0.2, 0.6))
+        x += 0.15 * unit(bp((r.random(n) < 150.0 / SR) * r.lognormal(0.0, 0.6, n), 1500.0, 7000.0)) * e
+    else:
+        x = zeros(3.5)
+        place(x, 0.02, noise_hit(r, 0.6, 150.0, 2500.0, 0.12), SR, 1.0)
+        place(x, 0.02, noise_hit(r, 0.5, 60.0, 300.0, 0.1), SR, 0.8)
+        place(x, 0.1, steam(r, 2.8, body=0.2, bright=0.9), SR, 0.6)
+        for _ in range(int(r.integers(30, 60))):
+            t0 = 0.05 + r.gamma(1.3, 0.35)
+            place(x, t0, noise_hit(r, 0.02, 2000.0, 8000.0, 0.001), SR, r.uniform(0.1, 0.4) * np.exp(-t0 / 1.2))
+    return cap(trim(far(x, r, 4500.0, 2.2, 0.45, damp=1800.0)))
+
+
+@shots("amb_doom_spark", 3)
+def shot_doom_spark(r, i):
+    # 1 a shower of sparks raining down onto steel; 2 an arc crackling across a broken busbar and
+    # popping out; 3 sparks bouncing, a few pinging off the iron
+    dur = 2.5
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    x = np.zeros(n)
+    if i == 0:
+        for _ in range(int(r.integers(70, 110))):
+            t0 = 0.02 + r.gamma(1.4, 0.25)
+            place(x, t0, noise_hit(r, 0.02, 2500.0, None, 0.0008), SR, r.uniform(0.2, 1.0) * np.exp(-t0 / 0.9))
+        for _ in range(8):
+            f = r.uniform(3000.0, 6000.0)
+            place(x, r.uniform(0.1, 1.5), modal([f, f * 2.7], [1.0, 0.4], [0.02, 0.01], 0.08, r=r), SR, r.uniform(0.1, 0.3))
+    elif i == 1:
+        d = r.uniform(1.4, 1.9)
+        hum = tone(np.full(n, 100.0) * (1.0 + 0.03 * smooth(r, n, 30.0)), [(k, 1.0 / k ** 0.6) for k in range(1, 30)])
+        gate = (t < d) * (0.5 + 0.5 * np.abs(smooth(r, n, 25.0)))
+        x += 0.5 * unit(bp(hum, 200.0, 6000.0)) * gate * rcos_env(n, 0.02, 0.2)
+        for _ in range(int(r.integers(60, 100))):
+            place(x, r.uniform(0.0, d), noise_hit(r, 0.015, 3000.0, None, 0.0006), SR, r.uniform(0.2, 0.8))
+        place(x, d, noise_hit(r, 0.15, 300.0, None, 0.01), SR, 1.0)
+    else:
+        t0 = 0.02
+        while t0 < 2.0:
+            place(x, t0, noise_hit(r, 0.02, 2500.0, None, 0.0008), SR, r.uniform(0.3, 1.0))
+            if r.random() < 0.3:
+                f = r.uniform(2500.0, 5000.0)
+                place(x, t0, modal([f, f * 2.3, f * 3.9], [1.0, 0.5, 0.2], [0.04, 0.02, 0.01], 0.12, r=r), SR, 0.25)
+            t0 += r.exponential(0.06)
+    return trim(far(x, r, 9000.0, 1.6, 0.35, damp=3000.0))
+
+
+@shots("amb_doom_clang", 2)
+def shot_doom_clang(r, i):
+    # the machine coming apart somewhere: 1 a great chunk of iron falling onto a deck (C3) and debris
+    # rattling after it; 2 a catwalk giving way, three clangs going down (G3, Eb3, C3)
+    x = zeros(5.0)
+    if i == 0:
+        place(x, 0.02, metal_hit(r, ga.mtof(48), 3.0, tau0=1.4), SR)
+        place(x, 0.02, noise_hit(r, 0.4, 60.0, 400.0, 0.08), SR, 0.8)
+        for _ in range(int(r.integers(10, 20))):
+            t0 = 0.1 + r.gamma(1.3, 0.25)
+            place(x, t0, metal_hit(r, r.uniform(600.0, 1500.0), 0.3, tau0=0.12), SR, r.uniform(0.1, 0.35))
+    else:
+        for j, m in enumerate((55, 51, 48)):
+            t0 = 0.02 + 0.55 * j + r.uniform(0, 0.08)
+            place(x, t0, metal_hit(r, ga.mtof(m), 2.4, tau0=1.0), SR, 1.0 - 0.15 * j)
+            place(x, t0, noise_hit(r, 0.3, 80.0, 600.0, 0.05), SR, 0.5)
+    return cap(trim(far(x, r, 3200.0, 3.2, 0.55, damp=1500.0, predelay=0.05)))
+
+
+# ---- abyss -----------------------------------------------------------------
+@shots("amb_abyss_whale", 3)
+def shot_abyss_whale(r, i):
+    # a great whale far off down the trench, slow and majestic, in D minor: 1 a long call rising D3 ->
+    # A3 and settling on F3; 2 a low A2 -> D3 moan answered higher (F3 -> D4); 3 a falling phrase A3,
+    # F3, D3
+    x = zeros(7.0)
+    if i == 0:
+        place(x, 0.05, abyss_call(r, [(0, 146.83), (0.45, 220.0), (0.8, 174.61), (1, 174.61)], 4.5, 450.0), SR)
+    elif i == 1:
+        place(x, 0.05, abyss_call(r, [(0, 110.0), (0.6, 146.83), (1, 146.83)], 3.0, 380.0), SR)
+        place(x, 3.2, abyss_call(r, [(0, 174.61), (0.7, 293.66), (1, 293.66)], 2.6, 600.0), SR, 0.6)
+    else:
+        place(x, 0.05, abyss_call(r, [(0, 220.0), (0.3, 220.0), (0.45, 174.61), (0.7, 174.61), (0.85, 146.83), (1, 146.83)],
+                                  5.0, 500.0), SR)
+    return cap(trim(far(x, r, 1500.0, 5.0, 0.7, damp=900.0, hp_hz=60.0, predelay=0.08), db_floor=-55.0))
+
+
+@shots("amb_abyss_bubbles", 3)
+def shot_abyss_bubbles(r, i):
+    # bubbles rising from the seabed: 1 a burst of big, low ones; 2 a thin stream; 3 a cluster that
+    # wobbles up past the lamp
+    x = zeros(3.0)
+    count, lo, hi = ((14, 4.0, 12.0), (40, 1.4, 4.0), (25, 2.0, 8.0))[i]
+    for _ in range(count):
+        t0 = min(r.gamma(1.5, 0.25) if i != 1 else r.uniform(0.0, 2.4), 2.5)
+        rmm = np.exp(r.uniform(np.log(lo), np.log(hi)))
+        place(x, t0, bubble(r, 3260.0 / rmm, 0.004 + 0.004 * rmm, r.uniform(0.15, 0.5), SR), SR, rmm ** 0.5 * r.uniform(0.4, 1.0))
+    return trim(far(x, r, 2200.0, 1.6, 0.45, damp=1200.0))
+
+
+@shots("amb_abyss_creak", 3)
+def shot_abyss_creak(r, i):
+    # metal creaking under the pressure: 1 a slow creak; 2 two short ones; 3 a creak and a plate
+    # re-seating with a dull tick
+    x = zeros(3.5)
+    if i == 0:
+        place(x, 0.02, metal_groan(r, 2.2, 1.1, rate=(10.0, 22.0)), SR)
+    elif i == 1:
+        place(x, 0.02, metal_groan(r, 0.9, 1.3, rate=(15.0, 25.0)), SR)
+        place(x, 1.3, metal_groan(r, 1.1, 1.2, rate=(12.0, 20.0)), SR, 0.8)
+    else:
+        place(x, 0.02, metal_groan(r, 1.6, 0.9, rate=(10.0, 20.0)), SR)
+        place(x, 1.7, metal_hit(r, r.uniform(500.0, 700.0), 0.8, tau0=0.3), SR, 0.5)
+    return cap(trim(far(x, r, 1800.0, 2.5, 0.55, damp=1000.0)))
+
+
+@shots("amb_abyss_sonar", 2)
+def shot_abyss_sonar(r, i):
+    # a sonar somewhere in the dark: 1 one ping on A5 and its echoes off the trench walls; 2 two pings
+    # on D5, the second answering the first
+    x = zeros(5.0)
+    if i == 0:
+        p = sonar_ping(r, 880.0, 2.8)
+        place(x, 0.02, p, SR)
+        for dly, g in ((0.7, 0.35), (1.5, 0.18), (2.4, 0.08)):
+            place(x, dly, lp(p, 1500.0), SR, g)
+    else:
+        p = sonar_ping(r, 587.33, 2.6)
+        place(x, 0.02, p, SR)
+        place(x, 1.4, p, SR, 0.7)
+        place(x, 2.2, lp(p, 1200.0), SR, 0.2)
+    return cap(trim(reverb(lp(x, 3000.0), r, 3.5, 1200.0, 0.55, predelay=0.06)))
+
+
+@shots("amb_abyss_vent", 2)
+def shot_abyss_vent(r, i):
+    # a hydrothermal vent: 1 a surge of deep rumble and a roar of low bubbles; 2 a big low belch of gas
+    # and the rumble trailing off
+    dur = 5.0
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    if i == 0:
+        e = rcos_env(n, 1.0, 2.0)
+        x = unit(bp(r.standard_normal(n), 30.0, 350.0)) * e * (0.7 + 0.3 * np.abs(smooth(r, n, 2.0)))
+        for _ in range(int(r.integers(50, 80))):
+            rmm = np.exp(r.uniform(np.log(3.0), np.log(12.0)))
+            place(x, r.uniform(0.3, 4.0), bubble(r, 3260.0 / rmm, 0.006 + 0.004 * rmm, 0.4, SR), SR, r.uniform(0.1, 0.4))
+    else:
+        x = unit(bp(r.standard_normal(n), 30.0, 300.0)) * ga.ad_env(t, 0.15, 1.4) * rcos_env(n, 0.0, 1.0)
+        place(x, 0.05, bubble(r, 55.0, 0.18, 0.8, SR), SR, 1.2)
+        place(x, 0.12, bubble(r, 75.0, 0.12, 0.8, SR), SR, 0.8)
+    return cap(trim(far(x, r, 1200.0, 3.0, 0.5, damp=800.0)))
+
+
+@shots("amb_abyss_groan", 2)
+def shot_abyss_groan(r, i):
+    # the wreck's hull: 1 a deep, long groan; 2 a groan and a bulkhead settling with a dull boom
+    x = zeros(6.0)
+    d = r.uniform(3.2, 4.2)
+    m = int(d * SR)
+    f = contour([(0, r.uniform(55, 70)), (0.5, r.uniform(80, 100)), (1, r.uniform(50, 62))], m, SR, 0.2)
+    tn = tone(f, ((1, 0.5), (2, 1.0), (3, 0.6), (4, 0.3), (5, 0.15))) * rcos_env(m, d * 0.35, d * 0.5)
+    place(x, 0.02, 0.6 * unit(tn) + metal_groan(r, d, 0.55, rate=(8.0, 16.0)), SR)
+    if i == 1:
+        tt = tv(1.5)
+        boom = tone(ga.sweep(80.0, 45.0, tt, 0.3), ((1, 1.0), (2, 0.5))) * ga.ad_env(tt, 0.005, 0.35)
+        place(x, d - 0.4, unit(boom) + 0.5 * metal_hit(r, r.uniform(150.0, 200.0), 1.5, tau0=0.6), SR, 0.9)
+    return cap(trim(far(x, r, 1000.0, 4.0, 0.6, damp=700.0, predelay=0.05)))
+
+
+@shots("amb_abyss_rock", 2)
+def shot_abyss_rock(r, i):
+    # rocks tumbling far down the trench wall, muffled: knocks cascading in a rush of silt
+    dur = 4.0
+    n = int(dur * SR)
+    x = np.zeros(n)
+    t0 = 0.02
+    count = int(r.integers(10, 16)) if i == 0 else int(r.integers(5, 9))
+    for j in range(count):
+        f = r.uniform(180.0, 500.0)
+        place(x, t0, modal([f, f * 2.2, f * 3.7], [1.0, 0.5, 0.25], [0.03, 0.015, 0.008], 0.2, r=r) +
+              0.3 * noise_hit(r, 0.2, 100.0, 1500.0, 0.01), SR, r.uniform(0.4, 1.0) * (1.0 - 0.5 * j / count))
+        t0 += r.uniform(0.12, 0.35)
+    m = int(min(t0 + 0.8, dur) * SR)
+    rush = np.zeros(n)
+    rush[:m] = bp(r.standard_normal(m), 100.0, 800.0) * rcos_env(m, 0.3, 0.8)
+    x = unit(x) + 0.3 * unit(rush)
+    return cap(trim(far(x, r, 1200.0, 3.0, 0.55, damp=800.0)))
+
+
+# ---- tempest ---------------------------------------------------------------
+@shots("amb_tempest_gust", 3)
+def shot_tempest_gust(r, i):
+    # a gust swelling past the tower: 1 a rising howl; 2 a hard double gust; 3 a gust whistling round a
+    # girder (B4 -> D5)
+    dur = 4.5
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    if i == 1:
+        sw = np.exp(-((t - 1.2) / 0.5) ** 2) + 0.8 * np.exp(-((t - 2.8) / 0.6) ** 2)
+    else:
+        sw = np.sin(np.pi * t / dur) ** 2
+    body = unit(bp(r.standard_normal(n), 150.0, 3000.0)) * sw
+    fc = 400.0 + 700.0 * sw
+    howl = unit(ga.svf_bandpass(r.standard_normal(n), fc, 6.0, SR)) * sw ** 1.5
+    x = body + 0.6 * howl
+    if i == 2:
+        f = ga.mtof(71) * (ga.mtof(74) / ga.mtof(71)) ** np.clip((t - 1.2) / 1.5, 0.0, 1.0)
+        f *= 1.0 + 0.006 * smooth(r, n, 4.0)
+        x += 0.35 * np.sin(TAU * np.cumsum(f) / SR) * np.sin(np.pi * t / dur) ** 4
+    return trim(reverb(x * rcos_env(n, 0.3, 0.6), r, 1.0, 2500.0, 0.2))
+
+
+@shots("amb_tempest_tarp", 3)
+def shot_tempest_tarp(r, i):
+    # torn tarps: 1 one flogging hard; 2 a few loud snaps; 3 one tearing loose, flogging faster then
+    # ripping
+    x = zeros(3.5)
+    if i == 0:
+        place(x, 0.02, flap(r, 2.8, r.uniform(6.0, 9.0)), SR)
+    elif i == 1:
+        for j in range(int(r.integers(3, 5))):
+            snap = noise_hit(r, 0.12, 600.0, 7000.0, 0.008) + 0.6 * noise_hit(r, 0.12, 120.0, 900.0, 0.02)
+            place(x, 0.02 + j * r.uniform(0.35, 0.7), snap, SR, r.uniform(0.6, 1.0))
+    else:
+        f = flap(r, 2.2, 6.0)
+        n = len(f)
+        speed = flap(r, 2.2, 11.0)
+        mixw = np.linspace(0.0, 1.0, n)
+        place(x, 0.02, f * (1.0 - mixw) + speed * mixw, SR)
+        m = int(0.6 * SR)
+        rip = bp(r.standard_normal(m), 900.0, 6000.0) * (0.5 + 0.5 * (r.random(m) < 0.3)) * rcos_env(m, 0.01, 0.3)
+        place(x, 2.2, unit(rip), SR, 0.8)
+    return trim(reverb(x, r, 0.9, 3000.0, 0.15))
+
+
+@shots("amb_tempest_cable", 2)
+def shot_tempest_cable(r, i):
+    # cables in a gust: 1 a heavy cable slapping a girder and thrumming (B2 / F#3); 2 a guy wire singing
+    # higher (B3, D4), wavering
+    dur = 4.0
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    x = np.zeros(n)
+    notes = (123.47, 185.0) if i == 0 else (246.94, 293.66)
+    sw = np.sin(np.pi * t / dur) ** 2 if i == 1 else ga.ad_env(t, 0.02, 1.4)
+    for f0 in notes:
+        f = f0 * (1.0 + (0.003 if i == 0 else 0.008) * smooth(r, n, 3.0))
+        ph = TAU * np.cumsum(f) / SR + r.uniform(0, TAU)
+        x += sum(a * np.sin(k * ph) for k, a in ((1, 1.0), (2, 0.5), (3, 0.35), (4, 0.2), (5, 0.12), (7, 0.05))) * sw
+    if i == 0:
+        place(x, 0.0, metal_hit(r, r.uniform(350.0, 450.0), 0.6, tau0=0.2), SR, 3.0)
+        place(x, 0.0, noise_hit(r, 0.2, 80.0, 600.0, 0.03), SR, 2.0)
+    x += 0.3 * unit(bp(r.standard_normal(n), 300.0, 2500.0)) * sw
+    return trim(reverb(x * rcos_env(n, 0.005, 0.5), r, 1.2, 2500.0, 0.25))
+
+
+@shots("amb_tempest_thunder", 2)
+def shot_tempest_thunder(r, i):
+    # thunder in the storm wall, 2-3.5 km off; the second with a restrike
+    x = thunder(r, 7.5, r.uniform(2000.0, 3500.0), r.uniform(400.0, 900.0), restrike=r.uniform(0.25, 0.4) if i == 1 else 0.0)
+    return cap(trim(reverb(hp(lp(x, 2600.0), 50.0), r, 2.8, 1000.0, 0.5, predelay=0.05), db_floor=-55.0))
+
+
+@shots("amb_tempest_crane", 2)
+def shot_tempest_crane(r, i):
+    # a tower crane far across the site: 1 its slewing ring groaning as the wind swings the jib; 2 a
+    # creak and the hook block's chain rattling
+    x = zeros(4.0)
+    place(x, 0.02, metal_groan(r, r.uniform(2.0, 2.6), r.uniform(1.0, 1.3), rate=(12.0, 22.0)), SR)
+    if i == 1:
+        place(x, 1.8, chain(r, 1.4, heavy=True, rate=30.0), SR, 0.6)
+    return cap(trim(far(x, r, 2500.0, 2.4, 0.5, damp=1800.0, predelay=0.04)))
+
+
+@shots("amb_tempest_rain", 2)
+def shot_tempest_rain(r, i):
+    # 1 a sheet of rain sweeping across the glass; 2 a squall lashing a steel panel
+    dur = 3.5
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    sw = np.sin(np.pi * t / dur) ** 2
+    x = unit(bp(r.standard_normal(n), 1200.0, 9000.0)) * sw
+    drops = (r.random(n) < 2500.0 * sw / SR) * r.lognormal(-0.3, 0.7, n) * np.sign(r.standard_normal(n))
+    x += 0.8 * unit(bp(drops, 1500.0, 8000.0))
+    if i == 0:
+        k = modal([r.uniform(2400, 2800), r.uniform(4100, 4600), r.uniform(6200, 6900)], [1.0, 0.6, 0.35], [0.012, 0.008, 0.005], 0.05, r=r)
+    else:
+        k = modal([r.uniform(800, 1000), r.uniform(1700, 2000), r.uniform(2800, 3200)], [1.0, 0.6, 0.4], [0.02, 0.014, 0.01], 0.08, r=r)
+    hits = (r.random(n) < 250.0 * sw / SR) * r.lognormal(0.0, 0.5, n)
+    x += 0.4 * unit(np.convolve(hits, k)[:n])
+    return trim(reverb(x * rcos_env(n, 0.1, 0.4), r, 0.8, 3500.0, 0.15))
+
+
+@shots("amb_tempest_debris", 3)
+def shot_tempest_debris(r, i):
+    # debris in the gale: 1 a sheet of tin tumbling along a deck; 2 a scaffold pole falling and
+    # bouncing; 3 grit and bits pattering against the glass
+    x = zeros(3.0)
+    if i == 0:
+        t0 = 0.02
+        while t0 < 2.2:
+            place(x, t0, metal_hit(r, r.uniform(300.0, 500.0), 0.4, tau0=0.12), SR, r.uniform(0.4, 1.0))
+            t0 += r.uniform(0.15, 0.4)
+    elif i == 1:
+        f = r.uniform(500.0, 650.0)
+        t0, g = 0.02, 1.0
+        for _ in range(5):
+            place(x, t0, modal([f * q for q in (1.0, 2.756, 5.404, 8.933)], [1.0, 0.6, 0.35, 0.2], [0.5, 0.25, 0.12, 0.06], 1.0, r=r)
+                  + 0.4 * noise_hit(r, 1.0, 800.0, 7000.0, 0.002), SR, g)
+            t0 += 0.35 * g + 0.05
+            g *= 0.6
+    else:
+        for _ in range(int(r.integers(40, 70))):
+            t0 = r.uniform(0.0, 2.0)
+            f = r.uniform(2500.0, 6000.0)
+            place(x, t0, modal([f, f * 1.7], [1.0, 0.5], [0.008, 0.004], 0.03, r=r) + 0.5 * noise_hit(r, 0.03, 2000.0, 9000.0, 0.001),
+                  SR, r.uniform(0.2, 1.0) * np.sin(np.pi * t0 / 2.0))
+    return trim(far(x, r, 7000.0, 1.2, 0.3, damp=3000.0))
+
+
+# ---- void ------------------------------------------------------------------
+def glass_note(r, f, dur, tau=1.5):
+    """A glass bar struck softly: a pure note with a few high, shimmering inharmonic partials."""
+    t = tv(dur)
+    out = np.zeros(len(t))
+    for q, a, ts in ((1.0, 1.0, 1.0), (2.76, 0.3, 0.45), (5.4, 0.12, 0.25), (8.93, 0.05, 0.15)):
+        if f * q < 16000.0:
+            beat = r.uniform(0.3, 1.5)
+            for d in (-beat / 2, beat / 2):
+                out += 0.5 * a * np.sin(TAU * (f * q + d) * t + r.uniform(0, TAU)) * np.exp(-t / (tau * ts))
+    return out * np.minimum(t / 0.001, 1.0) * rcos_env(len(t), 0.0, min(0.3 * dur, 0.5))
+
+
+@shots("amb_void_chime", 3)
+def shot_void_chime(r, i):
+    # glassy chimes on F# minor pentatonic: 1 a slow rising arpeggio; 2 a cluster tinkling; 3 one low
+    # glass bell (F#4) shimmering
+    x = zeros(5.0)
+    if i == 0:
+        s0 = int(r.integers(0, 3))
+        for j in range(5):
+            place(x, 0.02 + 0.32 * j, glass_note(r, in_key(78, s0 + j, MINOR_PENTA), 3.0), SR, 0.8)
+    elif i == 1:
+        for _ in range(int(r.integers(6, 10))):
+            place(x, r.uniform(0.02, 1.5), glass_note(r, in_key(78, r.integers(0, 8), MINOR_PENTA), 2.5, 1.0), SR, r.uniform(0.3, 1.0))
+    else:
+        place(x, 0.02, glass_note(r, ga.mtof(66), 4.5, 2.5), SR)
+        place(x, 0.02, glass_note(r, ga.mtof(78), 3.0, 1.5), SR, 0.3)
+    return cap(trim(reverb(x, r, 3.5, 4000.0, 0.5, predelay=0.04)))
+
+
+@shots("amb_void_whisper", 3)
+def shot_void_whisper(r, i):
+    # sound running backwards (no words): 1 and 2 an unvoiced murmur reverberated and reversed, so it
+    # swells up out of the dark and is sucked away; 3 a glass note reversed
+    if i < 2:
+        w = whisper(r, r.uniform(1.0, 1.6))
+        y = trim(reverb(lp(w, 4500.0), r, 2.8, 2500.0, 0.85, predelay=0.03))[::-1]
+    else:
+        y = trim(reverb(glass_note(r, in_key(66, r.integers(0, 6), MINOR_PENTA), 2.0, 1.0), r, 2.8, 3500.0, 0.7))[::-1]
+    y = y * rcos_env(len(y), 0.05, 0.06)
+    return cap(trim(np.concatenate([y, np.zeros(int(0.1 * SR))])))
+
+
+@shots("amb_void_clock", 2)
+def shot_void_clock(r, i):
+    # a clock without hands somewhere in the void: 1 a heavy tick-tock, six beats; 2 a clock ticking,
+    # slowing and stopping, the last tick sinking in pitch
+    x = zeros(6.0)
+    if i == 0:
+        for j in range(6):
+            place(x, 0.02 + 0.75 * j, tick_kernel(r, 0.5 if j % 2 else 0.45, 0.2, SR, wood=True), SR, 1.0 if j % 2 == 0 else 0.8)
+            place(x, 0.02 + 0.75 * j, tick_kernel(r, 0.6, 0.1, SR), SR, 0.3)
+    else:
+        t0, gap, sc = 0.02, 0.4, 0.8
+        while t0 < 4.5 and gap < 1.2:
+            place(x, t0, tick_kernel(r, sc, 0.15, SR), SR, 0.9)
+            t0 += gap
+            gap *= 1.15
+            sc *= 0.97
+        place(x, t0, tick_kernel(r, sc * 0.6, 0.2, SR, wood=True), SR, 0.7)
+    return cap(trim(reverb(x, r, 3.0, 3500.0, 0.5, predelay=0.04)))
+
+
+@shots("amb_void_crack", 3)
+def shot_void_crack(r, i):
+    # the world fracturing far away: 1 a sharp crack rolling away into the void; 2 a long splitting
+    # creak ending in a crack; 3 a shatter, shards tinkling down
+    x = zeros(4.0)
+    crack = noise_hit(r, 0.3, 400.0, 9000.0, r.uniform(0.006, 0.012)) + 0.6 * noise_hit(r, 0.3, 60.0, 400.0, 0.05)
+    if i == 0:
+        place(x, 0.02, crack, SR)
+        for j in range(int(r.integers(3, 6))):
+            place(x, 0.1 + 0.12 * j + r.uniform(0, 0.05), noise_hit(r, 0.08, 800.0, 7000.0, 0.004), SR, 0.5 * 0.7 ** j)
+    elif i == 1:
+        sp = stick_slip(r, 1.4, lambda u: 30.0 + 120.0 * u ** 2,
+                        ((r.uniform(1800, 2300), 0.01, 1.0), (r.uniform(3500, 4200), 0.006, 0.6), (r.uniform(5800, 6800), 0.004, 0.3)),
+                        bend=1.08)
+        place(x, 0.02, unit(sp) * rcos_env(len(sp), 0.2, 0.05), SR, 0.5)
+        place(x, 1.42, crack, SR)
+    else:
+        place(x, 0.02, crack, SR)
+        for _ in range(int(r.integers(25, 45))):
+            t0 = 0.05 + r.gamma(1.6, 0.25)
+            place(x, t0, glass_note(r, r.uniform(2000.0, 5500.0), 0.3, 0.08), SR, r.uniform(0.05, 0.3))
+    return cap(trim(far(x, r, 6000.0, 4.0, 0.6, damp=3000.0, predelay=0.06), db_floor=-55.0))
+
+
+@shots("amb_void_shimmer", 2)
+def shot_void_shimmer(r, i):
+    # a pad swelling up and away, shimmering: 1 F# minor (F#3 A3 C#4 G#4); 2 D major 7 (D3 F#3 A3 C#4)
+    dur = 7.0
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    chord = (185.0, 220.0, 277.18, 415.3) if i == 0 else (146.83, 185.0, 220.0, 277.18)
+    x = np.zeros(n)
+    for f in chord:
+        for det in (-0.2, 0.2):
+            ph = TAU * (f + det) * t + r.uniform(0, TAU)
+            x += np.sin(ph) + 0.25 * np.sin(2 * ph) + 0.08 * np.sin(3 * ph)
+    for f in (chord[0] * 4, chord[2] * 4):
+        x += 0.25 * np.sin(TAU * f * t) * (0.5 + 0.5 * np.tanh(2.0 * smooth(r, n, 4.0)))
+    x *= np.sin(np.pi * t / dur) ** 2
+    return cap(trim(reverb(x, r, 3.5, 4000.0, 0.5, predelay=0.05)))
+
+
+@shots("amb_void_choir", 2)
+def shot_void_choir(r, i):
+    # a held, wordless choir hum swelling out of the void: 1 F#3 A3 C#4 on "oo"; 2 F#2 C#3 F#3 on "ah"
+    dur = 7.0
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    notes, f1, f2 = (((185.0, 220.0, 277.18), 350.0, 700.0) if i == 0 else ((92.5, 138.59, 185.0), 650.0, 1100.0))
+    x = np.zeros(n)
+    for f0 in notes:
+        for det in (-0.3, 0.3):
+            f = (f0 + det) * (1.0 + 0.004 * np.sin(TAU * r.uniform(4.5, 5.5) * t))
+            ph = TAU * np.cumsum(f) / SR + r.uniform(0, TAU)
+            for k in range(1, 16):
+                if k * f0 < 4000.0:
+                    x += (resonance(f1, k * f0, 3.0) + 0.5 * resonance(f2, k * f0, 4.0) + 0.02) / k ** 0.4 * np.sin(k * ph)
+    x = lp(x, 2500.0) * np.sin(np.pi * t / dur) ** 1.5
+    return cap(trim(reverb(x, r, 3.5, 3000.0, 0.55, predelay=0.05)))
+
+
+@shots("amb_void_fall", 2)
+def shot_void_fall(r, i):
+    # fragments of the world falling away: 1 glass shards tumbling, their pings descending; 2 a slow
+    # falling whoosh and a soft glassy impact far below
+    x = zeros(4.5)
+    if i == 0:
+        t0, s = 0.02, int(r.integers(6, 9))
+        while s >= 0 and t0 < 3.5:
+            place(x, t0, glass_note(r, in_key(78, s, MINOR_PENTA), 1.2, 0.3), SR, r.uniform(0.4, 0.9))
+            t0 += r.uniform(0.15, 0.35)
+            s -= int(r.integers(1, 3))
+    else:
+        m = int(2.5 * SR)
+        tt = np.arange(m) / SR
+        fc = 3000.0 * (400.0 / 3000.0) ** (tt / 2.5)
+        w = unit(ga.svf_bandpass(r.standard_normal(m), fc, 4.0, SR)) * np.sin(np.pi * tt / 2.5) ** 2
+        place(x, 0.02, w, SR, 0.6)
+        place(x, 2.4, glass_note(r, in_key(66, r.integers(0, 3), MINOR_PENTA), 2.0, 0.8), SR, 0.8)
+        place(x, 2.4, noise_hit(r, 0.2, 800.0, 6000.0, 0.005), SR, 0.25)
+    return cap(trim(reverb(x, r, 3.5, 3500.0, 0.55, predelay=0.05)))
 
 
 # ==========================================================================
