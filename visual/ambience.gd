@@ -488,6 +488,35 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"pick": PackedColorArray([Color(1.6, 0.3, 1.0, 0.35), Color(1.6, 0.9, 0.3, 0.35), Color(0.3, 1.4, 1.3, 0.3)]),
 					"speed": Vector2(0.1, 0.4), "spread": 180.0, "curve": "pop"},
 			]
+		"tempest":
+			var scraps := PackedColorArray([Color(0.22, 0.22, 0.24), Color(0.86, 0.86, 0.84), Color(0.95, 0.55, 0.15),
+					Color(0.3, 0.42, 0.62), Color(0.85, 0.75, 0.2)])
+			return [
+				# near: hurricane rain driven almost sideways - grey daylight streaks, never glowing - and
+				# fine spray blowing through
+				{"depth": "near", "amount": 260, "lifetime": 0.5, "facing": "velocity", "tex": Fx.Tex.SPARK, "additive": false,
+					"size": Vector2(0.022, 0.8), "color": Color(0.82, 0.86, 0.92, 0.5),
+					"dir": Vector3(0.75, -0.55, 0.3), "spread": 4.0, "speed": Vector2(20.0, 26.0),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 60, "lifetime": 1.2, "tex": Fx.Tex.SMOKE, "size": 0.9, "additive": false,
+					"color": Color(0.86, 0.9, 0.95, 0.12), "speed": Vector2(6.0, 10.0), "dir": Vector3(0.75, -0.1, 0.3), "spread": 15.0,
+					"angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# mid: scraps of insulation, paper and tarp tumbling past, and sheets of rain sweeping by
+				{"depth": "mid", "amount": 45, "lifetime": 2.6, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.3,
+					"pick": scraps, "speed": Vector2(8.0, 14.0), "dir": Vector3(0.75, 0.05, 0.3), "spread": 25.0,
+					"gravity": Vector3(0, -1.0, 0), "turbulence": 1.2, "angle": Vector2(0, 360), "spin": Vector2(-720, 720),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 30, "lifetime": 3.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 7.0,
+					"color": Color(0.7, 0.74, 0.8, 0.14), "dir": Vector3(0.75, -0.2, 0.3), "spread": 10.0, "speed": Vector2(9.0, 14.0),
+					"angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# far: grey veils of rain marching across the skyline, and torn scud racing low
+				{"depth": "far", "amount": 50, "lifetime": 8.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 22.0,
+					"radius": 85.0, "color": Color(0.5, 0.54, 0.6, 0.3), "speed": Vector2(6.0, 10.0), "dir": Vector3(0.75, -0.3, 0.3),
+					"spread": 10.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 30, "lifetime": 7.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 30.0,
+					"radius": 110.0, "color": Color(0.36, 0.39, 0.44, 0.32), "speed": Vector2(8.0, 14.0), "dir": Vector3(0.8, 0.0, 0.3),
+					"spread": 6.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+			]
 		"sakura":
 			var petals := PackedColorArray([Color(1.0, 0.72, 0.82), Color(1.0, 0.86, 0.9), Color(0.96, 0.56, 0.7),
 					Color(1.0, 0.94, 0.95)])
