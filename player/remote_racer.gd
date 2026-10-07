@@ -15,6 +15,8 @@ var _has_state: bool = false
 var _facing: Vector3 = Vector3.FORWARD
 ## Teleport sequence of the last packet (a change means the racer respawned).
 var _seq: int = -1
+## Move bits of the last packet (MoveFlags).
+var _flags: int = 0
 var racer_name: String = ""
 ## Their title (Cosmetics.TITLES id), shown on the name tag under the name.
 var title_id: String = "rookie"
@@ -130,16 +132,25 @@ func flinch() -> void:
 	_visual.on_bounce(12.0)
 
 
-func push_state(pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
+## `flags` (MoveFlags, 0 = none, also for an older client that sends none) say which move they
+## are in: the wall run, the mantle, a wall kick, a knock. Rising bits drive the same visual hooks
+## the local player's moves do; the jump / land / bounce guesses stand down while one shows.
+func push_state(pos: Vector3, vel: Vector3, grounded: bool, seq: int, flags: int = 0) -> void:
+	flags = MoveFlags.clean(flags)
+	var moving: bool = flags & (MoveFlags.WALL | MoveFlags.MANTLE | MoveFlags.KICK | MoveFlags.KNOCK) != 0
+	var was: int = _flags
 	if not _has_state or seq != _seq or pos.distance_to(global_position) > 12.0:
 		# first packet, a respawn / teleport, or a long packet gap: snap, don't slide
 		if _has_state and seq != _seq:
 			_visual.on_respawn()     # drop the death-pose lean, same arrival glow as ours
+			was = 0
 		global_position = pos
 		var flat := Vector3(vel.x, 0, vel.z)
 		if flat.length() > 0.5:
 			_facing = flat.normalized()
 		_visual.snap_facing(_facing)
+	elif moving or was & (MoveFlags.WALL | MoveFlags.MANTLE) != 0:
+		pass   # the flagged move shows instead (a wall run's jump is not a jump)
 	elif grounded and not _grounded:
 		_visual.on_land(absf(_vel.y))
 	elif not grounded and _grounded and vel.y > 6.0:
@@ -147,12 +158,41 @@ func push_state(pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
 			_visual.on_bounce(vel.length())
 		else:
 			_visual.on_jump()
+	_apply_flags(flags, was, vel)
 	_pos = pos
 	_vel = vel
 	_grounded = grounded
 	_age = 0.0
 	_has_state = true
 	_seq = seq
+
+
+## Acts on the move bits that just rose (`was` = last packet's) and keeps the wall lean going
+## while the wall bit holds.
+func _apply_flags(flags: int, was: int, vel: Vector3) -> void:
+	var rose: int = flags & ~was
+	var side: float = MoveFlags.wall_side(flags)
+	if rose & MoveFlags.WALL != 0:
+		# the wall is on the reported side of their heading, panel normal pointing away from it
+		var right: Vector3 = _facing.cross(Vector3.UP)
+		_visual.on_wall_run(-side * right)
+	_visual.wall_roll = side
+	if rose & MoveFlags.MANTLE != 0:
+		_visual.on_mantle()
+	if rose & MoveFlags.KICK != 0:
+		if _visual.wall_normal == Vector3.ZERO:
+			# the latch packet was lost: the wall is behind the kick (they are thrown off it)
+			var away := Vector3(vel.x, 0.0, vel.z)
+			_visual.wall_normal = away.normalized() if away.length() > 0.1 else -_facing
+		_visual.on_wall_jump()
+	if rose & MoveFlags.KNOCK != 0:
+		_visual.on_knock(vel)
+	_flags = flags
+
+
+## The move bits showing right now (MoveFlags).
+func move_flags() -> int:
+	return _flags
 
 
 ## Last reported heading (the spectator camera starts behind it).
@@ -172,7 +212,7 @@ func _process(dt: float) -> void:
 		var flat := Vector3(_vel.x, 0, _vel.z)
 		if flat.length() > 0.5:
 			_facing = flat.normalized()
-	_visual.animate(dt, _vel, _grounded, _facing)
+	_visual.animate(dt, _vel, _grounded or _flags & MoveFlags.WALL != 0, _facing)
 	BlobShadow.fit(_shadow, get_world_3d().direct_space_state, global_position, 1 | 8)
 
 

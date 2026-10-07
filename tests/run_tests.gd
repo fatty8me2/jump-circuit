@@ -6717,3 +6717,418 @@ func test_zk_gallery() -> void:
 	await seconds(2.6)
 	lvl.player.cmd_move = Vector2.ZERO
 	check(lvl.player.global_position.x < 40.0 and lvl.player.grounded and lvl.deaths == 0, "and you can walk back over the join to the playground (x %.1f)" % lvl.player.global_position.x)
+
+
+# ======================================================================================
+# anim-depth (C6): online move mirroring, idle fidgets and flourishes, landing variety, the
+# checkpoint touch and the respawn materialize.
+# ======================================================================================
+
+## A built, settled visual standing at the origin of the test world.
+func _zn_visual(character: String = "volt") -> PlayerVisual:
+	var v := PlayerVisual.new()
+	v.set_character(character)
+	add_child(v)
+	await ticks(2)
+	for i: int in 20:
+		v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	return v
+
+
+## Flags -> wire -> flags, over the relay event and the direct RPC handler.
+func test_zn_move_flags_wire() -> void:
+	check(MoveFlags.clean(null) == 0 and MoveFlags.clean("7") == 0 and MoveFlags.clean(-3) == 0 and MoveFlags.clean(99) == 0
+		and MoveFlags.clean(NAN) == 0 and MoveFlags.clean([1]) == 0, "junk flags mean no move")
+	check(MoveFlags.clean(MoveFlags.WALL_RIGHT) == 0 and MoveFlags.clean(float(MoveFlags.KICK)) == MoveFlags.KICK, "a wall side without a wall is dropped; floats are fine")
+	check(MoveFlags.clean(MoveFlags.WALL | MoveFlags.WALL_RIGHT) == 3 and MoveFlags.wall_side(3) == 1.0 and MoveFlags.wall_side(1) == -1.0 and MoveFlags.wall_side(MoveFlags.KICK) == 0.0, "wall side")
+	var plain: Dictionary = Net.pose_packet(Vector3(1, 2, 3), Vector3.ZERO, true, 4)
+	var moving: Dictionary = Net.pose_packet(Vector3(1, 2, 3), Vector3.ZERO, false, 4, MoveFlags.WALL | MoveFlags.KICK)
+	check(not plain.has("f") and moving.get("f") == 9, "a plain pose packet carries no flags key; a move adds one small int")
+	var lvl: LevelBase = await _zm_race_level()
+	var g: RemoteRacer = lvl._ghosts.get(2)
+	var got: Array = []
+	var catcher := func(id: int, _pos: Vector3, _vel: Vector3, _grounded: bool, _seq: int) -> void: got.append([id, Net.pose_flags.get(id, -1)])
+	Net.racer_pose.connect(catcher)
+	# the relay path: JSON in, flags out (the key survives the round trip)
+	var wire: Variant = JSON.parse_string(JSON.stringify(moving))
+	Net._handle_relay_event(2, "pose", wire)
+	check(got == [[2, 9]] and Net.pose_flags[2] == 9, "the relay event delivers the move bits (%s)" % [got])
+	check(g.move_flags() == 9, "and the racer shows them")
+	# an older client's packet (no key) means no move, and clears the old bits
+	Net._handle_relay_event(2, "pose", JSON.parse_string(JSON.stringify(plain)))
+	check(Net.pose_flags[2] == 0 and g.move_flags() == 0, "a packet without flags clears them")
+	# garbage never gets through
+	for bad: Variant in ["x", 99, -1, null, [3], {"a": 1}]:
+		var pk: Dictionary = plain.duplicate()
+		pk["f"] = bad
+		Net._handle_relay_event(2, "pose", pk)
+		check(Net.pose_flags[2] == 0, "junk flags %s are ignored" % [bad])
+	# the direct path: the _pose_f RPC handler (the sender id is 0 outside a real RPC)
+	Net.roster[0] = Net.roster[2]
+	Net._pose_f(Vector3.ZERO, Vector3.ZERO, false, 0, MoveFlags.MANTLE)
+	check(Net.pose_flags.get(0) == MoveFlags.MANTLE, "the direct RPC delivers the bits")
+	Net._pose(Vector3.ZERO, Vector3.ZERO, true, 0)
+	check(Net.pose_flags.get(0) == 0, "and the plain RPC means none")
+	Net._pose_f(Vector3.ZERO, Vector3.ZERO, false, 0, 4096)
+	check(Net.pose_flags.get(0) == 0, "junk over the RPC is ignored too")
+	Net.roster.erase(0)
+	Net.pose_flags.erase(0)
+	# sending outside a link is harmless, flags or not
+	Net.send_pose(Vector3.ZERO, Vector3.ZERO, true, MoveFlags.WALL)
+	Net.racer_pose.disconnect(catcher)
+	await _zm_end_race()
+
+
+## The sender's side: what the local player reports.
+func test_zn_player_reports_moves() -> void:
+	await new_world()
+	check(player.net_move_flags() == 0, "standing still shows no move")
+	player._wall_body = player
+	player._wall_normal = Vector3(-1, 0, 0)   # the panel is on the player's right when facing -z
+	check(player.net_move_flags() == (MoveFlags.WALL | MoveFlags.WALL_RIGHT), "wall running on the right")
+	player._wall_normal = Vector3(1, 0, 0)
+	check(player.net_move_flags() == MoveFlags.WALL, "wall running on the left")
+	player._wall_body = null
+	player._mantle_t = 0.2
+	check(player.net_move_flags() == MoveFlags.MANTLE, "mantling")
+	player._mantle_t = -1.0
+	player._wall_jump()
+	check(player.net_move_flags() & MoveFlags.KICK != 0, "a wall kick raises its bit")
+	player._nf_kick_until = 0
+	check(player.net_move_flags() & MoveFlags.KICK == 0, "and drops it after the hold")
+	player.knockback(Vector3(4, 6, 0))
+	check(player.net_move_flags() & MoveFlags.KNOCK != 0, "a knock raises its bit")
+	player._nf_knock_until = 0
+	check(player.net_move_flags() == 0, "and drops it too")
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+## The receiving side: remote racers drive the same visual hooks.
+func test_zn_remote_racer_mirrors_moves() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var e0: int = trap.count()
+	var r := RemoteRacer.new()
+	add_child(r)
+	await ticks(1)
+	r.setup("Ada", Settings.RACER_COLORS[1])
+	var v: PlayerVisual = r.visual()
+	var pos := Vector3(0, 1, 0)
+	var run := Vector3(0, 0, -8)
+	r.push_state(pos, run, true, 0)   # (the four-argument call of an older caller still works)
+	await _frames(3)
+	# the wall run: latch fx, lean away from the wall, the wall-side mitt reaches
+	r.push_state(pos, run, false, 0, MoveFlags.WALL | MoveFlags.WALL_RIGHT)
+	check(v.wall_roll == 1.0 and v.wall_normal != Vector3.ZERO and r.move_flags() == 3, "a wall run on the right shows (roll %.1f)" % v.wall_roll)
+	check(absf(v.wall_normal.dot(r.facing().cross(Vector3.UP))) > 0.9 and v.wall_normal.dot(r.facing().cross(Vector3.UP)) < 0.0, "the panel is on the right of their heading")
+	await _frames(25)
+	check(v._lean.y > 0.25, "they lean away from the wall (%.2f)" % v._lean.y)
+	check(v._air_t == 0.0, "the wall run counts as on the ground for the pose")
+	r.push_state(pos, run, false, 0, MoveFlags.WALL)
+	check(v.wall_roll == -1.0, "the other side too")
+	# the wall kick: a flip and the radial burst, once per rising edge
+	var jump_before: float = v._jump_t
+	r.push_state(pos, Vector3(2, 9, 0), false, 0, MoveFlags.KICK)
+	check(v._flip_t == 0.0 and v._kick_t > 0.3 and v.wall_roll == 0.0, "a wall kick flips")
+	check(v._jump_t == jump_before, "and is not also guessed as a plain jump")
+	v._flip_t = 5.0
+	r.push_state(pos, Vector3(2, 9, 0), false, 0, MoveFlags.KICK)
+	check(v._flip_t == 5.0, "a held bit does not retrigger")
+	r.push_state(pos, Vector3(2, 9, 0), false, 0, 0)
+	r.push_state(pos, Vector3(2, 9, 0), false, 0, MoveFlags.KICK)
+	check(v._flip_t == 0.0, "but the next one does")
+	# the mantle scramble
+	r.push_state(pos, Vector3.ZERO, false, 0, 0)
+	await _frames(3)
+	r.push_state(pos, Vector3(0, 3, 0), false, 0, MoveFlags.MANTLE)
+	check(v._mantle_t == 0.0, "a mantle starts the scramble")
+	await _frames(10)
+	check(v._mantle_t > 0.0 and v._mantle_t < v._mantle_len * 1.2, "it plays out (%.2f)" % v._mantle_t)
+	# the knock flail
+	r.push_state(pos, Vector3.ZERO, true, 0, 0)
+	await _frames(25)
+	r.push_state(pos, Vector3(5, 7, 0), false, 0, MoveFlags.KNOCK)
+	check(v._knock_t == 0.0, "a knock flails")
+	# without the flag the old guesses still work
+	r.push_state(pos, Vector3.ZERO, true, 0, 0)
+	r.push_state(pos, Vector3(0, 8, 0), false, 0, 0)
+	check(v._jump_t == 0.0, "a jump with no flags is still guessed")
+	# a respawn (new seq) drops the bits
+	r.push_state(pos, run, false, 1, MoveFlags.WALL)
+	r.push_state(pos, run, true, 2, 0)
+	check(r.move_flags() == 0 and v.wall_roll == 0.0, "a respawn clears the move")
+	# junk is clamped by MoveFlags.clean
+	r.push_state(pos, run, true, 2, 4096)
+	check(r.move_flags() == 0, "an out-of-range value is no move")
+	await _frames(10)
+	check(trap.count() == e0, "no errors %s" % trap.since(e0))
+	r.queue_free()
+	await ticks(2)
+
+
+## The ghost keeps the move bits too (and an older ghost, which has none, still plays).
+func test_zn_ghost_keeps_moves() -> void:
+	var g := GhostData.new()
+	g.level_id = "gardens"
+	g.rev = GhostData.current_rev("gardens")
+	g.time = 3.0
+	g.add(Vector3(0, 0, 0), 0.0, true, false, false)
+	g.add(Vector3(0, 0, -1), 0.0, false, true, false, MoveFlags.WALL | MoveFlags.WALL_RIGHT)
+	g.add(Vector3(0, 1, -2), 0.0, false, false, false, MoveFlags.MANTLE)
+	g.add(Vector3(0, 2, -3), 0.0, false, false, false, MoveFlags.KICK | MoveFlags.KNOCK)
+	g.add(Vector3(0, 2, -4), 0.0, true, false, true, 99)
+	check(g.moves_at(0) == 0 and g.moves_at(1) == 3 and g.moves_at(2) == MoveFlags.MANTLE and g.moves_at(3) == (MoveFlags.KICK | MoveFlags.KNOCK) and g.moves_at(4) == 0,
+		"each sample keeps its bits (junk dropped)")
+	var back: GhostData = GhostData.decode(g.encode(), "gardens")
+	check(back != null and back.moves_at(1) == 3 and back.moves_at(3) == 24, "they survive the file")
+	check(int(back.sample(1.0 / float(GhostData.HZ))["moves"]) == 3 and bool(back.sample(1.0 / float(GhostData.HZ))["wall"]), "sample() reports them")
+	# a ghost recorded before this update has only the old bits
+	var old := GhostData.new()
+	old.add(Vector3.ZERO, 0.0, true, false, false)
+	old.add(Vector3.ZERO, 0.0, false, true, false)
+	old.add(Vector3.ZERO, 0.0, true, false, true)
+	check(old.moves_at(0) == 0 and old.moves_at(1) == MoveFlags.WALL and old.moves_at(2) == 0, "an older ghost reads as wall-or-nothing (the snap bit is not a move)")
+	# a racer replaying them
+	var r := RemoteRacer.new()
+	add_child(r)
+	await ticks(1)
+	r.make_ghost("PB", Color.WHITE)
+	r.push_state(Vector3.ZERO, Vector3.ZERO, true, 0, 0)
+	r.push_state(Vector3.ZERO, Vector3.ZERO, true, 0, g.moves_at(1))
+	check(r.visual().wall_roll == 1.0, "the ghost wall-runs when it did")
+	r.push_state(Vector3.ZERO, Vector3.ZERO, true, 0, g.moves_at(3))
+	check(r.visual()._knock_t == 0.0 and r.visual()._flip_t < 1.0, "and kicks / flails")
+	r.queue_free()
+	await ticks(2)
+
+
+## Fidgets 4-7 and every character's flourish: finite, above the floor, and each really moves
+## something.
+func test_zn_fidgets_and_flourishes() -> void:
+	await new_world()
+	var chars: Array = Cosmetics.ids("character")
+	check(chars.size() >= 15, "all the characters are covered (%d)" % chars.size())
+	var seen: Dictionary = {}
+	for n: int in 10:
+		seen[Flourish.pick(n, 0.0, 0.0)] = true
+	check(seen.size() == Flourish.COUNT, "the fidget rotation reaches all %d fidgets (%s)" % [Flourish.COUNT, str(seen.keys())])
+	for r2: float in [0.0, 0.3, 0.6, 0.999, 1.0]:
+		check(Flourish.pick(3, 0.9, r2) >= 0 and Flourish.pick(3, 0.9, r2) < Flourish.COUNT, "a random pick stays in range (%.2f)" % r2)
+	var e0: int = trap.count()
+	var f := Flourish.Pose.new()
+	for c: String in chars:
+		check(Flourish.OF_CHARACTER.has(c) and Flourish.LEN.has(Flourish.OF_CHARACTER[c]), "%s has its own flourish" % c)
+		var v: PlayerVisual = await _zn_visual(c)
+		var floor_y: float = v.global_position.y
+		for fid: int in range(Flourish.FIRST_NEW, Flourish.COUNT):
+			var clip: String = Flourish.clip_for(fid, c)
+			var len: float = Flourish.length(fid, c)
+			check(clip != "" and len > 1.0, "%s fidget %d is the clip '%s' (%.1f s)" % [c, fid, clip, len])
+			# the pure pose: finite, and the clip does something
+			var moved: float = 0.0
+			var finite: bool = true
+			var t: float = 0.0
+			while t < len:
+				Flourish.sample(f, clip, t)
+				for p: Vector3 in [f.hr, f.hl, f.fr, f.fl, f.torso_rot]:
+					finite = finite and p.is_finite()
+				finite = finite and is_finite(f.torso_y) and is_finite(f.root_y) and is_finite(f.spin) and is_finite(f.eye) and is_finite(f.ant_scale) and f.ant_kick.is_finite()
+				moved = maxf(moved, maxf((f.hr - Flourish.HAND).length(), (f.hl - Vector3(-Flourish.HAND.x, Flourish.HAND.y, Flourish.HAND.z)).length()))
+				moved = maxf(moved, maxf((f.fr - Flourish.FOOT).length(), (f.fl - Vector3(-Flourish.FOOT.x, Flourish.FOOT.y, Flourish.FOOT.z)).length()))
+				moved = maxf(moved, maxf(f.torso_rot.length(), maxf(absf(f.root_y), maxf(f.sway * 0.3, absf(f.ant_scale - 1.0)))))
+				t += 0.05
+			check(finite, "%s / %s: the sampled pose is finite" % [c, clip])
+			check(moved > 0.05, "%s / %s: it moves something (%.2f)" % [c, clip, moved])
+			# played on the rig: every mesh finite, nothing sinks below the floor
+			v._fidget = fid
+			v._fidget_t = 0.0
+			v._fl_puffs = 0
+			var low: float = INF
+			var ok: bool = true
+			var frames: int = int(len * 60.0) + 12
+			for i: int in frames:
+				v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+				if i % 6 == 0:
+					for mi: MeshInstance3D in _zm_meshes(v._root):
+						var o: Vector3 = mi.global_transform.origin
+						ok = ok and o.is_finite() and mi.global_transform.basis.is_finite()
+					var box: AABB = _zm_aabb(v._root)
+					low = minf(low, box.position.y - floor_y)
+			check(ok, "%s / %s: every mesh transform stays finite" % [c, clip])
+			check(low > -0.05, "%s / %s: nothing sinks below the floor (lowest %.3f)" % [c, clip, low])
+			# the fidget is over (animate ended it) and the body is back at rest
+			check(v._fidget == -1 or v._fidget_t < len, "%s / %s: the fidget ends" % [c, clip])
+			v._fidget = -1
+			for i: int in 30:
+				v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+			check(v._fl_clip == "" and v._sway_boost == 0.0 and absf(v._torso.rotation.x) < 0.001 and absf(v._torso.rotation.z) < 0.001 and v._antenna.scale.is_equal_approx(Vector3.ONE),
+				"%s / %s: everything it touched goes back to rest" % [c, clip])
+		v.queue_free()
+	check(trap.count() == e0, "no errors %s" % trap.since(e0))
+	# the secondary motion really changes: the dino's tail, the pirate's parrot, the wizard's orb, the knight's sword
+	var dino: PlayerVisual = await _zn_visual("dino")
+	var wag: float = 0.0
+	dino._fidget = Flourish.FLOURISH
+	dino._fidget_t = 0.0
+	for i: int in 90:
+		dino.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+		wag = maxf(wag, absf(dino._sways[0].node.rotation.y))
+	check(wag > 0.3, "the dino's tail wags hard in its flourish (%.2f rad)" % wag)
+	dino.queue_free()
+	var pirate: PlayerVisual = await _zn_visual("pirate")
+	var flap: float = 0.0
+	pirate._fidget = Flourish.FLOURISH
+	pirate._fidget_t = 0.0
+	for i: int in 90:
+		pirate.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+		flap = maxf(flap, absf(pirate._sways[0].node.rotation.x - pirate._sways[0].base.x))
+	check(flap > 0.15, "the parrot flaps (%.2f rad)" % flap)
+	pirate.queue_free()
+	var wiz: PlayerVisual = await _zn_visual("wizard")
+	var orb: float = 1.0
+	wiz._fidget = Flourish.FLOURISH
+	wiz._fidget_t = 0.0
+	for i: int in 100:
+		wiz.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+		orb = maxf(orb, wiz._antenna.scale.x)
+	check(orb > 1.5, "the wizard's orb pulses (x%.2f)" % orb)
+	wiz.queue_free()
+	var knight: PlayerVisual = await _zn_visual("knight")
+	var base_meshes: int = _zm_meshes(knight._root).size()
+	knight._fidget = Flourish.FLOURISH
+	knight._fidget_t = 0.0
+	var shown: bool = false
+	for i: int in 100:
+		knight.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+		shown = shown or (knight._fl_prop != null and knight._fl_prop.visible)
+	check(shown, "the knight's sword comes out")
+	for i: int in 120:
+		knight.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(knight._fl_prop != null and not knight._fl_prop.visible, "and goes away")
+	check(_zm_meshes(knight._root).size() <= ZM_MESH_BUDGET - 8 and _zm_meshes(knight._root).size() <= base_meshes + 3, "the sword stays inside the mesh budget (%d -> %d)" % [base_meshes, _zm_meshes(knight._root).size()])
+	knight.set_character("ninja")
+	check(knight._fl_prop == null, "swapping the body drops the sword")
+	knight.queue_free()
+	# moving cancels a fidget quickly and cleanly
+	var ninja: PlayerVisual = await _zn_visual("ninja")
+	ninja._fidget = Flourish.FLOURISH
+	ninja._fidget_t = 0.0
+	for i: int in 60:
+		ninja.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(ninja._fl_w > 0.5, "the ninja is mid-flourish")
+	for i: int in 30:
+		ninja.animate(1.0 / 60.0, Vector3(0, 0, -7), true, Vector3.FORWARD)
+	check(ninja._fidget == -1 and ninja._fl_clip == "" and ninja._fl_w == 0.0, "running off ends it")
+	ninja.queue_free()
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+## Landing variety: a tap after a hop, a deep crouch and a dust ring after a big fall.
+func test_zn_landing_scales_with_fall() -> void:
+	await new_world()
+	check(PlayerVisual.landing_heaviness(4.0) == 0.0 and PlayerVisual.landing_heaviness(14.0) == 0.0 and PlayerVisual.landing_heaviness(22.0) > 0.4 and PlayerVisual.landing_heaviness(40.0) == 1.0,
+		"heaviness is zero up to a full jump and grows with the fall")
+	var results: Array = []
+	for impact: float in [4.0, 12.0, 20.0, 30.0]:
+		var v: PlayerVisual = await _zn_visual("volt")
+		var kids: int = v.get_child_count()
+		v.on_land(impact)
+		var rings: int = v.get_child_count() - kids
+		var low: float = 1.0
+		var squash_low: float = 1.0
+		var crouch_frames: int = 0
+		for i: int in 60:
+			v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+			low = minf(low, v._torso.position.y)
+			squash_low = minf(squash_low, v._squash)
+			if v._torso.position.y < 0.2 - 0.01:
+				crouch_frames += 1
+		results.append({"impact": impact, "dip": 0.2 - low, "squash": -squash_low, "frames": crouch_frames, "rings": rings, "h": v._land_h})
+		v.queue_free()
+	for i: int in range(1, results.size()):
+		var a: Dictionary = results[i - 1]
+		var b: Dictionary = results[i]
+		check(float(b["dip"]) > float(a["dip"]) and float(b["squash"]) >= float(a["squash"]) and int(b["frames"]) >= int(a["frames"]),
+			"a harder landing (%.0f vs %.0f m/s) crouches deeper and longer (dip %.3f vs %.3f, squash %.2f vs %.2f, %d vs %d frames)" % [b["impact"], a["impact"], b["dip"], a["dip"], b["squash"], a["squash"], b["frames"], a["frames"]])
+	check(float(results[3]["squash"]) > float(results[0]["squash"]) + 0.2 and float(results[0]["dip"]) < 0.05 and float(results[3]["dip"]) > 0.12, "a tap barely dips; a big fall drops the body (%.3f / %.3f)" % [results[0]["dip"], results[3]["dip"]])
+	check(int(results[3]["frames"]) > int(results[1]["frames"]) + 6, "and it takes longer to recover (%d vs %d frames)" % [results[3]["frames"], results[1]["frames"]])
+	check(int(results[0]["rings"]) == 0 and int(results[1]["rings"]) == 0 and int(results[2]["rings"]) >= 1 and int(results[3]["rings"]) >= 1, "only a big fall adds the dust ring (%s)" % str(results.map(func(d: Dictionary) -> int: return d["rings"])))
+	check(float(results[0]["h"]) == 0.0 and float(results[3]["h"]) > 0.9, "the heaviness is recorded")
+	# a remote racer lands the same way from the reported fall speed
+	var r := RemoteRacer.new()
+	add_child(r)
+	await ticks(1)
+	r.push_state(Vector3(0, 5, 0), Vector3(0, -26, 0), false, 0)
+	r.push_state(Vector3(0, 0, 0), Vector3(0, -26, 0), true, 0)
+	check(r.visual()._land_h > 0.5, "a remote racer's big fall lands heavy")
+	r.queue_free()
+	# the ring follows the particle slider
+	var amounts: Array = []
+	var old_slider: float = Settings.particles
+	for slider: float in [0.2, 2.0]:
+		Settings.particles = slider
+		var v2: PlayerVisual = await _zn_visual("volt")
+		var before: Array = v2.get_children()
+		v2.on_land(30.0)
+		for ch: Node in v2.get_children():
+			if not before.has(ch) and ch is GPUParticles3D and (ch as GPUParticles3D).one_shot:
+				amounts.append((ch as GPUParticles3D).amount)
+				break
+		v2.queue_free()
+	Settings.particles = old_slider
+	check(amounts.size() == 2 and amounts[1] > amounts[0], "the landing ring scales with the particle setting (%s)" % str(amounts))
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+## The checkpoint touch rotates between a fist pump, a spin and a two-fisted pump; a respawn
+## materializes (a thin beam that fills out, sparkles climbing it).
+func test_zn_checkpoint_flourish_and_respawn() -> void:
+	await new_world()
+	var v: PlayerVisual = await _zn_visual("volt")
+	var seen: Array[int] = []
+	var wide: Array[float] = []
+	for k: int in 3:
+		for i: int in 60:
+			v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+		v.on_checkpoint()
+		seen.append(v._cp_variant)
+		var spun: bool = v._flip_axis.y != 0.0 and v._flip_t < v._flip_len
+		var reach: float = 0.0
+		var finite: bool = true
+		for i: int in 40:
+			v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+			reach = maxf(reach, minf(v._hand_r.position.y, v._hand_l.position.y))
+			finite = finite and v._hand_r.position.is_finite() and v._hand_l.position.is_finite() and v._flip.basis.is_finite()
+		wide.append(reach)
+		check(finite, "checkpoint flourish %d stays finite" % k)
+		check(spun == (k == 1), "only the second touch spins (touch %d: spun %s)" % [k, spun])
+	check(seen == [0, 1, 2], "the touch rotates through its variants (%s)" % str(seen))
+	check(wide[1] > 0.7, "the spin throws both mitts up (%.2f)" % wide[1])
+	for i: int in 60:
+		v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(v._flip.basis.is_equal_approx(Basis.IDENTITY), "the spin lands square")
+	# respawn
+	var kids: int = v.get_child_count()
+	v.on_respawn()
+	check(v._appear_fx == 0, "the sparkle-in is pending")
+	v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(v._rig.scale.x < v._rig.scale.y, "it starts as a thin beam (%s)" % str(v._rig.scale))
+	for i: int in 30:
+		v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(v._appear_fx == v.MATERIALIZE_AT.size(), "all the sparkle bands fired")
+	check(v.get_child_count() >= kids + 3, "as three bursts (%d new)" % (v.get_child_count() - kids))
+	for i: int in 30:
+		v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(v._rig.scale.is_equal_approx(Vector3.ONE), "and settles at full size (%s)" % str(v._rig.scale))
+	v.queue_free()
+	world.queue_free()
+	world = null
+	await ticks(2)

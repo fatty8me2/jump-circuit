@@ -100,6 +100,10 @@ var _pose_last_pos: Vector3 = Vector3.INF
 var _pose_last_vel: Vector3 = Vector3.INF
 var _pose_last_seq: int = -1
 var _pose_last_at: float = -100.0
+var _pose_last_flags: int = 0
+## Latest move bits (MoveFlags) of each remote racer's pose; absent / 0 = none. The level reads
+## it right after racer_pose.
+var pose_flags: Dictionary = {}
 
 
 func _ready() -> void:
@@ -582,8 +586,10 @@ func _handle_relay_event(from_id: int, event: String, raw_data: Variant) -> void
 			var p: Array = data.get("pos", [])
 			var v: Array = data.get("vel", [])
 			if p.size() == 3 and v.size() == 3:
+				# "f" (move bits) is optional: an older client simply never sends it
 				_emit_pose(from_id, Vector3(float(p[0]), float(p[1]), float(p[2])),
-					Vector3(float(v[0]), float(v[1]), float(v[2])), bool(data.get("grounded", false)), int(data.get("seq", 0)))
+					Vector3(float(v[0]), float(v[1]), float(v[2])), bool(data.get("grounded", false)), int(data.get("seq", 0)),
+					MoveFlags.clean(data.get("f", 0)))
 		"checkpoint":
 			_apply_checkpoint(from_id, int(data.get("index", 0)), float(data.get("at", 0.0)))
 		"finished":
@@ -821,31 +827,45 @@ func _return_to_lobby() -> void:
 	lobby_requested.emit()
 
 
-func send_pose(pos: Vector3, vel: Vector3, grounded: bool) -> void:
+func send_pose(pos: Vector3, vel: Vector3, grounded: bool, flags: int = 0) -> void:
 	# every relay message counts against the relay's request budget: 15 poses a second at most,
 	# and a racer standing still only sends a heartbeat (ghosts extrapolate from velocity)
 	var t := _local_time()
 	if t - _pose_last_at < POSE_INTERVAL - 0.002:
 		return
+	flags = MoveFlags.clean(flags)
 	var moving: bool = _pose_last_seq != _pose_seq or pos.distance_to(_pose_last_pos) > 0.03 \
-		or vel.distance_to(_pose_last_vel) > 0.15
+		or vel.distance_to(_pose_last_vel) > 0.15 or flags != _pose_last_flags
 	if not moving and t - _pose_last_at < POSE_IDLE_INTERVAL:
 		return
 	_pose_last_at = t
 	_pose_last_pos = pos
 	_pose_last_vel = vel
 	_pose_last_seq = _pose_seq
+	_pose_last_flags = flags
 	if _relay_mode:
 		if active and roster.size() > 1:
-			_relay_send_event("pose", {
-				"pos": [pos.x, pos.y, pos.z],
-				"vel": [vel.x, vel.y, vel.z],
-				"grounded": grounded,
-				"seq": _pose_seq,
-			})
+			_relay_send_event("pose", pose_packet(pos, vel, grounded, _pose_seq, flags))
 		return
 	if active and multiplayer.get_peers().size() > 0:
-		_pose.rpc(pos, vel, grounded, _pose_seq)
+		if flags == 0:
+			_pose.rpc(pos, vel, grounded, _pose_seq)
+		else:
+			_pose_f.rpc(pos, vel, grounded, _pose_seq, flags)
+
+
+## The relay's "pose" event data. "f" (MoveFlags) rides along only while a move is showing, so a
+## plain pose is as small as it always was and an older client just never sees the key.
+static func pose_packet(pos: Vector3, vel: Vector3, grounded: bool, seq: int, flags: int = 0) -> Dictionary:
+	var msg: Dictionary = {
+		"pos": [pos.x, pos.y, pos.z],
+		"vel": [vel.x, vel.y, vel.z],
+		"grounded": grounded,
+		"seq": seq,
+	}
+	if flags != 0:
+		msg["f"] = flags
+	return msg
 
 
 ## The local racer teleported (respawn, checkpoint skip): poses sent from now on carry a
@@ -859,8 +879,15 @@ func _pose(pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
 	_emit_pose(multiplayer.get_remote_sender_id(), pos, vel, grounded, seq)
 
 
-func _emit_pose(id: int, pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
+## The same pose with the move bits (MoveFlags) riding along; a plain pose uses _pose.
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func _pose_f(pos: Vector3, vel: Vector3, grounded: bool, seq: int, flags: int) -> void:
+	_emit_pose(multiplayer.get_remote_sender_id(), pos, vel, grounded, seq, MoveFlags.clean(flags))
+
+
+func _emit_pose(id: int, pos: Vector3, vel: Vector3, grounded: bool, seq: int, flags: int = 0) -> void:
 	if roster.has(id):
+		pose_flags[id] = flags
 		racer_pose.emit(id, pos, vel, grounded, seq)
 
 
