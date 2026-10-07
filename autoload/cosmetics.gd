@@ -82,6 +82,12 @@ const PAINTS: Dictionary = {
 	"candy": {"name": "Candy Stripe", "rule": {"type": "medal", "level": "candy", "tier": 3}},
 	"ghost": {"name": "Ghost", "rule": {"type": "medal", "level": "manor", "tier": 2}},
 	"neon": {"name": "Neon Glow", "rule": {"type": "medal", "level": "neon", "tier": 2}},
+	"goldleaf": {"name": "Gold Leaf", "rule": {"type": "medal", "level": "olympus", "tier": 3}},
+	"pixel": {"name": "Pixel", "rule": {"type": "medal", "level": "arcade", "tier": 2}},
+	"marble": {"name": "Marble", "rule": {"type": "medal", "level": "arcane", "tier": 2}},
+	"toxic": {"name": "Toxic", "rule": {"type": "medal", "level": "fungal", "tier": 3}},
+	"aurora": {"name": "Aurora", "rule": {"type": "medal", "level": "void", "tier": 3}},
+	"stained": {"name": "Stained Glass", "rule": {"type": "medals", "tier": 2, "n": 12}},
 }
 
 const TRAILS: Dictionary = {
@@ -95,6 +101,12 @@ const TRAILS: Dictionary = {
 	"sprinkles": {"name": "Sprinkles", "rule": {"type": "level", "id": "candy"}},
 	"contrail": {"name": "Jet Contrail", "rule": {"type": "level", "id": "carrier"}},
 	"rainbow": {"name": "Rainbow", "rule": {"type": "all"}},
+	"hearts": {"name": "Hearts", "rule": {"type": "medals", "tier": 2, "n": 8}},
+	"pixels": {"name": "Pixels", "rule": {"type": "level", "id": "arcade"}},
+	"notes": {"name": "Music Notes", "rule": {"type": "level", "id": "carnival"}},
+	"ink": {"name": "Ink Bubbles", "rule": {"type": "medal", "level": "abyss", "tier": 2}},
+	"leaves": {"name": "Leaves", "rule": {"type": "level", "id": "sakura"}},
+	"stars": {"name": "Stars and Moons", "rule": {"type": "runs", "n": 50}},
 }
 
 const FINISHES: Dictionary = {
@@ -104,6 +116,10 @@ const FINISHES: Dictionary = {
 	"lightning": {"name": "Lightning Bolt", "rule": {"type": "level", "id": "armada"}},
 	"ghost": {"name": "Ghost Spin", "rule": {"type": "flawless"}},
 	"jet": {"name": "Jet Flyover", "rule": {"type": "levels", "n": 10}},
+	"balloons": {"name": "Balloon Party", "rule": {"type": "medal", "level": "carnival", "tier": 2}},
+	"disco": {"name": "Disco", "rule": {"type": "level", "id": "neon"}},
+	"meteor": {"name": "Meteor Strike", "rule": {"type": "levels", "n": 20}},
+	"pixelburst": {"name": "Pixel Burst", "rule": {"type": "medal", "level": "arcade", "tier": 3}},
 }
 
 ## Shown beside your name on the roster, the race board and your name tag.
