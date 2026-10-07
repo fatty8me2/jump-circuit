@@ -2610,6 +2610,7 @@ def stingers():
                                   B.add(0.18, me.synth_pluck(r, float(mtof(78)), 0.4, 0.9), 0.4, -0.2, {"hall": 0.3}),
                                   B.add(0.36, me.synth_pluck(r, float(mtof(83)), 0.5, 0.8), 0.35, 0.0, {"hall": 0.4}),
                                   B.add(0.0, me.fm_bell(r, float(mtof(95)), 1.0, 0.4), 0.12, 0.0, {"hall": 0.4})))
+    stingers_new()
     # a new personal best: a rising sparkle (effects bus, over the results music)
     r = me.rng_for("new_best")
     B = me.Buffer(2.4, 120.0)
@@ -2619,6 +2620,769 @@ def stingers():
     for m in (60, 64, 67, 72):
         B.add(0.84, me.strings(r, float(mtof(m)), 1.2, 0.7, voices=3, att=0.05, rel=0.6), 0.1, sends={"hall": 0.4})
     me.render_stinger("new_best", B.mix(_irs(r)), -16.0, quality=0.4)
+
+
+# ==========================================================================
+# THE BIG UPDATE WORLDS (v2.0): toybox, fungal, carnival, olympus, dino, arcane, arcade, siege.
+# Each: base + hi layers, 40 bars (intro 4, A 8, A2/B 8, JUMP theme 8, break 4, A reprise 8).
+# ==========================================================================
+
+# ---- new instruments --------------------------------------------------
+def _toypiano(r, freq, dur, vel=0.8, pan=0.0):
+    """A toy piano: little inharmonic tines, a plinky attack."""
+    n = int(0.9 * me.MSR)
+    x = me.partials_tone(r, freq, n, (1.0, 2.02, 3.9, 6.1, 9.0), (1.0, 0.6, 0.35, 0.2, 0.1),
+                         (0.28, 0.14, 0.08, 0.05, 0.03), 0.0008, detune=0.003)
+    x = me._level_head(x, 0.3)
+    t = me.secs(n)
+    nz = me.fft_shape(me.noise(r, n), lambda f: me.hp(f, 2000) * me.lp(f, 9000))
+    x += 0.15 * vel * nz / (np.max(np.abs(nz)) + 1e-9) * np.exp(-t / 0.004)
+    return me.tail_fade(me.stereo(x * (0.3 + 0.7 * vel), pan), 0.02)
+
+
+def _lyre(r, freq, dur, vel=0.8, pan=0.0):
+    """A Greek lyre: a bright, slightly nasal gut-string pluck with a short bloom."""
+    t1 = float(np.clip(1.4 * (261.6 / freq) ** 0.45, 0.4, 2.4))
+    x = me.plucked(r, freq, dur, vel, pos=0.2, t1=t1, k_max=20, inharm=9e-5, ring=True, pick=0.06, bright=1.1,
+                   body=lambda f: me.bump(f, 600, 3, 0.7) * me.lp(f, 6500), detune=0.0012)
+    return me.stereo(x, pan)
+
+
+def _calliope(r, freq, dur, vel=0.8, pan=0.0):
+    """Steam calliope / band organ: bright, reedy, no leslie."""
+    return me.organ(r, freq, dur, vel, stops=(0.9, 0.7, 0.8, 0.5, 0.55, 0.3, 0.25), pan=pan, att=0.012, rel=0.05,
+                    leslie=False)
+
+
+def _chip(r, freq, dur, vel=0.8, duty=0.5, att=0.003, rel=0.025, vib=0.0, pan=0.0, legato_from=None):
+    """A chiptune pulse voice."""
+    n = int((dur + rel + 0.02) * me.MSR)
+    fc = np.full(n, float(freq))
+    if vib:
+        fc = fc * me.vibrato(r, n, 6.0, vib, 0.12, 0.1)
+    if legato_from:
+        fc = fc * me.glide(n, legato_from, freq, 0.02)
+    x = me._level(me.pulse(fc, duty, 0.0), 0.3) * me.env_asr(n, dur, att, rel) * (0.55 + 0.45 * vel)
+    return me.tail_fade(me.stereo(x, pan))
+
+
+def _chip_arp(r, freq, dur, vel=0.8, ints=(0, 4, 7), rate=60.0, duty=0.25, pan=0.0):
+    """The classic chiptune chord: one pulse voice cycling through the chord tones."""
+    n = int((dur + 0.04) * me.MSR)
+    idx = (me.secs(n) * rate).astype(int) % len(ints)
+    fc = freq * 2.0 ** (np.array(ints, dtype=float)[idx] / 12.0)
+    x = me._level(me.pulse(fc, duty, 0.0), 0.3) * me.env_asr(n, dur, 0.002, 0.02) * (0.55 + 0.45 * vel)
+    return me.tail_fade(me.stereo(x, pan))
+
+
+def _tri(r, freq, dur, vel=0.8, att=0.003, rel=0.03, pan=0.0):
+    """A 4-bit style triangle bass."""
+    n = int((dur + rel + 0.02) * me.MSR)
+    ph = np.cumsum(np.full(n, float(freq))) / me.MSR
+    x = 2.0 * np.abs(2.0 * (ph % 1.0) - 1.0) - 1.0
+    x = np.round(x * 8.0) / 8.0
+    x = me._level(x, 0.3) * me.env_asr(n, dur, att, rel) * (0.55 + 0.45 * vel)
+    return me.tail_fade(me.stereo(x, pan))
+
+
+def _chip_kick(r, vel=1.0):
+    n = int(0.16 * me.MSR)
+    t = me.secs(n)
+    f = 42.0 + 170.0 * np.exp(-t / 0.025)
+    x = np.round(np.sin(me.TAU * np.cumsum(f) / me.MSR) * 4.0) / 4.0 * np.exp(-t / 0.07)
+    return me._pk(x, vel)
+
+
+def _chip_snare(r, vel=1.0):
+    n = int(0.14 * me.MSR)
+    t = me.secs(n)
+    nz = me.fft_shape(np.sign(me.noise(r, n)), lambda f: me.hp(f, 1500) * me.lp(f, 10000))
+    x = nz / (np.max(np.abs(nz)) + 1e-9) * np.exp(-t / 0.04) + 0.5 * np.sin(me.TAU * 190.0 * t) * np.exp(-t / 0.03)
+    return me._pk(x, vel)
+
+
+def _chip_hat(r, vel=1.0):
+    n = int(0.05 * me.MSR)
+    t = me.secs(n)
+    nz = me.fft_shape(np.sign(me.noise(r, n)), lambda f: me.hp(f, 6000))
+    return me._pk(nz * np.exp(-t / 0.012), vel)
+
+
+def _chip_crash(r, vel=1.0):
+    n = int(0.6 * me.MSR)
+    t = me.secs(n)
+    nz = me.fft_shape(np.sign(me.noise(r, n)), lambda f: me.hp(f, 3000) * me.lp(f, 12000))
+    return me._pk(nz * np.exp(-t / 0.15), vel)
+
+
+M_TOYPIANO = me.memo(_toypiano, 3, "toypiano")
+M_XYLO = me.memo(I(me.mallet, kind="xylophone"), 3, "xylo")
+M_LYRE = me.memo(_lyre, 3, "lyre")
+M_CALLIOPE = me.memo(_calliope, 2, "calliope")
+CALLIOPE = I(_calliope)
+CHIP = I(_chip, duty=0.5)
+CHIP_PULSE = I(_chip, duty=0.25)
+CHIP_THIN = I(_chip, duty=0.125)
+CHIP_TRI = I(_tri)
+
+
+def chip_chords(T, layer, bus, P, gain, rate=60.0, center=62, duty=0.25, sends=None):
+    """Arpeggiated chords on a single pulse voice (a classic chiptune trick)."""
+    prev = None
+    for b, d, sym in P:
+        notes = voice(sym, center, 3, prev)
+        prev = notes
+        ints = tuple(m - notes[0] for m in notes)
+        T.add(layer, bus, b, _chip_arp(T.rng, float(mtof(notes[0])), d * T.spb, 0.7, ints, rate, duty), gain, None, sends, 0.0)
+
+
+# --------------------------------------------------------------------------
+# TOYBOX TUMBLE - F major, 126 bpm, 40 bars. A wind-up toy parade: a music box, a toy piano and
+# a xylophone over plucked-pizzicato oom-pah and woodblocks; the JUMP theme on music box and
+# xylophone; a winding-down break. Hi layer: xylophone double, glockenspiel sparkle, a piccolo
+# snare, soft kick and a ticking clock.
+# --------------------------------------------------------------------------
+TOY_CH = "| F | Bb | F | Dm | Bb | Gm | C7 | F |"
+TOY_A = ("F5q A5q C6q A5q | Bb5q. A5e G5h | A5q C6q F6q C6q | D6h C6h | "
+         "A5q C6q D6q C6q | Bb5q A5q G5q F5q | G5q. A5e Bb5q G5q | F5w |")
+TOY_A2 = ("C6q A5q F5q A5q | D6q. C6e Bb5h | C6q A5q F5q C6q | A5h G5h | "
+          "Bb5q D6q F6q D6q | E6q. D6e C6q A5q | Bb5q. C6e D6q E6q | F6w |")
+TOY_A2_CH = "| F | Bb | F | Dm | Bb | C7 | Gm C7 | F |"
+TOY_BRK = "A5h C6h | Bb5h G5h | A5h F5h | G5q F5q E5h |"
+TOY_BRK_CH = "| F | Bb | F | C7 |"
+
+
+def piece_toybox():
+    T = me.Track("toybox", 126, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("room", me.make_ir(r, rt60=1.2, predelay=0.01, damp=7500, er=0.7))
+    T.delay("echo", beats=0.75, fb=0.3, damp=5000, ret=0.3)
+    for b_, e in (("lead", std_eq(220, 13000)), ("keys", std_eq(150, 13000)), ("bass", std_eq(40, 3000)),
+                  ("perc", std_eq(40, 14000))):
+        T.bus(b_, eq=e)
+    RM = {"room": 0.25}
+    LD = {"room": 0.25, "echo": 0.2}
+    snr = bank("snare_piccolo", lambda r: me.snare(r, "piccolo"), 3)
+    kck = bank("kick_soft", lambda r: me.kick(r, "soft"), 2)
+    tick = [me.clock_tick(me.rng_for("toytick%d" % i), 1.0, i == 1) for i in range(2)]
+    sections = [("intro", 0, 4, TOY_CH), ("a", 4, 8, TOY_CH), ("a2", 12, 8, TOY_A2_CH),
+                ("jump", 20, 8, tx_chords(JUMP_A_CHORDS, 5)), ("break", 28, 4, TOY_BRK_CH), ("a3", 32, 8, TOY_CH)]
+    for name, bar0, nb, ch in sections:
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        arp(T, "base", "keys", P, [0, 1, 2, 1, 3, 2, 1, 2], 0.5, M_MUSICBOX, lo=72, hi=96, gain=0.07,
+            sends={"room": 0.35, "echo": 0.25}, vels=(0.8, 0.5, 0.6, 0.5))
+        if name in ("intro", "break"):
+            kit(T, "base", "perc", bars, {"wb": (WB, "x...x...x...x...", 0.1)}, sends=RM)
+            continue
+        bass(T, "base", "bass", P, [(0, 0, 0.8, 0.9), (1, 7, 0.4, 0.6), (2, 0, 0.8, 0.8), (3, 7, 0.4, 0.6)], M_PIZZ,
+             lo=36, hi=48, gain=0.4, sends=RM)
+        kit(T, "base", "perc", bars, {"wb": (WB, "x.g.x.g.x.g.x.g.", 0.12), "shk": (SHK, "..g...g...g...g.", 0.1)}, sends=RM)
+        arp(T, "hi", "keys", P, [0, 1, 2, 3, 2, 1], 0.25, M_GLOCK, lo=84, hi=102, gain=0.04, sends={"echo": 0.3},
+            vels=(0.8, 0.5, 0.6, 0.5))
+        kit(T, "hi", "perc", bars, {"kick": (kck, "x...x...x...x...", 0.4), "snr": (snr, "....x.......x..x", 0.22),
+                                   "tick": (tick, "..x...x...x...x.", 0.06)}, sends=RM)
+    LDF = {"room": 0.3, "echo": 0.2}
+    line(T, "base", "lead", TOY_A, 4, M_TOYPIANO, 0.34, LD, legato=False)
+    line(T, "base", "lead", TOY_A2, 12, M_MUSICBOX, 0.3, LDF, legato=False)
+    line(T, "base", "keys", TOY_A2, 12, M_XYLO, 0.14, RM, legato=False, transpose=-12)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_A, 20, M_MUSICBOX, 0.3, LDF, legato=False, pickup=1.0, transpose=5)
+    line(T, "base", "keys", JUMP_PICKUP + " | " + JUMP_A, 20, M_XYLO, 0.16, RM, legato=False, pickup=1.0, transpose=5 - 12)
+    line(T, "base", "lead", TOY_BRK, 28, M_MUSICBOX, 0.28, {"room": 0.4, "echo": 0.3}, legato=False)
+    line(T, "base", "lead", TOY_A, 32, M_TOYPIANO, 0.34, LD, legato=False)
+    line(T, "hi", "lead", TOY_A, 4, M_XYLO, 0.16, RM, legato=False, transpose=12)
+    line(T, "hi", "lead", TOY_A2, 12, M_TOYPIANO, 0.16, RM, legato=False, transpose=12)
+    line(T, "hi", "lead", JUMP_PICKUP + " | " + JUMP_A, 20, M_GLOCK, 0.16, RM, legato=False, pickup=1.0, transpose=5 + 12)
+    line(T, "hi", "lead", TOY_A, 32, M_XYLO, 0.18, RM, legato=False, transpose=12)
+    T.render(rms_db=-14.5, hi_gain=1.4)
+
+
+# --------------------------------------------------------------------------
+# FUNGAL GROVE - G dorian / minor, 96 bpm, 40 bars. A glowing mushroom wood: a harp arpeggio and a
+# bouncing pizzicato bass, oboe and flute tunes, a clarinet and bassoon, a hand drum; the JUMP
+# theme's B phrase in G minor on flute and harp. Hi layer: flute above, staccato bassoon, soft
+# strings, shaker and frame drum, harp glissandi.
+# --------------------------------------------------------------------------
+FUN_CH = "| Gm | C | Gm | F | Gm | C | Eb | D |"
+FUN_A = ("G5q Bb5q D6q C6q | Bb5h. A5q | G5q Bb5q C6q D6q | C6h. A5q | "
+         "G5e A5e Bb5e D6e~ D6q Bb5q | C6q. Bb5e A5h | G5q Bb5q Eb6q D6q | D6h C6q A5q |")
+FUN_B_CH = "| Bb | F | Cm | D | Bb | F/A | Eb | D |"
+FUN_B = ("D6q F6q D6q Bb5q | C6h. A5q | Eb6q D6q C6q G5q | A5h F#5h | "
+         "Bb5q D6q F6q Bb6q | A6h. F6q | G6q Eb6q Bb5q G5q | A5h D6h |")
+FUN_BRK_CH = "| Gm | Eb | Cm | D |"
+FUN_BRK = "D6h Bb5h | G5h Bb5h | Eb6h C6h | D6w |"
+
+
+def piece_fungal():
+    T = me.Track("fungal", 96, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("grove", me.make_ir(r, rt60=2.6, predelay=0.03, damp=4500, er=0.4, er_span=0.07))
+    T.delay("echo", beats=0.75, fb=0.35, damp=3800, ret=0.35)
+    for b_, e in (("lead", std_eq(200, 10000)), ("keys", std_eq(120, 11000)), ("bass", std_eq(35, 3000)),
+                  ("strings", std_eq(60, 9000)), ("perc", std_eq(40, 12000))):
+        T.bus(b_, eq=e)
+    G = {"grove": 0.4}
+    LD = {"grove": 0.4, "echo": 0.25}
+    frame = bank("frame", lambda r: me.frame_drum(r, 1.0, True), 3)
+    sections = [("intro", 0, 4, FUN_CH), ("a", 4, 8, FUN_CH), ("b", 12, 8, FUN_B_CH),
+                ("jump", 20, 8, tx_chords(JUMP_B_CHORDS, -2)), ("break", 28, 4, FUN_BRK_CH), ("a3", 32, 8, FUN_CH)]
+    for name, bar0, nb, ch in sections:
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        arp(T, "base", "keys", P, [0, 1, 2, 3, 2, 1, 3, 2], 0.5, M_HARP, lo=55, hi=84, gain=0.13, sends={"grove": 0.45},
+            vels=(0.8, 0.5, 0.65, 0.5))
+        pad(T, "base", "strings", P, STRINGS_SOFT, center=57, count=3, gain=0.06, sends=G, vel=0.5)
+        if name in ("intro", "break"):
+            continue
+        bass(T, "base", "bass", P, [(0, 0, 0.5, 0.9), (1.5, 7, 0.4, 0.6), (2, 0, 0.5, 0.8), (3.5, 12, 0.3, 0.55)], M_PIZZ,
+             lo=31, hi=43, gain=0.42, sends=G)
+        kit(T, "base", "perc", bars, {"shk": (SHK, "g.o.g.o.g.o.g.o.", 0.1)}, sends=G)
+        bass(T, "hi", "bass", P, [(0, 0, 0.5, 0.8), (2, 7, 0.5, 0.7)], BASSOON, lo=31, hi=43, gain=0.2, sends=G)
+        pad(T, "hi", "strings", P, I(me.strings, att=0.3, rel=0.6, bright=0.4), center=62, count=3, gain=0.08, sends=G, vel=0.55)
+        kit(T, "hi", "perc", bars, {"frame": (frame, "x.......x..x....", 0.22)}, sends=G)
+    line(T, "base", "lead", FUN_A, 4, OBOE, 0.34, LD)
+    line(T, "base", "lead", FUN_B, 12, FLUTE, 0.32, LD)
+    line(T, "base", "keys", FUN_B, 12, M_HARP, 0.12, G, legato=False, transpose=-12)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_B, 20, FLUTE, 0.32, LD, pickup=1.0, transpose=-2)
+    line(T, "base", "keys", JUMP_PICKUP + " | " + JUMP_B, 20, M_HARP, 0.16, G, legato=False, pickup=1.0, transpose=-2)
+    line(T, "base", "lead", FUN_BRK, 28, OCARINA, 0.28, {"grove": 0.5, "echo": 0.3})
+    line(T, "base", "lead", FUN_A, 32, CLARINET, 0.3, LD)
+    line(T, "hi", "lead", FUN_A, 4, FLUTE, 0.14, G, transpose=12)
+    line(T, "hi", "lead", FUN_B, 12, CLARINET, 0.16, G, transpose=-12)
+    line(T, "hi", "lead", JUMP_PICKUP + " | " + JUMP_B, 20, OBOE, 0.14, G, pickup=1.0, transpose=-2 - 12)
+    line(T, "hi", "lead", FUN_A, 32, FLUTE, 0.16, G, transpose=12)
+    for bar in (4, 12, 20, 32):   # harp glissandi into the phrases
+        for i, m in enumerate((55, 58, 62, 67, 70, 74, 79, 82)):
+            T.add("hi", "keys", bar * 4 - 1.0 + 0.1 * i, me.harp(r, float(mtof(m)), 1.0, 0.6), 0.1, (i / 7 - 0.5) * 0.6, G, 0.0)
+    T.render(rms_db=-14.5, hi_gain=1.5)
+
+
+# --------------------------------------------------------------------------
+# CARNIVAL CRASH - Eb major, 132 bpm, 40 bars. A fairground: a steam calliope on top of tuba
+# oom-pah and accordion off-beats, a marching snare and cymbal crashes; a bandstand trio; the JUMP
+# theme as the barker's call; a circus snare roll breakdown. Hi layer: trumpets and piccolo,
+# tambourine, glockenspiel, fuller drums.
+# --------------------------------------------------------------------------
+CARN_CH = "| Eb | Bb | Ab | Bb | Eb | Cm | Ab Bb | Eb |"
+CARN_A = ("G5e Bb5e Eb6e Bb5e G5e Bb5e Eb6q | D6e F6e Bb6e F6e D6e F6e Bb5q | C6e Eb6e Ab6e Eb6e C6e Eb6e Ab5q | "
+          "Bb5q. Bb5e D6q F6q | G5e Bb5e Eb6e Bb5e G5e Bb5e Eb6q | Eb6e C6e G5e C6e Eb6q C6q | Ab5q C6q Bb5q D6q | "
+          "Eb6h. r q |")
+CARN_B_CH = "| Ab | Bb | Ab | Bb | Ab | Db | Cm | Bb7 |"
+CARN_B = ("Ab5q C6q Eb6q C6q | Bb5h D6h | C6q Eb6q Ab6q Eb6q | D6q. Eb6e F6h | "
+          "Ab5q C6q Eb6q C6q | Db6q. C6e Bb5h | C6q Eb6q G6q Bb6q | Ab6h. r q |")
+CARN_BRK_CH = "| Cm | Ab | Bb | Bb7 |"
+
+
+def piece_carnival():
+    T = me.Track("carnival", 132, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("fair", me.make_ir(r, rt60=1.4, predelay=0.015, damp=6000, er=0.6, er_span=0.05))
+    T.delay("echo", beats=0.75, fb=0.25, damp=4500, ret=0.25)
+    for b_, e in (("lead", std_eq(250, 9500)), ("brass", std_eq(100, 10000)), ("acc", std_eq(120, 10000)),
+                  ("bass", std_eq(35, 2500)), ("drums", std_eq(40, 12000))):
+        T.bus(b_, eq=e)
+    FR = {"fair": 0.25}
+    LD = {"fair": 0.25, "echo": 0.15}
+    snr = bank("snare_march", lambda r: me.snare(r, "march"), 3)
+    kck = bank("kick_orch", lambda r: me.kick(r, "orch"), 2)
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    sections = [("intro", 0, 4, CARN_CH), ("a", 4, 8, CARN_CH), ("b", 12, 8, CARN_B_CH),
+                ("jump", 20, 8, tx_chords(JUMP_A_CHORDS, 3)), ("break", 28, 4, CARN_BRK_CH), ("a3", 32, 8, CARN_CH)]
+    for name, bar0, nb, ch in sections:
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        if name == "intro":
+            kit(T, "base", "drums", bars, {"snr": (snr, "x.x.x.x.xxxxxxxx", 0.2)}, sends=FR)
+            stabs(T, "base", "acc", P, (0.0, 2.0), ACCORDION, center=60, count=3, gain=0.12, sends=FR, vel=0.7, dur=0.4)
+            continue
+        if name == "break":
+            kit(T, "base", "drums", bars, {"snr": (snr, "xxxxxxxxxxxxxxxx", 0.18)}, sends=FR)
+            kit(T, "base", "drums", bars, {"kick": (kck, "x...............", 0.4)}, sends=FR)
+            continue
+        bass(T, "base", "bass", P, [(0, 0, 0.45, 0.95), (2, 7, 0.45, 0.8)], TUBA, lo=28, hi=40, gain=0.34, sends=FR)
+        stabs(T, "base", "acc", P, (1.0, 3.0), ACCORDION, center=62, count=3, gain=0.13, sends=FR, vel=0.7, dur=0.35)
+        kit(T, "base", "drums", bars, {"kick": (kck, "x...x...x...x...", 0.4), "snr": (snr, "....x.......x..x", 0.3)}, sends=FR)
+        kit(T, "hi", "drums", bars, {"tamb": (TAMB, "..x...x...x...x.", 0.14), "snr": (snr, "x.g.x.g.x.g.x.g.", 0.12)}, sends=FR)
+        stabs(T, "hi", "brass", P, (1.0, 3.0), M_TRPT_STAB, center=66, count=3, gain=0.07, sends=FR, vel=0.7)
+        if name != "jump":
+            ring(T, "hi", "drums", bar0 * 4, crash[bar0 % 2], 0.14, 0.3, FR)
+    line(T, "base", "lead", CARN_A, 4, CALLIOPE, 0.26, LD, legato=False)
+    line(T, "base", "lead", CARN_B, 12, CALLIOPE, 0.26, LD, legato=False)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_A, 20, CALLIOPE, 0.26, LD, legato=False, pickup=1.0, transpose=3)
+    line(T, "base", "lead", CARN_A, 32, CALLIOPE, 0.26, LD, legato=False)
+    line(T, "base", "lead", "Eb6e Eb6e Eb6e Eb6e Eb6e Eb6e Eb6q | Eb6e Eb6e Eb6e Eb6e Eb6e Eb6e Eb6q | Eb6e Eb6e Eb6e Eb6e Eb6e Eb6e Eb6q | "
+         "Bb5q Bb5q Bb5q Bb5q |", 28, M_GLOCK, 0.14, FR, legato=False)
+    line(T, "hi", "brass", CARN_A, 4, TRUMPETS, 0.18, FR, transpose=0)
+    line(T, "hi", "brass", CARN_B, 12, TRUMPETS, 0.18, FR)
+    line(T, "hi", "brass", JUMP_PICKUP + " | " + JUMP_A, 20, TRUMPETS, 0.2, FR, pickup=1.0, transpose=3)
+    line(T, "hi", "brass", CARN_A, 32, TRUMPETS, 0.18, FR)
+    line(T, "hi", "lead", CARN_A, 4, PICCOLO, 0.12, FR, transpose=12)
+    line(T, "hi", "lead", CARN_B, 12, M_GLOCK, 0.1, FR, legato=False, transpose=12)
+    line(T, "hi", "lead", CARN_A, 32, PICCOLO, 0.12, FR, transpose=12)
+    T.render(rms_db=-14.5, hi_gain=1.4)
+
+
+# --------------------------------------------------------------------------
+# OLYMPUS RISING - E major, 108 bpm, 40 bars. A hymn on the mountain of the gods: rolling lyre
+# arpeggios, a soft choir bed, low strings, a horn theme with an answer for flute and choir;
+# the JUMP theme as a trumpet-and-lyre processional. Hi layer: trumpets, a full "ah" choir,
+# timpani and snare, cymbal crashes.
+# --------------------------------------------------------------------------
+OLY_CH = "| E | E/G# | A | B | C#m | A | B | E |"
+OLY_A = ("B4h. E5q | G#5q F#5q E5h | E5q. F#5e G#5q B5q | A5h. G#5q | "
+         "F#5h. A5q | G#5q F#5q E5q C#5q | D#5h F#5h | E5w |")
+OLY_B_CH = "| E | C#m | A | B | A | E/G# | B | E |"
+OLY_B = ("E6h. D#6q | C#6h B5h | A5q. B5e C#6q E6q | D#6w | "
+         "C#6h. E6q | F#6q E6q D6q C#6q | B5h D#6h | E6w |")
+OLY_BRK_CH = "| C#m | A | B | B |"
+OLY_BRK = "G#5h E5h | A5h C#6h | B5h D#6h | F#6w |"
+
+
+def piece_olympus():
+    T = me.Track("olympus", 108, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("temple", me.make_ir(r, rt60=3.2, predelay=0.035, damp=4300, er=0.5, er_span=0.07))
+    T.delay("echo", beats=0.75, fb=0.3, damp=3500, ret=0.3)
+    for b_, e in (("lead", std_eq(180, 10000)), ("keys", std_eq(120, 10000)), ("choir", std_eq(100, 8000)),
+                  ("brass", std_eq(90, 9000)), ("strings", std_eq(50, 11000)), ("perc", std_eq(30)), ("bass", std_eq(30, 3000))):
+        T.bus(b_, eq=e)
+    TP = {"temple": 0.4}
+    LD = {"temple": 0.45, "echo": 0.2}
+    timp = [me.timpani(me.rng_for("otimp%d" % i), float(mtof(40)), 0.9) for i in range(2)]
+    frame = bank("frame", lambda r: me.frame_drum(r, 1.0, True), 3)
+    snr = bank("snare_march", lambda r: me.snare(r, "march"), 3)
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    sections = [("intro", 0, 4, OLY_CH), ("a", 4, 8, OLY_CH), ("b", 12, 8, OLY_B_CH),
+                ("jump", 20, 8, tx_chords(JUMP_A_CHORDS, 4)), ("break", 28, 4, OLY_BRK_CH), ("a3", 32, 8, OLY_CH)]
+    for name, bar0, nb, ch in sections:
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        arp(T, "base", "keys", P, [0, 1, 2, 3, 4, 3, 2, 1], 0.5, M_LYRE, lo=52, hi=80, gain=0.14, sends={"temple": 0.45},
+            vels=(0.8, 0.5, 0.65, 0.5))
+        pad(T, "base", "choir", P, CHOIR_O, center=58, count=3, gain=0.09, sends={"temple": 0.6}, vel=0.6)
+        pad(T, "base", "strings", P, STRINGS_SOFT, center=55, count=3, gain=0.06, sends=TP, vel=0.5)
+        bass(T, "base", "bass", P, [(0, 0, 1.9, 0.8), (2, 7, 1.9, 0.6)], CELLOS, lo=33, hi=47, gain=0.22, sends=TP)
+        if name in ("intro", "break"):
+            continue
+        kit(T, "base", "perc", bars, {"frame": (frame, "x.......x..x....", 0.3)}, sends=TP)
+        kit(T, "hi", "perc", bars, {"timp": (timp, "x.......x.......", 0.34), "snr": (snr, "....x..x....x.xx", 0.2)}, sends=TP)
+        pad(T, "hi", "choir", P, CHOIR_A, center=62, count=4, gain=0.12, sends={"temple": 0.6}, vel=0.7)
+        if name != "jump":
+            ring(T, "hi", "perc", bar0 * 4, crash[bar0 % 2], 0.14, 0.3, TP)
+    line(T, "base", "lead", OLY_A, 4, HORNS, 0.34, TP)
+    line(T, "base", "keys", OLY_A, 4, M_LYRE, 0.14, TP, legato=False, transpose=12)
+    line(T, "base", "lead", OLY_B, 12, FLUTE, 0.3, LD)
+    line(T, "base", "keys", OLY_B, 12, M_LYRE, 0.14, TP, legato=False)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_A, 20, M_LYRE, 0.3, LD, legato=False, pickup=1.0, transpose=4)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_A, 20, HORNS, 0.26, TP, pickup=1.0, transpose=4 - 12)
+    line(T, "base", "lead", OLY_BRK, 28, M_LYRE, 0.26, LD, legato=False)
+    line(T, "base", "lead", OLY_A, 32, HORNS, 0.34, TP)
+    line(T, "base", "keys", OLY_A, 32, M_LYRE, 0.14, TP, legato=False, transpose=12)
+    line(T, "hi", "brass", OLY_A, 12, TRUMPETS, 0.18, TP, transpose=12)
+    line(T, "hi", "brass", JUMP_PICKUP + " | " + JUMP_A, 20, TRUMPETS, 0.24, TP, pickup=1.0, transpose=4)
+    line(T, "hi", "brass", OLY_B, 32, TRUMPETS, 0.2, TP)
+    line(T, "hi", "lead", OLY_B, 12, VIOLINS, 0.14, TP, transpose=-12)
+    T.render(rms_db=-14.5, hi_gain=1.0)
+
+
+# --------------------------------------------------------------------------
+# DINO DASH - F minor, 112 bpm, 40 bars. A stomping primeval run: tribal toms and a frame-drum
+# heartbeat, a syncopated marimba ostinato, tuba and trombones growling underneath, a horn theme
+# and bone clacks; the JUMP theme's B phrase as a brass roar. Hi layer: a drum circle (nagado,
+# toms, shakers), male choir chant, brass stabs.
+# --------------------------------------------------------------------------
+DINO_CH = "| Fm | Db | Eb | Ab | Fm | Db | Bbm | C |"
+DINO_A = ("F4q. F4e Ab4q C5q | Db5h C5h | Eb5q. Eb5e F5q G5q | Ab5h. G5q | "
+          "F5q. F5e Ab5q C6q | Db6q C6q Ab5q F5q | Eb5q F5q G5q Bb5q | C6w |")
+DINO_BRK_CH = "| Fm | Fm | Db | C |"
+
+
+def piece_dino():
+    T = me.Track("dino", 112, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("canyon", me.make_ir(r, rt60=2.2, predelay=0.04, damp=3800, er=0.5, er_span=0.08))
+    T.reverb("gate", me.make_ir(r, rt60=0.7, predelay=0.0, damp=5500, er=0.9, er_span=0.03))
+    for b_, e in (("lead", std_eq(100, 9000)), ("keys", std_eq(120, 10000)), ("brass", std_eq(60, 8000)),
+                  ("perc", std_eq(35, 12000)), ("bass", std_eq(30, 2500)), ("choir", std_eq(90, 6500))):
+        T.bus(b_, eq=e)
+    CY = {"canyon": 0.3}
+    kck = bank("kick_orch", lambda r: me.kick(r, "orch"), 2)
+    toms = [me.tom(me.rng_for("dtom%d" % i), f, 1.0) for i, f in enumerate((72.0, 96.0, 128.0, 170.0))]
+    frame = bank("frame", lambda r: me.frame_drum(r, 1.0, True), 3)
+    na = bank("nagado", lambda r: me.taiko(r, "nagado"), 3)
+    od = bank("odaiko", lambda r: me.taiko(r, "odaiko"), 3)
+    clv = [me.claves(me.rng_for("dclv%d" % i), 1.0) for i in range(3)]
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    sections = [("intro", 0, 4, DINO_CH), ("a", 4, 8, DINO_CH), ("a2", 12, 8, DINO_CH),
+                ("jump", 20, 8, tx_chords(JUMP_B_CHORDS, 8)), ("break", 28, 4, DINO_BRK_CH), ("a3", 32, 8, DINO_CH)]
+    for name, bar0, nb, ch in sections:
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        if name == "intro":
+            kit(T, "base", "perc", bars, {"tom": (toms, "x..x..x...x.x...", 0.4), "fr": (frame, "x.......x.......", 0.3)}, sends=CY)
+            continue
+        if name == "break":
+            kit(T, "base", "perc", bars, {"fr": (frame, "x...x...x...x...", 0.4), "clv": (clv, "..x...x...x...xx", 0.14)}, sends=CY)
+            bass(T, "base", "bass", P, [(0, 0, 3.8, 0.8)], TUBA, lo=28, hi=40, gain=0.3, sends=CY)
+            continue
+        arp(T, "base", "keys", P, [0, 2, 1, 2, 0, 2, 1, 2], 0.5, M_MARIMBA, lo=53, hi=77, gain=0.2, sends=CY,
+            vels=(0.9, 0.5, 0.65, 0.5), skip=lambda k: k % 8 in (3, 7))
+        bass(T, "base", "bass", P, [(0, 0, 0.9, 0.95), (1.5, 0, 0.4, 0.7), (2.5, 7, 0.4, 0.7), (3, 0, 0.8, 0.8)], TUBA,
+             lo=28, hi=40, gain=0.34, sends=CY)
+        kit(T, "base", "perc", bars, {"kick": (kck, "x..x..x...x.....", 0.46), "tom": (toms, "......x.x.x...x.", 0.26),
+                                      "fr": (frame, "..x...x...x...x.", 0.16), "clv": (clv, "x.g.x.g.x.g.x.g.", 0.1)}, sends=CY)
+        kit(T, "hi", "perc", bars, {"na": (na, "x..x..x.x...x.x.", 0.3), "shk": (SHK, "x.oxx.oxx.oxx.ox", 0.1)}, sends=CY)
+        stabs(T, "hi", "brass", P, (0.0, 1.5, 3.0), M_BRASS_STAB, center=50, count=3, gain=0.1, sends=CY, vel=0.8, dur=0.3)
+        if name != "jump":
+            ring(T, "hi", "perc", bar0 * 4, od[bar0 % 3], 0.4, 0.0, CY)
+            ring(T, "hi", "perc", bar0 * 4, crash[bar0 % 2], 0.12, 0.3, CY)
+    line(T, "base", "lead", DINO_A, 4, HORNS, 0.34, CY, transpose=-12)
+    line(T, "base", "lead", DINO_A, 12, TROMBONES, 0.3, CY, transpose=-12)
+    line(T, "base", "keys", DINO_A, 12, M_MARIMBA, 0.14, CY, legato=False)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_B, 20, TROMBONES, 0.32, CY, pickup=1.0, transpose=8 - 12)
+    line(T, "base", "keys", JUMP_PICKUP + " | " + JUMP_B, 20, M_MARIMBA, 0.18, CY, legato=False, pickup=1.0, transpose=8)
+    line(T, "base", "lead", DINO_A, 32, HORNS, 0.34, CY, transpose=-12)
+    line(T, "hi", "brass", JUMP_PICKUP + " | " + JUMP_B, 20, TRUMPETS, 0.2, CY, pickup=1.0, transpose=8)
+    line(T, "hi", "brass", DINO_A, 12, TRUMPETS, 0.16, CY)
+    line(T, "hi", "brass", DINO_A, 32, TRUMPETS, 0.16, CY)
+    for bar0 in (4, 12, 32):   # a male chant on the downbeats
+        pad(T, "hi", "choir", prog(DINO_CH, 4, bar0), I(me.choir, vowel="o", male=True, voices=5, att=0.04, rel=0.2),
+            center=48, count=3, gain=0.12, sends={"canyon": 0.5}, vel=0.7)
+    T.render(rms_db=-14.5, hi_gain=1.5)
+
+
+# --------------------------------------------------------------------------
+# ARCANE ARCHIVE - C# minor, 92 bpm, 40 bars. A wizard's library after dark: harpsichord figures
+# and a celesta tune over glass pads and a low string drone, a wordless choir, bells and reversed
+# swells; the JUMP theme's B phrase as a theremin-and-celesta spell. Hi layer: a low choir,
+# trombones, pulsing tremolo strings, timpani and gongs.
+# --------------------------------------------------------------------------
+ARC_CH = "| C#m | C#m | A | G#7 | C#m | F#m | A | G#7 |"
+ARC_A = ("C#6h. E6q | D#6q C#6q B5h | A5q C#6q E6q A6q | G#6h. F#6e E6e | "
+         "E6q. D#6e C#6q B5q | A5q C#6q F#6q E6q | D6h C#6q B5q | G#5w |")
+ARC_BRK_CH = "| C#m | F#m | A | G#7 |"
+ARC_BRK = "E6w | F#6h A6h | E6h C#6h | B5w |"
+
+
+def piece_arcane():
+    T = me.Track("arcane", 92, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("library", me.make_ir(r, rt60=3.8, predelay=0.04, damp=3800, er=0.4, er_span=0.09))
+    T.delay("echo", beats=0.75, fb=0.4, damp=3500, ret=0.35)
+    for b_, e in (("lead", std_eq(200, 10000)), ("keys", std_eq(140, 11000)), ("pad", std_eq(80, 9000)),
+                  ("strings", std_eq(50, 9000)), ("choir", std_eq(100, 7000)), ("perc", std_eq(30)), ("brass", std_eq(60, 7000))):
+        T.bus(b_, eq=e)
+    LB = {"library": 0.45}
+    LD = {"library": 0.5, "echo": 0.3}
+    timp = [me.timpani(me.rng_for("atimp%d" % i), float(mtof(37)), 0.9) for i in range(2)]
+    sections = [("intro", 0, 4, ARC_CH), ("a", 4, 8, ARC_CH), ("a2", 12, 8, ARC_CH),
+                ("jump", 20, 8, tx_chords(JUMP_B_CHORDS, 4)), ("break", 28, 4, ARC_BRK_CH), ("a3", 32, 8, ARC_CH)]
+    for name, bar0, nb, ch in sections:
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        pad(T, "base", "pad", P, I(me.pad_glass, att=1.2, rel=2.0), center=61, count=4, gain=0.08, sends=LB, vel=0.55)
+        pad(T, "base", "strings", P, I(me.strings, att=0.8, rel=1.2, bright=0.3, voices=3), center=49, count=2, gain=0.07, sends=LB, vel=0.5)
+        bass(T, "base", "strings", P, [(0, 0, 3.9, 0.7)], M_SUB, lo=25, hi=37, gain=0.2)
+        if name != "intro" and name != "break":
+            arp(T, "base", "keys", P, [0, 1, 2, 3, 2, 1, 3, 2, 0, 2, 1, 3, 2, 1, 2, 3], 0.25, M_HARPSI, lo=61, hi=85, gain=0.09,
+                sends={"library": 0.35, "echo": 0.25}, vels=(0.9, 0.5, 0.65, 0.5))
+        else:
+            arp(T, "base", "keys", P, [0, 2, 1, 3], 1.0, M_CELESTA, lo=73, hi=97, gain=0.07, sends=LD, vels=(0.8, 0.5, 0.6, 0.5))
+        pad(T, "hi", "choir", P, CHOIR_U, center=57, count=3, gain=0.12, sends={"library": 0.6}, vel=0.65)
+        if name not in ("intro", "break"):
+            pad(T, "hi", "brass", P, I(me.brass, kind="trombone", voices=2, att=0.3, rel=0.6), center=46, count=3, gain=0.1,
+                sends=LB, vel=0.6)
+            pad(T, "hi", "strings", P, I(me.strings, att=0.05, rel=0.2, bright=0.45, tremolo=0.6), center=62, count=3,
+                gain=0.1, sends=LB, vel=0.6)
+            kit(T, "hi", "perc", bars, {"timp": (timp, "x.......x.......", 0.3)}, sends=LB)
+    line(T, "base", "lead", ARC_A, 4, M_CELESTA, 0.3, LD, legato=False)
+    line(T, "base", "lead", ARC_A, 12, M_CELESTA, 0.26, LD, legato=False, transpose=12)
+    line(T, "base", "lead", ARC_A, 12, I(me.theremin), 0.18, LD, transpose=0)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_B, 20, I(me.theremin), 0.26, LD, pickup=1.0, transpose=4)
+    line(T, "base", "keys", JUMP_PICKUP + " | " + JUMP_B, 20, M_CELESTA, 0.2, LD, legato=False, pickup=1.0, transpose=4 + 12)
+    line(T, "base", "lead", ARC_BRK, 28, M_CELESTA, 0.26, {"library": 0.6, "echo": 0.4}, legato=False)
+    line(T, "base", "lead", ARC_A, 32, M_CELESTA, 0.3, LD, legato=False)
+    line(T, "base", "lead", ARC_A, 32, M_HARPSI, 0.2, LB, legato=False, transpose=-12)
+    for bar in (4, 12, 20, 28, 32):
+        T.add("base", "pad", bar * 4 - 2, me.reverse_swell(r, 2, T.spb, float(mtof(61)), 0.7), 0.14, 0.0, LB, 0.0)
+    for bar in (0, 16, 28):
+        ring(T, "base", "keys", bar * 4, me.bell(r, float(mtof(73)), 5.0, 0.55, kind="church"), 0.1, 0.3, {"library": 0.6})
+    for bar in (4, 20, 32):
+        ring(T, "hi", "perc", bar * 4, me.gong(r, 0.9, 6.0, 69.0), 0.18, 0.0, LB)
+    line(T, "hi", "brass", JUMP_PICKUP + " | " + JUMP_B, 20, I(me.brass, kind="horn", voices=2), 0.2, LB, pickup=1.0, transpose=4 - 12)
+    line(T, "hi", "lead", ARC_A, 12, M_HARPSI, 0.12, LB, legato=False, transpose=12)
+    T.render(rms_db=-14.5, hi_gain=0.8)
+
+
+# --------------------------------------------------------------------------
+# ARCADE OVERDRIVE - A minor, 160 bpm, 40 bars (the last verse jumps up to B minor). Pure
+# chiptune: pulse-wave lead, arpeggiated chords, a 4-bit triangle bass and noise drums. The JUMP
+# theme's B phrase on the thin pulse. Hi layer: a harmony lead an octave up, fast arps, hats,
+# fills and crashes.
+# --------------------------------------------------------------------------
+ARCADE_CH = "| Am | Am | F | G | Am | Am | F | E |"
+ARCADE_A = ("A5e C6e E6e C6e A5e C6e E6e A6e | G6e E6e C6e E6e G6q E6q | F6e A5e C6e F6e A6e F6e C6e A5e | "
+            "G5e B5e D6e G6e B6q G6q | A5e C6e E6e C6e A5e E6e C6e E6e | A6q G6q E6q C6q | "
+            "F6e E6e D6e C6e B5e A5e G5e F5e | E6h. r q |")
+ARCADE_BRK_CH = "| Am | F | G | E |"
+ARCADE_BRK = "E6q E6q E6e E6e E6q | F6q F6q F6e F6e F6q | G6q G6q G6e G6e G6q | B6w |"
+
+
+def piece_arcade():
+    T = me.Track("arcade", 160, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("room", me.make_ir(r, rt60=0.6, predelay=0.005, damp=8000, er=0.8, er_span=0.02))
+    T.delay("echo", beats=0.75, fb=0.3, damp=6000, ret=0.25)
+    for b_, e in (("lead", std_eq(200, 12000)), ("chip", std_eq(150, 12000)), ("bass", std_eq(35, 2500)), ("drums", std_eq(40, 14000))):
+        T.bus(b_, eq=e)
+    RM = {"room": 0.12}
+    LD = {"room": 0.12, "echo": 0.2}
+    kck = [_chip_kick(me.rng_for("ck%d" % i)) for i in range(2)]
+    snr = [_chip_snare(me.rng_for("cs%d" % i)) for i in range(3)]
+    hat = [_chip_hat(me.rng_for("ch%d" % i)) for i in range(3)]
+    crs = [_chip_crash(me.rng_for("cc%d" % i)) for i in range(2)]
+    sections = [("intro", 0, 4, ARCADE_CH), ("a", 4, 8, ARCADE_CH), ("a2", 12, 8, ARCADE_CH),
+                ("jump", 20, 8, tx_chords(JUMP_B_CHORDS, 0)), ("break", 28, 4, ARCADE_BRK_CH),
+                ("a3", 32, 8, tx_chords(ARCADE_CH, 2))]
+    for name, bar0, nb, ch in sections:
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        chip_chords(T, "base", "chip", P, 0.1, rate=60.0, center=60, duty=0.25, sends=RM)
+        if name == "intro":
+            kit(T, "base", "drums", bars, {"hat": (hat, "x.x.x.x.x.x.x.x.", 0.1)}, sends=RM)
+            continue
+        bass(T, "base", "bass", P, [(k * 0.5, 0 if k % 2 == 0 else 12, 0.45, 0.9 if k % 2 == 0 else 0.7) for k in range(8)],
+             CHIP_TRI, lo=28, hi=40, gain=0.36)
+        if name == "break":
+            kit(T, "base", "drums", bars, {"kick": (kck, "x.......x.......", 0.45), "hat": (hat, "x.x.x.x.x.x.x.x.", 0.1)}, sends=RM)
+            continue
+        kit(T, "base", "drums", bars, {"kick": (kck, "x..x..x.x..x..x.", 0.5), "snr": (snr, "....x.......x...", 0.34),
+                                      "hat": (hat, "x.x.x.x.x.x.x.x.", 0.1)}, sends=RM)
+        kit(T, "hi", "drums", bars, {"hat": (hat, ".x.x.x.x.x.x.x.x", 0.08), "snr": (snr, "............x.xx", 0.18)}, sends=RM)
+        arp(T, "hi", "chip", P, [0, 1, 2, 1], 0.25, CHIP_THIN, lo=72, hi=96, gain=0.05, vels=(0.9, 0.5, 0.7, 0.5))
+        if name not in ("jump",):
+            ring(T, "hi", "drums", bar0 * 4, crs[bar0 % 2], 0.16, 0.3, RM)
+    line(T, "base", "lead", ARCADE_A, 4, CHIP, 0.2, LD, legato=False)
+    line(T, "base", "lead", ARCADE_A, 12, CHIP, 0.2, LD, legato=False)
+    line(T, "base", "lead", JUMP_PICKUP + " | " + JUMP_B, 20, CHIP_PULSE, 0.22, LD, pickup=1.0)
+    line(T, "base", "lead", ARCADE_BRK, 28, CHIP, 0.2, LD, legato=False)
+    line(T, "base", "lead", ARCADE_A, 32, CHIP, 0.2, LD, legato=False, transpose=2)
+    line(T, "hi", "lead", ARCADE_A, 12, CHIP_PULSE, 0.12, RM, legato=False, transpose=-5)
+    line(T, "hi", "lead", JUMP_PICKUP + " | " + JUMP_B, 20, CHIP_THIN, 0.14, RM, pickup=1.0, transpose=12)
+    line(T, "hi", "lead", ARCADE_A, 32, CHIP_PULSE, 0.12, RM, legato=False, transpose=2 + 12)
+    for bar in (7, 15, 23, 27, 39):   # snare fills
+        kit(T, "hi", "drums", [bar], {"fill": (snr, "xxxxxxxxxxxxxxxx", 0.16)}, sends=RM)
+    T.render(rms_db=-14.5, hi_gain=1.7)
+
+
+# --------------------------------------------------------------------------
+# SIEGE BREAKER - Bb minor, 108 bpm, 40 bars. A war march at the castle gates: a marching snare,
+# a concert bass drum and war-drum toms, a staccato cello ostinato, a horn theme, a low war horn,
+# tuba and trombones; the JUMP theme's B phrase as a brass charge. Hi layer: trumpets, a male
+# choir, taiko, timpani rolls and brass stabs.
+# --------------------------------------------------------------------------
+SIEGE_CH = "| Bbm | Bbm | Gb | Ab | Bbm | Bbm | Ebm | F |"
+SIEGE_A = ("Bb4q. Bb4e Db5q F5q | Gb5h F5h | Eb5q. Eb5e Gb5q Bb5q | Ab5h. Gb5q | "
+           "F5q. F5e Ab5q Db6q | Db6q C6q Ab5q F5q | Gb5q Ab5q Bb5q Db6q | C6h. r q |")
+SIEGE_RIFF = "Bb2e Bb2e Db3e Bb2e F3e Bb2e E3e F3e |"
+SIEGE_BRK_CH = "| Bbm | Gb | Ebm | F |"
+
+
+def piece_siege():
+    T = me.Track("siege", 108, 40, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("keep", me.make_ir(r, rt60=2.8, predelay=0.03, damp=3600, er=0.6, er_span=0.07))
+    T.reverb("gate", me.make_ir(r, rt60=0.8, predelay=0.0, damp=5500, er=0.9, er_span=0.03))
+    for b_, e in (("strings", std_eq(60, 9000)), ("brass", std_eq(60, 8500)), ("bass", std_eq(28, 2500)),
+                  ("drums", std_eq(30, 12000)), ("choir", std_eq(80, 6500))):
+        T.bus(b_, eq=e)
+    KP = {"keep": 0.3}
+    kck = bank("kick_orch", lambda r: me.kick(r, "orch"), 2)
+    snr = bank("snare_march", lambda r: me.snare(r, "march"), 3)
+    toms = [me.tom(me.rng_for("stom%d" % i), f, 1.0) for i, f in enumerate((66.0, 88.0, 118.0))]
+    na = bank("nagado", lambda r: me.taiko(r, "nagado"), 3)
+    od = bank("odaiko", lambda r: me.taiko(r, "odaiko"), 3)
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    anv = [me.anvil(me.rng_for("sanv%d" % i), 1.0, p, 0.7) for i, p in enumerate((0.9, 1.0))]
+    sections = [("intro", 0, 4, SIEGE_CH), ("a", 4, 8, SIEGE_CH), ("a2", 12, 8, SIEGE_CH),
+                ("jump", 20, 8, tx_chords(JUMP_B_CHORDS, 1)), ("break", 28, 4, SIEGE_BRK_CH), ("a3", 32, 8, SIEGE_CH)]
+    for name, bar0, nb, ch in sections:
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        if name == "intro":
+            kit(T, "base", "drums", bars, {"kick": (kck, "x.......x.......", 0.5), "tom": (toms, "....x..x....x.xx", 0.3)}, sends=KP)
+            bass(T, "base", "bass", P[:1], [(0, 0, 7.5, 0.8)], HORNS, lo=34, hi=46, gain=0.2, sends=KP)
+            continue
+        if name != "break":
+            for k in range(nb):
+                line(T, "base", "strings", SIEGE_RIFF, bar0 + k, M_CELLO_STAC, 0.24, KP, legato=False)
+        bass(T, "base", "bass", P, [(0, 0, 1.9, 0.9), (2, 0, 1.9, 0.8)], TUBA, lo=22, hi=34, gain=0.28, sends=KP)
+        if name == "break":
+            kit(T, "base", "drums", bars, {"kick": (kck, "x...x...x...x...", 0.5), "snr": (snr, "xxxxxxxxxxxxxxxx", 0.18)}, sends=KP)
+            continue
+        kit(T, "base", "drums", bars, {"kick": (kck, "x.....x.x.......", 0.52), "snr": (snr, "..x.x.xx..x.x.xx", 0.3),
+                                      "tom": (toms, "........x.....x.", 0.22), "anv": (anv, "....x...........", 0.08)}, sends=KP)
+        kit(T, "hi", "drums", bars, {"na": (na, "x...x...x.x.x...", 0.3)}, sends=KP)
+        stabs(T, "hi", "brass", P, (0.0, 1.5, 2.0), M_BRASS_STAB, center=48, count=3, gain=0.1, sends=KP, vel=0.85, dur=0.3)
+        pad(T, "hi", "choir", P, I(me.choir, vowel="o", male=True, voices=5), center=46, count=3, gain=0.11,
+            sends={"keep": 0.5}, vel=0.7)
+        if name != "jump":
+            ring(T, "hi", "drums", bar0 * 4, crash[bar0 % 2], 0.15, 0.3, KP)
+            ring(T, "hi", "drums", bar0 * 4, od[bar0 % 3], 0.4, 0.0, KP)
+    line(T, "base", "brass", SIEGE_A, 4, HORNS, 0.38, KP)
+    line(T, "base", "brass", SIEGE_A, 12, HORNS, 0.34, KP)
+    line(T, "base", "brass", SIEGE_A, 12, TROMBONES, 0.2, KP, transpose=-12)
+    line(T, "base", "brass", JUMP_PICKUP + " | " + JUMP_B, 20, TROMBONES, 0.34, KP, pickup=1.0, transpose=1 - 12)
+    line(T, "base", "brass", JUMP_PICKUP + " | " + JUMP_B, 20, HORNS, 0.3, KP, pickup=1.0, transpose=1)
+    line(T, "base", "brass", SIEGE_A, 32, TROMBONES, 0.32, KP, transpose=-12)
+    line(T, "base", "brass", SIEGE_A, 32, HORNS, 0.3, KP)
+    line(T, "hi", "brass", SIEGE_A, 12, TRUMPETS, 0.2, KP, transpose=12)
+    line(T, "hi", "brass", JUMP_PICKUP + " | " + JUMP_B, 20, TRUMPETS, 0.26, KP, pickup=1.0, transpose=1)
+    line(T, "hi", "brass", SIEGE_A, 32, TRUMPETS, 0.22, KP, transpose=12)
+    T.add("hi", "drums", 27 * 4 + 1.0, me.timpani_roll(r, float(mtof(34)), 3.0, T.spb, 0.2, 1.0), 0.3, 0.0, KP, 0.0)
+    T.render(rms_db=-14.5, hi_gain=1.6)
+
+
+# ---- stingers for the new worlds ----------------------------------------
+def _ff_toybox(B, r, k):
+    B.notes(mel("C5t D5t E5t F5q. C6e F6h", 4, 0, 0), M_XYLO, r, 0.4, sends={"small": 0.3})
+    B.notes(mel("C5t D5t E5t F5q. C6e F6h", 4, 0, 0), M_MUSICBOX, r, 0.3, sends={"small": 0.3})
+    for m in (53, 57, 60, 65):
+        B.add(1.0, me.pizz(r, float(mtof(m)), 0.4, 0.9, section=2), 0.3, sends={"small": 0.3})
+    for i, m in enumerate((77, 81, 84, 89, 93, 96)):
+        B.add(1.0 + 0.08 * i, me.mallet(r, float(mtof(m)), 0.6, 0.8, "glockenspiel"), 0.22, (i / 5 - 0.5), {"hall": 0.3})
+    B.add(1.0, _toypiano(r, float(mtof(77)), 1.0, 0.9), 0.3, sends={"small": 0.3})
+    B.add(1.0, me.clap(r), 0.35, sends={"small": 0.3})
+    B.add(2.5, me.woodblock(r, 0.9, 1.2), 0.2, sends={"small": 0.3})
+
+
+def _ff_fungal(B, r, k):
+    B.notes(mel("D5t E5t F#5t G5q D6q G6h", 4, 0, 0), FLUTE, r, 0.4, sends={"hall": 0.4}, legato=True)
+    B.notes(mel("D5t E5t F#5t G5q D6q G6h", 4, 0, 0), OBOE, r, 0.2, sends={"hall": 0.4}, legato=True)
+    for i, m in enumerate((55, 58, 62, 67, 70, 74, 79, 82, 86)):
+        B.add(1.0 + 0.07 * i, me.harp(r, float(mtof(m)), 1.5, 0.65), 0.18, (i / 8 - 0.5) * 0.6, {"hall": 0.5})
+    for m in (43, 50, 55, 58, 62):
+        B.add(1.0, me.woodwind(r, float(mtof(m)), 2.4, 0.7, "clarinet") if m > 45 else me.reed(r, float(mtof(m)), 2.4, 0.7, "bassoon"),
+              0.18, sends={"hall": 0.4})
+    B.add(1.0, me.timpani(r, float(mtof(43)), 0.8), 0.25, sends={"hall": 0.3})
+    B.add(1.5, me.triangle(r, 0.6, 1.5), 0.06, 0.3, {"hall": 0.4})
+
+
+def _ff_carnival(B, r, k):
+    B.notes(mel("Bb4t C5t D5t Eb5q Bb5q Eb6h", 4, 0, 0), CALLIOPE, r, 0.3, sends={"small": 0.3})
+    B.notes(mel("Bb4t C5t D5t Eb5q Bb5q Eb6h", 4, 0, 0), I(me.brass, kind="trumpet", voices=2), r, 0.3, sends={"hall": 0.3})
+    for i in range(10):
+        B.add(0.1 * i + 0.5, me.snare(r, "march", 0.4 + 0.06 * i), 0.2, sends={"small": 0.2})
+    for m in (51, 55, 58, 63):
+        B.add(2.0, me.brass(r, float(mtof(m)), 2.0, 0.95, "horn" if m > 52 else "tuba", voices=2), 0.18, sends={"hall": 0.4})
+        B.add(2.0, _calliope(r, float(mtof(m + 12)), 2.0, 0.8), 0.1, sends={"hall": 0.3})
+    B.add(2.0, me.kick(r, "orch"), 0.45)
+    B.add(2.0, me.cymbal(r, "crash"), 0.22, 0.3, {"hall": 0.3})
+    B.add(2.5, me.tambourine(r, 0.9, True), 0.14, 0.3, {"hall": 0.3})
+
+
+def _ff_olympus(B, r, k):
+    B.notes(mel("B4t C#5t D#5t E5q B5q E6h", 4, 0, 0), I(me.brass, kind="trumpet", voices=3), r, 0.4, sends={"hall": 0.5})
+    for i, m in enumerate((52, 56, 59, 64, 68, 71, 76, 80)):
+        B.add(0.1 * i + 1.0, _lyre(r, float(mtof(m)), 1.5, 0.8), 0.18, (i / 7 - 0.5) * 0.6, {"hall": 0.5})
+    for m in (40, 47, 52, 56, 59, 64):
+        B.add(2.0, me.brass(r, float(mtof(m)), 2.6, 0.95, "horn", voices=2), 0.14, sends={"hall": 0.5})
+        B.add(2.0, me.choir(r, float(mtof(m + 12)), 2.6, 0.85, "a", att=0.15, rel=1.2), 0.1, sends={"hall": 0.6})
+    B.add(2.0, me.timpani(r, float(mtof(40)), 1.0), 0.4, sends={"hall": 0.3})
+    B.add(2.0, me.cymbal(r, "crash"), 0.2, 0.3, {"hall": 0.3})
+
+
+def _ff_dino(B, r, k):
+    for i, f in enumerate((72.0, 96.0, 128.0, 96.0, 72.0, 128.0, 170.0, 128.0)):
+        B.add(0.25 * i, me.tom(r, f, 1.0), 0.32, (i / 7 - 0.5) * 0.6, {"hall": 0.2})
+    B.notes(mel("F3q Ab3q C4q F4h", 4, 0, 1.0), I(me.brass, kind="trombone", voices=3), r, 0.4, sends={"hall": 0.4})
+    for i, m in enumerate((65, 68, 72, 77, 80, 84)):
+        B.add(4.0 + 0.1 * i, me.mallet(r, float(mtof(m)), 0.8, 0.8, "marimba"), 0.2, (i / 5 - 0.5) * 0.5, {"hall": 0.3})
+    for m in (29, 36, 41, 44, 48):
+        B.add(4.0, me.brass(r, float(mtof(m)), 2.4, 0.95, "tuba" if m < 40 else "trombone", voices=2), 0.16, sends={"hall": 0.4})
+    B.add(4.0, me.taiko(r, "odaiko"), 0.5, sends={"hall": 0.3})
+    B.add(4.0, me.boom(r, 1.0, 36.0, 2.5), 0.4)
+    B.add(4.0, me.cymbal(r, "crash"), 0.16, 0.3, {"hall": 0.3})
+
+
+def _ff_arcane(B, r, k):
+    for i, m in enumerate((61, 64, 68, 73, 76, 80, 85, 88)):
+        B.add(0.14 * i, me.harpsichord(r, float(mtof(m)), 0.4, 0.85), 0.2, (i / 7 - 0.5) * 0.6, {"hall": 0.4})
+        B.add(0.14 * i + 0.07, me.mallet(r, float(mtof(m + 12)), 1.2, 0.7, "celesta"), 0.16, -(i / 7 - 0.5) * 0.6, {"hall": 0.5})
+    for m in (49, 56, 61, 64, 68):
+        B.add(1.5, me.pad_glass(r, float(mtof(m)), 3.4, 0.7), 0.1, sends={"hall": 0.6})
+        B.add(1.5, me.choir(r, float(mtof(m + 12)), 3.0, 0.75, "u", att=0.4, rel=1.2), 0.1, sends={"hall": 0.6})
+    B.add(1.5, me.bell(r, float(mtof(73)), 5.0, 0.7, kind="church"), 0.22, sends={"hall": 0.6})
+    B.add(1.5, me.gong(r, 0.8, 5.0, 69.0), 0.22, sends={"hall": 0.4})
+
+
+def _ff_arcade(B, r, k):
+    B.notes(mel("A4e C5e E5e A5e C6e E6e A6h", 4, 0, 0), CHIP, r, 0.28, sends={"small": 0.1})
+    B.notes(mel("A3e C4e E4e A4e C5e E5e A5h", 4, 0, 0), CHIP_PULSE, r, 0.14, sends={"small": 0.1})
+    for t0 in (0.0, 1.0, 2.0, 3.0):
+        B.add(t0, _chip_kick(r), 0.4)
+    for t0 in (0.5, 2.5, 3.5):
+        B.add(t0, _chip_snare(r), 0.3)
+    B.add(3.0, _chip_crash(r), 0.25, 0.2)
+    B.add(3.0, _chip_arp(r, float(mtof(57)), 2.2, 0.9, (0, 3, 7, 12), 40.0), 0.14)
+    B.add(3.0, _tri(r, float(mtof(33)), 2.2, 0.9), 0.25)
+
+
+def _ff_siege(B, r, k):
+    B.notes(mel("F4t G4t A4t Bb4q F5q Bb5h", 4, 0, 0), I(me.brass, kind="horn", voices=3), r, 0.42, sends={"hall": 0.5})
+    for t0 in (0.0, 0.5, 1.0, 1.5):
+        B.add(t0, me.snare(r, "march", 0.8), 0.2, sends={"small": 0.2})
+    B.add(0.0, me.timpani_roll(r, float(mtof(34)), 2.0, B.spb, 0.2, 1.0), 0.28, sends={"hall": 0.3})
+    for m in (34, 41, 46, 53, 58, 61):
+        B.add(2.0, me.brass(r, float(mtof(m)), 2.6, 0.95, "tuba" if m < 40 else ("trombone" if m < 55 else "horn"), voices=2),
+              0.15, sends={"hall": 0.5})
+    for m in (46, 53, 58):
+        B.add(2.0, me.choir(r, float(mtof(m)), 2.6, 0.8, "o", male=True, att=0.2, rel=1.0), 0.1, sends={"hall": 0.5})
+    B.add(2.0, me.taiko(r, "odaiko"), 0.5, sends={"hall": 0.3})
+    B.add(2.0, me.boom(r, 1.0, 34.0, 2.5), 0.45)
+    B.add(2.0, me.cymbal(r, "crash"), 0.22, 0.3, {"hall": 0.3})
+    B.add(2.0, me.anvil(r, 1.0, 0.9, 1.0), 0.2, 0.2, {"hall": 0.3})
+
+
+def stingers_new():
+    """Fanfares and checkpoint chimes for the eight v2.0 worlds (also run by `stingers`)."""
+    fanfare("toybox", 65, _ff_toybox, 3.8, bpm=126.0)
+    fanfare("fungal", 67, _ff_fungal, 4.6, bpm=96.0)
+    fanfare("carnival", 63, _ff_carnival, 4.4, bpm=132.0)
+    fanfare("olympus", 64, _ff_olympus, 5.0, bpm=108.0)
+    fanfare("dino", 65, _ff_dino, 4.8, bpm=112.0)
+    fanfare("arcane", 61, _ff_arcane, 5.4, bpm=92.0)
+    fanfare("arcade", 69, _ff_arcade, 3.6, bpm=160.0)
+    fanfare("siege", 58, _ff_siege, 5.0, bpm=108.0)
+    chime("toybox", lambda B, r: (B.add(0, _toypiano(r, float(mtof(77)), 0.5, 0.85), 0.4, -0.2, {"small": 0.3}),
+                                  B.add(0.14, _toypiano(r, float(mtof(84)), 0.5, 0.85), 0.38, 0.2, {"small": 0.3}),
+                                  B.add(0.0, me.mallet(r, float(mtof(89)), 0.6, 0.8, "musicbox"), 0.18, 0.0, {"small": 0.3})))
+    chime("fungal", lambda B, r: (B.add(0, me.harp(r, float(mtof(79)), 1.0, 0.8), 0.38, -0.2, {"hall": 0.4}),
+                                  B.add(0.16, me.harp(r, float(mtof(86)), 1.0, 0.8), 0.34, 0.2, {"hall": 0.4}),
+                                  B.add(0.0, me.pizz(r, float(mtof(67)), 0.3, 0.8, section=2), 0.25, 0.0, {"hall": 0.3}),
+                                  B.add(0.3, me.woodwind(r, float(mtof(91)), 0.4, 0.5, "flute"), 0.14, 0.0, {"hall": 0.5})))
+    chime("carnival", lambda B, r: (B.add(0, _calliope(r, float(mtof(75)), 0.3, 0.85), 0.26, -0.2, {"small": 0.3}),
+                                    B.add(0.13, _calliope(r, float(mtof(82)), 0.3, 0.85), 0.26, 0.2, {"small": 0.3}),
+                                    B.add(0.0, me.mallet(r, float(mtof(87)), 0.6, 0.8, "glockenspiel"), 0.22, 0.0, {"small": 0.3}),
+                                    B.add(0.26, me.tambourine(r, 0.8, True), 0.12, 0.3, {"small": 0.3})))
+    chime("olympus", lambda B, r: (B.add(0, _lyre(r, float(mtof(76)), 1.0, 0.85), 0.4, -0.2, {"hall": 0.5}),
+                                   B.add(0.16, _lyre(r, float(mtof(83)), 1.0, 0.85), 0.36, 0.2, {"hall": 0.5}),
+                                   B.add(0.3, me.choir(r, float(mtof(76)), 0.8, 0.6, "a", att=0.15, rel=0.5), 0.1, 0.0, {"hall": 0.6})))
+    chime("dino", lambda B, r: (B.add(0, me.mallet(r, float(mtof(65)), 0.6, 0.9, "marimba"), 0.42, -0.2, {"small": 0.3}),
+                                B.add(0.14, me.mallet(r, float(mtof(72)), 0.6, 0.9, "marimba"), 0.4, 0.2, {"small": 0.3}),
+                                B.add(0.0, me.tom(r, 96.0, 1.0), 0.3, 0.0, {"small": 0.2}),
+                                B.add(0.28, me.woodblock(r, 0.8, 1.0), 0.16, 0.0, {"small": 0.3})))
+    chime("arcane", lambda B, r: (B.add(0, me.mallet(r, float(mtof(73)), 1.0, 0.85, "celesta"), 0.38, -0.2, {"hall": 0.5}),
+                                  B.add(0.16, me.mallet(r, float(mtof(80)), 1.0, 0.85, "celesta"), 0.34, 0.2, {"hall": 0.5}),
+                                  B.add(0.0, me.harpsichord(r, float(mtof(61)), 0.4, 0.8), 0.22, 0.0, {"hall": 0.4}),
+                                  B.add(0.3, me.bell(r, float(mtof(85)), 1.0, 0.4), 0.1, 0.0, {"hall": 0.5})))
+    chime("arcade", lambda B, r: (B.add(0, _chip(r, float(mtof(81)), 0.1, 0.9, 0.5), 0.3, -0.1),
+                                  B.add(0.16, _chip(r, float(mtof(88)), 0.1, 0.9, 0.5), 0.3, 0.1),
+                                  B.add(0.32, _chip(r, float(mtof(93)), 0.3, 0.9, 0.25), 0.3, 0.0),
+                                  B.add(0.0, _chip_kick(r), 0.2)))
+    chime("siege", lambda B, r: (B.add(0, me.timpani(r, float(mtof(46)), 0.9), 0.35, 0.0, {"small": 0.3}),
+                                 B.add(0.0, me.brass(r, float(mtof(70)), 0.45, 0.9, "horn", voices=2, fp=True), 0.3, -0.2, {"hall": 0.3}),
+                                 B.add(0.2, me.brass(r, float(mtof(77)), 0.5, 0.9, "trumpet", voices=2, fp=True), 0.26, 0.2, {"hall": 0.3})))
 
 
 PIECES = {
@@ -2645,13 +3409,23 @@ PIECES = {
     "tempest": piece_tempest,
     "void": piece_void,
     "ascent": piece_ascent,
+    "toybox": piece_toybox,
+    "fungal": piece_fungal,
+    "carnival": piece_carnival,
+    "olympus": piece_olympus,
+    "dino": piece_dino,
+    "arcane": piece_arcane,
+    "arcade": piece_arcade,
+    "siege": piece_siege,
     "title": piece_title,
     "lobby": piece_lobby,
     "results": piece_results,
     "victory": piece_victory,
     "stingers": stingers,
+    "stingers_new": stingers_new,
 }
-LAYERED = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert", "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void", "ascent")
+LAYERED = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert", "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void", "ascent",
+           "toybox", "fungal", "carnival", "olympus", "dino", "arcane", "arcade", "siege")
 
 
 def verify():
@@ -2660,7 +3434,7 @@ def verify():
     ok = True
     total = 0
     print("verify:")
-    for name in [p for p in PIECES if p != "stingers"]:
+    for name in [p for p in PIECES if not p.startswith("stingers")]:
         files = ["music_" + name] + (["music_%s_hi" % name] if name in LAYERED else [])
         lens = []
         for f in files:
