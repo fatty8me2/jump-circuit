@@ -1375,8 +1375,9 @@ func _animate_emote(dt: float, speed: float, on_floor: bool) -> void:
 	_foot_r.position = _foot_r.position.lerp(f.fr, w)
 	_foot_l.position = _foot_l.position.lerp(f.fl, w)
 	_torso.position.y = lerpf(_torso.position.y, f.torso_y, w)
-	_torso.rotation.x = f.torso_rot.x * w
-	_torso.rotation.z = f.torso_rot.z * w
+	var tilt: float = float(Emotes.TILT_SCALE.get(built_character, 1.0))
+	_torso.rotation.x = f.torso_rot.x * w * tilt
+	_torso.rotation.z = f.torso_rot.z * w * tilt
 	_torso.rotation.y = lerp_angle(_torso.rotation.y, f.torso_rot.y, w)
 	_root.position.y = lerpf(_root.position.y, f.root_y, w)
 	if f.spin != 0.0:
