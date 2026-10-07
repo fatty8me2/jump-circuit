@@ -5,6 +5,8 @@ extends PowerUp
 const FLAME := Color(1.0, 0.6, 0.2)
 ## Seconds of thrust in the tank.
 const FUEL: float = 2.2
+## The burst never carries more than this much horizontal speed (it is a boost, not a skip).
+const SKIP_MAX: float = 10.0
 
 var fuel: float = FUEL
 var _thrusting: bool = false
@@ -111,7 +113,7 @@ func begin() -> void:
 	var p: Player = player()
 	var fwd := Vector3(p.velocity.x, 0, p.velocity.z)
 	var dir: Vector3 = fwd.normalized() if fwd.length() > 1.0 else Vector3(p.facing_dir.x, 0, p.facing_dir.z).normalized()
-	var along: float = maxf(fwd.length(), 11.0)
+	var along: float = clampf(fwd.length(), 7.0, SKIP_MAX)
 	p.velocity = dir * along + Vector3(0, 15.0, 0)
 	p.add_impulse(Vector3(0, 0.001, 0))
 	_blast_fx(layer, feet())

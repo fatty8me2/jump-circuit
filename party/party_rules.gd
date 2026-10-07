@@ -14,6 +14,16 @@ const BONUS_POINTS: int = 2
 const KO_WINDOW: float = 4.0
 ## The round ends this long after the first finisher (or when everyone is home).
 const ROUND_GRACE: float = 45.0
+## Hard cap: a round is over this many course-seconds after the start even if nobody finished.
+const ROUND_LIMIT: float = 240.0
+## The HUD counts down the last stretch before the cap.
+const LIMIT_WARNING: float = 30.0
+## Seconds a client waits past the cap (host silent) before ending the round with local results.
+const CLIENT_GRACE: float = 12.0
+## Seconds a relay client waits after "host lost connection" before ending the round locally.
+const HOST_AWAY_GRACE: float = 8.0
+## Seconds of invulnerability after any respawn or KO.
+const RESPAWN_PROTECTION: float = 2.0
 
 ## "party" (free-for-all), "team" (two teams) or "practice" (solo, no scoring).
 var mode: String = "party"
@@ -47,9 +57,11 @@ static func placement_points(place: int) -> int:
 
 ## The round is over once everyone finished, or ROUND_GRACE seconds (course time) after the
 ## first finish. `finish_times` holds each racer's finish course-time, -1 if still racing.
-static func round_over(finish_times: Array, course_time: float) -> bool:
+static func round_over(finish_times: Array, course_time: float, limit: float = ROUND_LIMIT) -> bool:
 	if finish_times.is_empty():
 		return false
+	if course_time >= limit:
+		return true
 	var first: float = first_finish(finish_times)
 	if first < 0.0:
 		return false
@@ -67,12 +79,17 @@ static func first_finish(finish_times: Array) -> float:
 	return first
 
 
-## Seconds left before the round is forced to end (-1 = no finisher yet).
-static func time_left(finish_times: Array, course_time: float) -> float:
+## Seconds left before the round is forced to end: the 45 s after the first finisher, or the
+## last LIMIT_WARNING seconds before the hard cap, whichever comes first. -1 = no countdown yet.
+static func time_left(finish_times: Array, course_time: float, limit: float = ROUND_LIMIT) -> float:
+	var left: float = -1.0
 	var first: float = first_finish(finish_times)
-	if first < 0.0:
-		return -1.0
-	return maxf(first + ROUND_GRACE - course_time, 0.0)
+	if first >= 0.0:
+		left = maxf(first + ROUND_GRACE - course_time, 0.0)
+	var cap: float = maxf(limit - course_time, 0.0)
+	if cap <= LIMIT_WARNING and (left < 0.0 or cap < left):
+		left = cap
+	return left
 
 
 ## Who gets the KO for a fall / death at `now`: the last attacker if the hit was recent enough.
@@ -204,3 +221,35 @@ static func rows_from_wire(raw: Variant) -> Array[Dictionary]:
 			row[k] = int(d.get(k, 0))
 		out.append(row)
 	return out
+
+
+# ---- course progress (Swap Warp, Thunder Cloud: who is really ahead) -------------------
+
+## Metres along the course polyline `points` (start, each checkpoint, finish) for a racer that
+## banked `cp` checkpoints and now stands at `pos`: the length up to their last checkpoint plus how
+## far they have closed the gap to the next one (straight-line, so detours never go backwards).
+static func route_progress(points: Array, cp: int, pos: Vector3) -> float:
+	if points.size() < 2:
+		return 0.0
+	var idx: int = clampi(cp, 0, points.size() - 1)
+	var base: float = 0.0
+	for i: int in idx:
+		base += (points[i] as Vector3).distance_to(points[i + 1] as Vector3)
+	if idx >= points.size() - 1:
+		return base
+	var seg: float = (points[idx] as Vector3).distance_to(points[idx + 1] as Vector3)
+	var left: float = pos.distance_to(points[idx + 1] as Vector3)
+	return base + clampf(seg - left, 0.0, seg)
+
+
+## The racer to swap with: of `progress` (id -> metres) the nearest one ahead of `mine`, within
+## `max_range` metres of course distance. 0 = nobody.
+static func swap_target(mine: float, progress: Dictionary, max_range: float) -> int:
+	var best: int = 0
+	var best_gap: float = INF
+	for id: Variant in progress:
+		var gap: float = float(progress[id]) - mine
+		if gap > 0.5 and gap <= max_range and gap < best_gap:
+			best_gap = gap
+			best = int(id)
+	return best
