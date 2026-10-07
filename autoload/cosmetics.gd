@@ -71,6 +71,25 @@ const HATS: Dictionary = {
 	"crown": {"name": "Crown", "rule": {"type": "medals", "tier": 3, "n": 10}},
 	"halo": {"name": "Halo", "rule": {"type": "stat", "key": "flawless_golds", "n": 1}},
 	"party": {"name": "Party Hat", "rule": {"type": "stat", "key": "laps_dealt", "n": 3}},
+	# v2.0: the eight new worlds' Silver hats, then Gold, medal-count, run and stat hats
+	"windup": {"name": "Wind-Up Key", "rule": {"type": "medal", "level": "toybox", "tier": 2}},
+	"toadstool": {"name": "Toadstool Cap", "rule": {"type": "medal", "level": "fungal", "tier": 2}},
+	"ringmaster": {"name": "Ringmaster Top Hat", "rule": {"type": "medal", "level": "carnival", "tier": 2}},
+	"laurel": {"name": "Laurel Wreath", "rule": {"type": "medal", "level": "olympus", "tier": 2}},
+	"dinoskull": {"name": "Dino Skull", "rule": {"type": "medal", "level": "dino", "tier": 2}},
+	"wizard": {"name": "Arcane Wizard Hat", "rule": {"type": "medal", "level": "arcane", "tier": 2}},
+	"pixel_crown": {"name": "Pixel Crown", "rule": {"type": "medal", "level": "arcade", "tier": 2}},
+	"knight_helm": {"name": "Knight's Helm", "rule": {"type": "medal", "level": "siege", "tier": 2}},
+	"toque": {"name": "Chef's Toque", "rule": {"type": "runs", "n": 15}},
+	"bunny": {"name": "Bunny Ears", "rule": {"type": "stat", "key": "laps_dealt", "n": 6}},
+	"flower_crown": {"name": "Flower Crown", "rule": {"type": "medals", "tier": 1, "n": 15}},
+	"monocle_hat": {"name": "Monocle Top Hat", "rule": {"type": "medal", "level": "clockwork", "tier": 3}},
+	"cone": {"name": "Traffic Cone", "rule": {"type": "runs", "n": 50}},
+	"gilded_viking": {"name": "Gilded Viking Helm", "rule": {"type": "medal", "level": "glacier", "tier": 3}},
+	"gilded_tricorn": {"name": "Gilded Pirate Tricorne", "rule": {"type": "medal", "level": "armada", "tier": 3}},
+	"gilded_cowboy": {"name": "Gilded Cowboy Hat", "rule": {"type": "medal", "level": "frontier", "tier": 3}},
+	"gilded_beanie": {"name": "Gilded Summit Beanie", "rule": {"type": "medal", "level": "ascent", "tier": 3}},
+	"gilded_headphones": {"name": "Gilded Neon Headphones", "rule": {"type": "medal", "level": "neon", "tier": 3}},
 }
 
 const PAINTS: Dictionary = {
