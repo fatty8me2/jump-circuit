@@ -259,19 +259,7 @@ func _steer_ground(to: Vector3) -> void:
 
 
 func _time_to_reach(y_target: float) -> float:
-	var t: MovementTuning = player.tuning
-	var y: float = player.global_position.y
-	var vy: float = player.velocity.y
-	var time: float = 0.0
-	var step: float = 1.0 / 60.0
-	while time < 4.0:
-		var g: float = t.gravity_rise if vy > 0.0 else t.gravity_fall
-		vy = maxf(vy - g * step, -t.max_fall_speed)
-		y += vy * step
-		time += step
-		if vy <= 0.0 and y <= y_target:
-			break
-	return time
+	return RouteMath.time_to_reach(player.tuning, player.global_position.y, player.velocity.y, y_target)
 
 
 func _steer_air(to: Vector3) -> void:
@@ -300,22 +288,11 @@ var _pick_basis: Basis = Basis.IDENTITY
 
 
 func _future(n: Node3D, local: Vector3, lead: float) -> Vector3:
-	var now: float = Game.course_time
-	if n is MovingPlatform:
-		var m := n as MovingPlatform
-		return m.global_position - m.offset_at(now) + m.offset_at(now + lead) + local
-	if n is RotatingPlatform:
-		var r := n as RotatingPlatform
-		return r.global_position + Basis(Vector3.UP, r.angle_at(now + lead)) * local
-	return n.global_transform * local
+	return RouteMath.future(n, local, lead)
 
 
 func _arm_basis(local: Vector3) -> Basis:
-	var d: Vector3 = _flat(local)
-	if d.length() < 0.1:
-		return Basis.IDENTITY
-	d = d.normalized()
-	return Basis(d, Vector3.UP, d.cross(Vector3.UP))
+	return RouteMath.arm_basis(local)
 
 
 func _x_node(step: Dictionary, key: String) -> Node3D:

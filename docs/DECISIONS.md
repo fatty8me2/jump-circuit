@@ -101,3 +101,21 @@
 - Sounds: 18 party clips synthesised by party/gen_party_audio.py (same helpers as tools/gen_audio.py); PartySfx
   falls back to pitched main-game clips if a file is missing.
 - Names are nods, not trademarks, and all live in party/party_names.gd.
+
+
+## CPU racers (2026-10-07, v2.0 workstream P2)
+- A CPU is a roster entry (id 900 + slot, `"cpu": true`, cosmetics like a human's), so standings, bonuses, KO credit,
+  scoring and the results screen need no special cases. Only the HOST simulates CPUs (party/cpu/cpu_field.gd) and
+  broadcasts one batched `cpose` Party packet per pose interval over either transport (no relay change). Guests
+  only apply what arrives. A human's hit on a CPU goes through `Net.send_party(to_id = CPU)` -> the host.
+- The driving is a `RouteWalker`: a physics-free body that follows the course's own `r_*` route. A second real
+  Player was rejected: checkpoints, kill zones and the finish gate react to ANY Player and would bank, kill or
+  finish the human. The walker reads the level only (platform positions, the route's timing tests, ray casts for
+  ground / edges / landings) and keeps its own progress. The route's `until` / `test` callables read `level.player`,
+  so they are asked with a disabled stand-in Player (`RouteWalker._cond`).
+- Skill (party/cpu/cpu_skill.gd, one table): run speed share, reaction + dither, botched long jumps and mistimed
+  obstacles (they fall and respawn like humans), corner cutting (Hard), shove appetite, item delay.
+  Not done: Hard does not pick a different `route_variant` - variants change the geometry the level builds at load.
+- Solo "Party vs CPU" is a one-person `Net.local_session` (host, no peers) running the ordinary party race flow;
+  it really pauses (the paused race clock is held by moving `Net.race_start_time`). Online, "Fill with CPUs" tops the
+  roster up to 8 when a round starts and removes the CPUs when the cup ends, so the lobby is never full of them.

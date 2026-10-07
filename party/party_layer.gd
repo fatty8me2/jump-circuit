@@ -153,6 +153,7 @@ func setup(p_level: LevelBase) -> void:
 		player.visual.set_accent(PartyNames.team_color(Net.team_of(Net.my_id())))
 		for id: Variant in level._ghosts:
 			(level._ghosts[id] as RemoteRacer).set_team(PartyNames.team_name(Net.team_of(int(id))), PartyNames.team_color(Net.team_of(int(id))))
+	CpuField.attach(self)   # CPU racers (party/cpu/), when the round has any
 	_place_when_ready.call_deferred()
 
 
