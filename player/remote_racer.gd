@@ -70,12 +70,26 @@ func apply_cosmetics(entry: Dictionary) -> void:
 	_visual.set_hat(Cosmetics.clean("hat", entry.get("hat")))
 	_visual.set_paint(Cosmetics.clean("paint", entry.get("paint")))
 	set_title(entry.get("title"))
+	_visual.pose_id = Cosmetics.clean("pose", entry.get("pose"))
 
 
 func set_title(id: Variant) -> void:
 	title_id = Cosmetics.clean("title", id)
 	if _label != null:
 		_label.text = _tag_text(_team_name)
+
+
+## They played an emote / victory pose (kind "emote" | "pose") or cut it short (kind "stop").
+## Ids are checked against the catalogue (Net validates them too); movement ends an emote on
+## its own (PlayerVisual stops it when the reported speed or air time says they moved).
+func play_emote(kind: String, id: String) -> void:
+	match kind:
+		"emote":
+			_visual.play_emote(id)
+		"pose":
+			_visual.play_pose(id, false, 0.0)
+		"stop":
+			_visual.cancel_emote()
 
 
 ## They crossed the line: their own finish celebration.

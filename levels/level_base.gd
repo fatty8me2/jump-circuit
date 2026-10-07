@@ -117,6 +117,8 @@ func _spawn_player() -> void:
 	player.visual.set_character(Cosmetics.equipped("character"))
 	player.visual.set_hat(Cosmetics.equipped("hat"))
 	player.visual.set_paint(Cosmetics.equipped("paint"))
+	player.visual.pose_id = Cosmetics.equipped("pose")
+	player.emote_sent.connect(Net.send_emote)
 	camera = OrbitCamera.new()
 	add_child(camera)
 	camera.target = player
@@ -191,6 +193,9 @@ func _setup_race() -> void:
 			if id == spectating_id:
 				_spectate_moved_on())
 	Net.racer_lapped.connect(_on_racer_lapped)
+	Net.racer_emote.connect(func(id: int, kind: String, emote_id: String) -> void:
+		if _ghosts.has(id) and is_inside_tree():
+			(_ghosts[id] as RemoteRacer).play_emote(kind, emote_id))
 	# a dropped relay link reconnects on its own; the race carries on meanwhile
 	Net.connection_interrupted.connect(func(_detail: String) -> void:
 		if is_inside_tree():

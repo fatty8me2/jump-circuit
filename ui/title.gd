@@ -515,9 +515,15 @@ func _practice_screen() -> Control:
 
 ## Locker tabs, in order: one per Cosmetics kind, then the racer colour. LB / RB (Q / E)
 ## switch tabs; the tab buttons are for the mouse (pad focus stays in the grid).
-const LOCKER_TABS: Array[String] = ["character", "hat", "paint", "trail", "finish", "title", "colour"]
-const LOCKER_COLUMNS: Dictionary = {"character": 5, "hat": 5, "paint": 4, "trail": 5, "finish": 3, "title": 4}
+const LOCKER_TABS: Array[String] = ["character", "hat", "paint", "trail", "finish", "title", "emote", "pose", "colour"]
+const LOCKER_COLUMNS: Dictionary = {"character": 5, "hat": 5, "paint": 4, "trail": 5, "finish": 3, "title": 4, "emote": 4, "pose": 3}
 var locker_tab: int = 0
+## Emotes tab: which of the four D-pad / 1-4 slots the next pick fills (0 up .. 3 left).
+var _emote_slot: int = 0
+var _emote_slot_row: HBoxContainer
+## The emote / pose the Locker preview loops (kind, id), and the pause before it replays.
+var _clip_loop: Array[String] = []
+var _clip_gap: float = 0.0
 var _locker_body: VBoxContainer
 var _locker_tabs_row: HBoxContainer
 var _locker_tab_hint: Label
@@ -536,12 +542,29 @@ func _wear_equipped() -> void:
 		_volt.set_hat(Cosmetics.equipped("hat"))
 	if _volt.paint_id != Cosmetics.equipped("paint"):
 		_volt.set_paint(Cosmetics.equipped("paint"))
+	# (a tab switch drops whatever emote / pose the last tab was previewing)
+	_clip_loop = []
+	_volt.stop_emote()
 
 
 ## Locker preview: Volt laps the pad platform at a run so the trail streams out, framed
 ## to the right of the menu column.
 func _locker_preview(dt: float) -> void:
 	var centre := Vector3(0.5, 0.2, 0.0)
+	if LOCKER_TABS[locker_tab] in ["emote", "pose"]:
+		# the emote / pose tabs: Volt stands in front of the camera and replays the focused clip
+		_volt.position = centre + Vector3(-4.6, 0.0, 0.0)
+		var to_cam: Vector3 = _cam.position - _volt.position
+		to_cam.y = 0.0
+		_volt.animate(dt, Vector3.ZERO, true, to_cam.normalized())
+		if not _clip_loop.is_empty() and not _volt.is_emoting():
+			_clip_gap -= dt
+			if _clip_gap <= 0.0:
+				_clip_gap = 0.5
+				_play_preview_clip(true)
+		_cam.position = centre + Vector3(-7.5, 4.2, 10.5)
+		_cam.look_at(centre + Vector3(-4.6, 0.9, 0.0))
+		return
 	var r: float = 3.4
 	var w: float = 3.5   # ~12 m/s: over the speed where every trail (Classic too) shows
 	var a: float = _t * w
@@ -555,7 +578,7 @@ func _locker_preview(dt: float) -> void:
 func _locker_screen() -> Control:
 	var box: VBoxContainer = UiKit.vbox(10)
 	box.add_child(UiKit.shadowed(UiKit.label("LOCKER", 40, Color.WHITE), 8))
-	var blurb: Label = UiKit.label("Earn medals and beat courses to unlock characters, hats, paint jobs, trails, finishes and titles. Racers online see yours too.", 17, UiKit.SOFT)
+	var blurb: Label = UiKit.label("Earn medals and beat courses to unlock characters, hats, paint jobs, trails, finishes, titles, emotes and victory poses. Racers online see yours too.", 17, UiKit.SOFT)
 	blurb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	blurb.custom_minimum_size = Vector2(720, 0)
 	box.add_child(blurb)
@@ -563,10 +586,10 @@ func _locker_screen() -> Control:
 	_locker_tabs_row = UiKit.hbox(6)
 	_locker_tabs_row.name = "Tabs"
 	for i: int in LOCKER_TABS.size():
-		var tb: Button = UiKit.button(_tab_label(LOCKER_TABS[i]), func() -> void: set_locker_tab(i), 96)
+		var tb: Button = UiKit.button(_tab_label(LOCKER_TABS[i]), func() -> void: set_locker_tab(i), 0)
 		tb.focus_mode = Control.FOCUS_NONE
 		tb.custom_minimum_size.y = 38
-		tb.add_theme_font_size_override("font_size", 15)
+		tb.add_theme_font_size_override("font_size", 13)
 		tb.set_meta("tab", LOCKER_TABS[i])
 		_locker_tabs_row.add_child(tb)
 	box.add_child(_locker_tabs_row)
@@ -623,13 +646,78 @@ func _build_locker_tab() -> Control:
 	_locker_body.add_child(UiKit.label(_tab_label(tab).to_upper(), 16, UiKit.TEAL))
 	if tab == "colour":
 		return _locker_colours()
+	if tab == "emote":
+		_locker_body.add_child(_locker_emote_slots())
 	var grid: GridContainer = _locker_grid(tab, int(LOCKER_COLUMNS.get(tab, 4)))
 	_locker_body.add_child(grid)
-	var want: String = Cosmetics.equipped(tab)
+	var want: String = Cosmetics.emote_slot(_emote_slot) if tab == "emote" else Cosmetics.equipped(tab)
 	for b: Node in grid.get_children():
 		if str(b.get_meta("item")) == want:
 			return b as Control
 	return grid.get_child(0) as Control if grid.get_child_count() > 0 else null
+
+
+## The four emote slots (D-pad up / right / down / left, keys 1-4): press one to choose it, then
+## press an emote in the grid below to put it there.
+func _locker_emote_slots() -> Control:
+	var col: VBoxContainer = UiKit.vbox(4)
+	_emote_slot_row = UiKit.hbox(6)
+	_emote_slot_row.name = "EmoteSlots"
+	for i: int in Cosmetics.EMOTE_SLOT_KEYS.size():
+		var sb: Button = UiKit.button("", func() -> void: _locker_choose_slot(i), 0)
+		sb.set_meta("slot", i)
+		sb.custom_minimum_size = Vector2(172, 40)
+		sb.add_theme_font_size_override("font_size", 15)
+		sb.clip_text = true
+		sb.focus_entered.connect(func() -> void:
+			var held: String = Cosmetics.emote_slot(i)
+			_set_locker_info("%s  -  slot %d: %s. Press to fill it with an emote." % [_slot_prompt(i), i + 1, Cosmetics.item_name("emote", held)], UiKit.SOFT)
+			_clip_loop = ["emote", held]
+			_play_preview_clip(false))
+		_emote_slot_row.add_child(sb)
+	col.add_child(_emote_slot_row)
+	var how: Label = UiKit.label("In game: %s." % ("D-pad up / right / down / left" if Game.using_pad else "keys 1 2 3 4 (the D-pad on a pad)"), 14, UiKit.SOFT)
+	col.add_child(how)
+	_refresh_emote_slots()
+	return col
+
+
+## "D-pad Up" / "Key 1" for slot `i`, by the device in hand.
+func _slot_prompt(i: int) -> String:
+	return "D-pad %s" % Cosmetics.EMOTE_SLOT_NAMES[i] if Game.using_pad else "Key %d" % (i + 1)
+
+
+func _refresh_emote_slots() -> void:
+	if _emote_slot_row == null or not is_instance_valid(_emote_slot_row):
+		return
+	for n: Node in _emote_slot_row.get_children():
+		var b := n as Button
+		var i: int = int(b.get_meta("slot"))
+		var label: String = "%s: %s" % [Cosmetics.EMOTE_SLOT_NAMES[i], Cosmetics.item_name("emote", Cosmetics.emote_slot(i))]
+		b.text = "[ %s ]" % label if i == _emote_slot else label
+		b.modulate = Color.WHITE if i == _emote_slot else Color(0.75, 0.78, 0.88)
+
+
+## Picks emote slot `i` and moves on to the emote grid (on that slot's emote).
+func _locker_choose_slot(i: int) -> void:
+	_emote_slot = clampi(i, 0, Cosmetics.EMOTE_SLOT_KEYS.size() - 1)
+	_refresh_emote_slots()
+	var want: String = Cosmetics.emote_slot(_emote_slot)
+	for g: Node in _locker_body.find_children("*", "GridContainer", true, false):
+		for b: Node in g.get_children():
+			if str(b.get_meta("item", "")) == want:
+				(b as Control).grab_focus()
+				return
+
+
+## Plays the focused emote / pose on the preview Volt (`quiet` for loop repeats).
+func _play_preview_clip(quiet: bool) -> void:
+	if _clip_loop.size() != 2 or _volt == null:
+		return
+	if _clip_loop[0] == "pose":
+		_volt.play_pose(_clip_loop[1], true, 0.0, quiet)
+	else:
+		_volt.play_emote(_clip_loop[1], quiet)
 
 
 ## Colour swatches, as on the Race Friends screen.
@@ -701,7 +789,7 @@ func _refresh_locker_grid(grid: GridContainer) -> void:
 		var id: String = str(b.get_meta("item"))
 		var item_name: String = Cosmetics.item_name(kind, id)
 		var unlocked: bool = Cosmetics.is_unlocked(kind, id)
-		if id == _equipped(kind):
+		if id == _equipped(kind) or (kind == "emote" and Cosmetics.emote_slot_of(id) >= 0):
 			b.text = "> %s <" % item_name
 		else:
 			b.text = item_name if unlocked else "Locked"
@@ -717,6 +805,8 @@ func _locker_focus(kind: String, id: String) -> void:
 	if not Cosmetics.is_unlocked(kind, id):
 		var prog: String = Cosmetics.progress(kind, id)
 		_set_locker_info("LOCKED  %s  -  %s%s" % [item_name, Cosmetics.hint(kind, id), "  (%s)" % prog if prog != "" else ""], Color(1, 0.7, 0.55))
+	elif kind == "emote" and Cosmetics.emote_slot_of(id) >= 0:
+		_set_locker_info("%s  -  on %s (press to put it on %s instead)" % [item_name, _slot_prompt(Cosmetics.emote_slot_of(id)), _slot_prompt(_emote_slot)], UiKit.GOLD)
 	elif id == _equipped(kind):
 		_set_locker_info("%s  -  equipped" % item_name, UiKit.GOLD)
 	else:
@@ -739,11 +829,20 @@ func _preview(kind: String, id: String) -> void:
 		"paint":
 			if _volt.paint_id != id:
 				_volt.set_paint(id)
+		"emote", "pose":
+			# a locked one is previewed too: that is how you see what you are working towards
+			_clip_loop = [kind, id]
+			_clip_gap = 0.0
+			_play_preview_clip(false)
 
 
 func _locker_pick(kind: String, id: String) -> void:
 	if Cosmetics.is_unlocked(kind, id):
-		Settings.set(Cosmetics.setting_key(kind), id)
+		if kind == "emote":
+			Cosmetics.set_emote_slot(_emote_slot, id)
+			_refresh_emote_slots()
+		else:
+			Settings.set(Cosmetics.setting_key(kind), id)
 		_save_locker()
 		Net.update_identity()
 		Sfx.play("ui", 0.05, 0.8)

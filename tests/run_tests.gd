@@ -1209,7 +1209,8 @@ func test_z_b2_pad_bindings_any_slot() -> void:
 	check(InputMap.event_is_action(a, "jump") and InputMap.event_is_action(a, "ui_accept"), "pad A on any slot jumps and confirms menus")
 	check(InputMap.event_is_action(_pad_button(JOY_BUTTON_B, 1), "ui_cancel"), "pad B is menu back")
 	check(InputMap.event_is_action(_pad_button(JOY_BUTTON_START, 5), "pause"), "Start pauses from any slot")
-	check(InputMap.event_is_action(_pad_button(JOY_BUTTON_DPAD_UP, 1), "move_forward"), "D-pad moves")
+	check(not InputMap.event_is_action(_pad_button(JOY_BUTTON_DPAD_UP, 1), "move_forward"), "the D-pad no longer moves (it plays emotes: the left stick moves)")
+	check(InputMap.event_is_action(_pad_button(JOY_BUTTON_DPAD_UP, 1), "emote_1") and InputMap.event_is_action(_pad_button(JOY_BUTTON_DPAD_LEFT, 3), "emote_4"), "the D-pad plays emotes on any slot")
 	var rs := InputEventJoypadMotion.new()
 	rs.device = 1
 	rs.axis = JOY_AXIS_RIGHT_X
@@ -3969,7 +3970,7 @@ func test_zm_reward_rules_hints_progress() -> void:
 
 
 func test_zm_catalogue_and_kinds() -> void:
-	check(Cosmetics.kinds() == ["character", "hat", "paint", "trail", "finish", "title"], "KINDS order: %s" % [Cosmetics.kinds()])
+	check(Cosmetics.kinds() == ["character", "hat", "paint", "trail", "finish", "title", "emote", "pose"], "KINDS order: %s" % [Cosmetics.kinds()])
 	for kind: String in Cosmetics.kinds():
 		var d: String = Cosmetics.default_id(kind)
 		check(Cosmetics.has_item(kind, d) and Cosmetics.catalogue(kind)[d]["rule"]["type"] == "default", "%s default %s is in its catalogue and always owned" % [kind, d])
@@ -4569,8 +4570,8 @@ func test_zm_locker_tabs() -> void:
 	check(Settings.character_id == "volt", "a locked character cannot be equipped")
 	# LB wraps round to Colour
 	await send.call(JOY_BUTTON_LEFT_SHOULDER)
-	check(int(title.get("locker_tab")) == 6 and focus.call() != null and focus.call().has_meta("colour"),
-		"LB from the first tab wraps to Colour, on a swatch")
+	check(int(title.get("locker_tab")) == 8 and focus.call() != null and focus.call().has_meta("colour"),
+		"LB from the first tab wraps to Colour (the last tab), on a swatch")
 	check(int(focus.call().get_meta("colour")) == Settings.color_index, "... the worn colour")
 	await send.call(JOY_BUTTON_DPAD_RIGHT)
 	await send.call(JOY_BUTTON_A)
@@ -4640,3 +4641,470 @@ func test_zz_no_fall_charged_at_load() -> void:
 		world.queue_free()
 		world = null
 		await ticks(2)
+
+
+# ---- C1: emotes and victory poses (cos-emotes) ------------------------------------------------------
+
+func test_ze_catalogue_unlocks_and_settings() -> void:
+	check(Cosmetics.kinds().slice(-2) == ["emote", "pose"], "emote and pose are the last two kinds")
+	check(Cosmetics.kind_label("emote") == "Emote" and Cosmetics.kind_label("pose") == "Pose", "tab labels")
+	check(Cosmetics.ids("emote") == ["wave", "thumbsup", "dance", "bow", "laugh", "flex", "spin", "facepalm", "taunt", "sit"], "emotes: %s" % [Cosmetics.ids("emote")])
+	check(Cosmetics.ids("pose") == ["cheer", "strongman", "salute", "hero", "dab", "rockstar"], "poses: %s" % [Cosmetics.ids("pose")])
+	check(Cosmetics.display_name("emote", "wave") == "Wave emote" and Cosmetics.display_name("pose", "dab") == "Dab pose", "display names")
+	var defaults: int = 0
+	for id: String in Cosmetics.ids("emote"):
+		check(Emotes.has_clip("emote", id), "emote %s has a clip" % id)
+		if Cosmetics.catalogue("emote")[id]["rule"]["type"] == "default":
+			defaults += 1
+		else:
+			check(Cosmetics.hint("emote", id) != "", "locked emote %s names its unlock" % id)
+	check(defaults == 4, "four emotes are free (%d)" % defaults)
+	defaults = 0
+	for id: String in Cosmetics.ids("pose"):
+		check(Emotes.has_clip("pose", id), "pose %s has a clip" % id)
+		if Cosmetics.catalogue("pose")[id]["rule"]["type"] == "default":
+			defaults += 1
+		else:
+			check(Cosmetics.hint("pose", id) != "", "locked pose %s names its unlock" % id)
+	check(defaults == 1, "one pose is free (%d)" % defaults)
+	check(Emotes.EMOTE_LEN.size() == Cosmetics.ids("emote").size() and Emotes.POSE_LEN.size() == Cosmetics.ids("pose").size(), "no clip without a catalogue entry")
+	for id: Variant in Emotes.PUFFS:
+		check(Emotes.has_clip("emote", str(id)) or Emotes.has_clip("pose", str(id)), "puff table names a real clip (%s)" % id)
+	# unlock rules against hand-made progress
+	var ten: Array[String] = []
+	for info: Dictionary in Game.LEVELS:
+		if ten.size() < 10:
+			ten.append(str(info["id"]))
+	var lv: Dictionary = {}
+	check(not Cosmetics.rule_met(Cosmetics.catalogue("emote")["laugh"]["rule"], lv) and not Cosmetics.rule_met(Cosmetics.catalogue("pose")["salute"]["rule"], lv), "nothing locked is owned on a fresh save")
+	lv[ten[0]] = {"completed": true, "runs": 10, "best": Game.medal_target(ten[0], 1)}
+	check(Cosmetics.rule_met(Cosmetics.catalogue("emote")["laugh"]["rule"], lv), "10 runs unlock Laugh")
+	for i: int in 5:
+		lv[ten[i]] = {"completed": true, "runs": 5, "best": Game.medal_target(ten[i], 1)}
+	check(Cosmetics.rule_met(Cosmetics.catalogue("emote")["flex"]["rule"], lv) and Cosmetics.rule_met(Cosmetics.catalogue("emote")["spin"]["rule"], lv)
+		and Cosmetics.rule_met(Cosmetics.catalogue("pose")["strongman"]["rule"], lv), "5 bronze medals unlock Flex, Spin and the Strongman pose")
+	check(not Cosmetics.rule_met(Cosmetics.catalogue("emote")["taunt"]["rule"], lv) and not Cosmetics.rule_met(Cosmetics.catalogue("emote")["sit"]["rule"], lv), "Taunt and Sit stay locked")
+	for i: int in 10:
+		lv[ten[i]] = {"completed": true, "runs": 5, "best": Game.medal_target(ten[i], 3)}
+	check(Cosmetics.rule_met(Cosmetics.catalogue("emote")["sit"]["rule"], lv) and Cosmetics.rule_met(Cosmetics.catalogue("pose")["rockstar"]["rule"], lv)
+		and Cosmetics.rule_met(Cosmetics.catalogue("pose")["hero"]["rule"], lv) and Cosmetics.rule_met(Cosmetics.catalogue("pose")["dab"]["rule"], lv), "10 gold medals unlock the rest")
+	check(Cosmetics.progress("emote", "flex", {}) == "Bronzes 0/5", "progress text (%s)" % Cosmetics.progress("emote", "flex", {}))
+	# slots: defaults, swapping, locked refused
+	var keep: Array = []
+	for k: String in Cosmetics.EMOTE_SLOT_KEYS:
+		keep.append(Settings.get(k))
+	var keep_pose: String = Settings.pose_id
+	SaveData.wipe()
+	for i: int in 4:
+		Settings.set(Cosmetics.EMOTE_SLOT_KEYS[i], Cosmetics.EMOTE_SLOT_DEFAULTS[i])
+	check(Cosmetics.emote_slots() == ["wave", "thumbsup", "dance", "bow"], "fresh slots: %s" % [Cosmetics.emote_slots()])
+	check(Cosmetics.set_emote_slot(0, "dance") and Cosmetics.emote_slots() == ["dance", "thumbsup", "wave", "bow"], "an emote already slotted swaps places (%s)" % [Cosmetics.emote_slots()])
+	check(not Cosmetics.set_emote_slot(1, "flex") and not Cosmetics.set_emote_slot(1, "nope") and not Cosmetics.set_emote_slot(7, "wave"), "locked, unknown and out-of-range picks are refused")
+	Settings.emote_id3 = "flex"
+	check(Cosmetics.emote_slot(2) == "dance", "a locked emote in a slot plays that slot's default (%s)" % Cosmetics.emote_slot(2))
+	check(Cosmetics.equipped("emote") == Cosmetics.emote_slot(0) and Cosmetics.equipped_all().has("pose"), "the emote kind equips slot 1; registration carries emote and pose")
+	# settings sanitizing
+	Settings.emote_id = "nope"
+	Settings.emote_id2 = "<b>"
+	Settings.emote_id4 = ""
+	Settings.pose_id = "moonwalk"
+	Settings.call("_sanitize")
+	check(Settings.emote_id == "wave" and Settings.emote_id2 == "thumbsup" and Settings.emote_id4 == "bow" and Settings.pose_id == "cheer", "junk slot ids reset to the defaults")
+	Settings.emote_id3 = "flex"
+	Settings.call("_sanitize")
+	check(Settings.emote_id3 == "flex", "a known (still locked) emote is kept in settings")
+	var path: String = "user://test_settings_emotes.cfg"
+	var cf := ConfigFile.new()
+	cf.set_value("s", "emote_id", 3)
+	cf.set_value("s", "emote_id2", "laugh")
+	cf.set_value("s", "emote_id3", ["x"])
+	cf.set_value("s", "emote_id4", "zzz")
+	cf.set_value("s", "pose_id", "rockstar")
+	cf.save(path)
+	Settings.load_settings(path)
+	check(Settings.emote_id2 == "laugh" and Settings.emote_id3 == "flex" and Settings.emote_id4 == "bow" and Settings.pose_id == "rockstar",
+		"from a file: wrong types ignored, bad strings reset (%s %s %s %s)" % [Settings.emote_id2, Settings.emote_id3, Settings.emote_id4, Settings.pose_id])
+	for k: String in Cosmetics.EMOTE_SLOT_KEYS + ["pose_id"]:
+		check(k in Settings._props(), "%s is saved with the settings" % k)
+	check(Cosmetics.equipped("pose") == "cheer", "a locked pose wears the default")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	for i: int in 4:
+		Settings.set(Cosmetics.EMOTE_SLOT_KEYS[i], keep[i])
+	Settings.pose_id = keep_pose
+	SaveData.wipe()
+
+
+## Rest-pose floor of a rig: the lowest visible mesh point (the poses must not sink into the ground).
+func _ze_low(v: PlayerVisual, centres: bool = false) -> float:
+	var low: float = INF
+	for mi: MeshInstance3D in _zm_meshes(v._root):
+		if mi.is_visible_in_tree() and mi.mesh != null:
+			var bb: AABB = mi.global_transform * mi.get_aabb()
+			# (a body pitched far over has loose bounding boxes: compare mesh centres instead)
+			low = minf(low, bb.get_center().y if centres else bb.position.y)
+	return low
+
+
+func test_ze_clips_animate_cleanly() -> void:
+	await new_world()
+	var e0: int = trap.count()
+	var v := PlayerVisual.new()
+	world.add_child(v)
+	await ticks(1)
+	var dt: float = 1.0 / 60.0
+	for c: String in Cosmetics.ids("character"):
+		v.set_character(c)
+		v.stop_emote()
+		for i: int in 40:
+			v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
+		var rest_low: float = _ze_low(v)
+		var rest_mid: float = _ze_low(v, true)
+		var rest_hand: Vector3 = v._hand_r.position
+		for kind: String in ["emote", "pose"]:
+			for id: String in Cosmetics.ids(kind):
+				check(v.play_emote(id, true) if kind == "emote" else v.play_pose(id, false, 0.0, true), "%s plays %s %s" % [c, kind, id])
+				var low: float = INF
+				var moved: float = 0.0
+				var finite: bool = true
+				var frames: int = int((Emotes.length(kind, id) + 0.5) / dt)
+				for i: int in frames:
+					v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
+					if i % 6 == 0:
+						low = minf(low, _ze_low(v, id == "bow"))
+						moved = maxf(moved, v._hand_r.position.distance_to(rest_hand))
+						for mi: MeshInstance3D in _zm_meshes(v._root):
+							if not mi.global_transform.origin.is_finite() or not mi.global_transform.basis.x.is_finite() or not mi.global_transform.basis.y.is_finite():
+								finite = false
+				check(finite, "%s %s %s: every mesh stays finite" % [c, kind, id])
+				check(not v.is_emoting(), "%s %s %s ends by itself" % [c, kind, id])
+				var floor_ref: float = rest_mid if id == "bow" else rest_low
+				check(low >= floor_ref - (0.1 if id == "bow" else 0.06), "%s %s %s stays above the floor (%.3f vs %.3f)" % [c, kind, id, low, floor_ref])
+				if id != "sit" and id != "cheer":
+					check(moved > 0.04 or id == "bow", "%s %s %s moves the right mitt (%.2f)" % [c, kind, id, moved])
+				for i: int in 60:
+					v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
+				check(v._torso.rotation.x == 0.0 and v._torso.rotation.z == 0.0, "%s %s %s leaves the torso upright" % [c, kind, id])
+	# unknown ids and kinds
+	check(not v.play_emote("moonwalk") and not v.play_pose("moonwalk") and not v.play_emote("") and not v.is_emoting(), "unknown ids are refused")
+	check(not v.play_emote("strongman") and not v.play_pose("wave"), "an emote id is not a pose id")
+	# movement and the air cancel an emote; a pose waits for the ground
+	v.play_emote("dance", true)
+	for i: int in 30:
+		v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
+	check(v.is_emoting() and v.emote_kind() == "emote" and v.emote_id() == "dance", "standing still keeps the emote going")
+	for i: int in 40:
+		v.animate(dt, Vector3(6, 0, 0), true, Vector3.RIGHT)
+	check(not v.is_emoting(), "running cancels the emote")
+	v.play_emote("wave", true)
+	for i: int in 40:
+		v.animate(dt, Vector3(0, -5, 0), false, Vector3.FORWARD)
+	check(not v.is_emoting(), "leaving the ground cancels the emote")
+	v.play_pose("hero", false, 0.0, true)
+	for i: int in 120:
+		v.animate(dt, Vector3(0, -5, 0), false, Vector3.FORWARD)
+	check(v.is_emoting() and v._emote_t <= 0.01, "a victory pose waits for the ground")
+	for i: int in 400:
+		v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
+	check(not v.is_emoting(), "... then plays and ends")
+	# a held pose (the podium) stays until cancelled
+	v.play_pose("rockstar", true)
+	for i: int in 900:
+		v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
+	check(v.is_emoting() and v.emote_kind() == "pose", "a held pose outlasts its length")
+	v.cancel_emote()
+	for i: int in 30:
+		v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
+	check(not v.is_emoting(), "cancel_emote lets it go")
+	# the finish plays the equipped pose after the twirl; the default cheer needs no clip
+	v.pose_id = "dab"
+	v.on_cheer()
+	check(v.is_emoting() and v.emote_kind() == "pose" and v.emote_id() == "dab", "the finish plays the equipped pose")
+	for i: int in 400:
+		v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
+	check(not v.is_emoting(), "the finish pose relaxes")
+	v.pose_id = "cheer"
+	v.on_cheer()
+	check(not v.is_emoting(), "the Cheer pose is the built-in celebration")
+	v.play_emote("sit", true)
+	v.on_respawn()
+	check(not v.is_emoting(), "a respawn drops the emote")
+	check(trap.count() == e0, "no errors while emoting %s" % trap.since(e0))
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+func test_ze_emote_input_and_cancel() -> void:
+	await new_world()
+	floor_slab()
+	player.use_device_input = true
+	await settle()
+	for n: int in 4:
+		var a: String = "emote_%d" % (n + 1)
+		check(InputMap.has_action(a), "%s exists" % a)
+		var key := InputEventKey.new()
+		key.physical_keycode = (KEY_1 + n) as Key
+		check(InputMap.event_is_action(key, a), "key %d plays slot %d" % [n + 1, n + 1])
+	var pads: Array = [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]
+	for n: int in 4:
+		check(InputMap.event_is_action(_pad_button(pads[n], 1), "emote_%d" % (n + 1)), "D-pad %d plays slot %d" % [n, n + 1])
+		check(not InputMap.event_is_action(_pad_button(pads[n], 1), "move_forward") and not InputMap.event_is_action(_pad_button(pads[n], 1), "move_left"), "D-pad %d no longer moves" % n)
+	var keep: Array = []
+	for k: String in Cosmetics.EMOTE_SLOT_KEYS:
+		keep.append(Settings.get(k))
+	SaveData.wipe()
+	for i: int in 4:
+		Settings.set(Cosmetics.EMOTE_SLOT_KEYS[i], Cosmetics.EMOTE_SLOT_DEFAULTS[i])
+	var sent: Array = []
+	player.emote_sent.connect(func(k: String, i: String) -> void: sent.append([k, i]))
+	var press_key := func(code: Key) -> void:
+		var ev := InputEventKey.new()
+		ev.physical_keycode = code
+		ev.pressed = true
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+		var up: InputEventKey = ev.duplicate()
+		up.pressed = false
+		Input.parse_input_event(up)
+		await ticks(2)
+	var press_pad := func(button: JoyButton) -> void:
+		var ev := InputEventJoypadButton.new()
+		ev.device = 0
+		ev.button_index = button
+		ev.pressed = true
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+		var up: InputEventJoypadButton = ev.duplicate()
+		up.pressed = false
+		Input.parse_input_event(up)
+		await ticks(2)
+	var before: Vector3 = player.global_position
+	await press_key.call(KEY_2)
+	check(sent == [["emote", "thumbsup"]] and player.visual.emote_id() == "thumbsup", "key 2 plays slot 2 and announces it (%s)" % [sent])
+	await press_pad.call(JOY_BUTTON_DPAD_LEFT)
+	check(player.visual.emote_id() == "bow" and sent.size() == 2 and sent[1] == ["emote", "bow"], "the D-pad left plays slot 4 (%s)" % [sent])
+	await seconds(0.5)
+	check(player.global_position.distance_to(before) < 0.01 and player.velocity.length() < 0.1 and player.grounded, "emoting never moves the body")
+	check(player.visual.is_emoting(), "still emoting while standing still")
+	# walking away cancels it and tells the others
+	Input.action_press("move_forward")
+	await seconds(0.3)
+	Input.action_release("move_forward")
+	check(sent.back() == ["stop", ""], "moving sends a stop (%s)" % [sent])
+	await seconds(0.6)
+	check(not player.visual.is_emoting(), "movement input cancels the emote")
+	await settle()
+	# a jump press cancels too
+	check(player.try_emote(0) and player.visual.emote_id() == "wave", "try_emote(0) plays slot 1")
+	player.press_jump()
+	await ticks(3)
+	check(sent.back() == ["stop", ""], "jumping sends a stop (%s)" % [sent])
+	await seconds(1.2)
+	check(not player.visual.is_emoting(), "a jump cancels the emote")
+	# never in the air; fine during the countdown (control off) because it is only visual
+	player.press_jump()
+	player.cmd_jump = true
+	await seconds(0.15)
+	player.cmd_jump = false
+	check(not player.grounded and not player.try_emote(1), "no emotes in the air")
+	await seconds(1.5)
+	await settle()
+	player.control_enabled = false
+	check(player.try_emote(2) and player.visual.emote_id() == "dance", "an emote is allowed during the countdown (no physics effect)")
+	await seconds(0.4)
+	check(player.velocity.length() < 0.1, "... and does not move the body")
+	player.control_enabled = true
+	# a locked pick plays the slot's default
+	Settings.emote_id2 = "flex"
+	check(Cosmetics.emote_slot(1) == "thumbsup", "a locked emote on a slot plays the default")
+	for i: int in 4:
+		Settings.set(Cosmetics.EMOTE_SLOT_KEYS[i], keep[i])
+	SaveData.wipe()
+	player.use_device_input = false
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+func test_ze_emote_net_round_trip() -> void:
+	var lvl: LevelBase = await _zm_race_level()
+	var g: RemoteRacer = lvl._ghosts.get(2)
+	check(g != null, "Ada's ghost exists")
+	g.push_state(g.global_position, Vector3.ZERO, true, 0)
+	await ticks(2)
+	var got: Array = []
+	var catcher := func(id: int, kind: String, eid: String) -> void: got.append([id, kind, eid])
+	Net.racer_emote.connect(catcher)
+	# the relay path: a JSON "pose" event carrying {"emote": ...}
+	var wire: Variant = JSON.parse_string(JSON.stringify({"emote": {"k": "emote", "id": "dance"}}))
+	Net._handle_relay_event(2, "pose", wire)
+	check(got == [[2, "emote", "dance"]], "the relay event reaches racer_emote (%s)" % [got])
+	check(g.visual().is_emoting() and g.visual().emote_kind() == "emote" and g.visual().emote_id() == "dance", "the ghost plays Ada's dance")
+	await ticks(1)
+	# throttled: a second one right away is dropped; after the gap it plays
+	Net._handle_relay_event(2, "pose", {"emote": {"k": "emote", "id": "wave"}})
+	check(got.size() == 1 and g.visual().emote_id() == "dance", "a flood from one sender is throttled")
+	await seconds(0.3)
+	Net._emote_seen_at.clear()   # (the throttle runs on wall-clock time; the test clock may be faster)
+	# the direct (RPC) path ends in the same place
+	Net._apply_emote_msg(2, {"k": "pose", "id": "hero"})
+	check(got.size() == 2 and got[1] == [2, "pose", "hero"] and g.visual().emote_kind() == "pose" and g.visual().emote_id() == "hero", "a pose plays too (%s)" % [got])
+	await seconds(0.3)
+	Net._emote_seen_at.clear()   # (the throttle runs on wall-clock time; the test clock may be faster)
+	Net._apply_emote_msg(2, {"k": "stop", "id": ""})
+	check(got.size() == 3 and got[2] == [2, "stop", ""], "stop is relayed")
+	await seconds(0.6)
+	check(not g.visual().is_emoting(), "stop cancels the ghost's clip")
+	# garbage is ignored
+	await seconds(0.3)
+	Net._emote_seen_at.clear()   # (the throttle runs on wall-clock time; the test clock may be faster)
+	var n0: int = got.size()
+	Net._apply_emote_msg(2, {"k": "emote", "id": "<script>"})
+	Net._apply_emote_msg(2, {"k": "emote", "id": 7})
+	Net._apply_emote_msg(2, {"k": "emote"})
+	Net._apply_emote_msg(2, {"k": "pose", "id": "wave"})
+	Net._apply_emote_msg(2, {"k": "dance", "id": "wave"})
+	Net._apply_emote_msg(2, {"k": ["emote"], "id": "wave"})
+	Net._apply_emote_msg(99, {"k": "emote", "id": "wave"})
+	Net._apply_emote_msg(Net.my_id(), {"k": "emote", "id": "wave"})
+	Net._handle_relay_event(2, "pose", {"emote": "wave"})
+	Net._handle_relay_event(2, "pose", {"emote": 5})
+	check(got.size() == n0 and not g.visual().is_emoting(), "bad kinds, unknown ids, strangers, ourselves and wrong types are ignored")
+	# a racer's emote cancels when they run off
+	await seconds(0.3)
+	Net._emote_seen_at.clear()   # (the throttle runs on wall-clock time; the test clock may be faster)
+	Net._apply_emote_msg(2, {"k": "emote", "id": "dance"})
+	await ticks(2)
+	g.push_state(g.global_position, Vector3(7, 0, 0), true, 0)
+	await seconds(0.8)
+	check(not g.visual().is_emoting(), "the ghost stops emoting when it starts to move")
+	# sending outside a link, and invalid sends, are harmless
+	Net.send_emote("emote", "wave")
+	Net.send_emote("emote", "<x>")
+	Net.send_emote("stop")
+	check(Net._valid_emote("emote", "wave") and Net._valid_emote("pose", "dab") and Net._valid_emote("stop", "") and not Net._valid_emote("emote", "dab") and not Net._valid_emote("hat", "none"), "send validation")
+	# the roster carries the victory pose; the ghost wears it for its finish
+	Net.roster[2]["pose"] = "salute"
+	lvl._ghosts[2].apply_cosmetics(Net.roster[2])
+	check(g.visual().pose_id == "salute", "a racer's pose rides the roster")
+	g.celebrate()
+	check(g.visual().is_emoting() and g.visual().emote_id() == "salute", "their finish plays their pose")
+	lvl._ghosts[2].apply_cosmetics({"pose": "<x>"})
+	check(g.visual().pose_id == "cheer", "an unknown pose id falls back to Cheer")
+	Net.racer_emote.disconnect(catcher)
+	await _zm_end_race()
+
+
+## Seconds until the Locker preview of a finished clip has certainly replayed.
+func _ze_clip_wait(kind: String, id: String) -> float:
+	return Emotes.length(kind, id) + 0.9
+
+
+func test_ze_locker_emote_and_pose_tabs() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var keep: Array = []
+	for k: String in Cosmetics.EMOTE_SLOT_KEYS:
+		keep.append(Settings.get(k))
+	var keep_pose: String = Settings.pose_id
+	SaveData.wipe()
+	for i: int in 4:
+		Settings.set(Cosmetics.EMOTE_SLOT_KEYS[i], Cosmetics.EMOTE_SLOT_DEFAULTS[i])
+	Settings.pose_id = "cheer"
+	var e0: int = trap.count()
+	Game.title_screen = "locker"
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	title.set("persist_settings", false)
+	add_child(title)
+	await ticks(3)
+	var send := func(button: JoyButton) -> void:
+		var ev := InputEventJoypadButton.new()
+		ev.device = 1
+		ev.button_index = button
+		ev.pressed = true
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+		var up: InputEventJoypadButton = ev.duplicate()
+		up.pressed = false
+		Input.parse_input_event(up)
+		await ticks(2)
+	var focus := func() -> Control:
+		return get_viewport().gui_get_focus_owner()
+	var info: Label = title.get("_locker_info")
+	var volt: PlayerVisual = title.get("_volt")
+	var tabs: Array = title.get("LOCKER_TABS")
+	check(tabs.slice(-3) == ["emote", "pose", "colour"], "the Locker has Emote and Pose tabs before Colour (%s)" % [tabs])
+	for i: int in 6:
+		await send.call(JOY_BUTTON_RIGHT_SHOULDER)
+	check(int(title.get("locker_tab")) == 6 and focus.call().get_meta("kind", "") == "emote" and focus.call().get_meta("item", "") == "wave", "RB x6: the Emote tab, on slot 1's emote")
+	await ticks(2)
+	check(volt.is_emoting() and volt.emote_id() == "wave" and volt.emote_kind() == "emote", "focusing an emote plays it on the preview")
+	var slot_row: Node = (title.get("_screen") as Control).find_child("EmoteSlots", true, false)
+	check(slot_row != null and slot_row.get_child_count() == 4 and (slot_row.get_child(0) as Button).text == "[ Up: Wave ]" and (slot_row.get_child(3) as Button).text == "Left: Bow",
+		"the four slots are listed, slot 1 chosen (%s)" % ((slot_row.get_child(0) as Button).text if slot_row != null else "?"))
+	# the preview loops: after it ends it plays again
+	await seconds(_ze_clip_wait("emote", "wave"))
+	check(volt.is_emoting() and volt.emote_id() == "wave", "the preview loops the emote")
+	await send.call(JOY_BUTTON_DPAD_RIGHT)
+	check(focus.call().get_meta("item", "") == "thumbsup" and volt.emote_id() == "thumbsup" and not info.text.begins_with("LOCKED"), "right: Thumbs Up, previewed (%s)" % info.text)
+	await send.call(JOY_BUTTON_A)
+	check(Settings.emote_id == "thumbsup" and Settings.emote_id2 == "wave", "A puts it on slot 1 and swaps Wave to slot 2 (%s / %s)" % [Settings.emote_id, Settings.emote_id2])
+	check((slot_row.get_child(0) as Button).text == "[ Up: Thumbs Up ]" and (slot_row.get_child(1) as Button).text == "Right: Wave", "the slot labels follow")
+	check((focus.call() as Button).text == "> Thumbs Up <", "slotted emotes are marked")
+	# down onto a locked emote: hint, progress, A refuses
+	await send.call(JOY_BUTTON_DPAD_DOWN)
+	check(focus.call().get_meta("item", "") == "flex" and info.text.begins_with("LOCKED") and info.text.contains("Bronze or better on 5 courses") and info.text.contains("Bronzes 0/5"),
+		"a locked emote names its unlock (%s)" % info.text)
+	check(volt.emote_id() == "flex", "locked emotes can still be previewed")
+	await send.call(JOY_BUTTON_A)
+	check(Settings.emote_id == "thumbsup" and Settings.emote_id2 == "wave", "A on a locked emote changes nothing")
+	# up x2 reaches the slot row (pad only); choose that slot, then pick Dance for it
+	await send.call(JOY_BUTTON_DPAD_UP)
+	await send.call(JOY_BUTTON_DPAD_UP)
+	check(focus.call() is Button and focus.call().get_parent() == slot_row, "the D-pad reaches the slot row")
+	var slot_btn: Button = focus.call()
+	var slot_idx: int = int(slot_btn.get_meta("slot"))
+	await send.call(JOY_BUTTON_A)
+	check(int(title.get("_emote_slot")) == slot_idx and focus.call().get_meta("kind", "") == "emote", "A on a slot chooses it and drops back to the grid (slot %d)" % slot_idx)
+	var dance_btn: Control = null
+	for g: Node in (title.get("_locker_body") as Control).find_children("*", "GridContainer", true, false):
+		for b: Node in g.get_children():
+			if b.get_meta("item", "") == "dance":
+				dance_btn = b
+	dance_btn.grab_focus()
+	await ticks(2)
+	await send.call(JOY_BUTTON_A)
+	check(Cosmetics.emote_slot(slot_idx) == "dance" and Cosmetics.emote_slots().count("dance") == 1, "Dance fills the chosen slot (%s)" % [Cosmetics.emote_slots()])
+	# the Pose tab
+	await send.call(JOY_BUTTON_RIGHT_SHOULDER)
+	check(int(title.get("locker_tab")) == 7 and focus.call().get_meta("kind", "") == "pose" and focus.call().get_meta("item", "") == "cheer", "RB: the Pose tab, on Cheer")
+	await ticks(2)
+	check(volt.is_emoting() and volt.emote_kind() == "pose" and volt.emote_id() == "cheer", "focusing a pose plays it on the preview")
+	await send.call(JOY_BUTTON_DPAD_RIGHT)
+	check(focus.call().get_meta("item", "") == "strongman" and info.text.begins_with("LOCKED") and volt.emote_id() == "strongman", "a locked pose names its unlock and previews (%s)" % info.text)
+	await send.call(JOY_BUTTON_A)
+	check(Settings.pose_id == "cheer", "A on a locked pose changes nothing")
+	# earn it, then equip
+	for lid: String in ["gardens", "foundry", "balance"]:
+		SaveData.data["levels"][lid] = {"completed": true, "runs": 1, "best": Game.medal_target(lid, 3)}
+	await send.call(JOY_BUTTON_A)
+	check(Settings.pose_id == "strongman" and (focus.call() as Button).text == "> Strongman <", "once earned, A equips the pose")
+	# RB to Colour, LB back, B out
+	await send.call(JOY_BUTTON_RIGHT_SHOULDER)
+	check(focus.call().has_meta("colour") and not volt.is_emoting(), "leaving the tabs stops the preview clip")
+	await send.call(JOY_BUTTON_LEFT_SHOULDER)
+	await send.call(JOY_BUTTON_LEFT_SHOULDER)
+	check(focus.call().get_meta("kind", "") == "emote", "LB goes back to Emote")
+	await send.call(JOY_BUTTON_B)
+	await ticks(2)
+	check(Game.title_screen == "main", "B leaves from the Emote tab")
+	check(trap.count() == e0, "no errors in the Locker %s" % trap.since(e0))
+	title.queue_free()
+	await ticks(2)
+	for i: int in 4:
+		Settings.set(Cosmetics.EMOTE_SLOT_KEYS[i], keep[i])
+	Settings.pose_id = keep_pose
+	Game.title_screen = "main"
+	SaveData.wipe()
