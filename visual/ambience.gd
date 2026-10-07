@@ -662,10 +662,26 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 			]
 		"fungal":
 			return [
-				# PLACEHOLDER - the Mushroom Hollow level agent replaces this case (near / mid / far layers)
-				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
-					"color": Color(1.00, 0.95, 0.85), "speed": Vector2(0.05, 0.3), "spread": 180.0,
-					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# near: pollen and tiny seeds glinting gold as they drift past, a few petals tumbling
+				{"depth": "near", "amount": 90, "lifetime": 4.0, "tex": Fx.Tex.DOT, "size": 0.09,
+					"pick": PackedColorArray([Color(2.0, 1.7, 0.9), Color(1.8, 1.8, 1.5), Color(2.0, 1.5, 0.7)]),
+					"dir": Vector3(0.4, 0.15, 0.1), "speed": Vector2(0.15, 0.55), "spread": 90.0, "turbulence": 0.7,
+					"turbulence_scale": 5.0, "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 14, "lifetime": 6.0, "tex": Fx.Tex.PETAL, "size": 0.16, "additive": false,
+					"pick": PackedColorArray([Color(1.0, 0.74, 0.8), Color(1.0, 0.92, 0.55), Color(0.78, 0.9, 0.45)]),
+					"dir": Vector3(0.3, -1.0, 0.1), "speed": Vector2(0.4, 0.9), "spread": 30.0, "angle": Vector2(0, 360),
+					"spin": Vector2(-140, 140), "turbulence": 0.6, "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# mid: dandelion fluff and spores rising slowly on warm air
+				{"depth": "mid", "amount": 60, "lifetime": 8.0, "tex": Fx.Tex.STAR, "size": 0.26,
+					"color": Color(1.7, 1.68, 1.5), "dir": Vector3(0.3, 1.0, 0.1), "spread": 40.0, "speed": Vector2(0.3, 0.9),
+					"turbulence": 0.7, "turbulence_scale": 4.0, "curve": "pop"},
+				# far: big soft hazes of gold light drifting between the giant stems, and slow glints
+				{"depth": "far", "amount": 24, "lifetime": 12.0, "tex": Fx.Tex.SMOKE, "additive": true, "size": 26.0,
+					"radius": 90.0, "pick": PackedColorArray([Color(0.9, 0.78, 0.4, 0.1), Color(0.8, 0.9, 0.5, 0.08)]),
+					"speed": Vector2(0.4, 1.2), "dir": Vector3(0.4, 0.1, 0.1), "spread": 40.0, "angle": Vector2(0, 360),
+					"spin": Vector2(-4, 4), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 60, "lifetime": 9.0, "tex": Fx.Tex.STAR, "size": 0.9, "radius": 70.0,
+					"color": Color(2.0, 1.8, 1.2), "dir": Vector3.UP, "spread": 25.0, "speed": Vector2(0.8, 2.2), "curve": "pop"},
 			]
 		"olympus":
 			return [
