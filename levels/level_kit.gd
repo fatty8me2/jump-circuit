@@ -706,3 +706,97 @@ func seesaw(top: Vector3, length: float = 9.0, width: float = 2.6, along_x: bool
 		s.set(key, opts[key])
 	_add(s, top - Vector3(0, 0.2, 0))
 	return s
+
+
+## Flipper paddle. `pivot_top` = the pivot at the paddle's top height. The paddle lies along
+## local +X at `rest_deg` yaw, winds back for the tell (>= 0.8 s), then swats through `swing_deg`
+## (positive = toward -Z). Riders on or beside it are thrown along the swing, harder at the tip.
+## opts may set width/thick/tell/power/lift. throw_velocity(world_pos) predicts the throw.
+## Route: r_until(func(): return fl.swat_free_for(Game.course_time, 2.0)) to pass it,
+## or {"kind": "kick", "from": spot_on_paddle, "to": landing} to ride the swat.
+## Clips: kit_flipper_tell/swat/return.
+func flipper(pivot_top: Vector3, length: float = 5.0, rest_deg: float = 0.0, swing_deg: float = 80.0, period: float = 4.0, phase: float = 0.0, opts: Dictionary = {}) -> Flipper:
+	var f := Flipper.new()
+	f.length = length
+	f.rest_deg = rest_deg
+	f.swing_deg = swing_deg
+	f.period = period
+	f.phase = phase
+	for key: String in opts:
+		f.set(key, opts[key])
+	_add(f, pivot_top)
+	return f
+
+
+## Drawbridge. `hinge_top` = the hinge edge at deck-top height; the deck runs `length` m along local
+## -Z (turned by yaw), `width` wide. It stays flat for most of `period`, rattles its chains for
+## `warn` s (>= 0.8), rises ~80 deg, waits and lowers. A gatehouse frame is built behind the hinge.
+## Route: r_until(func(): return br.is_down_for(Game.course_time, crossing_seconds)).
+## Clips: kit_drawbridge_chains/raise/lower/thud.
+func drawbridge(hinge_top: Vector3, length: float = 8.0, width: float = 3.4, yaw_deg: float = 0.0, period: float = 9.0, phase: float = 0.0, opts: Dictionary = {}) -> Drawbridge:
+	var d := Drawbridge.new()
+	d.length = length
+	d.width = width
+	d.period = period
+	d.phase = phase
+	for key: String in opts:
+		d.set(key, opts[key])
+	d.rotation_degrees.y = yaw_deg
+	_add(d, hinge_top)
+	return d
+
+
+## Gap wall across a lane. `floor_pos` = floor at the lane centre; the wall faces local Z (yaw 0 =
+## you walk along -Z through it). The doorway (`gap` wide) sits on the lane for `open_time`
+## (the lamp flashes amber the last `warn` s), slides off in `move_time` (>= 0.8) and back.
+## opts may set height/thick/slide/open_time/move_time/warn/side.
+## Route: r_until(func(): return gw.is_open_for(Game.course_time, crossing_seconds)).
+## Clips: kit_gapwall_warn/slide/thud.
+func gap_wall(floor_pos: Vector3, yaw_deg: float = 0.0, gap: float = 3.4, period: float = 8.0, phase: float = 0.0, opts: Dictionary = {}) -> GapWall:
+	var w := GapWall.new()
+	w.gap = gap
+	w.period = period
+	w.phase = phase
+	w.slide = gap * 0.5 + 2.7
+	for key: String in opts:
+		w.set(key, opts[key])
+	w.rotation_degrees.y = yaw_deg
+	_add(w, floor_pos)
+	return w
+
+
+## Falling block over `floor_top` (the floor point under its centre), hung `drop_height` m up.
+## A shadow swells on the floor for `tell` s (>= 0.8), then it drops and kills what is under it,
+## rests (rideable top), and hauls itself back up. approach = true: it only starts when a rider
+## comes within `trigger_radius`. opts may set tell/trigger_radius.
+## Route: r_until(func(): return blk.is_clear_for(Game.course_time, 1.5)).
+## Clips: kit_block_tell/slam/rise.
+func falling_block(floor_top: Vector3, size: Vector3 = Vector3(3.0, 1.6, 3.0), drop_height: float = 7.0, period: float = 5.0, phase: float = 0.0, approach: bool = false, opts: Dictionary = {}) -> FallingBlock:
+	var b := FallingBlock.new()
+	b.size = size
+	b.drop_height = drop_height
+	b.period = period
+	b.phase = phase
+	b.approach = approach
+	for key: String in opts:
+		b.set(key, opts[key])
+	_add(b, floor_top)
+	return b
+
+
+## Spinning hammer on a post at `floor_top`. The arm waits parked at `park_deg`, winds back for the
+## tell (>= 0.8 s) and sweeps one full revolution (`swing_time` s), thrown riders fly outward. The
+## parked time is the gap. opts may set arm_length/head_radius/tell/swing_time/arm_height.
+## Route: r_until(func(): return hm.is_parked_for(Game.course_time, crossing_seconds)).
+## Clips: kit_hammer_tell/swing/park.
+func hammer(floor_top: Vector3, arm_length: float = 5.0, period: float = 4.8, phase: float = 0.0, park_deg: float = 180.0, spin_dir: float = 1.0, opts: Dictionary = {}) -> SpinHammer:
+	var h := SpinHammer.new()
+	h.arm_length = arm_length
+	h.period = period
+	h.phase = phase
+	h.park_deg = park_deg
+	h.spin_dir = spin_dir
+	for key: String in opts:
+		h.set(key, opts[key])
+	_add(h, floor_top)
+	return h

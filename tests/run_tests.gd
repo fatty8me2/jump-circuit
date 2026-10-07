@@ -4845,3 +4845,143 @@ func test_zk_seesaw() -> void:
 
 func test_zk_bot_slice1() -> void:
 	await _kit_bot("res://tests/kit_course.gd", 120.0, "the bot rides the barrel, zipline, cannon lane, rolling log and seesaw")
+
+
+## The longest run of `ph` phases (seconds) over one period, sampled every 10 ms.
+func _kit_phase_span(period: float, phase_of: Callable, ph: int) -> float:
+	var best: float = 0.0
+	var run: float = 0.0
+	var t: float = 0.0
+	while t < period * 2.0:
+		if int(phase_of.call(t)) == ph:
+			run += 0.01
+			best = maxf(best, run)
+		else:
+			run = 0.0
+		t += 0.01
+	return best
+
+
+func test_zk_flipper() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab(Vector3(60, 1, 60), Vector3(0, -0.04, 0))
+	var f: Flipper = kit.flipper(Vector3(0, 0, 0), 5.0, 0.0, 80.0, 4.0, 0.0)
+	check(_kit_phase_span(f.period, f.phase_at, 1) >= 0.8, "the flipper winds up for at least 0.8 s before it swats (%.2f s)" % _kit_phase_span(f.period, f.phase_at, 1))
+	check(absf(f.angle_at(0.0)) < 0.01 and absf(f.angle_at(f._rest_len + f.tell + 0.2) - 80.0) < 0.5, "it rests at rest_deg and ends the swat at rest_deg + swing_deg")
+	check(f.swat_free_for(0.0, 1.0) and not f.swat_free_for(0.0, f._rest_len + f.tell + 0.05), "swat_free_for() matches the clock")
+	var pred: Vector3 = f.throw_velocity(Vector3(3.5, 0, 0))
+	check(pred.z < -8.0 and pred.y > 6.0 and absf(pred.x) < 0.5, "a rider near the tip is thrown along the swing toward -Z %s" % str(pred.snapped(Vector3.ONE * 0.1)))
+	check(f.throw_velocity(Vector3(1.0, 0, 0)).length() < pred.length(), "and thrown less near the pivot")
+	player.teleport(Transform3D(Basis(), Vector3(3.5, 0.2, 0)))
+	await settle()
+	var thrown: bool = await wait_until(func() -> bool: return player.velocity.y > 5.0 and player.velocity.z < -6.0, 6.0, "the swat")
+	check(thrown, "standing on the paddle when it swats throws the rider (v %s)" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+	var landed: float = await wait_landing(4.0)
+	check(landed < 4.0 and player.global_position.z < -4.0, "and carries them well clear of it (z %.1f)" % player.global_position.z)
+
+
+func test_zk_drawbridge() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab(Vector3(60, 1, 60), Vector3(0, -9, 0))
+	kit.plat(Vector3(0, 0, 4), Vector3(8, 1, 8))
+	var br: Drawbridge = kit.drawbridge(Vector3(0, 0, 0), 8.0, 3.4, 0.0, 9.0, 0.0)
+	check(_kit_phase_span(br.period, br.phase_at, 1) >= 0.8, "the chains rattle for at least 0.8 s before it rises (%.2f s)" % _kit_phase_span(br.period, br.phase_at, 1))
+	check(br.angle_at(0.0) == 0.0 and absf(br.angle_at(br._down_hold + br.warn + br.RAISE + 0.2) - br.raise_deg) < 0.01, "flat for the down hold, raised after the rise")
+	check(br.is_down_for(0.0, br._down_hold - 0.1) and not br.is_down_for(0.0, br._down_hold + 0.1), "is_down_for() covers exactly the down hold")
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.1, -6)))
+	await seconds(0.5)
+	check(player.grounded and player.floor_body == br._deck, "the lowered deck is solid ground")
+	check(absf(br._deck.rotation.x - deg_to_rad(br.angle_at(Game.course_time))) < 0.01, "the deck's pose is the clock's")
+	# let it rise under the rider: they are dumped back toward the hinge, not carried up
+	await wait_until(func() -> bool: return br.angle_at(Game.course_time) > 60.0, 12.0, "the deck rises")
+	await seconds(0.3)
+	check(player.global_position.z > -3.0 or player.global_position.y < -1.0, "a rider on the rising deck slides off it (z %.1f y %.1f)" % [player.global_position.z, player.global_position.y])
+	await wait_until(func() -> bool: return br.phase_at(Game.course_time) == 0, 12.0, "the deck is down again")
+
+
+func test_zk_gapwall() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab()
+	var w: GapWall = kit.gap_wall(Vector3(0, 0, -10), 0.0, 3.4, 8.0, 0.0)
+	check(w.move_time >= 0.8 and w.warn >= 0.8, "the wall's slide and its lamp warning are at least 0.8 s (%.1f, %.1f)" % [w.move_time, w.warn])
+	check(w.is_open_for(0.0, 1.5) and not w.is_open_for(0.0, 4.5) and absf(w.offset_at(w.open_time + w.move_time + 0.2)) > w.gap * 0.5 + 1.5, "open at the start, shut through its closed time")
+	check(w.open_in(w.open_time + 0.5) > 0.0 and w.open_in(0.0) == 0.0, "open_in() finds the next opening")
+	# shut: it stops the rider
+	await wait_until(func() -> bool: return w.state_at(Game.course_time) == 3, 10.0, "the wall to shut")
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, -4)))
+	player.cmd_move = FWD
+	await seconds(0.9)
+	check(player.global_position.z > -9.2, "a shut wall blocks the lane (z %.2f)" % player.global_position.z)
+	player.cmd_move = Vector2.ZERO
+	# open: it lets the rider through
+	await wait_until(func() -> bool: return w.is_open_for(Game.course_time, 2.0) and w.state_at(Game.course_time) == 0, 12.0, "the doorway to line up")
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, -5.5)))
+	player.cmd_move = FWD
+	var through: bool = await wait_until(func() -> bool: return player.global_position.z < -12.5, 3.0, "walk through the doorway")
+	player.cmd_move = Vector2.ZERO
+	check(through, "an open doorway lets the rider straight through")
+
+
+func test_zk_block() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var base: Vector3 = lvl.checkpoints[0].global_position + Vector3(40, 0, 0)
+	lvl.player.use_device_input = false
+	lvl.kit.plat(base, Vector3(30, 1, 30), "main", 0.0)
+	var b: FallingBlock = lvl.kit.falling_block(base, Vector3(3, 1.6, 3), 7.0, 5.0, 0.0)
+	check(b.tell >= 0.8 and _kit_phase_span(b.period, b.phase_at, 1) >= 0.8, "the shadow grows for at least 0.8 s before the drop (%.2f s)" % _kit_phase_span(b.period, b.phase_at, 1))
+	check(b.gap_at(0.0) == 7.0 and b.gap_at(b._rest_len + b.tell + b.FALL + 0.1) == 0.0, "it hangs high, lands on the floor and rests there")
+	await seconds(0.3)
+	# the shadow swells through the tell
+	await wait_until(func() -> bool: return b.phase_at(Game.course_time) == 1, 6.0, "the tell begins")
+	await get_tree().physics_frame
+	var a0: float = (b._shadow.material_override as StandardMaterial3D).albedo_color.a
+	var s0: float = b._shadow.scale.x
+	await seconds(0.7)
+	var a1: float = (b._shadow.material_override as StandardMaterial3D).albedo_color.a
+	check(a1 > a0 + 0.1 and b._shadow.scale.x > s0 + 0.2, "the floor shadow darkens and grows through the tell (alpha %.2f -> %.2f)" % [a0, a1])
+	# standing clear when is_clear_for() says so is safe; standing under it through the drop is not
+	var d0: int = lvl.deaths
+	await wait_until(func() -> bool: return b.is_clear_for(Game.course_time, 0.4) and b.phase_at(Game.course_time) == 0, 8.0, "a clear moment")
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(0, 0.1, 0)))
+	await seconds(0.3)
+	check(lvl.deaths == d0, "standing under it while is_clear_for() holds is safe")
+	var hit: bool = await wait_until(func() -> bool: return lvl.deaths > d0, 5.0, "the drop")
+	var land_t: float = b._rest_len + b.tell + b.FALL
+	check(hit and fposmod(Game.course_time, b.period) > land_t - 0.2, "the block kills a rider who stays under it through the drop")
+	# approach mode: idle until someone comes near, then the same tell and drop
+	var a: FallingBlock = lvl.kit.falling_block(base + Vector3(14, 0, 0), Vector3(3, 1.6, 3), 7.0, 5.0, 0.0, true)
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(14, 0.1, 12)))
+	await seconds(1.0)
+	check(a.phase_at(Game.course_time) == 0 and a.gap_at(Game.course_time) == 7.0, "an approach block stays up while nobody is near")
+	d0 = lvl.deaths
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(14, 0.1, 4.0)))
+	var armed: bool = await wait_until(func() -> bool: return a.phase_at(Game.course_time) == 1, 1.0, "the approach block to arm")
+	var armed_at: float = Game.course_time
+	check(armed, "coming within the trigger radius starts the tell at once")
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(14, 0.1, 0)))
+	await wait_until(func() -> bool: return lvl.deaths > d0, 4.0, "the approach block lands")
+	check(Game.course_time - armed_at >= 0.8, "and it fell no sooner than the tell (%.2f s after arming)" % (Game.course_time - armed_at))
+
+
+func test_zk_hammer() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab()
+	var h: SpinHammer = kit.hammer(Vector3(0, 0, 0), 5.0, 4.8, 0.0, 180.0, 1.0)
+	check(_kit_phase_span(h.period, h.phase_at, 1) >= 0.8, "the hammer winds back for at least 0.8 s (%.2f s)" % _kit_phase_span(h.period, h.phase_at, 1))
+	check(absf(h.angle_at(0.0) - 180.0) < 0.01 and absf(h.angle_at(h._rest_len + h.tell + h.swing_time - 0.001) - 540.0) < 0.5, "it parks at park_deg and sweeps one full turn")
+	check(h.is_parked_for(0.0, 2.0) and not h.is_parked_for(0.0, h._rest_len + 0.2) and h.tip_speed_at(0.5) < 0.1 and h.tip_speed_at(h._rest_len + h.tell + h.swing_time * 0.5) > 15.0, "is_parked_for() and the head speed follow the clock")
+	var knocks: Array[int] = [0]
+	player.knocked.connect(func(_v: Vector3) -> void: knocks[0] += 1)
+	# parked: standing right at the parked head is harmless (arm points -X)
+	await wait_until(func() -> bool: return h.phase_at(Game.course_time) == 0 and h.parked_left(Game.course_time) > 1.5, 8.0, "the hammer to park")
+	player.teleport(Transform3D(Basis(), Vector3(2.5, 0.05, 0)))
+	await seconds(0.6)
+	check(knocks[0] == 0 and player.grounded, "a rider on the clear side of a parked hammer is untouched")
+	# in the way of the swing: knocked outward and up
+	player.teleport(Transform3D(Basis(), Vector3(-4.0, 0.05, 0)))
+	var got: bool = await wait_until(func() -> bool: return knocks[0] > 0, 8.0, "the hammer reaches the rider")
+	check(got and player.velocity.y > 5.0 and player.velocity.length() > 8.0, "the swing knocks the rider away (v %s)" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+
+
+func test_zk_bot_slice2() -> void:
+	await _kit_bot("res://tests/kit_course2.gd", 150.0, "the bot passes the gap wall, falling block, hammer, flipper and drawbridge")
