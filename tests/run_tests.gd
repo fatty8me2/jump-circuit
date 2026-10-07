@@ -3983,7 +3983,7 @@ func test_zm_catalogue_and_kinds() -> void:
 	check(Cosmetics.catalogue("nope").is_empty() and Cosmetics.default_id("nope") == "", "an unknown kind is empty")
 	# the catalogue as planned
 	check(Cosmetics.ids("character") == ["volt", "knight", "ninja", "astronaut", "dino", "skeleton", "catbot", "outlaw", "cyber", "golden"], "characters: %s" % [Cosmetics.ids("character")])
-	check(Cosmetics.ids("paint") == ["white", "chrome", "camo", "lava", "galaxy", "candy", "ghost", "neon"], "paints: %s" % [Cosmetics.ids("paint")])
+	check(Cosmetics.ids("paint") == ["white", "chrome", "camo", "lava", "galaxy", "candy", "ghost", "neon", "goldleaf", "pixel", "marble", "toxic", "aurora", "stained"], "paints: %s" % [Cosmetics.ids("paint")])
 	check(Cosmetics.ids("title") == ["rookie", "globetrotter", "speed_demon", "gold_rush", "flawless", "lap_king", "marathoner"], "titles: %s" % [Cosmetics.ids("title")])
 	# one hat per world, for Silver on it
 	var worlds: Dictionary = {}
@@ -4640,3 +4640,30 @@ func test_zz_no_fall_charged_at_load() -> void:
 		world.queue_free()
 		world = null
 		await ticks(2)
+
+
+# ---- v2.0 looks (LooksExt): paints, trails and finishes ---------------------------------------
+
+func test_zc_looks_ext_items() -> void:
+	var paints: Array[String] = ["goldleaf", "pixel", "marble", "toxic", "aurora", "stained"]
+	for p: String in paints:
+		var code: String = LooksExt.paint_shader_code(p)
+		check(code.contains("shader_type spatial") and code.contains("void fragment()"), "paint %s has its own shader source" % p)
+		check(not code.contains("/") and not code.contains("pow(") and not code.contains("normalize("),
+			"paint %s is NaN-free: no division, pow or normalize" % p)
+		var m: Material = CosmeticArt.paint_material(p)
+		check(m is ShaderMaterial and m == CosmeticArt.paint_material(p), "paint %s is a cached ShaderMaterial" % p)
+		check(Cosmetics.hint("paint", p) != "" and not Cosmetics.is_unlocked("paint", p, {}), "paint %s is locked on a fresh save, with a hint" % p)
+	for t: String in ["hearts", "pixels", "notes", "ink", "leaves", "stars"]:
+		var layers: Array[Dictionary] = LooksExt.trail_layers(t, Color.WHITE)
+		var ok: bool = not layers.is_empty()
+		for l: Dictionary in layers:
+			ok = ok and int(l.get("amount", 0)) > 0
+		check(ok, "trail %s has emitter layers with amounts" % t)
+		check(not Cosmetics.is_unlocked("trail", t, {}) and Cosmetics.hint("trail", t) != "", "trail %s is locked on a fresh save, with a hint" % t)
+	for f: String in ["balloons", "disco", "meteor", "pixelburst"]:
+		check(FileAccess.file_exists("res://audio/fin_%s.wav" % f), "the %s finish has its fin_%s.wav" % [f, f])
+		check(not Cosmetics.is_unlocked("finish", f, {}) and Cosmetics.hint("finish", f) != "", "finish %s is locked on a fresh save, with a hint" % f)
+	check(LooksExt.paint_shader_code("white") == "" and LooksExt.trail_layers("classic", Color.WHITE).is_empty(),
+		"ids LooksExt does not know fall through (white paint, classic trail)")
+	check(Cosmetics.ids("trail").size() == 16 and Cosmetics.ids("finish").size() == 10, "trails %d, finishes %d" % [Cosmetics.ids("trail").size(), Cosmetics.ids("finish").size()])
