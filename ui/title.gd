@@ -270,8 +270,8 @@ func _logo() -> Control:
 
 func _main_screen() -> Control:
 	# everything must fit the 900 px canvas: logo, seven buttons, the hint line and an
-	# unlock note or update button (the column has no scroll)
-	var box: VBoxContainer = UiKit.vbox(8)
+	# unlock note or update button (the column has no scroll). Tighter rows since Party vs CPU joined.
+	var box: VBoxContainer = UiKit.vbox(6)
 	box.add_child(_logo())
 	var spacer := Control.new()
 	spacer.custom_minimum_size = Vector2(0, 14)
