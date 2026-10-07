@@ -3388,7 +3388,15 @@ const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_l
 	"tempest_scaffold_fall", "tempest_load_bell", "tempest_gondola_start", "tempest_crane_horn", "tempest_ram_hiss",
 	"tempest_driver_hiss", "tempest_thunder", "tempest_checkpoint", "tempest_finish_strike", "tempest_beacon",
 	"void_phase_warn", "void_phase_swap", "void_rift_enter", "void_tumble_warn", "void_tumble_turn", "void_tumble_thud",
-	"void_collapse_start", "void_fragment_crack", "void_fragment_fall", "void_checkpoint", "void_finish"]
+	"void_collapse_start", "void_fragment_crack", "void_fragment_fall", "void_checkpoint", "void_finish",
+	"kit_barrel_load", "kit_barrel_fuse", "kit_barrel_fire", "kit_zipline_ready", "kit_zipline_grab",
+	"kit_zipline_release", "kit_battery_fuse", "kit_battery_fire", "kit_log_reverse", "kit_seesaw_thunk",
+	"kit_flipper_tell", "kit_flipper_swat", "kit_flipper_return", "kit_drawbridge_chains", "kit_drawbridge_raise",
+	"kit_drawbridge_lower", "kit_drawbridge_thud", "kit_gapwall_warn", "kit_gapwall_slide", "kit_gapwall_thud",
+	"kit_block_tell", "kit_block_slam", "kit_block_rise", "kit_hammer_tell", "kit_hammer_swing", "kit_hammer_park",
+	"emote_wave", "emote_thumbsup", "emote_dance", "emote_bow", "emote_laugh", "emote_flex", "emote_spin",
+	"emote_facepalm", "emote_taunt", "emote_sit", "emote_strongman", "emote_salute", "emote_hero", "emote_dab",
+	"emote_rockstar"]
 const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
 	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
 	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz",
@@ -3400,7 +3408,8 @@ const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "
 	"jungle_waterfall", "neon_car_hum", "neon_drone_hum", "neon_holo_hum", "neon_gondola_motor", "neon_steam_hiss",
 	"neon_sign_buzz", "frontier_fuse_hiss", "frontier_collapse_rumble", "frontier_steam_hiss", "frontier_cart_rumble",
 	"doom_pour_loop", "doom_reactor_hum", "doom_grate_buzz", "doom_gear_grind", "abyss_current_loop", "abyss_surge_loop",
-	"tempest_wind", "tempest_trolley", "tempest_gondola_motor", "tempest_crane_slew", "void_rift_hum", "void_collapse_rumble"]
+	"tempest_wind", "tempest_trolley", "tempest_gondola_motor", "tempest_crane_slew", "void_rift_hum", "void_collapse_rumble",
+	"kit_zipline_whirr", "kit_log_roll"]
 
 
 func test_z_world_sounds() -> void:
