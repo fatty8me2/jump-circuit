@@ -4985,3 +4985,33 @@ func test_zk_hammer() -> void:
 
 func test_zk_bot_slice2() -> void:
 	await _kit_bot("res://tests/kit_course2.gd", 150.0, "the bot passes the gap wall, falling block, hammer, flipper and drawbridge")
+
+
+func test_zk_gallery() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Game.level_index = -1
+	Game.race_mode = false
+	Game.course_time = 0.0
+	Game.course_running = true
+	var lvl: LevelBase = (load("res://levels/playground.tscn") as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	var kinds: Array[String] = ["LaunchBarrel", "Zipline", "CannonBattery", "RollingLog", "Seesaw", "Flipper", "Drawbridge", "GapWall", "FallingBlock", "SpinHammer"]
+	var missing: Array[String] = []
+	for k: String in kinds:
+		if lvl.find_children("*", k, true, false).is_empty():
+			missing.append(k)
+	check(missing.is_empty(), "the Kit Gallery shows all ten obstacles (missing: %s)" % str(missing))
+	check(lvl.find_children("*", "Label3D", true, false).size() >= 11, "and labels them")
+	lvl.player.use_device_input = false
+	lvl.player.teleport(Transform3D(Basis(), Vector3(60, 0.1, -2)))
+	await seconds(0.8)
+	check(lvl.player.grounded and lvl.deaths == 0, "the gallery floor is solid and joined to the playground (y %.2f)" % lvl.player.global_position.y)
+	lvl.player.cmd_move = Vector2(-1, 0)
+	await seconds(2.6)
+	lvl.player.cmd_move = Vector2.ZERO
+	check(lvl.player.global_position.x < 40.0 and lvl.player.grounded and lvl.deaths == 0, "and you can walk back over the join to the playground (x %.1f)" % lvl.player.global_position.x)

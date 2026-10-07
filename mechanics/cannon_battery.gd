@@ -54,7 +54,8 @@ func _build() -> void:
 	_glow_mat = Look.flat(Look.c("accent"), 0.4, 0.2, 0.4).duplicate() as StandardMaterial3D
 	# carriage and barrel
 	add_child(Look.box(Vector3(2.2, 0.9, 2.0), Look.flat(Look.c("decor").darkened(0.3), 0.8), Vector3(0, 0.45, 0.9)))
-	var barrel := Look.cylinder(0.55, 2.3, metal, Vector3(0, 1.15, -0.4), 0.45, 16)
+	# (rotated to lie along Z the cylinder's top end is the back: wide breech, narrower muzzle)
+	var barrel := Look.cylinder(0.45, 2.3, metal, Vector3(0, 1.15, -0.4), 0.55, 16)
 	barrel.rotation.x = PI * 0.5
 	add_child(barrel)
 	var muzzle := Look.cylinder(0.62, 0.3, _glow_mat, Vector3(0, 1.15, -1.5), -1.0, 16)
