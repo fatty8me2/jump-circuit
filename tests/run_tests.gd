@@ -65,6 +65,8 @@ func _ready() -> void:
 		var gen: int = _test_gen
 		# physics-time budget (process_in_physics, scaled): the bot levels get 1300 s each
 		var limit: float = 1300.0 * Game.LEVELS.size() if n == "test_n_bot_levels" else watchdog_s
+		if n.begins_with("test_zcpu_"):
+			limit = 2400.0   # whole CPU races under Engine.time_scale (physics seconds)
 		if n == "test_z_world_sounds":
 			# loads every level and walks each machine kind: scale with the level count
 			limit = maxf(watchdog_s, 30.0 * Game.LEVELS.size())
@@ -4640,3 +4642,413 @@ func test_zz_no_fall_charged_at_load() -> void:
 		world.queue_free()
 		world = null
 		await ticks(2)
+
+
+# ---- CPU racers (party/cpu/) -----------------------------------------------------------------------
+
+## A CPU walker following a level's route from the start to the finish, headless. Returns the walker.
+func _cpu_walk(index: int, diff: String, budget_s: float) -> RouteWalker:
+	var lvl: LevelBase = await load_level(index)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242 + index
+	var w := RouteWalker.new()
+	w.setup(lvl, CpuSkill.personal(diff, rng), 4242 + index, lvl._spawn.origin)
+	var label: String = str(Game.LEVELS[index]["name"])
+	# (Engine.time_scale scales the physics step: use the course clock's own delta)
+	var last: float = Game.course_time
+	var t: float = 0.0
+	while t < budget_s and not w.done:
+		await get_tree().physics_frame
+		var dt: float = Game.course_time - last
+		last = Game.course_time
+		w.tick(dt)
+		w.events.clear()
+		t += dt
+	check(w.done, "%s: a %s CPU follows the route to the finish (%.0fs, %d respawns, %d skipped steps, step %d/%d)" % [label, diff, t, w.deaths, w.skipped, w.step, lvl.route.size()])
+	check(w.cp >= lvl.checkpoints.size() - 1 and w.skipped <= 3, "%s: the CPU banked its checkpoints (%d/%d) without skipping the route" % [label, w.cp, lvl.checkpoints.size()])
+	metrics["%s cpu %s time s" % [Game.LEVELS[index]["id"], diff]] = snappedf(t, 0.1)
+	return w
+
+
+func test_zcpu_route_coverage() -> void:
+	for i: int in Game.LEVELS.size():
+		if only_level >= 0 and i != only_level:
+			continue
+		var lvl: LevelBase = await load_level(i)
+		var marks: int = 0
+		for s: Dictionary in lvl.route:
+			if str(s["kind"]) == "checkpoint":
+				marks += 1
+		var gates: int = lvl.find_children("*", "FinishGate", true, false).size()
+		check(lvl.route.size() > 5 and gates >= 1, "%s: a route (%d steps, %d checkpoint marks for %d checkpoints) and a finish gate for the CPUs" % [Game.LEVELS[i]["name"], lvl.route.size(), marks, lvl.checkpoints.size()])
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+
+
+## Early, mid and late course: a CPU drives the course's own route to the finish.
+func test_zcpu_finishes_early_mid_late() -> void:
+	var picks: Array[int] = [0, 13, 24]
+	if only_level >= 0:
+		picks = [only_level]
+	Engine.time_scale = 8.0
+	for i: int in picks:
+		await _cpu_walk(i, "hard", 700.0)
+	Engine.time_scale = 1.0
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+
+
+## Easy botches more jumps than Hard and is slower; the skill table orders the three levels.
+func test_zcpu_skill_levels() -> void:
+	var easy: Dictionary = CpuSkill.TABLE[CpuSkill.EASY]
+	var norm: Dictionary = CpuSkill.TABLE[CpuSkill.NORMAL]
+	var hard: Dictionary = CpuSkill.TABLE[CpuSkill.HARD]
+	check(float(easy["speed"]) < float(norm["speed"]) and float(norm["speed"]) < float(hard["speed"]), "Easy < Normal < Hard in running speed")
+	check(float(easy["jump_fail"]) > float(norm["jump_fail"]) and float(norm["jump_fail"]) > float(hard["jump_fail"]), "Easy botches more jumps than Normal, Normal more than Hard")
+	check(float(easy["react"]) > float(hard["react"]) and bool(hard["cut"]) and not bool(easy["cut"]), "Hard reacts faster and cuts corners")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1
+	var a: Dictionary = CpuSkill.personal("normal", rng)
+	var b: Dictionary = CpuSkill.personal("normal", rng)
+	check(a["speed"] != b["speed"], "two CPUs of one level do not drive identically")
+	# a botched long jump respawns the CPU at its checkpoint like a human
+	var lvl: LevelBase = await load_level(0)
+	var w := RouteWalker.new()
+	var p: Dictionary = CpuSkill.personal("easy", rng)
+	p["jump_fail"] = 1.0
+	w.setup(lvl, p, 7, lvl._spawn.origin)
+	Engine.time_scale = 5.0
+	var last: float = Game.course_time
+	var t: float = 0.0
+	while t < 120.0 and w.deaths == 0:
+		await get_tree().physics_frame
+		var dt: float = Game.course_time - last
+		last = Game.course_time
+		w.tick(dt)
+		t += dt
+	Engine.time_scale = 1.0
+	check(w.deaths >= 1, "a botched long jump makes the CPU fall and respawn (%.0fs in)" % t)
+	check(w.hold > 0.0 or w.pos.distance_to(w.respawn_point()) < 6.0, "...and it stands at its respawn point for a beat")
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+
+
+func _cpu_cleanup() -> void:
+	Engine.time_scale = 1.0
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Net.leave()
+	Game.party = null
+	Game.race_mode = false
+
+
+## Starts a solo Party vs CPU round the way Game.play_party_cpu does, but loads the course under this
+## test (play_party_cpu changes scenes, which would unload the runner).
+func _cpu_round(index: int, count: int, diff: String, mode: String = "party", countdown: float = 1.5) -> LevelBase:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Net.host_local()
+	CpuField.configure_local(count, diff)
+	CpuField.sync_roster()
+	Net.host_set_mode(mode)
+	Net.race_starting.disconnect(Game._on_race_starting)
+	Net.host_start_race(index, countdown)
+	Net.race_starting.connect(Game._on_race_starting)
+	Game.race_mode = true
+	Game.party = PartyRules.new(Net.game_mode)
+	Game.party.round_no = Net.party_round
+	Game.level_index = index
+	Game.course_time = Net.now() - Net.race_start_time
+	Game.course_running = true
+	var lvl: LevelBase = (load(Game.LEVELS[index]["scene"]) as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(6)
+	return lvl
+
+
+func _cpu_field(lvl: LevelBase) -> CpuField:
+	return lvl.party.find_child("CpuField", false, false) as CpuField
+
+
+## The menu: Party vs CPU is on the main menu, reachable and operable with a pad alone.
+func test_zcpu_menu_pad() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	add_child(title)
+	title.call("show_screen", "main")
+	await ticks(3)
+	var e0: int = trap.count()
+	var found: bool = false
+	for i: int in 9:
+		if _focused_text() == "Party vs CPU":
+			found = true
+			break
+		await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(found, "the D-pad reaches Party vs CPU on the main menu")
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	await ticks(3)
+	check(Game.title_screen == "partycpu", "A opens the Party vs CPU screen")
+	check(_focused_text() == "Start the Cup", "the screen starts on its Start button (%s)" % _focused_text())
+	# up through the rows: course, difficulty, CPU count, mode
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_UP))
+	check(_focused_text().begins_with("Course:"), "D-pad up reaches the Course row (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_UP))
+	check(_focused_text().begins_with("Difficulty:"), "...then Difficulty (%s)" % _focused_text())
+	var before: String = _focused_text()
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_RIGHT))
+	check(_focused_text() != before and _focused_text().begins_with("Difficulty:"), "D-pad right cycles the value (%s -> %s)" % [before, _focused_text()])
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_LEFT))
+	check(_focused_text() == before, "D-pad left steps back (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	check(_focused_text() != before and _focused_text().begins_with("Difficulty:"), "A also cycles the focused row (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_UP))
+	check(_focused_text().begins_with("CPU racers:"), "...then the CPU count (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_UP))
+	check(_focused_text().begins_with("Mode:"), "...then the mode (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_B))
+	await ticks(3)
+	check(Game.title_screen == "main" and _focused_text() == "Party vs CPU", "B goes back onto the Party vs CPU button (%s)" % _focused_text())
+	# the solo lobby (between rounds): CPU rows, no room code, B leaves
+	Net.host_local()
+	CpuField.configure_local(3, "normal")
+	CpuField.sync_roster()
+	Net.host_set_mode("party")
+	title.call("show_screen", "lobby")
+	await ticks(3)
+	var labels: String = ""
+	for l: Node in title.find_children("*", "Label", true, false):
+		labels += (l as Label).text + "|"
+	check(labels.contains("PARTY VS CPU") and labels.contains("(CPU)") and not labels.contains("ROOM CODE"), "the solo lobby lists the CPU racers and has no room code")
+	check(Net.roster.size() == 4 and CpuField.cpu_ids().size() == 3, "three CPUs joined the roster (%d racers)" % Net.roster.size())
+	var count_btn: Button = null
+	for b: Node in title.find_children("*", "Button", true, false):
+		if (b as Button).text.begins_with("CPU racers:"):
+			count_btn = b as Button
+	check(count_btn != null, "the lobby host can change the CPU count")
+	if count_btn != null:
+		count_btn.grab_focus()
+		await _zp_press(_zp_pad(JOY_BUTTON_DPAD_RIGHT))
+		check(CpuField.cpu_ids().size() == 4 and Net.roster.size() == 5, "D-pad right adds a CPU (%d)" % CpuField.cpu_ids().size())
+	await _zp_press(_zp_pad(JOY_BUTTON_B))
+	await ticks(3)
+	check(Game.title_screen == "main" and not Net.active, "B in the solo lobby leaves the session")
+	check(trap.count() == e0, ("the CPU menus build without errors %s" % trap.since(e0)).strip_edges())
+	title.queue_free()
+	await ticks(2)
+	Game.title_screen = "main"
+
+
+## The online lobby: the host's "Fill with CPUs" option, and how it tops the roster up.
+func test_zcpu_online_fill() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	add_child(title)
+	check(Net.host(24593) == OK, "hosting opens the lobby")
+	await ticks(3)
+	var fill: Button = null
+	for b: Node in title.find_children("*", "Button", true, false):
+		if (b as Button).name == "FillCpus":
+			fill = b as Button
+	check(fill != null and fill.text.ends_with("Off"), "the host's lobby offers Fill with CPUs (off by default)")
+	Net.host_set_mode("party")
+	if fill != null:
+		fill.pressed.emit()
+	check(CpuField.fill_online, "...and it switches on")
+	CpuField.sync_roster()
+	check(Net.roster.size() == 8 and CpuField.cpu_ids().size() == 7, "the roster fills to 8 racers with CPUs (%d)" % Net.roster.size())
+	# a classic Race has no CPUs
+	Net.host_set_mode("race")
+	CpuField.sync_roster()
+	check(CpuField.cpu_ids().is_empty() and Net.roster.size() == 1, "a plain Race strips the CPUs again")
+	Net.host_set_mode("team")
+	CpuField.sync_roster()
+	var t0: int = 0
+	for id: int in Net.roster:
+		if Net.team_of(id) == 0:
+			t0 += 1
+	check(Net.roster.size() == 8 and absi(t0 - (8 - t0)) <= 1, "Team Party balances the CPUs into two even teams (%d / %d)" % [t0, 8 - t0])
+	CpuField.clear_roster()
+	check(Net.roster.size() == 1, "ending the cup takes the CPUs out of the roster again")
+	CpuField.fill_online = false
+	title.queue_free()
+	Net.leave()
+	await ticks(2)
+	Game.title_screen = "main"
+
+
+## A solo round with 3 CPUs: they race (poses, checkpoints, finish), item boxes feed them, the round ends
+## and the cup scores everyone.
+func test_zcpu_solo_round_scores() -> void:
+	var lvl: LevelBase = await _cpu_round(0, 3, "hard")
+	var p: PartyLayer = lvl.party
+	var f: CpuField = _cpu_field(lvl)
+	check(p != null and f != null and f.racers.size() == 3, "a solo round has a party layer and three simulated CPUs")
+	if p == null or f == null:
+		await _cpu_cleanup()
+		return
+	check(lvl._ghosts.size() == 3 and Net.roster.size() == 4, "each CPU has a ghost on the course (%d ghosts, %d racers)" % [lvl._ghosts.size(), Net.roster.size()])
+	for id: int in f.racers:
+		var g: RemoteRacer = lvl._ghosts[id]
+		check(g.racer_name == str(Net.roster[id]["name"]) and bool(Net.roster[id]["cpu"]), "CPU %d shows up as %s with its own look" % [id, g.racer_name])
+	check(p.rules.mode == "party", "a Party round (free for all)")
+	var start_pos: Array[Vector3] = []
+	for id: int in f.racers:
+		start_pos.append((f.racers[id] as CpuRacer).walker.pos)
+	Engine.time_scale = 5.0
+	await wait_until(func() -> bool: return Game.course_time > 25.0, 120.0, "25 s of racing")
+	var moved: int = 0
+	var i: int = 0
+	for id: int in f.racers:
+		if (f.racers[id] as CpuRacer).walker.pos.distance_to(start_pos[i]) > 20.0:
+			moved += 1
+		i += 1
+	check(moved == 3, "all three CPUs ran at least 20 m in 25 s (%d)" % moved)
+	var ghost_moved: int = 0
+	for id: int in lvl._ghosts:
+		if (lvl._ghosts[id] as RemoteRacer).global_position.distance_to(start_pos[0]) > 10.0:
+			ghost_moved += 1
+	check(ghost_moved >= 2, "their ghosts follow the poses the field sends (%d moved)" % ghost_moved)
+	var cps: int = 0
+	for id: int in f.racers:
+		cps += int(Net.roster[id]["cp"])
+	check(cps >= 1, "CPUs bank checkpoints in the roster (%d in total)" % cps)
+	var held: int = 0
+	var taken: int = 0
+	for b: ItemBox in p.boxes:
+		if not b.available:
+			taken += 1
+	for id: int in f.racers:
+		if (f.racers[id] as CpuRacer).item != "":
+			held += 1
+	check(taken >= 1, "item boxes feed the CPUs (%d boxes taken, %d CPUs holding an item)" % [taken, held])
+	# the round ends 45 s after the first finisher; the CPUs finish, the idle human does not
+	await wait_until(func() -> bool: return p.round_over, 700.0, "the round to end")
+	Engine.time_scale = 1.0
+	var finished: int = 0
+	for id: int in f.racers:
+		if float(Net.roster[id]["finished"]) >= 0.0:
+			finished += 1
+	check(finished >= 2, "at least two CPUs finished the course (%d of 3)" % finished)
+	check(p.round_over and p.last_rows.size() == 4, "the round scored all four racers (%d rows)" % p.last_rows.size())
+	var human_row: Dictionary = {}
+	var top: Dictionary = p.last_rows[0]
+	for r: Dictionary in p.last_rows:
+		if int(r["id"]) == 1:
+			human_row = r
+	check(CpuField.is_cpu_id(int(top["id"])) and int(top["place"]) == 1 and int(top["place_pts"]) == 10, "a CPU won the round and got the 10 placement points")
+	check(not human_row.is_empty() and int(human_row["place"]) == 0 and int(human_row["place_pts"]) == 0, "the idle human got no placement points")
+	var total: int = 0
+	for id: Variant in Game.party.cup:
+		total += int(Game.party.cup[id])
+	check(Game.party.cup.size() == 4 and total >= 10 + 8, "the Party Cup holds everyone's points (%d racers, %d points)" % [Game.party.cup.size(), total])
+	await _cpu_cleanup()
+
+
+## Being hit, KO credit, hitting back, pick-ups and the items, on a live CPU.
+func test_zcpu_hits_items_ko() -> void:
+	var lvl: LevelBase = await _cpu_round(0, 3, "normal", "party", 0.5)
+	var p: PartyLayer = lvl.party
+	var f: CpuField = _cpu_field(lvl)
+	await wait_until(func() -> bool: return Game.course_time > 3.0 and p._ready_done, 60.0, "the round to get going")
+	var ids: Array = f.racers.keys()
+	ids.sort()
+	var a: CpuRacer = f.racers[ids[0]]
+	var b: CpuRacer = f.racers[ids[1]]
+	a.protect_left = 0.0
+	b.protect_left = 0.0
+	# the human shoves a CPU: the message goes through Net.send_party and reaches the CPU
+	var kb := Vector3(8, 5, 0)
+	Net.send_party({"k": "hit", "kb": PowerUp.arr(kb), "st": 0.5, "ko": false, "e": "", "ed": 0.0, "s": "shove", "add": false}, a.id)
+	check(a.last_hit_by == 1 and a.walker.mode == RouteWalker.Mode.AIR and a.walker.hold > 0.0, "a human's hit on a CPU knocks and stuns it and is remembered (by %d)" % a.last_hit_by)
+	# a fall within the KO window is the attacker's KO
+	var kos: int = int(p.kos.get(1, 0))
+	a.walker.die("fall")
+	await ticks(2)
+	check(int(p.kos.get(1, 0)) == kos + 1, "a CPU that falls right after a hit is the hitter's KO (+%d)" % PartyRules.KO_POINTS)
+	check(a.protect_left > 0.0 and a.walker.deaths == 1, "...and it respawns with a protection window")
+	a.protect_left = 0.0
+	# a CPU's hit on the human is credited to the CPU
+	var human: Dictionary = {}
+	for r: Dictionary in f.rivals_of(b):
+		if int(r["id"]) == 1:
+			human = r
+	check(not human.is_empty(), "the human is one of a CPU's rivals")
+	f.hit_rival(b, human, Vector3(0, 6, 0), {"st": 0.4, "s": "shove"})
+	check(p.last_hit_by == b.id and lvl.player.party_stun > 0.0, "a CPU's shove stuns the human and is credited to the CPU (by %d)" % p.last_hit_by)
+	var deaths: int = lvl.deaths
+	lvl.fail("fall")
+	await ticks(2)
+	check(int(p.kos.get(b.id, 0)) == 1 and lvl.deaths == deaths + 1, "the human falling after that hit is the CPU's KO")
+	# pick-up: a CPU standing in a box takes it
+	var box: ItemBox = null
+	for bx: ItemBox in p.boxes:
+		if bx.available:
+			box = bx
+			break
+	b.item = ""
+	b.p["greed"] = 1.0
+	b.walker.teleport(box.global_position - Vector3(0, 1.1, 0))
+	await ticks(3)
+	check(not box.available and b.item != "", "a CPU that runs into an item box takes it (%s)" % b.item)
+	# using items
+	b.protect_left = 0.0
+	b.item = "balloon"
+	b.item_age = 10.0
+	b._item_wait = 0.0
+	CpuItems.consider(b, f, f.rivals_of(b))
+	check(b.item == "" and b.shield_left > 0.0, "a CPU uses a Balloon Shield (soaks the next hit)")
+	var last: int = b.last_hit_by
+	b.take_hit(1, {"kb": PowerUp.arr(Vector3(5, 3, 0)), "s": "shove"}, f)
+	check(b.shield_left == 0.0 and b.last_hit_by == last and b.walker.mode != RouteWalker.Mode.AIR, "...which absorbs a hit")
+	b.item = "fox"
+	b.item_age = 10.0
+	CpuItems.consider(b, f, f.rivals_of(b))
+	check(b.form == "fox" and b.boost_left > 0.0 and b.boost_mult > 1.0, "a CPU transforms into the Nine-Tailed Fox and runs faster")
+	b.clear_buffs(f)
+	# Thunder Cloud when behind: aimed at everyone ahead
+	a.protect_left = 0.0
+	b.item = "thunder"
+	b.item_age = 20.0
+	f._stand_t = -1000.0
+	f._standing.clear()
+	f._standing.append_array([ids[2], ids[0], 1, ids[1]])
+	CpuItems.consider(b, f, f.rivals_of(b))
+	check(b.item == "", "a CPU in last place uses Thunder Cloud")
+	check(a.slow_left > 0.0 and a.walker.hold > 0.0, "...and the racers ahead are zapped (slow %.1f, hold %.1f)" % [a.slow_left, a.walker.hold])
+	await _cpu_cleanup()
+
+
+## The main mode never sees a CPU, a local session or a party layer.
+func test_zcpu_main_mode_pure() -> void:
+	Game.party = null
+	check(not Net.local_session and CpuField.cpu_ids().is_empty(), "no local session / CPUs outside Party vs CPU")
+	var lvl: LevelBase = await load_level(0)
+	await ticks(4)
+	check(lvl.party == null and lvl.find_children("*", "CpuField", true, false).is_empty(), "the main mode adds no party layer and no CPU field")
+	check(lvl.find_children("*", "ItemBox", true, false).is_empty(), "no item boxes in the main mode")
+	# a plain race (even one hosted with the Fill option on) has no CPUs
+	CpuField.fill_online = true
+	check(Net.host(24591) == OK, "hosting")
+	CpuField.sync_roster()
+	check(CpuField.cpu_ids().is_empty() and Net.game_mode == "race", "Fill with CPUs does nothing in the Race mode")
+	CpuField.fill_online = false
+	Net.leave()
+	check(CpuField.wanted_count() == 0, "...and nothing is wanted once the session is gone")
+
