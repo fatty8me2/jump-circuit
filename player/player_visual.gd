@@ -152,6 +152,15 @@ var _idle_t: float = 0.0
 var _fidget: int = -1
 var _fidget_t: float = 0.0
 var _fidget_n: int = 0
+# emotes / victory poses (player/emotes.gd): one clip at a time, blended over everything else
+var pose_id: String = "cheer"      # played after the finish twirl (Cosmetics.POSES)
+var _emote: String = ""            # id of the clip playing, "" when none
+var _emote_kind: String = "emote"  # "emote" or "pose"
+var _emote_t: float = 0.0          # seconds into it (negative while it waits to start)
+var _emote_len: float = 0.0
+var _emote_hold: bool = false      # a held pose stays until cancelled (the podium)
+var _emote_puffs: int = 0          # puffs already fired
+var _emote_frame: Emotes.Frame = Emotes.Frame.new()
 var _blink_t: float = 2.0       # counts down to the next blink
 var _blink: float = 0.0         # 0 open .. 1 shut
 var _skid: float = 0.0          # sharp-turn skid, 0..1
@@ -1273,6 +1282,136 @@ func on_cheer() -> void:
 			_pop(_cheer_confetti, global_position + Vector3(0, 1.2, 0))
 		_flash(accent.lerp(Color.WHITE, 0.3), 4.0, 0.6)
 		play_finish(finish_id)
+	# the equipped victory pose takes over once the twirl is done ("cheer" is the built-in one above)
+	if pose_id != "cheer" and Cosmetics.has_item("pose", pose_id):
+		play_pose(pose_id, false, 0.85)
+
+
+# ---- emotes and victory poses (player/emotes.gd) ------------------------------------------------
+
+## Plays emote `id` (Cosmetics.EMOTES) once: a pose blended over the walk / idle animation,
+## cancelled by movement (cancel_emote). Visual only: nothing here touches physics. `quiet`
+## skips the sound (the Locker's looping preview). Returns false for an unknown id.
+func play_emote(id: String, quiet: bool = false) -> bool:
+	return _start_clip("emote", id, false, 0.0, quiet)
+
+
+## Plays victory pose `id` (Cosmetics.POSES) after `delay` s. `hold` keeps it until
+## cancel_emote() (the party podium); otherwise it plays for a few seconds and relaxes.
+## The pose only advances while grounded. Returns false for an unknown id.
+func play_pose(id: String, hold: bool = false, delay: float = 0.0, quiet: bool = false) -> bool:
+	return _start_clip("pose", id, hold, delay, quiet)
+
+
+## Fades the current emote / pose out (0.3 s). No-op when none is playing.
+func cancel_emote() -> void:
+	if _emote == "":
+		return
+	_emote_hold = false
+	_emote_len = minf(_emote_len, maxf(_emote_t, 0.0) + 0.3)
+
+
+## Drops the clip at once (respawns, tab switches).
+func stop_emote() -> void:
+	_emote = ""
+	_emote_t = 0.0
+	_emote_hold = false
+	if _torso != null:
+		_torso.rotation.x = 0.0
+		_torso.rotation.z = 0.0
+
+
+## True while an emote or pose is playing or about to start.
+func is_emoting() -> bool:
+	return _emote != ""
+
+
+## "emote" / "pose" for what is playing, "" when nothing is.
+func emote_kind() -> String:
+	return _emote_kind if _emote != "" else ""
+
+
+## The id of the clip playing ("" when none).
+func emote_id() -> String:
+	return _emote
+
+
+func _start_clip(kind: String, id: String, hold: bool, delay: float, quiet: bool) -> bool:
+	if not Cosmetics.has_item(kind, id) or not Emotes.has_clip(kind, id):
+		return false
+	_emote = id
+	_emote_kind = kind
+	_emote_t = -maxf(delay, 0.0)
+	_emote_len = Emotes.length(kind, id)
+	_emote_hold = hold
+	_emote_puffs = 0
+	if not quiet and is_inside_tree() and not (kind == "pose" and id == "cheer"):
+		Sfx.play_at("emote_" + id, global_position + Vector3(0, 1.0, 0), 0.03, 0.8)
+	return true
+
+
+## Blends the playing clip over the hands, feet, torso, hop, spin and eyes that animate() just
+## set. Emotes end themselves when the body starts moving or leaves the ground.
+func _animate_emote(dt: float, speed: float, on_floor: bool) -> void:
+	if _emote == "":
+		return
+	var is_pose: bool = _emote_kind == "pose"
+	if not is_pose and (speed > 2.5 or _air_t > 0.2 or wall_roll != 0.0 or _mantle_t < _mantle_len) and not _emote_cancelling():
+		cancel_emote()
+	if is_pose and not on_floor:
+		return   # a pose waits for the ground
+	_emote_t += dt
+	if not _emote_hold and _emote_t >= _emote_len:
+		stop_emote()
+		return
+	if _emote_t < 0.0:
+		return
+	var w: float = Emotes.weight(_emote_t, _emote_len, _emote_hold)
+	# a held pose loops its motion; the clock keeps running
+	var f: Emotes.Frame = _emote_frame
+	Emotes.sample(f, _emote_kind, _emote, _emote_t)
+	_hand_r.position = _hand_r.position.lerp(f.hr, w)
+	_hand_l.position = _hand_l.position.lerp(f.hl, w)
+	_foot_r.position = _foot_r.position.lerp(f.fr, w)
+	_foot_l.position = _foot_l.position.lerp(f.fl, w)
+	_torso.position.y = lerpf(_torso.position.y, f.torso_y, w)
+	_torso.rotation.x = f.torso_rot.x * w
+	_torso.rotation.z = f.torso_rot.z * w
+	_torso.rotation.y = lerp_angle(_torso.rotation.y, f.torso_rot.y, w)
+	_root.position.y = lerpf(_root.position.y, f.root_y, w)
+	if f.spin != 0.0:
+		_flip.basis = Basis(Vector3.UP, f.spin * w) * _flip.basis
+	var eye_y: float = lerpf(_eye_l.scale.y, _eye_base.y * clampf(f.eye, 0.08, 1.4), w)
+	_eye_l.scale.y = eye_y
+	_eye_r.scale.y = eye_y
+	var puffs: Array = Emotes.PUFFS.get(_emote, [])
+	while _emote_puffs < puffs.size() and _emote_t >= float((puffs[_emote_puffs] as Array)[0]):
+		_emote_puff(str((puffs[_emote_puffs] as Array)[1]))
+		_emote_puffs += 1
+
+
+## Already fading out (a second cancel must not stretch the release).
+func _emote_cancelling() -> bool:
+	return not _emote_hold and _emote_len - maxf(_emote_t, 0.0) <= 0.3
+
+
+## A small one-shot puff for the clip: "stars" over the head, "dust" at the feet, "sparks".
+func _emote_puff(kind: String) -> void:
+	if not is_inside_tree():
+		return
+	var at: Vector3 = global_position
+	match kind:
+		"stars":
+			Fx.spawn(self, Fx.burst({"amount": 10, "lifetime": 0.8, "tex": Fx.Tex.STAR, "spread": 180.0,
+				"speed": Vector2(1.5, 3.0), "size": 0.18, "curve": "pop",
+				"color": Fx.hot(accent.lerp(Color.WHITE, 0.3), 2.2), "layers": 2}), at + Vector3(0, 1.3, 0))
+		"dust":
+			Fx.spawn(self, Fx.smoke({"amount": 6, "lifetime": 0.6, "size": 0.4, "shape": "ring", "ring_radius": 0.35,
+				"dir": Vector3.UP, "spread": 70.0, "speed": Vector2(0.6, 1.4), "color": Color(0.8, 0.82, 0.88, 0.55),
+				"layers": 2}), at + Vector3(0, 0.05, 0))
+		"sparks":
+			Fx.spawn(self, Fx.sparks({"amount": 14, "lifetime": 0.4, "dir": Vector3.UP, "spread": 60.0,
+				"speed": Vector2(4.0, 7.0), "color": Color(2.8, 2.2, 1.2), "layers": 2}), at + Vector3(0, 0.9, 0))
 
 
 # ---- unlockable cosmetics (Cosmetics catalogue) ---------------------------------------------
@@ -1648,6 +1787,7 @@ func on_respawn() -> void:
 	_hand_l.position = Vector3(-HAND_REST.x, HAND_REST.y, HAND_REST.z)
 	_hand_r.position = HAND_REST
 	_appear_t = 0.0
+	stop_emote()
 	_flip_t = 9.0
 	_mantle_t = 9.0
 	_cheer_t = 9.0
@@ -1878,7 +2018,7 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 		_skid_dust.amount_ratio = clampf(_skid, 0.4, 1.0)
 		Fx.fire(_skid_dust, global_position + fwd * 0.25 + Vector3(0, 0.05, 0), Basis(fwd.cross(Vector3.UP).normalized(), Vector3.UP, -fwd))
 	# idle clock and fidgets
-	var idle: bool = on_floor and speed < 0.4 and not mantling and _cheer_t > 3.6 and ap >= 1.0
+	var idle: bool = on_floor and speed < 0.4 and not mantling and _cheer_t > 3.6 and ap >= 1.0 and _emote == ""
 	if idle:
 		_idle_t += dt
 		if _fidget < 0:
@@ -2170,6 +2310,7 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 	_flare = maxf(_flare - dt * 2.5, 0.0)
 	_bulb_mat.emission_energy_multiplier = 2.0 + _flare * 7.0
 	_bulb.scale = Vector3.ONE * (_bulb_base * (1.0 + _flare * 0.42))
+	_animate_emote(dt, speed, on_floor)
 	_animate_extras(dt, amp, speed)
 
 	# speed streak: carried momentum (the same > 11 m/s as the HUD readout and the FOV

@@ -148,6 +148,37 @@ const FINISHES: Dictionary = {
 	"pixelburst": {"name": "Pixel Burst", "rule": {"type": "medal", "level": "arcade", "tier": 3}},
 }
 
+## Emotes: the D-pad (up, right, down, left) and keys 1-4 play the four you slot in the
+## Locker. The first four are free.
+const EMOTES: Dictionary = {
+	"wave": {"name": "Wave", "rule": {"type": "default"}},
+	"thumbsup": {"name": "Thumbs Up", "rule": {"type": "default"}},
+	"dance": {"name": "Dance", "rule": {"type": "default"}},
+	"bow": {"name": "Bow", "rule": {"type": "default"}},
+	"laugh": {"name": "Laugh", "rule": {"type": "runs", "n": 10}},
+	"flex": {"name": "Flex", "rule": {"type": "medals", "tier": 1, "n": 5}},
+	"spin": {"name": "Spin", "rule": {"type": "levels", "n": 5}},
+	"facepalm": {"name": "Facepalm", "rule": {"type": "runs", "n": 40}},
+	"taunt": {"name": "Taunt", "rule": {"type": "medals", "tier": 2, "n": 5}},
+	"sit": {"name": "Sit Down", "rule": {"type": "levels", "n": 10}},
+}
+
+## Victory poses: played at the finish (and on the party podium).
+const POSES: Dictionary = {
+	"cheer": {"name": "Cheer", "rule": {"type": "default"}},
+	"strongman": {"name": "Strongman", "rule": {"type": "medals", "tier": 1, "n": 3}},
+	"salute": {"name": "Salute", "rule": {"type": "runs", "n": 25}},
+	"hero": {"name": "Hero", "rule": {"type": "levels", "n": 8}},
+	"dab": {"name": "Dab", "rule": {"type": "medals", "tier": 2, "n": 6}},
+	"rockstar": {"name": "Rock Star", "rule": {"type": "medals", "tier": 3, "n": 4}},
+}
+
+## Settings property of each emote slot (D-pad up, right, down, left / keys 1-4) and what the
+## slot holds on a fresh install. Slot 1 is the "emote" kind's setting (KINDS).
+const EMOTE_SLOT_KEYS: Array[String] = ["emote_id", "emote_id2", "emote_id3", "emote_id4"]
+const EMOTE_SLOT_DEFAULTS: Array[String] = ["wave", "thumbsup", "dance", "bow"]
+const EMOTE_SLOT_NAMES: Array[String] = ["Up", "Right", "Down", "Left"]
+
 ## Shown beside your name on the roster, the race board and your name tag.
 const TITLES: Dictionary = {
 	"rookie": {"name": "Rookie", "rule": {"type": "default"}},
@@ -171,6 +202,8 @@ const KINDS: Dictionary = {
 	"trail": {"items": TRAILS, "default": DEFAULT_TRAIL, "label": "Trail", "setting": "trail_id", "suffix": " trail"},
 	"finish": {"items": FINISHES, "default": DEFAULT_FINISH, "label": "Finish", "setting": "finish_id", "suffix": " finish"},
 	"title": {"items": TITLES, "default": "rookie", "label": "Title", "setting": "title_id", "suffix": " title"},
+	"emote": {"items": EMOTES, "default": "wave", "label": "Emote", "setting": "emote_id", "suffix": " emote"},
+	"pose": {"items": POSES, "default": "cheer", "label": "Pose", "setting": "pose_id", "suffix": " pose"},
 }
 
 const MEDAL_NAMES: Array[String] = ["", "Bronze", "Silver", "Gold"]
@@ -441,6 +474,42 @@ static func equipped(kind: String) -> String:
 	var key: String = setting_key(kind)
 	var id: String = clean(kind, Settings.get(key) if key != "" else null)
 	return id if is_unlocked(kind, id) else default_id(kind)
+
+
+# ---- emote slots ---------------------------------------------------------------------------------
+
+## The emote on slot `i` (0 up, 1 right, 2 down, 3 left): the Settings pick when it is known and
+## unlocked, else that slot's default.
+static func emote_slot(i: int) -> String:
+	i = clampi(i, 0, EMOTE_SLOT_KEYS.size() - 1)
+	var id: String = clean("emote", Settings.get(EMOTE_SLOT_KEYS[i]))
+	return id if is_unlocked("emote", id) else EMOTE_SLOT_DEFAULTS[i]
+
+
+## All four slots, in D-pad order.
+static func emote_slots() -> Array[String]:
+	var out: Array[String] = []
+	for i: int in EMOTE_SLOT_KEYS.size():
+		out.append(emote_slot(i))
+	return out
+
+
+## Which slot holds `id` (-1 if none).
+static func emote_slot_of(id: String) -> int:
+	return emote_slots().find(id)
+
+
+## Puts `id` on slot `i`. An emote already on another slot swaps places (an emote never sits
+## on two slots). Locked or unknown ids are refused.
+static func set_emote_slot(i: int, id: String) -> bool:
+	if i < 0 or i >= EMOTE_SLOT_KEYS.size() or not is_unlocked("emote", id):
+		return false
+	var slots: Array[String] = emote_slots()
+	var other: int = slots.find(id)
+	if other >= 0 and other != i:
+		Settings.set(EMOTE_SLOT_KEYS[other], slots[i])
+	Settings.set(EMOTE_SLOT_KEYS[i], id)
+	return true
 
 
 static func equipped_trail() -> String:
