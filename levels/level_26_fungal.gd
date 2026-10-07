@@ -283,7 +283,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -641,6 +641,264 @@ func _lift(pf: FungalPuff, c: Vector3, shelf_r: float, to: Vector3, above: float
 	var top_y: float = _w(Vector3(0, c.y + above, 0)).y
 	route.append({"kind": "desert_fly", "to": mid, "until": func() -> bool: return player.global_position.y > top_y})
 	route.append({"kind": "desert_fly", "to": _w(to)})
+
+
+# ---- stage 7: Fairy Ring (BRANCH) - run up the bark | step into the fairy ring and pop out on the branch -----
+# [shortcut: a little ring on a cap by the fork]
+
+## z of the centre of a landing `sz` deep reached from a platform whose far (front) edge is at z=`front`, by
+## a jump needing `pct` of max reach (the same rule as _ahead).
+func _adv_z(front: float, pct: float, dy: float, sz: float) -> float:
+	var m: float = pct * _reach(dy)
+	var k: int = ceili((m - 0.4) / 0.2 - 0.001)
+	var e: float = float(k) * 0.2 - 0.03
+	return front + 0.35 - e - sz * 0.5
+
+
+## A fairy ring round a warp ring: a glowing circle on the floor and a horseshoe of white toadstools behind.
+## `floor_pos` / yaw as given to kit.portal (world).
+func _dress_ring(floor_pos: Vector3, yaw_deg: float, col: Color) -> void:
+	var tm := TorusMesh.new()
+	tm.inner_radius = 1.7
+	tm.outer_radius = 1.82
+	tm.rings = 40
+	tm.ring_segments = 5
+	var glow := Look.mesh_node(tm, Look.flat(col, 0.4, 0.0, 1.6), floor_pos + Vector3(0, 0.05, 0))
+	glow.scale = Vector3(1, 0.2, 1)
+	glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(glow)
+	var basis := Basis(Vector3.UP, deg_to_rad(yaw_deg))
+	for i: int in 9:
+		var a: float = deg_to_rad(15.0 + 150.0 * float(i) / 8.0)
+		var p: Vector3 = floor_pos + basis * Vector3(cos(a) * 2.05, 0.0, sin(a) * 2.05 + 0.2)
+		deco.toadstool(p, 0.55 + 0.25 * float(i % 3) / 2.0, 0.3 + 0.08 * float(i % 2), Color(0.97, 0.93, 0.85), false)
+
+
+## A slab of pale birch bark behind a wall-run panel (visual only): local centre, size (along z, height, thick).
+func _bark_slab(c: Vector3, size: Vector3, side: float) -> void:
+	var bark: StandardMaterial3D = Look.flat(Color(0.88, 0.84, 0.76), 0.9)
+	var n := Look.box(_sz(Vector3(size.z, size.y, size.x)), bark, _w(c + Vector3(side * (size.z * 0.5 + 0.35), 0, 0)))
+	add_child(n)
+	var dark: StandardMaterial3D = Look.flat(Color(0.2, 0.17, 0.15), 0.9)
+	for i: int in 7:
+		var z: float = c.z + (kit.rng.randf() - 0.5) * size.x * 0.9
+		var y: float = c.y + (kit.rng.randf() - 0.5) * size.y * 0.8
+		var mark := Look.box(_sz(Vector3(0.05, 0.2, 1.4)), dark, _w(Vector3(c.x + side * 0.0, y, z)) + _d(Vector3(-side * (-0.1), 0, 0)))
+		mark.position = _w(Vector3(c.x - side * 0.3, y, z))
+		mark.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mark)
+
+
+func _stage_7() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.80, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	# RIGHT: run the first bark, kick across to the second, run it, kick onto a cap, hop on to the merge
+	kit.wallrun(_w(Vector3(6.1, 1.2, f0 - 7.0)), Vector3(12.0, 6.5, 0.6), _yaw + 90.0)
+	kit.wallrun(_w(Vector3(1.5, 3.6, f0 - 17.5)), Vector3(9.0, 6.5, 0.6), _yaw + 90.0)
+	var pb: Dictionary = _cap_plat(Vector3(3.6, 0.0, f0 - 27.6), 1.1, ORANGE)
+	var pb2: Dictionary = _leaf_plat(Vector3(3.6, 0.0, _adv_z(f0 - 27.6 - 1.1, 0.78, 0.0, 2.2)), 1.1)
+	var mz: float = _adv_z((pb2["c"] as Vector3).z - 1.1, 0.78, 0.0, 3.0)
+	var merge: Dictionary = _blk(Vector3(0, 0, mz), 11.0, 3.0)
+	# LEFT: the fairy ring on the fork sends you up onto a long branch, then three drops to the merge
+	var f1: float = 0.0
+	var z_a: float = _adv_z(f1, 0.78, -1.5, 2.2)
+	var z_b: float = _adv_z(z_a - 1.1, 0.78, -1.5, 2.2)
+	var z_m: float = _adv_z(z_b - 1.1, 0.78, -1.5, 3.0)
+	var hi_end: float = mz - z_m
+	var hi_len: float = maxf((f0 - 6.5) - hi_end, 5.0)
+	var hi: Dictionary = _blk(Vector3(-3.5, 4.5, f0 - 6.5 - hi_len * 0.5), 2.2, hi_len, "alt", 0.6)
+	var la: Dictionary = _leaf_plat(Vector3(-3.5, 3.0, hi_end + z_a), 1.1)
+	var lb: Dictionary = _cap_plat(Vector3(-3.5, 1.5, hi_end + z_b), 1.1, PINKCAP)
+	var door: WarpPortal = kit.portal(_w(Vector3(-3.5, 0, fc.z - 0.6)), _yaw, _w(Vector3(-3.5, 4.5, f0 - 7.2)), _yaw, 7.0)
+	_dress_ring(_w(Vector3(-3.5, 0, fc.z - 0.6)), _yaw, Color(1.0, 0.7, 0.4))
+	_dress_ring(_w(Vector3(-3.5, 4.5, f0 - 7.2)), _yaw, Color(0.5, 0.8, 1.0))
+	# SHORTCUT: a little cap by the fork with its own ring, out at the merge
+	var sp: Dictionary = _cap_plat(_ahead(_area(fc, 5.5, 1.5), 0.88, 0.0, 2.0), 1.0, VIOLET)
+	var spc: Vector3 = sp["c"]
+	var sdoor: WarpPortal = kit.portal(_w(spc + Vector3(0, 0, -0.1)), _yaw, _w(Vector3(0.0, 0, mz + 0.9)), _yaw, 6.0)
+	_dress_ring(_w(Vector3(0.0, 0, mz + 0.9)), _yaw, Color(0.5, 0.8, 1.0))
+	var cp: Dictionary = _cp(_ahead(merge, 0.78, 0.0, 5.0))
+	print("S7 hi_len ", hi_len, " mz ", mz, " pct pb2 ", 0.78)
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 2:
+		r_walk(_w(Vector3(0, 0, fc.z + 0.2)))
+		_hop(_area(fc, 5.5, 1.5), sp, Vector3(0, 0, 0.35))
+		r_portal(_w(spc + Vector3(0, 0, -0.5)), sdoor.exit_point())
+	elif route_variant == 1:
+		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
+		r_portal(_w(Vector3(-3.5, 0, fc.z - 0.9)), door.exit_point())
+		r_walk(_w(Vector3(-3.5, 4.5, hi_end + 0.9 + z_a * 0.0 + 0.0)))
+		_hop(hi, la)
+		_hop(la, lb)
+		_hop(lb, merge, Vector3(-3.5, 0, 0.6))
+	else:
+		r_walk(_w(Vector3(3.6, 0, fc.z + 0.6)))
+		r_wallrun(_w(Vector3(4.2, 0, f0 + 0.35)), _w(Vector3(5.6, 1.4, f0 - 3.2)), _w(Vector3(5.6, 1.4, f0 - 10.6)), _w(Vector3(2.0, 4.4, f0 - 14.4)))
+		r_wallrun(Vector3.ZERO, _w(Vector3(2.0, 4.4, f0 - 14.4)), _w(Vector3(2.0, 4.4, f0 - 19.6)), _w(Vector3(3.6, 0.0, f0 - 27.4)), true, true)
+		_hop(pb, pb2)
+		_hop(pb2, merge, Vector3(3.6, 0, 0.6))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	_sign(Vector3(-3.5, 0, fc.z + 1.2), Color(1.0, 0.7, 0.4))
+	_sign(Vector3(3.6, 0, fc.z + 1.2), Color(0.9, 0.9, 0.95))
+	_bark_slab(Vector3(6.1, 1.2, f0 - 7.0), Vector3(12.0, 6.5, 0.6), 1.0)
+	_bark_slab(Vector3(1.5, 3.6, f0 - 17.5), Vector3(9.0, 6.5, 0.6), -1.0)
+	return cp["c"]
+
+
+# ---- stage 8: Acorn Drop - walk the root under two falling acorns, mantle the stump ------------------------------
+
+## A falling acorn: the crusher press, dressed (a glossy nut under a scaly cap) with a warning toadstool cluster
+## on the top of its frame that blinks faster for the last 1.2 s before it drops.
+func _acorn_press(floor_c: Vector3, size: Vector3, lift: float, period: float, phase: float) -> Crusher:
+	var c: Crusher = kit.crusher(_w(floor_c), size, lift, period, phase, _yaw)
+	for ch: Node in c.get_children():
+		if ch is MeshInstance3D:
+			(ch as MeshInstance3D).visible = false
+	var nut := Look.sphere(1.0, Look.flat(Color(0.72, 0.5, 0.24), 0.3), Vector3(0, -0.35, 0))
+	nut.scale = Vector3(size.x * 0.46, 0.75, size.z * 0.5)
+	c.add_child(nut)
+	var cap_mat: StandardMaterial3D = Look.flat(Color(0.5, 0.36, 0.2), 0.85)
+	c.add_child(Look.cylinder(size.x * 0.55, 0.42, cap_mat, Vector3(0, 0.4, 0), size.x * 0.5, 20))
+	for i: int in 8:
+		var a: float = TAU * float(i) / 8.0
+		var scale_n := Look.box(Vector3(0.45, 0.1, 0.1), Look.flat(Color(0.4, 0.28, 0.15), 0.9), Vector3(cos(a), 0.62, sin(a)) * size.x * 0.42)
+		scale_n.rotation.y = -a + PI * 0.5
+		c.add_child(scale_n)
+	c.add_child(Look.cylinder(0.1, 0.35, Look.flat(Color(0.35, 0.26, 0.14), 0.9), Vector3(0, 0.8, 0), 0.07, 6))
+	var h: float = lift + size.y + 1.5
+	var tell := FungalTell.new()
+	tell.position = _w(floor_c) + Vector3(0, h + 0.4, 0)
+	tell.left = func(t: float) -> float:
+		var u: float = fposmod(t / c.period + c.phase, 1.0)
+		return ((0.5 - u) if u < 0.5 else (1.5 - u)) * c.period
+	add_child(tell)
+	return c
+
+
+func _stage_8() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _cap_plat(_ahead(cp0, 0.76, 0.0, 2.2), 1.1, YELLOW)
+	var walk: Dictionary = _blk(_ahead(p1, 0.78, 0.0, 16.0, 0.0), 1.8, 16.0, "alt", 0.6)
+	var wc: Vector3 = walk["c"]
+	var w0: float = wc.z + 8.0
+	var period: float = 6.0
+	var t1: float = 2.4
+	var t2: float = 3.0
+	var c1: Crusher = _acorn_press(Vector3(wc.x, wc.y, w0 - 5.0), Vector3(2.2, 1.2, 2.0), 3.2, period, fposmod(0.92 - (t1 - 0.4) / period, 1.0))
+	var c2: Crusher = _acorn_press(Vector3(wc.x, wc.y, w0 - 10.5), Vector3(2.2, 1.2, 2.0), 3.2, period, fposmod(0.92 - (t2 - 0.4) / period, 1.0))
+	var ledge_top := Vector3(wc.x, wc.y + 3.3, w0 - 16.0 - 1.2 - 1.1)
+	var ld: Dictionary = _ledge(ledge_top, Vector3(3.6, 9.0, 2.2))
+	var cp: Dictionary = _cp(_ahead(ld, 0.78, 0.0, 5.0, -wc.x))
+	_wait(func() -> bool: return _press_ok(c1, t1 - 0.3, t1 + 0.3 + 1.5) and _press_ok(c2, t2 - 0.3, t2 + 0.3 + 1.5))
+	_hop(cp0, p1)
+	_hop(p1, walk, Vector3(0, 0, 7.0))
+	r_walk(_w(Vector3(wc.x, wc.y, w0 - 16.0 + 0.9)))
+	r_mantle(_w(Vector3(wc.x, wc.y, w0 - 16.0 + 0.35)), _w(ledge_top + Vector3(0, 0, 0.5)))
+	_hop(ld, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 9: Frog Pond - hop the lily pads while the frogs flick their tongues --------------------------------------
+
+## A frog on the left of lily pad `pad` (area dict, local) whose tongue flicks across the pad to the right.
+## Returns the tongue's Piston. `hit_phase` offsets the cycle.
+func _frog(pad: Dictionary, period: float, phase: float) -> Piston:
+	var pc: Vector3 = pad["c"]
+	var pr: float = float(pad["r"])
+	var size := Vector3(1.6, 1.3, 1.2)
+	var x_r: float = pc.x - pr - 0.3 - size.z * 0.5
+	var p := Piston.new()
+	p.size = size
+	p.stroke = 3.0
+	p.period = period
+	p.phase = phase
+	p.strength = 10.0
+	p.rotation_degrees.y = _yaw - 90.0
+	p.position = _w(Vector3(x_r, pc.y + 1.35 - size.y * 0.5, pc.z))
+	add_child(p)
+	for ch: Node in p.get_children():
+		if ch is MeshInstance3D:
+			(ch as MeshInstance3D).visible = false
+	# the sticky pink tip of the tongue
+	var tip := Look.sphere(1.0, Look.flat(Color(0.95, 0.45, 0.55), 0.3), Vector3.ZERO)
+	tip.scale = Vector3(size.x * 0.5, size.y * 0.5, size.z * 0.6)
+	p.add_child(tip)
+	for sx: float in [-0.4, 0.3]:
+		p.add_child(Look.sphere(0.12, Look.flat(Color(0.8, 0.28, 0.4), 0.4), Vector3(sx, 0.35, -0.45)))
+	var mouth_l := Vector3(x_r - size.z * 0.5 - 1.0, pc.y + 0.65, pc.z)
+	var tongue := FungalTongue.new()
+	tongue.piston = p
+	tongue.mouth = _w(mouth_l)
+	add_child(tongue)
+	_frog_body(_w(mouth_l + Vector3(-1.1, -0.65, 0)), _yaw - 90.0)
+	var tell := FungalTell.new()
+	tell.position = _w(mouth_l + Vector3(-1.1, 0.55, 1.3))
+	tell.clip = "fungal_frog_croak"
+	tell.left = func(t: float) -> float:
+		var u: float = fposmod(t / p.period + p.phase, 1.0)
+		return ((0.45 - u) if u < 0.45 else (1.45 - u)) * p.period
+	add_child(tell)
+	return p
+
+
+## A cartoon frog sitting on the ground at world `pos`, facing along `yaw_deg` (its -Z), mouth open a little.
+func _frog_body(pos: Vector3, yaw_deg: float) -> void:
+	var n := Node3D.new()
+	n.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(yaw_deg)), pos)
+	add_child(n)
+	var green: StandardMaterial3D = Look.flat(Color(0.4, 0.72, 0.28), 0.5)
+	var belly: StandardMaterial3D = Look.flat(Color(0.93, 0.95, 0.7), 0.6)
+	var body := Look.sphere(1.0, green, Vector3(0, 0.75, 0.3))
+	body.scale = Vector3(1.0, 0.75, 1.15)
+	n.add_child(body)
+	var chest := Look.sphere(1.0, belly, Vector3(0, 0.55, -0.35))
+	chest.scale = Vector3(0.7, 0.5, 0.6)
+	n.add_child(chest)
+	var head := Look.sphere(0.62, green, Vector3(0, 0.95, -0.75))
+	head.scale = Vector3(1.15, 0.8, 1.0)
+	n.add_child(head)
+	for sx: float in [-1.0, 1.0]:
+		n.add_child(Look.sphere(0.24, green, Vector3(sx * 0.42, 1.38, -0.7)))
+		n.add_child(Look.sphere(0.15, Look.flat(Color(0.97, 0.97, 0.9), 0.3), Vector3(sx * 0.44, 1.42, -0.84)))
+		n.add_child(Look.sphere(0.08, Look.flat(Color(0.05, 0.05, 0.06), 0.2), Vector3(sx * 0.45, 1.43, -0.95)))
+		var leg := Look.sphere(1.0, green, Vector3(sx * 0.95, 0.4, 0.55))
+		leg.scale = Vector3(0.28, 0.5, 0.7)
+		n.add_child(leg)
+	n.add_child(Look.box(Vector3(0.9, 0.05, 0.05), Look.flat(Color(0.2, 0.3, 0.12), 0.5), Vector3(0, 0.83, -1.3)))
+
+
+func _stage_9() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var l1: Dictionary = _leaf_plat(_ahead(cp0, 0.74, 0.0, 2.8), 1.4)
+	var l2: Dictionary = _leaf_plat(_ahead(l1, 0.76, 0.0, 2.8, 0.0), 1.4)
+	var l3: Dictionary = _leaf_plat(_ahead(l2, 0.76, 0.5, 2.8, 0.0), 1.4)
+	var l4: Dictionary = _leaf_plat(_ahead(l3, 0.76, 0.0, 2.8, 0.0), 1.4)
+	var cp: Dictionary = _cp(_ahead(l4, 0.76, 0.0, 5.0))
+	var period: float = 6.0
+	var ph2: float = 0.0
+	var r2: Piston = _frog(l2, period, ph2)
+	var r3: Piston = _frog(l3, period, fposmod(ph2 - 1.0 / period, 1.0))
+	var t2: float = 1.0
+	var t3: float = 2.0
+	_hop(cp0, l1)
+	_wait(func() -> bool: return _ram_clear(r2, t2 - 0.3, t2 + 0.4 + 1.5) and _ram_clear(r3, t3 - 0.3, t3 + 0.4 + 1.5), _w((l1["c"] as Vector3) + Vector3(0, 0, 0.2)))
+	_hop(l1, l2)
+	_hop(l2, l3)
+	_hop(l3, l4)
+	_hop(l4, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	# the pond under the pads, with lilies floating on it
+	var pc: Vector3 = _w((l2["c"] as Vector3) + Vector3(0, -7.5, 1.5))
+	deco.pond(pc, 24.0)
+	for i: int in 9:
+		var a: float = kit.rng.randf() * TAU
+		var d: float = kit.rng.randf_range(4.0, 20.0)
+		deco.lily(pc + Vector3(cos(a) * d, 0.12, sin(a) * d), kit.rng.randf_range(1.4, 2.6), kit.rng.randf() < 0.4)
+	return cp["c"]
 
 # @@STAGES@@
 
