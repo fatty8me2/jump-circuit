@@ -28,7 +28,7 @@ checks that the first and last samples are near zero. For loops it checks the se
 * the curvature (second difference) across the wrap must pass the same test;
 * the 40 ms window across the wrap must be no quieter than the quietest windows in the loop (a faded-out end would fail).
 
-It also checks the total size, which is about 33.8 MB of a 36 MB budget.
+It also checks the total size, which is about 35.1 MB of a 52 MB budget (the eight new worlds' footsteps and landings add 1.3 MB).
 
 ## Formats and levels
 
@@ -140,6 +140,14 @@ model struck harder, with a heavier body, longer tails and more debris.
 | The Abyss | `step_abyss_*`, `land_abyss_*` | Soft silt over a bed of broken shells, deep under water: the foot sinks in with a muffled puff (noise through a band falling from 500-650 to about 200 Hz as the silt billows up), a soft 95-115 -> 55 Hz body, 10 to 40 shell-crunch grains (1.5-6 kHz) and one or two brittle shell cracks (1.8-4.8 kHz modes; three or four on a landing), all low-passed at 4.5 kHz. The landing adds a thud and the silt settling. |
 | Tempest Tower | `step_tempest_*`, `land_tempest_*` | A rain-soaked steel girder: an I-beam ringing low (free-bar modes from 310-380 Hz, damped by the water on it), a 130-150 -> 75 Hz body, the boot slapping the film of water (0.5-6 kHz), 16 to 56 droplets thrown off with a few small bubbles, and the curtain wall's glass beside it ticking (plate modes from f11 700-820 Hz), in open air. The landing adds a thud, the beam's lower ring and the water thrown up. |
 | The Void | `step_void_*`, `land_void_*` | Polished marble floating over nothing: a dense, hard stone knock (about 560 / 1220 / 2000 / 3200 Hz, 5-18 ms), the hollow under the slab ringing (a 210-250 Hz cavity tone), a cool glassy shimmer from its veins (plate modes from f11 1100-1300 Hz), in a vast, empty 1.6-2.2 s space. The landing adds a thud. |
+| Toybox Tumble | `step_toybox_*`, `land_toybox_*` | A plastic brick knocked onto pine boards: a bright 2.4-4.7 kHz plastic tick, a hollow board (250-300 Hz bar modes) under it, a 110-130 -> 60 Hz thud and a rattle of loose bricks. A landing adds a heavier 95 -> 45 Hz thud. |
+| Mushroom Hollow | `step_fungal_*`, `land_fungal_*` | A spongy toadstool cap: a soft, wet squish (noise through a band falling from 380-480 to 160-210 Hz), a damped 90-110 -> 50 Hz body and quiet leaf-litter crunching. The landing flattens the cap. |
+| Carnival Chaos | `step_carnival_*`, `land_carnival_*` | Boardwalk planks of loose pine: a hollow, springy plank slap (200-240 Hz bar modes), its nail knocking the joist beneath, a 120-140 -> 65 Hz body and a scatter of grit. |
+| Sky Citadel | `step_olympus_*`, `land_olympus_*` | Polished marble steps in a sunlit temple: a crisp 2.5-11 kHz click, a clear ring at 780-880 Hz from the stone, a soft 140-165 -> 80 Hz body and the open air (a 1.2-1.7 s reverb). |
+| Dino Valley | `step_dino_*`, `land_dino_*` | Packed earth under ferns: a soft 85-105 -> 40 Hz thump sinking into the soil, a grass swish as the stems part and, now and then, a twig snapping. The landing crushes the ferns. |
+| Arcane Library | `step_arcane_*`, `land_arcane_*` | An old library floor of planks over a stone flag: a dry creak (a narrow 900-1100 -> 500-650 Hz glide), a hollow wood knock (200-250 Hz modes), a 160-190 -> 90 Hz stone thud and dust sifting from the shelves. |
+| Pixel Panic | `step_arcade_*`, `land_arcade_*` | A pixel tap on a rubber mat: a short square-wave bleep (780-1000 Hz, odd harmonics) with its pitch decay, and a plastic click on contact. The landing bleeps lower. |
+| Castle Siege | `step_siege_*`, `land_siege_*` | A flagstone of the castle yard: a dull slab slap (330-380 Hz plate modes), a crisp chip off its edge, grit crunching in the mortar joint and a 100-120 -> 55 Hz stone thud. |
 
 ## Player: movement
 

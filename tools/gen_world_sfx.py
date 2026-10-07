@@ -14,6 +14,7 @@ so they repeat without a seam.
 Usage (from anywhere):
     python tools/gen_world_sfx.py            # generate everything, then verify
     python tools/gen_world_sfx.py --verify   # only verify the files on disk
+    python tools/gen_world_sfx.py --themes=toybox,fungal   # only those surfaces' footsteps and landings
 
 Deterministic: every clip has its own RNG seeded from gen_audio.SEED plus the
 CRC of "world_" + its name, so re-running gives bit-identical files.
@@ -31,10 +32,11 @@ SR = ga.SR
 TAU = ga.TAU
 PEAK_DB = ga.SFX_PEAK_DB
 OUT = ga.OUT
-SIZE_BUDGET = 36.0e6
+SIZE_BUDGET = 52.0e6
 
 THEMES = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent", "xeno", "volcano", "glacier", "desert",
-          "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void")
+          "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void",
+          "toybox", "fungal", "carnival", "olympus", "dino", "arcane", "arcade", "siege")
 
 # ---------------------------------------------------------------------------
 # clip table: name -> (seconds, loop).  The verifier checks the files against it.
@@ -927,11 +929,123 @@ def surface_hit(theme, r, k, dur):
         if k:
             place(x, 0.0, thud(t, 100, 50, 0.1, 0.09), 0.6)
         x = space(r, x, 1.6 + 0.6 * k, 0.22 + 0.08 * k, 250, 9000, 0.6)
+    elif theme == "toybox":
+        # a plastic brick knocked onto pine boards: a bright plastic tick, the hollow board under it (a
+        # little box-like boom), the foot's thud, and a rattle of loose bricks (k: the heavier landing)
+        tick = modes(t, [(r.uniform(2400, 2800), 1.0, 0.004), (r.uniform(4200, 4700), 0.5, 0.0025)], r, 0.0)
+        board = modes(t, bar_modes(r.uniform(250, 300), 0.04 + 0.04 * k, (1.0, 0.6, 0.3, 0.15), 0.6), r, 0.02, hard=2500)
+        body = thud(t, r.uniform(110, 130), 60, 0.04, 0.03 + 0.04 * k, harm=(0.25,))
+        both(click(r, dur, 2000, 9000, 0.001) * 0.6 + 0.55 * tick + 0.45 * board + 0.7 * body)
+        bricks = np.zeros(n)
+        grains(r, bricks, int(6 + 14 * k), 0.0, 0.05 + 0.1 * k, 1800, 6000, 0.0008, 0.002, 1.0, decay=0.02 + 0.03 * k)
+        x += 0.25 * unit(bricks)
+        x = band(x, None, 9000)
+        if k:
+            place(x, 0.0, thud(t, 95, 45, 0.1, 0.08), 0.7)
+        x = space(r, x, 0.6, 0.15, 200, 8000)
+    elif theme == "fungal":
+        # a spongy toadstool cap underfoot: a soft, wet squish as the cap folds and springs back, a damped
+        # body beneath, and the leaf litter crunching quietly (k: the landing flattens the cap)
+        squish = svf(r.standard_normal(n), glide(r.uniform(380, 480), r.uniform(160, 210), t, 0.08 + 0.05 * k), 1.2)
+        squish = unit(squish) * env(t, 0.008, 0.05 + 0.06 * k)
+        body = thud(t, r.uniform(90, 110), 50, 0.06, 0.04 + 0.05 * k, harm=(0.2,))
+        both(0.8 * squish + 0.6 * body)
+        litter = np.zeros(n)
+        grains(r, litter, int(8 + 24 * k), 0.01, 0.06 + 0.1 * k, 1200, 5000, 0.0008, 0.003, 1.0, decay=0.03 + 0.04 * k)
+        x += 0.3 * unit(litter)
+        x = band(x, None, 4500, 3)
+        if k:
+            place(x, 0.0, thud(t, 80, 40, 0.1, 0.1), 0.6)
+        x = space(r, x, 0.5, 0.1, 200, 4000)
+    elif theme == "carnival":
+        # boardwalk planks of loose pine: a hollow, springy slap of a plank, its nail knocking on the joist
+        # beneath, a scatter of grit (k: the landing sends the planks clattering)
+        f1 = r.uniform(200, 240)
+        plank = modes(t, bar_modes(f1, 0.06 + 0.05 * k, (1.0, 0.5, 0.3, 0.15), 0.6), r, 0.02, hard=3000 + 1500 * k)
+        body = thud(t, r.uniform(120, 140), 65, 0.04, 0.03 + 0.04 * k, harm=(0.3,))
+        both(click(r, dur, 2500, 9000, 0.0009) * 0.5 + 0.5 * plank + 0.7 * body)
+        grit = np.zeros(n)
+        grains(r, grit, int(10 + 30 * k), 0.0, 0.05 + 0.1 * k, 1500, 7000, 0.0008, 0.002, 1.0, decay=0.03 + 0.04 * k)
+        x += 0.25 * unit(grit)
+        x = band(x, None, 8000)
+        if k:
+            place(x, 0.0, thud(t, 90, 42, 0.1, 0.09), 0.7)
+        x = space(r, x, 0.5, 0.12, 150, 6000)
+    elif theme == "olympus":
+        # polished marble steps in a sunlit temple: a crisp, dry click, a clear ring from the stone, a soft
+        # body beneath and the open air (k: the landing rings longer)
+        ring = modes(t, [(r.uniform(780, 880), 1.0, 0.03 + 0.03 * k), (r.uniform(1950, 2150), 0.4, 0.015),
+                         (r.uniform(3100, 3400), 0.2, 0.008)], r, 0.0)
+        body = thud(t, r.uniform(140, 165), 80, 0.03, 0.03 + 0.03 * k, harm=(0.2,))
+        both(click(r, dur, 2500, 11000, 0.0008) * 0.9 + 0.35 * ring + 0.5 * body)
+        x = band(x, None, 10000)
+        if k:
+            place(x, 0.0, thud(t, 100, 50, 0.1, 0.09), 0.5)
+        x = space(r, x, 1.2 + 0.5 * k, 0.2 + 0.08 * k, 250, 9000, 0.6)
+    elif theme == "dino":
+        # packed earth under the ferns: a soft, heavy thump that sinks into the soil, the grass swishing as
+        # its stems part, and a twig snapping under the weight (k: the landing crushes the ferns)
+        body = thud(t, r.uniform(85, 105), 40, 0.1, 0.07 + 0.06 * k, harm=(0.3, 0.1))
+        soil = noise(r, n, 100, 800) * env(t, 0.004, 0.03 + 0.05 * k)
+        both(body + 0.5 * soil)
+        swish = np.zeros(n)
+        grains(r, swish, int(14 + 40 * k), 0.0, 0.08 + 0.12 * k, 1000, 6000, 0.001, 0.004, 1.0, decay=0.03 + 0.06 * k)
+        x += 0.35 * unit(swish)
+        if r.random() < 0.5 + 0.4 * k:
+            twig = modes(tv(0.05), bar_modes(r.uniform(1400, 1800), 0.012, (1.0, 0.4), 0.7), r, 0.02, hard=3000)
+            place(x, r.uniform(0.02, 0.07), twig, 0.2 + 0.1 * k)
+        x = band(x, None, 7000)
+        if k:
+            place(x, 0.0, thud(t, 70, 35, 0.12, 0.12), 0.8)
+        x = space(r, x, 0.6, 0.12, 120, 5000)
+    elif theme == "arcane":
+        # an old library floor, planks laid over a stone flag: the boards' dry creak, a hollow wood knock,
+        # the flag's stone thud beneath, and dust sifting from the shelves (k: the landing shakes the dust down)
+        creak = svf(r.standard_normal(n), glide(r.uniform(900, 1100), r.uniform(500, 650), t, 0.1), 6.0)
+        creak = unit(creak) * env(t, 0.002, 0.04 + 0.04 * k)
+        board = modes(t, bar_modes(r.uniform(200, 250), 0.05 + 0.04 * k, (1.0, 0.6, 0.3), 0.6), r, 0.02, hard=2500)
+        stone = thud(t, r.uniform(160, 190), 90, 0.03, 0.02 + 0.03 * k, harm=(0.2,))
+        both(0.35 * creak + 0.5 * board + 0.7 * stone + 0.4 * click(r, dur, 1500, 7000, 0.0012))
+        dust = np.zeros(n)
+        grains(r, dust, int(4 + 12 * k), 0.01, 0.05 + 0.1 * k, 2000, 8000, 0.0008, 0.002, 1.0, decay=0.02 + 0.03 * k)
+        x += 0.15 * unit(dust)
+        x = band(x, None, 8000)
+        if k:
+            place(x, 0.0, thud(t, 85, 40, 0.1, 0.1), 0.6)
+        x = space(r, x, 1.0 + 0.4 * k, 0.18 + 0.08 * k, 150, 6000)
+    elif theme == "arcade":
+        # a pixel tap on a rubber mat: a short, bright square-wave bleep, its pitch stepping down, and the
+        # plastic click of the contact (k: the heavier landing bleeps lower)
+        f = r.uniform(780, 1000) * (1.0 - 0.12 * k)
+        sq = sum(np.sin(TAU * f * h * t) / h for h in (1, 3, 5, 7, 9) if h * f < 0.45 * SR)
+        blip = sq * env(t, 0.0005, 0.012 + 0.01 * k)
+        both(0.7 * blip + 0.4 * click(r, dur, 2500, 9000, 0.0009))
+        x = band(x, None, 9000)
+        if k:
+            place(x, 0.0, thud(t, 95, 45, 0.1, 0.09), 0.5)
+    elif theme == "siege":
+        # a flagstone of the castle yard, cut stone bedded in mortar: a dull slap of the slab, a crisp chip off
+        # its edge, grit crunching in the joint, and the stone's low thud beneath (k: the landing cracks it)
+        slab = modes(t, plate_modes(r.uniform(330, 380), 1.5, 0.02 + 0.02 * k, 6, 0.6, r), r, 0.01, hard=5000)
+        body = thud(t, r.uniform(100, 120), 55, 0.04, 0.04 + 0.04 * k, harm=(0.2, 0.08))
+        both(click(r, dur, 1200, 7000, 0.0013) * 0.8 + 0.4 * slab + 0.8 * body)
+        grit = np.zeros(n)
+        grains(r, grit, int(10 + 30 * k), 0.0, 0.04 + 0.08 * k, 1500, 7000, 0.0006, 0.002, 1.0, decay=0.02 + 0.03 * k)
+        x += 0.35 * unit(grit)
+        x = band(x, None, 9000)
+        if k:
+            place(x, 0.0, thud(t, 80, 38, 0.12, 0.12), 0.8)
+        x = space(r, x, 0.9 + 0.4 * k, 0.18 + 0.07 * k, 200, 6000)
     return x
+
+
+STEP_THEMES = None   # --themes=a,b: regenerate only those surfaces' footsteps and landings
 
 
 def gen_steps():
     for th in THEMES:
+        if STEP_THEMES and th not in STEP_THEMES:
+            continue
         for i in range(1, 5):
             name = "step_%s_%d" % (th, i)
             save(name, surface_hit(th, rng(name), 0.0, STEP_LEN), fin=0.0008, fout=0.03)
@@ -5440,10 +5554,16 @@ GENERATORS = (gen_steps, gen_wall, gen_movement_loops, gen_lasers, gen_crusher_p
 
 
 def main():
-    """--only=manor,armada runs just those generators (gen_<name>) before verifying everything."""
+    """--only=manor,armada runs just those generators (gen_<name>) before verifying everything.
+    --themes=toybox,fungal re-renders just those surfaces' footsteps and landings (gen_steps) and then verifies."""
+    global STEP_THEMES
     args = sys.argv[1:]
     only = [a.split("=", 1)[1].split(",") for a in args if a.startswith("--only=")]
     only = ["gen_" + o for o in only[0]] if only else None
+    themes = [a.split("=", 1)[1] for a in args if a.startswith("--themes=")]
+    if themes:
+        STEP_THEMES = set(themes[0].split(","))
+        only = ["gen_steps"]
     if "--verify" not in args:
         print("world effects -> audio/")
         for fn in GENERATORS:

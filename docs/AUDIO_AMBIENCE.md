@@ -28,7 +28,7 @@ target, peak under -3 dBFS, and less than 35 % of the energy below 80 Hz. It als
 loop seam on the *decoded* file: the sample step and the curvature across the wrap must be no
 larger than ordinary ones inside the file, and the level of the last 50 ms must match the first
 50 ms. For **one-shots**: 44.1 kHz mono, 0.2-10 s, peak about -3 dBFS, silent first and last
-samples. It fails on missing or stray `amb_*` files and when the total goes over 42 MB.
+samples. It fails on missing or stray `amb_*` files and when the total goes over 56 MB.
 
 ## Formats and levels
 
@@ -37,10 +37,10 @@ samples. It fails on missing or stray `amb_*` files and when the total goes over
 | Beds      | `amb_<theme>.ogg` (+ layers)     | Ogg Vorbis, 32 kHz stereo      | -24 to -27 dBFS RMS (title -30; the glacier and desert storm layers, the manor's tower, the carrier's island, Sakura Peaks' keep, the frontier train's engine, the doom reactor core, the abyss wreck, the tempest spire and the void's fracture are 1 dB above their base beds, and the armada's flagship 1 dB below, as the storm breaks); a memoryless soft knee holds peaks under -4 dBFS; 40 Hz high-pass, 6-9 kHz low-pass |
 | One-shots | `amb_<theme>_<event>_<n>.ogg`    | Ogg Vorbis, 44.1 kHz mono      | peak normalised to -3 dBFS; the runtime plays them 8-22 dB down |
 
-One-shots are Ogg rather than WAV to keep within the size budget: the 361 clips add up to about
-1430 s, which would be about 126 MB as 44.1 kHz 16-bit WAV, against 10.8 MB as Ogg. Nothing is
-timing-critical, so Ogg's decode latency doesn't matter. Total size: about 37.9 MB (42 beds 27.1 MB,
-361 one-shots 10.8 MB).
+One-shots are Ogg rather than WAV to keep within the size budget: the 421 clips add up to about
+1670 s, which would be about 147 MB as 44.1 kHz 16-bit WAV, against 12.7 MB as Ogg. Nothing is
+timing-critical, so Ogg's decode latency doesn't matter. Total size: about 44.4 MB (50 beds 31.7 MB,
+421 one-shots 12.7 MB), budget 56 MB. The eight worlds of the fifth set (see the tables below) added 6.5 MB.
 
 The beds sit well under the music and effects. They are rolled off at both ends, so there is
 no masking sub rumble and no fizzy top that tires the ear over a long session.
@@ -80,7 +80,9 @@ the score) and by the title diorama (`"title"`). An unknown theme builds a silen
   (`amb_doom_core`), the wrecked submarine's hull groans and its sonar pings slowly at the bottom
   of The Abyss (`amb_abyss_wreck`), the wind grows fiercer and the beacon ticks round Tempest
   Tower's spire (`amb_tempest_spire`) and The Void fractures faster under a held choir
-  (`amb_void_fracture`). Near
+  (`amb_void_fracture`). The fifth set of worlds (Toybox Tumble, Mushroom Hollow, Carnival Chaos,
+  Sky Citadel, Dino Valley, Arcane Library, Pixel Panic and Castle Siege) each have a single bed and
+  no layer. Near
   the top of the Final Ascent, `amb_ascent_high` takes over: stronger, howling wind with the city
   further away.
 * **One-shots:** each event counts down a random interval. When it is due, it plays with
@@ -143,6 +145,14 @@ the score) and by the title diorama (`"title"`). An unknown theme builds a silen
 | `amb_tempest_spire.ogg` | 64 s | The spire: a fiercer, higher wind (a Q 9 howl, 620 -> 1400 Hz), the cables louder, thinner rain (1600 drops a second), fewer tarps, and the aircraft-warning beacon's relay ticking every 2 s with a short 120 Hz buzz. It is 1 dB louder than the base bed. Crossfades in from 50 % to 95 % of the course. |
 | `amb_void.ogg` | 64 s | A surreal dream void. Airy, shimmering pads: F#m(add9) turning into Dmaj7 and back once a loop, each note two sines a hair apart, swelling in its own time, with high F#5 / C#6 / F#6 tones flickering on top and breath-like air through narrow resonances on the chord tones. Ten sounds played backwards (a breath of noise on one fixed vowel colour, nothing word-like, or a glassy note), swelling out of nothing and sucked away. Three handless clocks ticking out of step (64, 85 and 48 ticks a loop), each heard in stretches. Glassy chimes on F# minor pentatonic drifting by. The world cracking far away every 9-18 s (a crack and glassy splinters, dulled at 3 kHz). A 3.5 s reverb. |
 | `amb_void_fracture.ogg` | 64 s | The collapse: a held choir-like hum (F#2, F#3, A3, C#4, two voices each on one "oo" vowel, each breathing in its own time so the chord never breaks), the cracking nearer and every 2.5-6 s, the pads, chimes, reversed sounds and clocks further back. It is 1 dB louder than the base bed. Crossfades in from 50 % to 95 % of the course. |
+| `amb_toybox.ogg` | 64 s | A playroom with the heating on: warm room tone (180-1400 Hz pink noise, gusted). A music box plays an eight-note tune on C6 pentatonic (tines ringing 1.8 s) in the next room every 14-22 s, and the floor creaks (a stick-slip through wood resonances) every 9-16 s. |
+| `amb_fungal.ogg` | 64 s | A sunny forest floor at beetle size: a breeze over the leaves (900-4000 Hz wind layer), a brook babbling over stones (500-3500 Hz, about 160 bubbles a loop), and 12 far birds from the one-shot species, dulled. |
+| `amb_carnival.ogg` | 64 s | A funfair at sunset heard from the midway: a crowd murmur (250-1400 Hz pink noise, swelling with the gusts, the two ears a little apart), a calliope tune on C major pentatonic every 18-30 s (breathy steam-pipe harmonics) and a far bell rung every 20-40 s. |
+| `amb_olympus.ogg` | 64 s | Above the clouds: wind over the marble terraces (180-1800 Hz, whistling at 280-560 Hz as it gusts), and chimes on C6 pentatonic every 9-16 s, ringing far below in a temple (a 4 s reverb). |
+| `amb_dino.ogg` | 64 s | A steamy valley: twelve insect choruses (the cricket chirp model, 3.8-5.2 kHz, singing in stretches), wind through the fronds (200-1800 Hz) and a geyser's rumble (120-900 Hz) with hiss bursts every 15-25 s and about 90 bubbles a loop. |
+| `amb_arcane.ogg` | 64 s | A library at night: a candle flame's hum (700-2600 Hz), about 120 soft wax pops, page flutters every 6-12 s and a shimmer of A minor pads (A3 C4 E4 A4, tremolo) with glass glints. Pops are kept off the loop's first and last tenth so the seam stays quiet, and the bed sits 1.5 dB under the usual level so its transients do not overshoot in the Ogg. |
+| `amb_arcade.ogg` | 64 s | A dim arcade hall: a 120 Hz mains hum (with 240 and 360 Hz) under the fans' hush (1.2-5 kHz pink noise), and attract-mode square-wave bleeps every 4-9 s. |
+| `amb_siege.ogg` | 64 s | A castle at dusk: wind over the battlements (120-1400 Hz, a 180 / 360 Hz whistle as it gusts), fires crackling in the yard (400-2500 Hz with crackles), and crows calling far off every 12-20 s. |
 
 ## One-shots
 
@@ -285,6 +295,30 @@ the score) and by the title diorama (`"title"`). An unknown theme builds a silen
 | `amb_void_shimmer_1..2` | A pad swelling up and away, shimmering: 1 F# minor (F#3 A3 C#4 G#4); 2 D major 7 (D3 F#3 A3 C#4). |
 | `amb_void_choir_1..2` | A held, wordless choir hum swelling out of the void (voices on one vowel, fixed formants): 1 F#3 A3 C#4 on "oo"; 2 F#2 C#3 F#3 on "ah". |
 | `amb_void_fall_1..2` | Fragments falling away: 1 glass shards tumbling, their pings descending F# minor pentatonic; 2 a slow falling whoosh and a soft glassy impact far below. |
+| `amb_toybox_clock_1..2` | A wind-up alarm clock on a nursery shelf: 1 a steady ticking, eight beats; 2 the spring running down, the ticks slowing and stopping. |
+| `amb_toybox_box_1..2` | A music box heard from another room: a short tune on the major pentatonic, its tines plucked and ringing, in a 6 kHz low-pass far reverb. |
+| `amb_toybox_creak_1..3` | A floorboard creaking under a small foot: 1 a short creak; 2 a long groan bending up in pitch; 3 two creaks in a row. |
+| `amb_fungal_bird_1..3` | Birds in the trees: 1 a robin's song; 2 a warbler's trill; 3 a sparrow's chirping. |
+| `amb_fungal_cricket_1..2` | Crickets in the long grass: 1 a few crickets chirping close by; 2 one cricket chirping on, its pulses quickening. |
+| `amb_fungal_brook_1..2` | A brook babbling over stones: 1 a short burble of bubbles; 2 a longer rushing babble with a splash where it tumbles over a rock. |
+| `amb_carnival_crowd_1..2` | A crowd on the midway: 1 a murmur of many voices, swelling and falling away; 2 a cheer going up and dying down. |
+| `amb_carnival_calliope_1..2` | A steam calliope across the field: 1 a jaunty phrase of four notes; 2 a quick run up the scale, the pipes sagging and swelling. |
+| `amb_carnival_ding_1..3` | A bell rung at a fairground stall for a prize: 1 a clean ding; 2 a ding and then a higher one; 3 a bell ringing on and dying away, a little out of tune. |
+| `amb_olympus_wind_1..2` | A gust rolling over the clouds: 1 a long rising rush; 2 a falling sweep that thins into the distance. |
+| `amb_olympus_chime_1..3` | Chimes ringing in a temple far below: 1 a rising arpeggio of glass; 2 one great bell; 3 a scatter of shimmering notes. |
+| `amb_olympus_eagle_1..2` | An eagle soaring high over the clouds: 1 a long, wavering cry climbing and then gliding; 2 two calls, the second higher. |
+| `amb_dino_insect_1..3` | Insects droning in the jungle ferns: 1 a cicada's rising shrill; 2 a chorus of crickets; 3 a swarm of flies round a warm rock. |
+| `amb_dino_roar_1..3` | A beast roaring far off in the valley: 1 a deep roar falling away; 2 a shorter, sharper roar; 3 two roars answering. |
+| `amb_dino_geyser_1..2` | A geyser bubbling and blowing off: 1 a wet gurgle of bubbles, then a hiss of steam; 2 a roar of steam and a splash down. |
+| `amb_arcane_candle_1..3` | A candle flame by the reading desk: 1 a few small pops of wax; 2 a steady crackle and sputter; 3 one bright snap and the flame settling. |
+| `amb_arcane_page_1..2` | Pages turned in a draught: 1 a quick flutter; 2 a slow turn, the paper rustling and settling. |
+| `amb_arcane_shimmer_1..2` | A spell shimmering in the air: 1 a rising sparkle of glass on A minor; 2 a soft swell that glides down and away. |
+| `amb_arcade_crt_1..2` | A cabinet's CRT warming up: 1 a 120 Hz hum swelling and fading; 2 the hum rising in pitch with a crackle of static. |
+| `amb_arcade_coin_1..3` | A coin dropped in a slot: 1 a clink and a bounce or two; 2 a coin tumbling down a chute; 3 a handful of coins into the tray. |
+| `amb_arcade_beep_1..3` | Distant machines bleeping in attract mode: 1 a rising chirp; 2 a falling bleep sequence; 3 two chirps answering across the hall. |
+| `amb_siege_drum_1..3` | Battle drums beating far off: 1 a slow march of three beats; 2 a roll swelling to a boom; 3 one heavy drum, then a second answering it. |
+| `amb_siege_fire_1..3` | A fire crackling in an iron brazier: 1 a few sharp pops over a roar of flame; 2 a log splitting; 3 a steady crackle, the flames sighing. |
+| `amb_siege_crow_1..3` | Crows over the field: 1 a single caw; 2 two cawing back and forth; 3 a squabbling flock. |
 
 ## Scheduling tables (`Soundscape.THEMES`)
 
@@ -537,6 +571,70 @@ dove every 25-50 s (-22 to -15 dB).
 | fall | 20-45 | -20 to -14 | 0 (in tune) | 20-60 | 0-30 | chance 40 % -> 100 % |
 | shimmer | 25-55 | -20 to -14 | 0 (in tune) | 20-50 | 0-20 | |
 | choir | 30-70 | -20 to -14 | 0 (in tune) | 30-80 | -10 to 30 | chance 30 % -> 100 % |
+
+**Toybox Tumble** (bed `amb_toybox`)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| clock | 14-32 | -20 to -14 | 0.03 | 6-18 | -2 to 6 | chance 100 % -> 50 % |
+| box | 25-55 | -20 to -14 | 0 (in tune) | 12-30 | 0-8 | |
+| creak | 12-28 | -22 to -15 | 0.08 | 3-10 | -3 to 1 | |
+
+**Mushroom Hollow** (bed `amb_fungal`)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| bird | 5-12 | -22 to -14 | 0.08 | 8-30 | 2-12 | answer 30 % |
+| cricket | 12-26 | -22 to -16 | 0.05 | 3-12 | -1 to 3 | |
+| brook | 18-40 | -20 to -14 | 0.04 | 10-30 | -3 to 2 | travel 6 m |
+
+**Carnival Chaos** (bed `amb_carnival`)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| crowd | 30-60 | -20 to -14 | 0.04 | 20-50 | -2 to 6 | |
+| calliope | 25-55 | -20 to -13 | 0.02 | 60-140 | -10 to 20 | chance 100 % -> 60 % |
+| ding | 12-28 | -20 to -14 | 0 (in tune) | 30-80 | -5 to 20 | chance 100 % -> 70 % |
+
+**Sky Citadel** (bed `amb_olympus`)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| wind | 12-25 | -18 to -12 | 0.04 | 10-30 | -4 to 10 | travel 40 m |
+| chime | 20-45 | -22 to -15 | 0 (in tune) | 60-140 | -120 to -40 (below, in the temple) | |
+| eagle | 35-80 | -18 to -12 | 0.04 | 80-200 | 40-160 | travel 60 m, chance 100 % -> 50 % |
+
+**Dino Valley** (bed `amb_dino`)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| insect | 10-22 | -22 to -14 | 0.06 | 6-25 | -2 to 6 | |
+| roar | 40-90 | -16 to -10 | 0.04 | 150-320 | -40 to 40 | chance 100 % -> 60 % |
+| geyser | 25-55 | -18 to -12 | 0.05 | 40-120 | -30 to -5 | |
+
+**Arcane Library** (bed `amb_arcane`)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| candle | 8-18 | -22 to -14 | 0.08 | 3-10 | -2 to 3 | |
+| page | 12-26 | -22 to -15 | 0.05 | 5-15 | -2 to 4 | travel 10 m |
+| shimmer | 25-55 | -20 to -14 | 0 (in tune) | 10-30 | 0-15 | |
+
+**Pixel Panic** (bed `amb_arcade`)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| crt | 30-70 | -22 to -16 | 0.02 | 6-20 | -2 to 4 | |
+| coin | 10-24 | -20 to -14 | 0.08 | 6-25 | -2 to 4 | |
+| beep | 8-20 | -22 to -15 | 0.04 | 20-60 | -4 to 10 | chance 100 % -> 60 % |
+
+**Castle Siege** (bed `amb_siege`)
+
+| Event | every | dB | pitch +- | dist | height | extra |
+|-------|-------|----|----------|------|--------|-------|
+| drum | 30-70 | -16 to -10 | 0.04 | 150-300 | -20 to 30 | chance 100 % -> 50 % |
+| fire | 12-26 | -20 to -14 | 0.06 | 8-25 | -3 to 4 | |
+| crow | 15-35 | -20 to -14 | 0.05 | 40-120 | 10-60 | answer 30 % |
 
 **The Final Ascent** (bed `amb_ascent`, layer `amb_ascent_high` from 0.3 to 0.95)
 
