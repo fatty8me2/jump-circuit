@@ -1,36 +1,46 @@
 extends PowerUp
 ## Swap Warp (instant): you and the racer directly ahead of you trade places through a pair of
-## swirling portals. (The leader never rolls it.) In Party Practice it swaps with the nearest
-## dummy. The victim is told where to go ("swap") and teleports itself.
+## swirling portals. (The leader never rolls it.) The target is the nearest racer ahead by real
+## course distance (checkpoint progress + the way to the next one). Both land on the other's last
+## safe ground and trade checkpoint progress; a Balloon Shield blocks it. In Party Practice it
+## swaps with the nearest dummy. Kept in the slot when nobody is in reach.
 
 const TEAL := Color(0.4, 1.0, 0.85)
+
+
+func can_use() -> bool:
+	return not layer.target_ahead().is_empty()
+
+
+func no_use_hint() -> String:
+	return "Nobody ahead to swap with!"
 
 
 func begin() -> void:
 	var tg: Dictionary = layer.target_ahead()
 	if tg.is_empty():
-		layer.hud.announce("Nobody to swap with!", TEAL)
-		PartyFx.burst(world(), chest(), TEAL, 20, 3.0, 0.2)
 		finish()
 		return
-	var a: Vector3 = feet()
-	var b: Vector3 = tg["pos"]
-	_warp_fx(layer, a, b)
-	fx("warp", {"a": arr(a), "b": arr(b)})
-	layer.sfx.play("warp", 1.0, 1.0)
 	if bool(tg.get("dummy", false)):
+		# Party Practice: trade places with the dummy (it lands where we last stood safely)
+		var a: Vector3 = feet() if player().grounded else layer.my_safe_spot()
+		var b: Vector3 = tg["pos"]
+		_warp_fx(layer, feet(), b)
+		fx("warp", {"a": arr(feet()), "b": arr(b)})
+		layer.sfx.play("warp", 1.0, 1.0)
 		var d: PracticeDummy = tg["node"] as PracticeDummy
 		d.global_position = a
 		d.vel = Vector3.ZERO
 		d.grounded = false
 		d.take_hit(Vector3.ZERO, {"s": "swap", "add": true, "st": 0.8})
 		layer.hit_landed.emit(d.id, "swap")
+		var p: Player = player()
+		p.teleport(Transform3D(Basis(Vector3.UP, p.camera_yaw), b + Vector3(0, 0.1, 0)))
+		layer.hud.announce("SWAP!", TEAL)
 	else:
-		Net.send_party({"k": "swap", "pos": arr(a)}, int(tg["id"]))
-		layer.hit_landed.emit(int(tg["id"]), "swap")
-	var p: Player = player()
-	p.teleport(Transform3D(Basis(Vector3.UP, p.camera_yaw), b + Vector3(0, 0.1, 0)))
-	layer.hud.announce("SWAP!", TEAL)
+		# a rival: they answer with their safe spot (or refuse: Balloon Shield, protection) and
+		# nobody moves until they do - the PartyLayer finishes the swap
+		layer.request_swap(tg)
 	finish()
 
 

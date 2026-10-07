@@ -484,6 +484,11 @@ func _dash_anim(dir: Vector3) -> void:
 
 # ---- Energy Wave ----------------------------------------------------------------------------
 
+## A tap dash-punches on the press; the Energy Wave charge starts after hold_threshold.
+func on_attack_press() -> void:
+	_dash_punch()
+
+
 func on_attack_hold(held: float) -> void:
 	if held < hold_threshold:
 		return
@@ -505,9 +510,7 @@ func on_attack_hold(held: float) -> void:
 
 func on_attack_release(held: float) -> void:
 	if _charge < 0.0:
-		if held >= 0.0 and held < hold_threshold:
-			_dash_punch()
-		return
+		return   # a tap already punched on the press
 	var power: float = charge_frac()
 	_charge = -1.0
 	_show_orb(false)
