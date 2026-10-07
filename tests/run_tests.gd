@@ -4669,3 +4669,311 @@ func test_zc_looks_ext_items() -> void:
 	check(LooksExt.paint_shader_code("white") == "" and LooksExt.trail_layers("classic", Color.WHITE).is_empty(),
 		"ids LooksExt does not know fall through (white paint, classic trail)")
 	check(Cosmetics.ids("trail").size() == 16 and Cosmetics.ids("finish").size() == 10, "trails %d, finishes %d" % [Cosmetics.ids("trail").size(), Cosmetics.ids("finish").size()])
+
+
+
+# ---- ghost replays (M1) ------------------------------------------------------------------
+
+## A straight run along -Z at 8 m/s for `secs`, 15 Hz, with a respawn jump halfway through.
+func _make_test_ghost(id: String, secs: float = 10.0) -> GhostData:
+	var g := GhostData.new()
+	g.level_id = id
+	g.rev = GhostData.current_rev(id)
+	g.time = secs
+	var n: int = int(secs * GhostData.HZ) + 1
+	for i: int in n:
+		var t: float = float(i) / GhostData.HZ
+		# a respawn at t=5: the pose jumps 40 m back up the course
+		var snap: bool = i == int(5.0 * GhostData.HZ)
+		var z: float = -8.0 * t + (40.0 if t >= 5.0 else 0.0)
+		g.add(Vector3(2.0, 1.0, z), 0.5 + 0.01 * float(i), i % 7 != 0, false, snap)
+	return g
+
+
+## Rendered frames (the ghost follows the clock in _process; physics ticks can run in bursts).
+func _frames(n: int) -> void:
+	for k: int in n:
+		await get_tree().process_frame
+
+
+func _ghost_setup() -> Dictionary:
+	var keep: Dictionary = {"mode": Settings.ghost_mode, "path": Settings.save_path_override}
+	Settings.save_path_override = "user://ghosts_test_settings.cfg"
+	GhostData.delete_all()
+	return keep
+
+
+func _ghost_teardown(keep: Dictionary) -> void:
+	Settings.ghost_mode = int(keep["mode"])
+	var p: String = Settings.save_path_override
+	if FileAccess.file_exists(p):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+	Settings.save_path_override = str(keep["path"])
+	GhostData.delete_all()
+	Game.course_running = false
+
+
+func test_zh_ghost_roundtrip_and_rev_discard() -> void:
+	var keep: Dictionary = _ghost_setup()
+	check(GhostData.dir() != "user://ghosts", "tests keep ghosts out of the real folder (%s)" % GhostData.dir())
+	var g: GhostData = _make_test_ghost("gardens")
+	check(g.save() and FileAccess.file_exists(GhostData.path_for("gardens")), "a ghost saves to <dir>/gardens.ghost")
+	var bytes: PackedByteArray = FileAccess.get_file_as_bytes(GhostData.path_for("gardens"))
+	check(bytes.slice(0, 4).get_string_from_ascii() == "JCGH" and bytes[4] == GhostData.VERSION, "the file starts with the magic and version")
+	check(bytes.size() < g.size() * GhostData.BYTES_PER_SAMPLE, "the file is compact (%d bytes for %d samples)" % [bytes.size(), g.size()])
+	var back: GhostData = GhostData.load_for("gardens")
+	check(back != null and back.size() == g.size() and absf(back.time - g.time) < 0.001 and back.rev == g.rev, "a ghost loads back with its length, time and rev")
+	var worst_pos: float = 0.0
+	var worst_yaw: float = 0.0
+	var flags_ok: bool = true
+	if back != null:
+		for i: int in g.size():
+			worst_pos = maxf(worst_pos, back.pos[i].distance_to(g.pos[i]))
+			worst_yaw = maxf(worst_yaw, absf(angle_difference(back.yaw[i], g.yaw[i])))
+			flags_ok = flags_ok and back.flags[i] == g.flags[i]
+	check(worst_pos < 0.0001 and worst_yaw < 0.001 and flags_ok, "round-trip keeps positions (%.6f), yaw (%.5f) and flags" % [worst_pos, worst_yaw])
+	# the same bytes under another level id are not that level's ghost
+	check(GhostData.decode(bytes, "foundry") == null, "a ghost is only valid for its own level")
+	# an older layout rev is discarded (and the stale file removed)
+	var old: GhostData = _make_test_ghost("foundry")
+	old.rev = GhostData.current_rev("foundry") - 1
+	check(old.save() and FileAccess.file_exists(GhostData.path_for("foundry")), "an old-rev ghost file exists")
+	check(GhostData.load_for("foundry") == null, "a ghost from an older layout rev is discarded")
+	check(not FileAccess.file_exists(GhostData.path_for("foundry")), "and its stale file is deleted")
+	# damage: truncated, garbage, a wrong version
+	var cut: PackedByteArray = bytes.slice(0, bytes.size() - 10)
+	check(GhostData.decode(cut, "gardens") == null, "a truncated ghost is rejected")
+	check(GhostData.decode(PackedByteArray([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]), "gardens") == null, "garbage is rejected")
+	var wrong: PackedByteArray = bytes.duplicate()
+	wrong[4] = GhostData.VERSION + 1
+	check(GhostData.decode(wrong, "gardens") == null, "an unknown version is rejected")
+	check(GhostData.load_for("nonexistent") == null, "a level without a ghost loads null")
+	GhostData.delete_all()
+	check(not DirAccess.dir_exists_absolute(GhostData.dir()), "delete_all clears the test ghost folder")
+	_ghost_teardown(keep)
+
+
+func test_zh_ghost_record_and_save_on_pb() -> void:
+	var keep: Dictionary = _ghost_setup()
+	Settings.ghost_mode = Settings.GHOST_OFF
+	var lvl: LevelBase = await load_level(0)
+	var gr: GhostRun = lvl.ghost_run
+	check(gr != null, "a solo run has a ghost recorder")
+	if gr == null:
+		_ghost_teardown(keep)
+		return
+	check(gr.racer == null, "with the ghost off nothing is shown (but the run is still recorded)")
+	var start_n: int = gr.recording.size()
+	lvl.player.control_enabled = true
+	lvl.player.use_device_input = false
+	lvl.player.cmd_move = Vector2(0, 1)
+	Game.course_time = 0.0
+	Game.course_running = true
+	await seconds(2.0)
+	var n: int = gr.recording.size()
+	check(n >= 25 and n <= 36, "about 15 samples a second are recorded (%d in 2 s, started at %d)" % [n, start_n])
+	var last: Vector3 = gr.recording.pos[n - 1]
+	check(last.distance_to(lvl.player.global_position) < 2.0, "samples follow the player")
+	# restarting the clock starts the recording over
+	lvl.restart_run()
+	await ticks(3)
+	check(gr.recording.size() < 5, "restarting the run restarts the recording (%d)" % gr.recording.size())
+	await seconds(1.0)
+	# finishing with a new best saves the ghost, a slower run does not replace it
+	check(not FileAccess.file_exists(GhostData.path_for(lvl.level_id)), "no ghost file before a finish")
+	lvl.run_time = Game.course_time
+	var t1: float = lvl.run_time
+	lvl._on_finish()
+	await ticks(2)
+	check(SaveData.best_time(lvl.level_id) > 0.0 and FileAccess.file_exists(GhostData.path_for(lvl.level_id)), "a new personal best writes the ghost file")
+	var saved: GhostData = GhostData.load_for(lvl.level_id)
+	check(saved != null and absf(saved.time - t1) < 0.001 and saved.size() >= 10, "the saved ghost carries the PB time (%s)" % str(saved.time if saved != null else -1.0))
+	lvl.finished = false
+	lvl.run_time = t1 + 30.0
+	var before: PackedByteArray = FileAccess.get_file_as_bytes(GhostData.path_for(lvl.level_id))
+	lvl._on_finish()
+	await ticks(2)
+	check(FileAccess.get_file_as_bytes(GhostData.path_for(lvl.level_id)) == before, "a slower finish keeps the old ghost")
+	lvl.player.cmd_move = Vector2.ZERO
+	SaveData.wipe()
+	_ghost_teardown(keep)
+
+
+func test_zh_ghost_playback_timing() -> void:
+	var keep: Dictionary = _ghost_setup()
+	Settings.ghost_mode = Settings.GHOST_PB
+	var lvl0: LevelBase = await load_level(0)
+	var id: String = lvl0.level_id
+	var g: GhostData = _make_test_ghost(id)
+	check(g.save(), "test ghost saved")
+	# an old-layout ghost never shows up
+	var stale: GhostData = _make_test_ghost(id)
+	stale.rev = GhostData.current_rev(id) + 1
+	stale.save()
+	var lvl: LevelBase = await load_level(0)
+	check(lvl.ghost_run != null and lvl.ghost_run.racer == null, "an old-layout ghost is not replayed")
+	check(not FileAccess.file_exists(GhostData.path_for(id)), "and is deleted from disk")
+	g.save()
+	lvl = await load_level(0)
+	var racer: RemoteRacer = lvl.ghost_run.racer
+	check(racer != null, "the saved PB ghost is replayed as a racer")
+	if racer == null:
+		_ghost_teardown(keep)
+		return
+	Game.course_running = false
+	for t: float in [0.0, 2.0, 3.5, 4.9, 6.0, 9.0]:
+		Game.course_time = t
+		await _frames(3)
+		var want: Vector3 = g.sample(t)["pos"]
+		check(racer.global_position.distance_to(want) < 0.35, "at %.1f s the ghost is at %s (got %s)" % [t, str(want), str(racer.global_position)])
+	# the respawn jump is a snap, not a slide
+	Game.course_time = 4.9
+	await _frames(3)
+	var z_before: float = racer.global_position.z
+	Game.course_time = 5.05
+	await _frames(3)
+	check(racer.global_position.z - z_before > 30.0, "the ghost jumps with the recorded respawn (%.1f -> %.1f)" % [z_before, racer.global_position.z])
+	# rewinding the clock (a restart) puts it back at the start
+	Game.course_time = 0.0
+	await _frames(3)
+	check(racer.global_position.distance_to(g.pos[0]) < 0.35 and racer.visible, "a restart sends the ghost back to the start")
+	# past the end it stands, then goes away
+	Game.course_time = g.duration() + 1.0
+	await _frames(3)
+	check(racer.visible, "at the end the ghost celebrates in view")
+	await seconds(2.8)
+	check(not racer.visible, "then it leaves")
+	# translucent
+	var faded: bool = false
+	for m: Node in racer.find_children("*", "MeshInstance3D", true, false):
+		faded = faded or (m as MeshInstance3D).transparency > 0.3
+	check(faded, "the ghost renders translucent")
+	# turning it off live removes it; on again restores it
+	Settings.ghost_mode = Settings.GHOST_OFF
+	lvl.ghost_run.apply_setting()
+	await ticks(2)
+	check(lvl.ghost_run.racer == null, "Off removes the ghost")
+	Settings.ghost_mode = Settings.GHOST_PB
+	lvl.ghost_run.apply_setting()
+	check(lvl.ghost_run.racer != null, "Personal best brings it back")
+	# Off from the start: nothing built
+	Settings.ghost_mode = Settings.GHOST_OFF
+	lvl = await load_level(0)
+	check(lvl.ghost_run != null and lvl.ghost_run.racer == null, "with Ghost: Off no racer is built")
+	_ghost_teardown(keep)
+
+
+func test_zh_ghost_none_in_party_or_multiplayer() -> void:
+	var keep: Dictionary = _ghost_setup()
+	Settings.ghost_mode = Settings.GHOST_PB
+	var lvl0: LevelBase = await load_level(0)
+	_make_test_ghost(lvl0.level_id).save()
+	check(GhostRun.allowed(), "a plain solo run allows ghosts")
+	Game.race_mode = true
+	check(not GhostRun.allowed(), "a race allows none")
+	Game.race_mode = false
+	var was_active: bool = Net.active
+	Net.active = true
+	check(not GhostRun.allowed(), "an open multiplayer session allows none")
+	Net.active = was_active
+	# a Party Practice level: no recorder, no replay
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Game.party = PartyRules.new("practice")
+	Game.level_index = 0
+	Game.race_mode = false
+	Game.course_time = 0.0
+	var lvl: LevelBase = (load(Game.LEVELS[0]["scene"]) as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	check(lvl.ghost_run == null, "Party Practice has no ghost run")
+	var ghosts: int = 0
+	for r: Node in lvl.find_children("*", "RemoteRacer", true, false):
+		ghosts += 1
+	check(ghosts == 0, "and no ghost racer")
+	var pause: PauseMenu = lvl.find_children("*", "PauseMenu", true, false)[0] as PauseMenu
+	pause.set_open(true)
+	check(find_button(pause, "Ghost: Personal best") == null and find_button(pause, "Ghost: Off") == null, "the party pause menu has no ghost toggle")
+	pause.set_open(false)
+	Game.party = null
+	_ghost_teardown(keep)
+
+
+func test_zh_ghost_settings_and_pause_toggle_pad() -> void:
+	var keep: Dictionary = _ghost_setup()
+	# sanitize + persistence (to the private settings file)
+	Settings.ghost_mode = 9
+	Settings._sanitize()
+	check(Settings.ghost_mode == 1, "an out-of-range ghost mode is clamped")
+	Settings.ghost_mode = Settings.GHOST_OFF
+	Settings.save_settings()
+	Settings.ghost_mode = Settings.GHOST_PB
+	Settings.load_settings(Settings.save_path_override)
+	check(Settings.ghost_mode == Settings.GHOST_OFF, "the ghost setting persists in the settings file")
+	# the Settings panel row
+	var sp := SettingsPanel.new()
+	var holder: Control = UiKit.centered(sp)
+	add_child(holder)
+	await _focus_after_rebuild()
+	var row: OptionButton = null
+	for ob: Node in sp.find_children("*", "OptionButton", true, false):
+		if (ob as OptionButton).item_count == Settings.GHOST_NAMES.size() and (ob as OptionButton).get_item_text(0) == "Off":
+			row = ob as OptionButton
+	check(row != null and row.selected == Settings.GHOST_OFF, "the Settings panel has a Ghost row showing Off")
+	var send := func(button: JoyButton) -> void:
+		var ev := InputEventJoypadButton.new()
+		ev.device = 2
+		ev.button_index = button
+		ev.pressed = true
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+		var up: InputEventJoypadButton = ev.duplicate()
+		up.pressed = false
+		Input.parse_input_event(up)
+		await ticks(2)
+	var reached: bool = false
+	var guard: int = 0
+	while guard < 80 and row != null:
+		if get_viewport().gui_get_focus_owner() == row:
+			reached = true
+			break
+		await send.call(JOY_BUTTON_DPAD_DOWN)
+		guard += 1
+	check(reached, "the pad can walk down to the Ghost row (%d presses)" % guard)
+	if row != null:
+		row.item_selected.emit(1)
+		check(Settings.ghost_mode == Settings.GHOST_PB, "choosing Personal best sets the setting")
+	sp.set("_dirty", false)
+	holder.queue_free()
+	await ticks(2)
+	# the pause-menu toggle, by pad
+	Settings.ghost_mode = Settings.GHOST_PB
+	var lvl0: LevelBase = await load_level(0)
+	_make_test_ghost(lvl0.level_id).save()
+	var lvl: LevelBase = await load_level(0)
+	var pause: PauseMenu = lvl.find_children("*", "PauseMenu", true, false)[0] as PauseMenu
+	check(lvl.ghost_run.racer != null, "the PB ghost is up before pausing")
+	pause.set_open(true)
+	await ticks(3)
+	var gb: Button = find_button(pause, "Ghost: Personal best")
+	check(gb != null, "the pause menu has a Ghost toggle")
+	reached = false
+	guard = 0
+	while guard < 12 and gb != null:
+		if get_viewport().gui_get_focus_owner() == gb:
+			reached = true
+			break
+		await send.call(JOY_BUTTON_DPAD_DOWN)
+		guard += 1
+	check(reached, "the pad reaches the pause menu's Ghost toggle")
+	await send.call(JOY_BUTTON_A)
+	check(Settings.ghost_mode == Settings.GHOST_OFF and gb.text == "Ghost: Off", "A cycles it to Off (%s)" % gb.text)
+	await ticks(2)
+	check(lvl.ghost_run.racer == null, "and the ghost leaves the course at once")
+	await send.call(JOY_BUTTON_A)
+	check(Settings.ghost_mode == Settings.GHOST_PB and lvl.ghost_run.racer != null, "A again brings the ghost back")
+	pause.set_open(false)
+	_ghost_teardown(keep)

@@ -46,6 +46,8 @@ var _started: bool = false
 var _pose_tick: int = 0
 var _ghosts: Dictionary = {}
 var _pause: PauseMenu
+## Solo ghost replay + recorder (null in Party Mode and races).
+var ghost_run: GhostRun
 
 
 func _ready() -> void:
@@ -74,10 +76,19 @@ func _ready() -> void:
 		_setup_race()
 	else:
 		_begin_run()
+		_setup_ghost()
 	if Game.party != null:
 		party = PartyLayer.new()
 		add_child(party)
 		party.setup(self)
+
+
+func _setup_ghost() -> void:
+	if not GhostRun.allowed():
+		return
+	ghost_run = GhostRun.new()
+	add_child(ghost_run)
+	ghost_run.setup(self)
 
 
 ## Override: set level_id/theme_id/kill_y etc.
@@ -512,6 +523,8 @@ func _on_finish() -> void:
 	var is_best: bool = false
 	if Game.level_index >= 0:
 		is_best = SaveData.record_finish(level_id, time, deaths, splits)
+	if is_best and ghost_run != null:
+		ghost_run.save_best(time)
 	await _finish_sequence()
 	hud.show_results(time, prev_best, is_best, deaths, prev_ff, prev_medal)
 	if is_best and prev_best >= 0.0 and _new_medal(prev_medal) == 0:
