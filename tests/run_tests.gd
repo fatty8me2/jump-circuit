@@ -3984,7 +3984,7 @@ func test_zm_catalogue_and_kinds() -> void:
 	# the catalogue as planned
 	check(Cosmetics.ids("character") == ["volt", "knight", "ninja", "astronaut", "dino", "skeleton", "catbot", "outlaw", "cyber", "golden"], "characters: %s" % [Cosmetics.ids("character")])
 	check(Cosmetics.ids("paint") == ["white", "chrome", "camo", "lava", "galaxy", "candy", "ghost", "neon"], "paints: %s" % [Cosmetics.ids("paint")])
-	check(Cosmetics.ids("title") == ["rookie", "globetrotter", "speed_demon", "gold_rush", "flawless", "lap_king", "marathoner"], "titles: %s" % [Cosmetics.ids("title")])
+	check(Cosmetics.ids("title") == ["rookie", "globetrotter", "speed_demon", "gold_rush", "flawless", "lap_king", "marathoner", "challenger", "challenge_master", "completionist"], "titles: %s" % [Cosmetics.ids("title")])
 	# one hat per world, for Silver on it
 	var worlds: Dictionary = {}
 	for id: String in Cosmetics.ids("hat"):
@@ -4640,3 +4640,305 @@ func test_zz_no_fall_charged_at_load() -> void:
 		world.queue_free()
 		world = null
 		await ticks(2)
+
+
+# ---- course challenges and the Stats screen ----------------------------------------------------
+
+func test_zx_challenges_generated_and_evaluated() -> void:
+	SaveData.wipe()
+	check(Challenges.total() == Game.LEVELS.size() * 3, "three challenges per course, generated from Game.LEVELS (%d)" % Challenges.total())
+	var names_ok: bool = true
+	var targets_ok: bool = true
+	for info: Dictionary in Game.LEVELS:
+		var id: String = str(info["id"])
+		for k: String in Challenges.KINDS:
+			if Challenges.title(id, k) == "" or Challenges.description(id, k) == "":
+				names_ok = false
+		var t: float = Challenges.speed_target(id)
+		if not (t < Game.medal_target(id, 2) and t > Game.medal_target(id, 3)):
+			targets_ok = false
+	check(names_ok, "every course has a name and description for each challenge (generic fallbacks)")
+	check(targets_ok, "the Speedrunner target sits strictly between Silver and Gold on every course")
+	check(Challenges.title("gardens", "flawless") == "Green Thumb" and Challenges.title("siege", "flawless") == "Flawless", "flavour names with a generic fallback")
+	var id: String = "gardens"
+	check(Challenges.count() == 0, "a fresh save has no challenges done")
+	# a Silver-time, falling run: only Silver Standard
+	SaveData.record_finish(id, Game.medal_target(id, 2) - 1.0, 4)
+	check(Challenges.done(id, "silver") and not Challenges.done(id, "flawless") and not Challenges.done(id, "speed"), "Silver time, 4 falls: Silver Standard only")
+	# just over the Speedrunner target does not count; just under does
+	var tgt: float = Challenges.speed_target(id)
+	SaveData.record_finish(id, tgt, 2)
+	check(not Challenges.done(id, "speed"), "exactly the target is not under it")
+	SaveData.record_finish(id, tgt - 0.5, 0)
+	check(Challenges.done(id, "speed") and Challenges.done(id, "flawless") and Challenges.level_count(id) == 3, "a fast flawless run completes the other two (3/3)")
+	check(Challenges.count() == 3, "challenges count across the circuit")
+	# the shared rules are derived from records: a hand-built levels dict is judged without the save
+	var fake: Dictionary = {"foundry": {"completed": true, "best": Game.medal_target("foundry", 3) - 1.0, "fewest_falls": 1}}
+	check(Challenges.done("foundry", "silver", fake) and Challenges.done("foundry", "speed", fake) and not Challenges.done("foundry", "flawless", fake), "evaluation works on any levels dict")
+	check(not Challenges.done(id, "flawless", {}), "an empty record has nothing done")
+	SaveData.wipe()
+
+
+func test_zx_challenges_retroactive_and_sticky() -> void:
+	SaveData.wipe()
+	# a save from before challenges existed: bests, fewest falls and an older layout's legacy bests
+	SaveData.data["levels"]["foundry"] = {"completed": true, "runs": 3, "best": Game.medal_target("foundry", 3) - 1.0, "fewest_falls": 0, "rev": 3}
+	SaveData.data["levels"]["balance"] = {"completed": true, "runs": 1, "legacy_best": Game.medal_target("balance", 2) - 1.0, "legacy_fewest_falls": 0, "rev": 1}
+	check(Challenges.level_count("foundry") == 3, "old bests and fewest falls earn challenges retroactively")
+	check(Challenges.done("balance", "silver") and Challenges.done("balance", "flawless") and not Challenges.done("balance", "speed"), "legacy records count too")
+	var before: Array[String] = []
+	var fresh: Array[String] = Challenges.sync(before)
+	check(fresh.size() == 5, "sync reports what was newly done (%d)" % fresh.size())
+	check(Challenges.stored().size() == 5 and Challenges.stored().has("foundry:speed"), "and remembers it in the save")
+	check(Challenges.sync(Challenges.done_keys()).is_empty(), "a second sync has nothing new")
+	# the record is later lost (a layout rebuild): the remembered challenge stays done
+	SaveData.data["levels"]["foundry"] = {"completed": true, "runs": 3, "rev": 3}
+	check(Challenges.done("foundry", "flawless") and Challenges.level_count("foundry") == 3, "a remembered challenge never relocks")
+	check(not Challenges.met(SaveData.data["levels"], "foundry", "flawless"), "(while the records alone no longer meet it)")
+	# saved and loaded
+	SaveData.save_data()
+	SaveData.data = {"levels": {}, "game_completed": false}
+	SaveData.load_data()
+	check(Challenges.stored().has("foundry:flawless") and Challenges.count() >= 5, "challenges survive save and load")
+	SaveData.wipe()
+
+
+func test_zx_challenges_save_sanitizing() -> void:
+	SaveData.wipe()
+	var clean: Dictionary = SaveData._sanitize({"levels": {}, "challenges": ["gardens:silver", "gardens:silver", "nope:silver", "gardens:nope", 5, null, "foundry:speed"]})
+	check(clean["challenges"] == ["gardens:silver", "foundry:speed"], "challenges keep known, unique id:kind strings only (%s)" % str(clean["challenges"]))
+	check(SaveData._sanitize({"levels": {}, "challenges": "gardens:silver"})["challenges"] == [], "a non-array value becomes empty")
+	check(SaveData._sanitize({"levels": {}})["challenges"] == [], "a missing value becomes empty")
+	var st: Dictionary = SaveData._sanitize({"levels": {}, "stats": {"falls_total": 7, "play_secs": -3, "bogus": 5, "flawless_golds": "x"}})["stats"]
+	check(st.get("falls_total") == 7 and not st.has("play_secs") and not st.has("bogus") and not st.has("flawless_golds"), "the new stat keys are sanitized like the others")
+	# a hand-edited file on disk
+	var f := FileAccess.open(SaveData._path(), FileAccess.WRITE)
+	f.store_string('{"levels": {"gardens": {"completed": true, "best": 100.0}}, "challenges": ["gardens:flawless", 12, {"a": 1}], "stats": {"falls_total": 3, "play_secs": 125}}')
+	f.close()
+	SaveData.load_data()
+	check(Challenges.stored() == ["gardens:flawless"], "loading drops junk entries")
+	check(SaveData.stat("falls_total") == 3 and SaveData.stat("play_secs") == 125, "stat counters load")
+	SaveData.wipe()
+
+
+func test_zx_challenge_rule_hint_progress() -> void:
+	SaveData.wipe()
+	var rule: Dictionary = Cosmetics.TITLES["challenger"]["rule"]
+	check(rule["type"] == "challenges" and Cosmetics.TITLES.keys().slice(-3) == ["challenger", "challenge_master", "completionist"], "the three challenge titles are appended after the old ones")
+	check(Cosmetics.TITLES.keys().slice(0, 7) == ["rookie", "globetrotter", "speed_demon", "gold_rush", "flawless", "lap_king", "marathoner"], "the older titles keep their order")
+	check(not Cosmetics.is_unlocked("title", "challenger"), "Challenger starts locked")
+	check(Cosmetics.hint("title", "challenger") == "Complete 25 course challenges (see Challenges)", "hint (%s)" % Cosmetics.hint("title", "challenger"))
+	check(Cosmetics.progress("title", "challenger") == "0/25", "progress starts at 0/25")
+	# 9 courses' worth of 3 challenges = 27 with hand-made records
+	var lv: Dictionary = {}
+	for i: int in 9:
+		var id: String = str(Game.LEVELS[i]["id"])
+		lv[id] = {"completed": true, "best": Game.medal_target(id, 3) - 1.0, "fewest_falls": 0}
+	check(Challenges.count(lv) == 27, "nine perfect courses are 27 challenges")
+	check(Cosmetics.rule_met(rule, lv) and not Cosmetics.rule_met(Cosmetics.TITLES["challenge_master"]["rule"], lv), "challenges(25) met, challenges(60) not")
+	check(Cosmetics.progress("title", "challenger", lv) == "25/25" and Cosmetics.progress("title", "challenge_master", lv) == "27/60", "progress is capped at n (%s, %s)" % [Cosmetics.progress("title", "challenger", lv), Cosmetics.progress("title", "challenge_master", lv)])
+	check(not Cosmetics.rule_met(Cosmetics.TITLES["completionist"]["rule"], lv), "Completionist needs every challenge")
+	check(Cosmetics.progress("title", "completionist", lv) == "27/%d" % Challenges.total(), "and shows 27/%d" % Challenges.total())
+	var all: Dictionary = {}
+	for info: Dictionary in Game.LEVELS:
+		all[info["id"]] = {"completed": true, "best": Game.medal_target(info["id"], 3) - 1.0, "fewest_falls": 0}
+	check(Cosmetics.rule_met(Cosmetics.TITLES["completionist"]["rule"], all), "every course perfect: Completionist")
+	check(Challenges.next_reward()[0] == "Challenger title" and Challenges.next_reward()[1] == 25, "the next reward is the nearest challenge title (%s)" % str(Challenges.next_reward()))
+	# the save feeds it: unlocking announces the title once
+	for i: int in 9:
+		SaveData.data["levels"][Game.LEVELS[i]["id"]] = lv[Game.LEVELS[i]["id"]]
+	check(Cosmetics.is_unlocked("title", "challenger"), "the saved records unlock Challenger")
+	var fresh: Array[Array] = Cosmetics.check_unlocks()
+	check(fresh.any(func(p: Array) -> bool: return p[0] == "title" and p[1] == "challenger"), "and it is announced")
+	check(Cosmetics.check_unlocks().is_empty(), "only once")
+	SaveData.wipe()
+
+
+func test_zx_stats_counters() -> void:
+	SaveData.wipe()
+	check(SaveData.stat("falls_total") == 0 and SaveData.stat("play_secs") == 0, "the counters start at zero")
+	SaveData.count_fall()
+	SaveData.count_fall()
+	SaveData.tick_play(0.6)
+	check(SaveData.stat("play_secs") == 0, "play time banks whole seconds only")
+	SaveData.tick_play(0.6)
+	SaveData.tick_play(61.0)
+	check(SaveData.stat("falls_total") == 2 and SaveData.stat("play_secs") == 62, "falls and seconds accumulate (%d falls, %d s)" % [SaveData.stat("falls_total"), SaveData.stat("play_secs")])
+	SaveData.flush_play_stats()
+	SaveData.data = {"levels": {}, "game_completed": false}
+	SaveData.load_data()
+	check(SaveData.stat("falls_total") == 2 and SaveData.stat("play_secs") == 62, "flushing writes them to the save")
+	check(ExtraScreens.play_time_text(45) == "45s" and ExtraScreens.play_time_text(750) == "12m 30s" and ExtraScreens.play_time_text(11100) == "3h 05m", "play time reads as h/m/s")
+	# a real level counts its falls and its time
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var lvl: LevelBase = await load_level(0)
+	await seconds(1.0)
+	var falls0: int = SaveData.stat("falls_total")
+	var secs0: int = SaveData.stat("play_secs")
+	lvl.fail("fall")
+	check(SaveData.stat("falls_total") == falls0 + 1 and lvl.deaths == 1, "a fall in a course is counted in the stats")
+	Game.course_time = 0.0
+	lvl._started = true
+	await seconds(2.2)
+	check(SaveData.stat("play_secs") >= secs0 + 1, "time on the course is counted (%d -> %d)" % [secs0, SaveData.stat("play_secs")])
+	world.queue_free()
+	world = null
+	await ticks(2)
+	SaveData.wipe()
+
+
+func test_zx_stats_rows() -> void:
+	SaveData.wipe()
+	var rows: Array[PackedStringArray] = ExtraScreens.stats_rows()
+	var by: Dictionary = {}
+	for r: PackedStringArray in rows:
+		by[r[0]] = r[1]
+	check(by["Total runs"] == "0" and by["Favourite course"] == "None yet" and by["Medals"] == "Gold 0   Silver 0   Bronze 0", "a fresh save reads all zero")
+	SaveData.data["levels"]["gardens"] = {"completed": true, "runs": 2, "best": Game.medal_target("gardens", 3) - 1.0, "fewest_falls": 0}
+	SaveData.data["levels"]["foundry"] = {"completed": true, "runs": 5, "best": Game.medal_target("foundry", 2) - 1.0, "fewest_falls": 1}
+	SaveData.data["levels"]["reef"] = {"completed": true, "runs": 1, "best": Game.medal_target("reef", 1) - 1.0, "fewest_falls": 3}
+	SaveData.data["stats"] = {"falls_total": 14, "play_secs": 3725}
+	by.clear()
+	for r: PackedStringArray in ExtraScreens.stats_rows():
+		by[r[0]] = r[1]
+	check(by["Total runs"] == "8" and by["Total falls"] == "14" and by["Time played"] == "1h 02m", "runs, falls and time (%s)" % str(by))
+	check(by["Medals"] == "Gold 1   Silver 1   Bronze 1", "medals by tier, each course once (%s)" % by["Medals"])
+	check(by["Favourite course"] == "Bounce Foundry  (5 runs)", "favourite course is the one with most runs (%s)" % by["Favourite course"])
+	check(by["Courses beaten"] == "3 / %d" % Game.LEVELS.size() and by["Challenges done"].begins_with("%d / " % Challenges.count()), "courses beaten and challenges done")
+	SaveData.wipe()
+
+
+func test_zx_challenges_results_note() -> void:
+	await new_world()
+	world.queue_free()
+	world = null
+	SaveData.wipe()
+	Game.level_index = 0
+	Game.race_mode = false
+	var lvl: LevelBase = (load(Game.LEVELS[0]["scene"]) as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	Cosmetics.check_unlocks()
+	lvl.deaths = 0
+	lvl.run_time = Challenges.speed_target(lvl.level_id) - 1.0
+	lvl._on_finish()
+	await seconds(4.5)
+	var notes: Array[String] = []
+	if lvl.hud._results_box != null:
+		for n: Node in lvl.hud._results_box.find_children("*", "Label", true, false):
+			if (n as Label).text.begins_with("Challenge complete!"):
+				notes.append((n as Label).text)
+	check(notes.size() == 3, "a first flawless gold-ish run shows three Challenge complete! notes in the results panel (%s)" % str(notes))
+	check(notes.any(func(t: String) -> bool: return t.contains("Green Thumb")), "named after the challenge (flavour name)")
+	check(Challenges.level_count(lvl.level_id) == 3 and Challenges.stored().size() == 3, "and they are saved")
+	# finishing again earns nothing new: no notes
+	lvl.hud._results.queue_free()
+	lvl.hud._results = null
+	lvl.finished = false
+	var before: Array[String] = Challenges.done_keys()
+	SaveData.record_finish(lvl.level_id, lvl.run_time, 0)
+	check(Challenges.sync(before).is_empty(), "a repeat run completes nothing new")
+	world.queue_free()
+	world = null
+	await ticks(2)
+	SaveData.wipe()
+
+
+func test_zx_challenges_stats_screens_pad() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	SaveData.wipe()
+	SaveData.data["levels"]["gardens"] = {"completed": true, "runs": 1, "best": 190.0, "fewest_falls": 0}
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	title.set("persist_settings", false)
+	add_child(title)
+	title.call("show_screen", "main")
+	await ticks(3)
+	var send := func(button: JoyButton) -> void:
+		var ev := InputEventJoypadButton.new()
+		ev.device = 2
+		ev.button_index = button
+		ev.pressed = true
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+		var up: InputEventJoypadButton = ev.duplicate()
+		up.pressed = false
+		Input.parse_input_event(up)
+		await ticks(2)
+	var focus := func() -> Control:
+		return get_viewport().gui_get_focus_owner()
+	var guard: int = 0
+	while not (focus.call() is Button and (focus.call() as Button).text in ["Challenges", "Stats"]) and guard < 12:
+		await send.call(JOY_BUTTON_DPAD_DOWN)
+		guard += 1
+	check(focus.call() is Button and (focus.call() as Button).text in ["Challenges", "Stats"], "the Challenges / Stats row is reachable with the D-pad")
+	if (focus.call() as Button).text == "Stats":
+		await send.call(JOY_BUTTON_DPAD_LEFT)
+	check((focus.call() as Button).text == "Challenges", "left reaches Challenges")
+	await send.call(JOY_BUTTON_DPAD_RIGHT)
+	check(focus.call() is Button and (focus.call() as Button).text == "Stats", "right moves along the row to Stats")
+	await send.call(JOY_BUTTON_DPAD_LEFT)
+	await send.call(JOY_BUTTON_A)
+	await ticks(3)
+	check(Game.title_screen == "challenges", "A opens the Challenges screen")
+	var f: Control = focus.call()
+	check(f is Button and f.has_meta("level") and f.get_meta("level") == "gardens", "initial focus: the first course with challenges left")
+	check((f as Button).text.contains("[x]") and (f as Button).text.contains("[ ]"), "the row lists each challenge with its state")
+	var scroll: ScrollContainer = (title.get("_screen") as Control).find_child("Scroll", true, false) as ScrollContainer
+	check(scroll != null and scroll.follow_focus, "the list scrolls with focus")
+	var summary: Label = (title.get("_screen") as Control).find_child("Summary", true, false) as Label
+	check(summary != null and summary.text.begins_with("%d / %d" % [Challenges.count(), Challenges.total()]), "the summary shows overall progress (%s)" % (summary.text if summary != null else ""))
+	var reward: Label = (title.get("_screen") as Control).find_child("NextReward", true, false) as Label
+	check(reward != null and reward.text.contains("Challenger"), "and the next reward (%s)" % (reward.text if reward != null else ""))
+	# walk down the unlocked rows: the scroll box follows (only the first two courses are unlocked in a fresh save)
+	await send.call(JOY_BUTTON_DPAD_DOWN)
+	var f2: Control = focus.call()
+	check(f2 is Button and f2 != f and f2.get_meta("level", "") == "foundry", "down moves to the next course row")
+	for k: int in 8:
+		await send.call(JOY_BUTTON_DPAD_DOWN)
+	check(scroll.scroll_vertical > 0, "the list scrolls to keep the focused course in view (%d)" % scroll.scroll_vertical)
+	var fr: Rect2 = (focus.call() as Control).get_global_rect()
+	check(scroll.get_global_rect().grow(4.0).encloses(fr), "the focused row sits inside the scroll box")
+	guard = 0
+	while not (focus.call() is Button and (focus.call() as Button).text == "Back") and guard < 40:
+		await send.call(JOY_BUTTON_DPAD_DOWN)
+		guard += 1
+	check(focus.call() is Button and (focus.call() as Button).text == "Back", "down through every course reaches Back")
+	await send.call(JOY_BUTTON_B)
+	await ticks(3)
+	check(Game.title_screen == "main", "B leaves Challenges")
+	check(focus.call() is Button and (focus.call() as Button).text == "Challenges", "focus returns to the Challenges button")
+	# Stats
+	await send.call(JOY_BUTTON_DPAD_RIGHT)
+	await send.call(JOY_BUTTON_A)
+	await ticks(3)
+	check(Game.title_screen == "stats", "A on Stats opens it")
+	check(focus.call() is Button and (focus.call() as Button).text == "Back", "the Stats screen starts focused on Back")
+	var rows: Node = (title.get("_screen") as Control).find_child("Rows", true, false)
+	check(rows != null and rows.get_child_count() == ExtraScreens.stats_rows().size() * 2, "it lists every stat")
+	await send.call(JOY_BUTTON_B)
+	await ticks(3)
+	check(Game.title_screen == "main" and focus.call() is Button and (focus.call() as Button).text == "Stats", "B leaves Stats and focus returns to its button")
+	# level select shows the pips
+	title.call("show_screen", "levels")
+	await ticks(3)
+	var pip_rows: Array = []
+	for n: Node in (title.get("_screen") as Control).find_children("*", "Button", true, false):
+		if n.has_meta("challenges"):
+			pip_rows.append(n)
+	check(pip_rows.size() == Game.LEVELS.size(), "every level-select row carries challenge pips")
+	var lit: int = 0
+	for pip: Node in (pip_rows[0] as Button).find_child("Pips", true, false).get_children():
+		if (pip as ColorRect).color == UiKit.GOLD:
+			lit += 1
+	check(pip_rows[0].get_meta("challenges") == 2 and lit == 2, "Launch Gardens: Silver and Flawless -> 2 of 3 pips lit (%d)" % lit)
+	title.queue_free()
+	await ticks(2)
+	Game.title_screen = "main"
+	SaveData.wipe()
