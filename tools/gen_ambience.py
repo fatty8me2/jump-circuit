@@ -41,7 +41,7 @@ BED_QUALITY = 0.85    # libsndfile Vorbis compression level (0 best .. 1 smalles
 SHOT_QUALITY = 0.55
 SHOT_PEAK_DB = -3.0
 BED_CEIL = 10.0 ** (-4.0 / 20.0)   # soft-knee ceiling for beds (-4 dBFS)
-SIZE_BUDGET = 42.0e6
+SIZE_BUDGET = 56.0e6
 place = ga.place
 
 
@@ -2710,6 +2710,237 @@ def bed_void():
 @bed("amb_void_fracture", -25.0)
 def bed_void_fracture():
     void_bed("amb_void_fracture", fracture=True)
+
+
+# ==========================================================================
+# the fifth set of beds: Toybox Tumble, Mushroom Hollow, Carnival Chaos, Sky Citadel, Dino Valley,
+# Arcane Library, Pixel Panic, Castle Siege
+# ==========================================================================
+def calliope_note(r, f, dur, sr=SR):
+    """A steam calliope pipe: a breathy, bright harmonic voice that shakes a little, with the valve's hiss."""
+    n = int(dur * sr)
+    t = np.arange(n) / sr
+    ph = TAU * f * t + 0.01 * np.sin(TAU * 5.5 * t)
+    s = sum(np.sin(k * ph) / k ** 0.9 for k in range(1, 7) if k * f < 0.45 * sr)
+    s = unit(s) + 0.12 * unit(bp(r.standard_normal(n), f * 2.0, f * 4.0, 2, sr))
+    return s * pts_env([(0, 0), (0.05, 1), (0.8, 0.8), (1, 0)], n)
+
+
+def square_blip(f, dur, sr=SR):
+    """An arcade bleep: a square wave (odd partials) with a short decay."""
+    n = int(dur * sr)
+    t = np.arange(n) / sr
+    sq = sum(np.sin(TAU * f * h * t) / h for h in (1, 3, 5, 7, 9) if h * f < 0.45 * sr)
+    return sq * np.exp(-t / (0.5 * dur)) * np.minimum(t / 0.001, 1.0)
+
+
+def arcade_chirp(r, sr=SR, base=None, up=None, count=None):
+    """A machine in attract mode: a few square bleeps running up or down the scale."""
+    base = base if base is not None else r.uniform(600.0, 1000.0)
+    up = (r.random() < 0.5) if up is None else up
+    count = count if count is not None else int(r.integers(3, 7))
+    x = np.zeros(int((0.085 * count + 0.1) * sr))
+    for j in range(count):
+        f = base * 2.0 ** ((j if up else -j) * 2.0 / 12.0)
+        place(x, j * 0.085, square_blip(f, 0.07, sr), sr, 0.8)
+    return x
+
+
+def crow_caw(r, dur, sr=SR):
+    """A crow's caw: a harsh, rough voice pulsed a few times over, through a nasal formant, the pitch dropping."""
+    n = int(dur * sr)
+    t = np.arange(n) / sr
+    f = contour([(0, 360.0), (0.4, 300.0), (1, 250.0)], n, sr, 0.01) * (1.0 + 0.02 * smooth(r, n, 30.0, sr))
+    ph = TAU * np.cumsum(f) / sr
+    s = sum(np.sin(k * ph) / k ** 0.9 * (k * f < 0.45 * sr) for k in range(1, 9))
+    pulse = np.sin(np.pi * r.uniform(9.0, 12.0) * t) ** 2
+    s = unit(s + 0.5 * unit(bp(r.standard_normal(n), 900.0, 1500.0, 2, sr))) * pulse
+    return s * pts_env([(0, 0), (0.1, 1), (0.8, 0.7), (1, 0)], n)
+
+
+def page_flutter(r, dur, sr=SR):
+    """Pages turned by a draught: a rustle of paper with a run of quick slaps riding on it."""
+    n = int(dur * sr)
+    t = np.arange(n) / sr
+    rustle = unit(bp(r.standard_normal(n), 1500.0, 7000.0, 2, sr)) * (0.4 + 0.6 * np.abs(np.sin(TAU * r.uniform(7.0, 11.0) * t)))
+    flick = np.zeros(n)
+    for _ in range(int(r.integers(6, 14))):
+        place(flick, r.uniform(0.0, dur * 0.9), noise_hit(r, 0.02, 2500.0, 9000.0, 0.0015, sr), sr, r.uniform(0.3, 1.0))
+    return (0.5 * rustle + flick) * rcos_env(n, 0.05, min(0.3, dur * 0.4), sr)
+
+
+def drum_hit(r, sr=SR, f0=None, dur=1.2):
+    """A war drum struck far off: a taut skin's boom dropping in pitch, with the stick's slap on top."""
+    n = int(dur * sr)
+    t = np.arange(n) / sr
+    f0 = f0 if f0 is not None else r.uniform(95.0, 115.0)
+    fs = 55.0 + (f0 - 55.0) * np.exp(-t / 0.05)
+    ph = TAU * np.cumsum(fs) / sr
+    boom = np.sin(ph) * np.exp(-t / 0.35) + 0.3 * np.sin(2.0 * ph) * np.exp(-t / 0.2)
+    slap = noise_hit(r, dur, 800.0, 4000.0, 0.004, sr)
+    return (boom + 0.4 * slap) * np.minimum(t / 0.002, 1.0)
+
+
+@bed("amb_toybox", -26.0)
+def bed_toybox():
+    mix = Mix("amb_toybox", 64.0)
+    r, n, T = mix.r, mix.n, mix.T
+    # a playroom with the heating on: the warm hush of the room, a music box playing its tune in the
+    # next room again and again, and the old floor settling as it cools
+    for ch in range(2):
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(cband(pink(r, n, BSR, slope=-0.6), 180.0, 1400.0, 2)) * (0.6 + 0.4 * gusts(r, n, 0.04))
+        mix.add_loop("room", chans)
+    tune = (0, 2, 4, 2, 0, 4, 7, 4)
+    for tb in spaced_times(r, T, 14.0, 22.0):
+        for j, s in enumerate(tune):
+            mix.add("box", tb + 0.3 * j, tine(r, in_key(84, s, CANDY_PENTA), 1.8, BSR), gain=r.uniform(0.5, 0.8),
+                    pan=r.uniform(-0.6, 0.6), rev=0.7)
+    for tb in spaced_times(r, T, 9.0, 16.0):
+        mix.add("creaks", tb, wood_creak(r, r.uniform(0.9, 1.6), lambda u: 6.0 + 10.0 * u, 1.0, 1.0, BSR),
+                gain=r.uniform(0.4, 0.8), pan=r.uniform(-0.7, 0.7), rev=0.5)
+    levels = {"room": 0.0, "box": -9.0, "creaks": -12.0}
+    mix.render(BEDS["amb_toybox"][1], levels, t60=2.0, damp=3000.0, wet=0.35, predelay=0.03, hp_hz=60.0, lp_hz=8000.0)
+
+
+@bed("amb_fungal", -25.0)
+def bed_fungal():
+    mix = Mix("amb_fungal", 64.0)
+    r, n, T = mix.r, mix.n, mix.T
+    # a sunny forest floor at beetle size: a breeze stirring the leaves overhead, a brook babbling over
+    # the stones close by, and birds calling from the trees
+    wind_layer(mix, "leaves", r, gusts(r, n, 0.05), 900.0, 4000.0, body_gain=0.6, spread_s=0.3)
+    water = cband(pink(r, n, BSR, slope=-0.3), 500.0, 3500.0, 2) * (0.45 + 0.55 * gusts(r, n, 0.25))
+    mix.add_loop("brook", st(rmsn(water), 0.2), rev=0.3)
+    for tb in density_times(r, T, 160, np.ones(n)):
+        mix.add("brook", tb, bubble(r, r.uniform(450.0, 1100.0), r.uniform(0.008, 0.02), 0.5),
+                gain=r.uniform(0.2, 0.7), pan=r.uniform(-0.8, 0.8), rev=0.4)
+    far_birds(mix, 12, 0.6 + 0.4 * cbeat(n, 4, r.uniform(0, TAU)))
+    levels = {"leaves": -6.0, "brook": -8.0, "birds": -10.0}
+    mix.render(BEDS["amb_fungal"][1], levels, t60=1.6, damp=4000.0, wet=0.3, predelay=0.02, hp_hz=60.0, lp_hz=9000.0)
+
+
+@bed("amb_carnival", -25.0)
+def bed_carnival():
+    mix = Mix("amb_carnival", 64.0)
+    r, n, T = mix.r, mix.n, mix.T
+    # a funfair at sunset, heard from the midway: the crowd's murmur swelling and fading, a calliope
+    # playing a tune across the field, and a bell rung far off for a prize
+    for ch in range(2):
+        g = np.roll(0.5 + 0.5 * gusts(r, n, 0.12), int(ch * 0.3 * BSR))
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(cband(pink(r, n, BSR, slope=-0.4), 250.0, 1400.0, 2) * (0.3 + 0.7 * g))
+        mix.add_loop("crowd", chans, rev=0.3)
+    for tb in spaced_times(r, T, 18.0, 30.0):
+        for j, s in enumerate((0, 2, 4, 4, 2, 0, 4, 7)):
+            mix.add("calliope", tb + 0.4 * j, calliope_note(r, in_key(72, s, CANDY_PENTA), 0.5, BSR),
+                    gain=r.uniform(0.4, 0.7), pan=r.uniform(-0.7, 0.7), rev=0.8)
+    for tb in spaced_times(r, T, 20.0, 40.0):
+        mix.add("dings", tb, ga.bell(ga.mtof(int(r.choice((84, 88, 91)))), 2.5, BSR, 1.0), gain=r.uniform(0.5, 0.9),
+                pan=r.uniform(-0.8, 0.8), rev=0.9)
+    levels = {"crowd": 0.0, "calliope": -10.0, "dings": -14.0}
+    mix.render(BEDS["amb_carnival"][1], levels, t60=2.5, damp=3500.0, wet=0.4, predelay=0.03, hp_hz=50.0, lp_hz=8500.0)
+
+
+@bed("amb_olympus", -26.0)
+def bed_olympus():
+    mix = Mix("amb_olympus", 64.0)
+    r, n, T = mix.r, mix.n, mix.T
+    # high above the clouds: the wind rolling over the marble terraces, whistling where it meets the
+    # columns, and chimes ringing far below in a temple
+    wind_layer(mix, "wind", r, gusts(r, n, 0.035), 180.0, 1800.0, howl=(280.0, 560.0), howl_gain=0.3, spread_s=0.6)
+    for tb in spaced_times(r, T, 9.0, 16.0):
+        for j in range(int(r.integers(2, 5))):
+            mix.add("chimes", tb + j * r.uniform(0.2, 0.45), glock(r, in_key(84, r.integers(0, 8), CANDY_PENTA), 3.0, 2.0, BSR),
+                    gain=r.uniform(0.4, 1.0), pan=r.uniform(-0.8, 0.8), rev=0.9)
+    levels = {"wind": 0.0, "chimes": -10.0}
+    mix.render(BEDS["amb_olympus"][1], levels, t60=4.0, damp=4000.0, wet=0.55, predelay=0.05, hp_hz=50.0, lp_hz=9000.0)
+
+
+@bed("amb_dino", -25.0)
+def bed_dino():
+    mix = Mix("amb_dino", 64.0)
+    r, n, T = mix.r, mix.n, mix.T
+    # a steamy valley: insects droning in the ferns, the wind in the fronds, and a geyser somewhere
+    # down the valley hissing and bubbling as it breathes
+    crickets(mix, "insects", r, 12)
+    wind_layer(mix, "wind", r, gusts(r, n, 0.04), 200.0, 1800.0, body_gain=0.5, spread_s=0.4)
+    geyser = cband(pink(r, n, BSR, slope=-0.5), 120.0, 900.0, 2) * (0.3 + 0.7 * gusts(r, n, 0.08))
+    mix.add_loop("geyser", st(rmsn(geyser), 0.0), rev=0.5)
+    for tb in spaced_times(r, T, 15.0, 25.0):
+        mix.add("geyser", tb, hiss_burst(r, r.uniform(1.5, 3.0)), gain=r.uniform(0.3, 0.8), pan=r.uniform(-0.8, 0.8), rev=0.5)
+    for tb in density_times(r, T, 90, np.ones(n)):
+        mix.add("geyser", tb, bubble(r, r.uniform(300.0, 700.0), r.uniform(0.02, 0.04), 0.5),
+                gain=r.uniform(0.2, 0.7), pan=r.uniform(-0.8, 0.8), rev=0.5)
+    levels = {"insects": -10.0, "wind": -8.0, "geyser": -7.0}
+    mix.render(BEDS["amb_dino"][1], levels, t60=2.5, damp=3000.0, wet=0.4, predelay=0.04, hp_hz=60.0, lp_hz=8500.0)
+
+
+@bed("amb_arcane", -27.5)
+def bed_arcane():
+    mix = Mix("amb_arcane", 64.0)
+    r, n, T = mix.r, mix.n, mix.T
+    # a library at night: the candles' steady breath, the odd crackle of wax, pages stirred by a draught
+    # and a shimmer of magic hanging in the air
+    for ch in range(2):
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(cband(pink(r, n, BSR, slope=-0.5), 700.0, 2600.0, 2)) * (0.4 + 0.6 * gusts(r, n, 0.1))
+        mix.add_loop("flame", chans)
+    for tb in density_times(r, T, 120, 0.5 + 0.5 * cbeat(n, 6, r.uniform(0, TAU))):
+        if not 0.1 < tb < T - 0.1:      # keep the seam quiet: no sharp pop on the loop's first or last tenth
+            continue
+        mix.add("pops", tb, noise_hit(r, 0.02, 1500.0, 6000.0, 0.0015, BSR, att=0.0015), gain=r.uniform(0.1, 0.4),
+                pan=r.uniform(-0.9, 0.9), rev=0.3)
+    for tb in spaced_times(r, T, 6.0, 12.0):
+        mix.add("pages", tb, page_flutter(r, r.uniform(0.6, 1.2), BSR), gain=r.uniform(0.4, 0.9),
+                pan=r.uniform(-0.8, 0.8), rev=0.5)
+    for f in (220.0, 261.63, 329.63, 880.0):
+        for det, pan in ((-0.2, -0.5), (0.2, 0.5)):
+            tremolo = 0.5 + 0.5 * cbeat(n, int(r.integers(2, 5)), r.uniform(0, TAU))
+            mix.add_loop("shimmer", st(csine(f + det, n, phase=r.uniform(0, TAU)) * tremolo * 0.1, pan), rev=0.9)
+    for tb in spaced_times(r, T, 10.0, 16.0):
+        for j in range(int(r.integers(2, 4))):
+            mix.add("shimmer", tb + j * 0.3, glock(r, in_key(84, r.integers(0, 8), NAT_MINOR), 2.0, 1.2, BSR),
+                    gain=r.uniform(0.3, 0.8), pan=r.uniform(-0.8, 0.8), rev=0.9)
+    levels = {"flame": -8.0, "pops": -19.0, "pages": -16.0, "shimmer": -12.0}
+    mix.render(BEDS["amb_arcane"][1], levels, t60=3.0, damp=3500.0, wet=0.45, predelay=0.03, hp_hz=50.0, lp_hz=8500.0)
+
+
+@bed("amb_arcade", -26.0)
+def bed_arcade():
+    mix = Mix("amb_arcade", 64.0)
+    r, n, T = mix.r, mix.n, mix.T
+    # a dim arcade hall: the cabinets' mains hum under the fans' hush, and machines chirping in attract mode
+    hum = 0.6 * csine(120.0, n, phase=r.uniform(0, TAU)) + 0.3 * csine(240.0, n, phase=r.uniform(0, TAU)) \
+        + 0.15 * csine(360.0, n, phase=r.uniform(0, TAU))
+    mix.add_loop("hum", st(hum * (0.8 + 0.2 * cbeat(n, 4, 0.0)), 0.0), rev=0.2)
+    for ch in range(2):
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(cband(pink(r, n, BSR, slope=-0.6), 1200.0, 5000.0, 2)) * (0.6 + 0.4 * gusts(r, n, 0.06))
+        mix.add_loop("hall", chans)
+    for tb in spaced_times(r, T, 4.0, 9.0):
+        mix.add("blips", tb, arcade_chirp(r, BSR), gain=r.uniform(0.4, 0.8), pan=r.uniform(-0.9, 0.9), rev=0.5)
+    levels = {"hum": -18.0, "hall": -10.0, "blips": -9.0}
+    mix.render(BEDS["amb_arcade"][1], levels, t60=1.5, damp=5000.0, wet=0.25, predelay=0.02, hp_hz=60.0, lp_hz=9000.0)
+
+
+@bed("amb_siege", -25.0)
+def bed_siege():
+    mix = Mix("amb_siege", 64.0)
+    r, n, T = mix.r, mix.n, mix.T
+    # a castle at dusk, from inside its walls: the wind over the battlements, fires crackling in the
+    # yard, and crows wheeling over the field below
+    wind_layer(mix, "wind", r, gusts(r, n, 0.03), 120.0, 1400.0, howl=(180.0, 360.0), howl_gain=0.25, spread_s=0.5)
+    fire = cband(pink(r, n, BSR, slope=-0.4), 400.0, 2500.0, 2) * (0.5 + 0.5 * gusts(r, n, 0.1))
+    mix.add_loop("fire", st(rmsn(fire), 0.1), rev=0.3)
+    for tb in density_times(r, T, 220, 0.5 + 0.5 * cbeat(n, 5, 0.0)):
+        mix.add("fire", tb, noise_hit(r, 0.02, 2000.0, 8000.0, 0.001, BSR), gain=r.uniform(0.2, 0.7),
+                pan=r.uniform(-0.8, 0.8), rev=0.3)
+    for tb in spaced_times(r, T, 12.0, 20.0):
+        mix.add("crows", tb, crow_caw(r, r.uniform(0.5, 0.9), BSR), gain=r.uniform(0.4, 0.8),
+                pan=r.uniform(-0.9, 0.9), rev=0.7)
+    levels = {"wind": -3.0, "fire": -6.0, "crows": -12.0}
+    mix.render(BEDS["amb_siege"][1], levels, t60=2.0, damp=3000.0, wet=0.35, predelay=0.03, hp_hz=50.0, lp_hz=8000.0)
 
 
 # ==========================================================================
@@ -5939,6 +6170,403 @@ def shot_void_fall(r, i):
         place(x, 2.4, glass_note(r, in_key(66, r.integers(0, 3), MINOR_PENTA), 2.0, 0.8), SR, 0.8)
         place(x, 2.4, noise_hit(r, 0.2, 800.0, 6000.0, 0.005), SR, 0.25)
     return cap(trim(reverb(x, r, 3.5, 3500.0, 0.55, predelay=0.05)))
+
+
+# ---- toybox ----------------------------------------------------------------
+@shots("amb_toybox_clock", 2)
+def shot_toybox_clock(r, i):
+    # a wind-up alarm clock on a nursery shelf: 1 a steady ticking, eight beats; 2 the spring running down,
+    # the ticks slowing and stopping
+    x = zeros(5.0)
+    if i == 0:
+        for j in range(8):
+            place(x, 0.02 + 0.5 * j, tick_kernel(r, 0.7, 0.1, SR, wood=True), SR, 1.0 if j % 2 == 0 else 0.7)
+    else:
+        t0, gap, sc = 0.02, 0.3, 0.8
+        while t0 < 4.5 and gap < 1.0:
+            place(x, t0, tick_kernel(r, sc, 0.1, SR), SR, 0.9)
+            t0 += gap
+            gap *= 1.12
+            sc *= 0.98
+    return cap(trim(reverb(x, r, 1.2, 4000.0, 0.3, predelay=0.02)))
+
+
+@shots("amb_toybox_box", 2)
+def shot_toybox_box(r, i):
+    # a music box heard from another room: a short tune on the major pentatonic, its tines plucked and ringing
+    x = zeros(6.0)
+    tune = (0, 2, 4, 2, 0, 4, 7) if i == 0 else (7, 4, 2, 4, 7, 9, 7)
+    for j, s in enumerate(tune):
+        place(x, 0.05 + 0.3 * j, tine(r, in_key(84, s, CANDY_PENTA), 1.5, 0.9), SR, 0.7)
+    return cap(trim(far(x, r, 6000.0, 1.8, 0.35, damp=3500.0, predelay=0.03), db_floor=-55.0))
+
+
+@shots("amb_toybox_creak", 3)
+def shot_toybox_creak(r, i):
+    # a floorboard creaking under a small foot somewhere in the house: 1 a short creak; 2 a long groan
+    # bending up in pitch; 3 two creaks one after the other
+    x = zeros(3.5)
+    if i == 0:
+        place(x, 0.02, wood_creak(r, 0.9, lambda u: 10.0 + 20.0 * u, 1.0, 1.0, SR), SR, 0.8)
+    elif i == 1:
+        place(x, 0.02, wood_creak(r, 1.8, lambda u: 6.0 + 30.0 * u, 1.0, 1.12, SR), SR, 0.8)
+    else:
+        place(x, 0.02, wood_creak(r, 0.7, lambda u: 14.0 + 0.0 * u, 1.2, 1.0, SR), SR, 0.8)
+        place(x, 0.9, wood_creak(r, 0.7, lambda u: 14.0 + 0.0 * u, 1.2, 1.0, SR), SR, 0.6)
+    return cap(trim(reverb(x, r, 0.8, 3000.0, 0.15, predelay=0.01)))
+
+
+# ---- fungal (cricket and brook helpers first) -----------------------------
+def cricket_chirp(r, f, pulses, prate, sr=SR):
+    """One cricket's chirp: a pure tone in a few quick pulses."""
+    dur = pulses / prate + 0.02
+    n = int(dur * sr)
+    t = np.arange(n) / sr
+    gate = (t < pulses / prate) * np.sin(np.pi * ((t * prate) % 1.0)) ** 2
+    return np.sin(TAU * f * t) * gate
+
+
+@shots("amb_fungal_bird", 3)
+def shot_fungal_bird(r, i):
+    # birds in the trees above the forest floor: 1 a robin's song; 2 a warbler's trill; 3 a sparrow's chirping
+    x = (bird_robin, bird_warbler, bird_sparrow)[i](r)
+    return far(hp(x, 1200.0), r, 9000.0, 0.6, 0.12, damp=5000.0)
+
+
+@shots("amb_fungal_cricket", 2)
+def shot_fungal_cricket(r, i):
+    # crickets in the long grass at beetle height: 1 a few crickets chirping close by; 2 one cricket
+    # chirping on, its pulses quickening
+    x = zeros(4.0)
+    if i == 0:
+        for _ in range(int(r.integers(4, 7))):
+            place(x, r.uniform(0.0, 3.2), cricket_chirp(r, r.uniform(4000.0, 5200.0), int(r.integers(2, 5)),
+                                                        r.uniform(28.0, 38.0), SR), SR, r.uniform(0.3, 0.8))
+    else:
+        f = r.uniform(4000.0, 5000.0)
+        for j in range(9):
+            place(x, 0.02 + 0.42 * j, cricket_chirp(r, f, 3, 34.0 + 1.5 * j, SR), SR, 0.7)
+    return cap(trim(far(x, r, 7000.0, 1.0, 0.2, damp=4000.0, predelay=0.02), db_floor=-55.0))
+
+
+@shots("amb_fungal_brook", 2)
+def shot_fungal_brook(r, i):
+    # a brook babbling over the stones: 1 a short, lively burble of bubbles; 2 a longer rushing babble with a
+    # splash where it tumbles over a rock
+    dur = 4.5 if i == 0 else 6.0
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    rush = unit(bp(r.standard_normal(n), 700.0, 3200.0, 2, SR)) * (0.5 + 0.5 * np.tanh(2.0 * smooth(r, n, 3.0, SR)))
+    x = 0.8 * rush * (0.6 + 0.4 * np.sin(TAU * 0.5 * t))
+    for _ in range(int(dur * 40)):
+        place(x, r.uniform(0.0, dur - 0.1), bubble(r, r.uniform(500.0, 1500.0), r.uniform(0.005, 0.012), 0.6, SR), SR,
+              r.uniform(0.1, 0.4))
+    if i == 1:
+        place(x, 3.0, noise_hit(r, 0.3, 1500.0, 7000.0, 0.03, SR), SR, 0.5)
+    return cap(trim(reverb(x, r, 1.4, 4000.0, 0.25, predelay=0.02)))
+
+
+# ---- carnival ---------------------------------------------------------------
+@shots("amb_carnival_crowd", 2)
+def shot_carnival_crowd(r, i):
+    # a crowd on the midway: 1 a murmur of many voices, swelling and falling away; 2 a cheer going up as
+    # something happens, and dying down
+    dur = 4.5
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    x = np.zeros(n)
+    for _ in range(int(r.integers(10, 16))):
+        place(x, r.uniform(0.0, dur - 1.2), whisper(r, r.uniform(0.5, 1.1)), SR, r.uniform(0.2, 0.5))
+    if i == 0:
+        x *= np.sin(np.pi * t / dur) ** 1.2
+    else:
+        cheer_env = np.minimum(t / 1.2, 1.0) * np.exp(-np.maximum(t - 1.8, 0.0) / 1.1)
+        x = x * 0.6 + 0.6 * unit(bp(r.standard_normal(n), 400.0, 2500.0, 2, SR)) * cheer_env
+    return cap(trim(reverb(x, r, 1.5, 3000.0, 0.25, predelay=0.02)))
+
+
+@shots("amb_carnival_calliope", 2)
+def shot_carnival_calliope(r, i):
+    # a steam calliope across the field: 1 a jaunty phrase of four notes; 2 a quick run up the scale, the
+    # pipes sagging and swelling
+    x = zeros(4.5)
+    if i == 0:
+        for j, s in enumerate((0, 2, 4, 2, 4, 7, 4)):
+            place(x, 0.02 + 0.45 * j, calliope_note(r, in_key(72, s, CANDY_PENTA), 0.42, SR), SR, 0.8)
+    else:
+        for j, s in enumerate((0, 1, 2, 3, 4, 3, 2, 1, 0, 2, 4)):
+            place(x, 0.02 + 0.2 * j, calliope_note(r, in_key(72, s, CANDY_PENTA), 0.25, SR), SR, 0.8)
+    return cap(trim(far(x, r, 6000.0, 2.0, 0.4, damp=3000.0, predelay=0.04), db_floor=-55.0))
+
+
+@shots("amb_carnival_ding", 3)
+def shot_carnival_ding(r, i):
+    # a bell rung at a fairground stall for a prize: 1 a clean ding; 2 a ding, then a second, higher one;
+    # 3 a bell ringing on and dying away, a little out of tune
+    x = zeros(4.0)
+    m = (84, 91, 81)[i]
+    place(x, 0.02, ga.bell(ga.mtof(m), 2.8, SR, 1.1), SR, 0.8)
+    if i == 1:
+        place(x, 0.6, ga.bell(ga.mtof(91), 2.2, SR, 0.9), SR, 0.6)
+    if i == 2:
+        place(x, 0.02, ga.bell(ga.mtof(m) * 1.02, 3.6, SR, 1.6), SR, 0.5)
+    return cap(trim(far(x, r, 6000.0, 2.2, 0.3, damp=3500.0, predelay=0.03), db_floor=-55.0))
+
+
+# ---- olympus ----------------------------------------------------------------
+@shots("amb_olympus_wind", 2)
+def shot_olympus_wind(r, i):
+    # a gust rolling over the clouds: 1 a long rising rush; 2 a falling sweep that thins into the distance
+    dur = 3.8
+    m = int(dur * SR)
+    tt = np.arange(m) / SR
+    f0, f1 = (500.0, 2200.0) if i == 0 else (2000.0, 380.0)
+    fc = f0 * (f1 / f0) ** (tt / dur)
+    w = unit(ga.svf_bandpass(r.standard_normal(m), fc, 3.0, SR)) * np.sin(np.pi * tt / dur) ** 2
+    return cap(trim(reverb(0.8 * w, r, 3.0, 4000.0, 0.5, predelay=0.04)))
+
+
+@shots("amb_olympus_chime", 3)
+def shot_olympus_chime(r, i):
+    # chimes ringing in a temple far below: 1 a rising arpeggio of glass; 2 one great bell, its chime carrying;
+    # 3 a scatter of notes shimmering
+    x = zeros(5.0)
+    if i == 0:
+        for j in range(5):
+            place(x, 0.02 + 0.3 * j, glock(r, in_key(84, j, CANDY_PENTA), 3.0, 1.6), SR, 0.8)
+    elif i == 1:
+        place(x, 0.02, ga.bell(ga.mtof(84), 4.0, SR, 1.8), SR, 0.8)
+    else:
+        for _ in range(7):
+            place(x, r.uniform(0.02, 1.8), glock(r, in_key(84, r.integers(0, 8), CANDY_PENTA), 2.5, 1.2), SR,
+                  r.uniform(0.3, 0.8))
+    return cap(trim(reverb(x, r, 3.5, 4000.0, 0.5, predelay=0.04)))
+
+
+@shots("amb_olympus_eagle", 2)
+def shot_olympus_eagle(r, i):
+    # an eagle soaring high over the clouds: 1 a long, wavering cry climbing and then gliding; 2 two calls,
+    # the second higher, from far above
+    x = zeros(5.0)
+    if i == 0:
+        place(x, 0.02, hawk_scream(r, [(0, 900.0), (0.4, 1300.0), (0.8, 1150.0), (1, 1000.0)], 2.2, rasp=0.25), SR, 0.8)
+    else:
+        place(x, 0.02, hawk_scream(r, [(0, 1000.0), (0.5, 1400.0), (1, 1100.0)], 1.4, 0.3), SR, 0.8)
+        place(x, 2.4, hawk_scream(r, [(0, 1200.0), (0.6, 1500.0), (1, 1200.0)], 1.6, 0.3), SR, 0.9)
+    return cap(trim(far(x, r, 6000.0, 2.5, 0.4, damp=3000.0, predelay=0.04), db_floor=-55.0))
+
+
+# ---- dino -------------------------------------------------------------------
+def insect_drone(r, dur, f, pulse, sr=SR):
+    """A chorus of insects in the ferns: a shrill tone pulsed fast, with a gritty edge."""
+    n = int(dur * sr)
+    t = np.arange(n) / sr
+    tn = np.sin(TAU * f * t) + 0.4 * np.sin(TAU * 2.0 * f * t)
+    grit = 0.3 * unit(bp(r.standard_normal(n), f * 0.9, f * 1.1, 2, sr))
+    gate = (0.5 + 0.5 * np.sin(TAU * pulse * t)) ** 2
+    return unit(tn + grit) * gate * rcos_env(n, 0.05, 0.1, sr)
+
+
+def roar(r, dur, f0, sr=SR):
+    """A big beast roaring far off: a rough, low voice gliding down through two wide mouth formants,
+    with a rumble under it."""
+    n = int(dur * sr)
+    t = np.arange(n) / sr
+    f = contour([(0, f0 * 1.15), (0.25, f0), (0.6, f0 * 0.9), (1, f0 * 0.7)], n, sr, 0.02) * (1.0 + 0.02 * smooth(r, n, 5.0, sr))
+    ph = TAU * np.cumsum(f) / sr
+    s = np.zeros(n)
+    for k in range(1, 18):
+        s += np.sin(k * ph) * (resonance(500.0, k * f0, 3.0) + 0.7 * resonance(1100.0, k * f0, 4.0)) / k ** 0.7
+    s = unit(s) * (1.0 + 0.3 * np.sin(TAU * r.uniform(25.0, 35.0) * t))
+    s += 0.3 * unit(lp(r.standard_normal(n), 120.0, 2, sr))
+    return unit(s) * pts_env([(0, 0), (0.12, 1), (0.5, 0.85), (1, 0)], n)
+
+
+@shots("amb_dino_insect", 3)
+def shot_dino_insect(r, i):
+    # insects droning in the jungle ferns: 1 a cicada's rising shrill; 2 a chorus of crickets, the pulses
+    # ticking away; 3 a swarm of flies buzzing round a warm rock
+    x = zeros(4.0)
+    if i == 0:
+        place(x, 0.02, insect_drone(r, 3.0, r.uniform(3800.0, 4400.0), 50.0, SR), SR, 0.8)
+    elif i == 1:
+        for _ in range(10):
+            place(x, r.uniform(0.0, 3.2), cricket_chirp(r, r.uniform(3800.0, 5000.0), int(r.integers(2, 5)),
+                                                        r.uniform(28.0, 38.0), SR), SR, r.uniform(0.3, 0.8))
+    else:
+        place(x, 0.02, insect_drone(r, 2.5, 280.0, 30.0, SR), SR, 0.8)
+        place(x, 1.4, insect_drone(r, 2.0, 320.0, 24.0, SR), SR, 0.5)
+    return cap(trim(far(x, r, 7000.0, 1.2, 0.25, damp=4000.0, predelay=0.03), db_floor=-55.0))
+
+
+@shots("amb_dino_roar", 3)
+def shot_dino_roar(r, i):
+    # a beast roaring far off in the valley: 1 a deep roar falling away; 2 a shorter, sharper roar;
+    # 3 two roars answering each other
+    x = zeros(5.0)
+    if i == 0:
+        place(x, 0.05, roar(r, 2.8, r.uniform(90.0, 110.0), SR), SR, 0.9)
+    elif i == 1:
+        place(x, 0.05, roar(r, 1.6, r.uniform(140.0, 160.0), SR), SR, 0.9)
+    else:
+        place(x, 0.05, roar(r, 2.2, r.uniform(95.0, 110.0), SR), SR, 0.8)
+        place(x, 2.6, roar(r, 1.8, r.uniform(120.0, 140.0), SR), SR, 0.6)
+    return cap(trim(far(x, r, 2500.0, 3.0, 0.5, damp=1800.0, predelay=0.05), db_floor=-55.0))
+
+
+@shots("amb_dino_geyser", 2)
+def shot_dino_geyser(r, i):
+    # a geyser in the valley bubbling and blowing off: 1 a wet gurgle of bubbles, then a hiss of steam;
+    # 2 a roar of steam rising, and a splash down
+    x = zeros(5.0)
+    place(x, 1.0 if i else 2.0, hiss_burst(r, 3.0 if i else 2.0, 1500.0, 8000.0, SR), SR, 0.6)
+    for _ in range(int(r.integers(30, 60))):
+        place(x, r.uniform(0.02, 3.5), bubble(r, r.uniform(300.0, 800.0), r.uniform(0.01, 0.03), 0.5, SR), SR,
+              r.uniform(0.2, 0.7))
+    if i == 1:
+        place(x, 3.6, noise_hit(r, 0.8, 300.0, 3000.0, 0.2, SR), SR, 0.5)
+    return cap(trim(far(x, r, 6000.0, 2.0, 0.35, damp=3000.0, predelay=0.03), db_floor=-55.0))
+
+
+# ---- arcane -----------------------------------------------------------------
+@shots("amb_arcane_candle", 3)
+def shot_arcane_candle(r, i):
+    # a candle flame by the reading desk: 1 a few small pops of wax; 2 a steady crackle and sputter;
+    # 3 one bright snap, and the flame settling
+    dur = 3.5
+    m = int(dur * SR)
+    x = np.zeros(m)
+    for _ in range((6, 40, 3)[i]):
+        place(x, r.uniform(0.02, dur - 0.1), noise_hit(r, 0.02, 2000.0, 9000.0, 0.0012, SR), SR, r.uniform(0.3, 1.0))
+    hiss = unit(bp(r.standard_normal(m), 900.0, 3500.0, 2, SR)) * (0.5 + 0.5 * np.tanh(2.0 * smooth(r, m, 2.0, SR)))
+    x += (0.15 if i == 1 else 0.05) * hiss
+    return cap(trim(reverb(x, r, 1.5, 4000.0, 0.3, predelay=0.02)))
+
+
+@shots("amb_arcane_page", 2)
+def shot_arcane_page(r, i):
+    # pages turned in a draught: 1 a quick flutter of loose pages; 2 a slow turn, the paper rustling and settling
+    return cap(trim(page_flutter(r, 1.6 if i == 0 else 2.6, SR)))
+
+
+@shots("amb_arcane_shimmer", 2)
+def shot_arcane_shimmer(r, i):
+    # a spell shimmering in the air: 1 a rising sparkle of glass notes on A minor; 2 a soft swell of shimmer
+    # that glides down and away
+    x = zeros(5.0)
+    if i == 0:
+        for j in range(7):
+            place(x, 0.03 + 0.2 * j, glass_note(r, in_key(81, j, NAT_MINOR), 2.0, 1.2), SR, 0.7)
+    else:
+        m = int(4.5 * SR)
+        t = np.arange(m) / SR
+        ph = TAU * np.cumsum(1800.0 * 0.5 ** (t / 4.5)) / SR
+        y = (np.sin(ph) + 0.3 * np.sin(2.76 * ph) + 0.1 * np.sin(5.4 * ph)) * np.sin(np.pi * t / 4.5) ** 2 * 0.5
+        place(x, 0.02, y, SR)
+    return cap(trim(reverb(x, r, 3.0, 4000.0, 0.5, predelay=0.04)))
+
+
+# ---- arcade -----------------------------------------------------------------
+@shots("amb_arcade_crt", 2)
+def shot_arcade_crt(r, i):
+    # an arcade cabinet's CRT warming up: 1 a steady mains hum swelling and fading; 2 the hum rising in pitch as
+    # the screen powers up, with a crackle of static
+    dur = 3.5
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    f = np.full(n, 120.0) if i == 0 else 120.0 * (1.0 + 0.6 * (t / dur) ** 2)
+    x = tone(f, ((1, 1.0), (2, 0.5), (3, 0.25)), SR) * np.sin(np.pi * t / dur) ** 1.5 * 0.7
+    if i == 1:
+        x += 0.2 * unit(bp(r.standard_normal(n), 2000.0, 8000.0, 2, SR)) * (t / dur) ** 2
+    return cap(trim(reverb(x, r, 1.5, 4000.0, 0.25, predelay=0.02)))
+
+
+def coin_clink(r, f):
+    """A coin on metal: a bright ring with two overtones that die fast."""
+    return modal([f, f * 2.76, f * 5.4], [1.0, 0.3, 0.12], [0.18, 0.08, 0.04], 0.5, SR, att=0.0005, r=r)
+
+
+@shots("amb_arcade_coin", 3)
+def shot_arcade_coin(r, i):
+    # a coin dropped in a slot: 1 a clink and a bounce or two; 2 a coin tumbling down a chute, its rings falling
+    # in pitch; 3 a handful of coins into the tray
+    x = zeros(3.5)
+    if i == 0:
+        for t0, g in ((0.02, 1.0), (0.2, 0.5), (0.31, 0.25)):
+            place(x, t0, coin_clink(r, r.uniform(3000.0, 3600.0)), SR, g)
+    elif i == 1:
+        for j in range(9):
+            place(x, 0.02 + 0.12 * j, coin_clink(r, 3800.0 * 0.88 ** j), SR, 0.9 * 0.9 ** j)
+    else:
+        for _ in range(12):
+            place(x, r.uniform(0.02, 1.4), coin_clink(r, r.uniform(2600.0, 4200.0)), SR, r.uniform(0.3, 0.8))
+    return cap(trim(far(x, r, 7000.0, 1.0, 0.25, damp=4000.0, predelay=0.02), db_floor=-55.0))
+
+
+@shots("amb_arcade_beep", 3)
+def shot_arcade_beep(r, i):
+    # distant arcade machines bleeping in attract mode: 1 a rising chirp; 2 a falling bleep sequence;
+    # 3 two chirps answering each other across the hall
+    x = zeros(4.0)
+    if i == 0:
+        place(x, 0.02, arcade_chirp(r, SR, base=800.0, up=True, count=5), SR, 0.7)
+    elif i == 1:
+        place(x, 0.02, arcade_chirp(r, SR, base=1200.0, up=False, count=6), SR, 0.7)
+    else:
+        place(x, 0.02, arcade_chirp(r, SR, base=700.0, up=True, count=4), SR, 0.7)
+        place(x, 1.6, arcade_chirp(r, SR, base=1000.0, up=False, count=4), SR, 0.6)
+    return cap(trim(far(x, r, 7000.0, 1.2, 0.3, damp=4000.0, predelay=0.02), db_floor=-55.0))
+
+
+# ---- siege ------------------------------------------------------------------
+@shots("amb_siege_drum", 3)
+def shot_siege_drum(r, i):
+    # battle drums beating far off across the valley: 1 a slow march of three beats; 2 a roll of drums
+    # swelling to a boom; 3 one heavy drum, then a second answering it
+    x = zeros(5.0)
+    if i == 0:
+        for j in range(3):
+            place(x, 0.1 + 0.9 * j, drum_hit(r, SR), SR, 0.9 - 0.1 * j)
+    elif i == 1:
+        for j in range(12):
+            place(x, 0.05 + 0.06 * j, drum_hit(r, SR, dur=0.25), SR, 0.3 + 0.05 * j)
+        place(x, 0.8, drum_hit(r, SR), SR, 1.0)
+    else:
+        place(x, 0.1, drum_hit(r, SR), SR, 1.0)
+        place(x, 2.4, drum_hit(r, SR), SR, 0.6)
+    return cap(trim(far(x, r, 3000.0, 2.8, 0.5, damp=2000.0, predelay=0.05), db_floor=-55.0))
+
+
+@shots("amb_siege_fire", 3)
+def shot_siege_fire(r, i):
+    # a fire crackling in an iron brazier: 1 a few sharp pops over a roar of flame; 2 a log splitting;
+    # 3 a steady crackle, the flames sighing
+    dur = 4.0
+    n = int(dur * SR)
+    x = np.zeros(n)
+    roar_ = unit(bp(r.standard_normal(n), 400.0, 2500.0, 2, SR)) * (0.5 + 0.5 * np.tanh(2.0 * smooth(r, n, 1.5, SR)))
+    x += (0.3 if i == 1 else 0.5) * roar_
+    for _ in range({0: 12, 1: 3, 2: 45}[i]):
+        place(x, r.uniform(0.02, dur - 0.1), noise_hit(r, 0.02, 2000.0, 9000.0, 0.0015, SR), SR, r.uniform(0.3, 1.0))
+    if i == 1:
+        place(x, 1.0, noise_hit(r, 0.3, 200.0, 4000.0, 0.05, SR), SR, 0.8)
+    return cap(trim(reverb(x, r, 1.0, 4000.0, 0.15, predelay=0.01)))
+
+
+@shots("amb_siege_crow", 3)
+def shot_siege_crow(r, i):
+    # crows over the field, cawing: 1 a single caw; 2 two cawing back and forth; 3 a flock of crows
+    # squabbling, many voices
+    x = zeros(4.5)
+    if i == 0:
+        place(x, 0.02, crow_caw(r, 0.9, SR), SR, 0.9)
+    elif i == 1:
+        place(x, 0.02, crow_caw(r, 0.7, SR), SR, 0.9)
+        place(x, 1.3, crow_caw(r, 0.8, SR), SR, 0.8)
+    else:
+        for _ in range(7):
+            place(x, r.uniform(0.02, 3.6), crow_caw(r, r.uniform(0.4, 0.8), SR), SR, r.uniform(0.3, 0.8))
+    return cap(trim(far(x, r, 5000.0, 1.0, 0.25, damp=3000.0, predelay=0.03), db_floor=-55.0))
 
 
 # ==========================================================================
