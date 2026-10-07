@@ -155,7 +155,6 @@ func _fade_later(c: CanvasItem, after: float, to_alpha: float = 0.0) -> void:
 func _process(dt: float) -> void:
 	if party == null:
 		return
-	var pad: bool = Game.using_pad
 	# item slot (flicking through items for a moment after a pickup)
 	if _roll_left > 0.0 and party.item != "":
 		_roll_left -= dt
@@ -241,8 +240,6 @@ func _process(dt: float) -> void:
 	else:
 		_score.text = ""
 		_count.visible = false
-	if pad != Game.using_pad:
-		pass
 
 
 func _cup_teams() -> Dictionary:
