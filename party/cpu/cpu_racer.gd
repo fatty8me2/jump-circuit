@@ -188,7 +188,7 @@ func _melee(f: CpuField, rivals: Array[Dictionary]) -> void:
 			continue
 		_enc[rid] = f.clock + 3.0
 		var edge: bool = f.edge_near(r["pos"] as Vector3, dir)
-		var chance: float = float(p["shove"]) * (1.0 if form != "" else (2.0 if edge else 0.5))
+		var chance: float = float(p["shove"]) * (1.0 if form != "" else (2.0 if edge else 0.3))
 		if rng.randf() < chance:
 			f.cpu_shove(self, r, dir)
 			return

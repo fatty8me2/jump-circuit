@@ -23,7 +23,7 @@ extends Node
 
 const BASE_ID: int = 900
 const MAX_RACERS: int = 8
-const POSE_EVERY: int = 4
+## Poses go out as often as a human's (Net.POSE_INTERVAL): the relay bills every message.
 
 ## Lobby choices (kept for the session).
 static var fill_online: bool = false
@@ -37,10 +37,11 @@ var layer: PartyLayer
 var level: LevelBase
 var racers: Dictionary = {}
 var clock: float = 0.0
-var _ticks: int = 0
+var _pose_acc: float = 0.0
 var _standing: Array[int] = []
 var _stand_t: float = 99.0
 var _key_n: int = 0
+var _tornado_cd: Dictionary = {}
 
 
 # ---- roster management (host; static so the lobby / Net can call them) ---------------------------
@@ -221,9 +222,10 @@ func _physics_process(dt: float) -> void:
 		_standing = Net.standings()
 	for r: CpuRacer in racers.values():
 		r.tick(dt, self)
-	_tick_puddles()
-	_ticks += 1
-	if _ticks % POSE_EVERY == 0:
+	_tick_hazards()
+	_pose_acc += dt
+	if _pose_acc >= Net.POSE_INTERVAL - 0.002:
+		_pose_acc = 0.0
 		_send_poses()
 
 
@@ -237,23 +239,36 @@ func _send_poses() -> void:
 	Net.send_party({"k": "cpose", "l": list})
 
 
-## Slick Puddles other racers dropped catch CPUs too (humans' own copies catch themselves).
-func _tick_puddles() -> void:
+## Hazards other racers placed (Slick Puddles, Tornadoes) are caught by the victim's own client, which
+## for a CPU is this one: they catch CPUs just as they catch a human's Player.
+func _tick_hazards() -> void:
 	for key: Variant in layer.hazards.keys():
-		var pd: Variant = layer.hazards.get(key)
-		if not (pd is SlickPuddle) or not is_instance_valid(pd):
-			continue
-		var puddle: SlickPuddle = pd
-		if puddle.used or puddle._age < 0.3:
+		var hz: Variant = layer.hazards.get(key)
+		if hz == null or not is_instance_valid(hz):
 			continue
 		for r: CpuRacer in racers.values():
-			if r.id == puddle.owner_id or r.finished or not is_rival(puddle.owner_id, r.id):
+			if r.finished or r.protect_left > 0.0:
 				continue
-			if puddle._touches(r.walker.pos):
-				var fwd: Vector3 = RouteMath.flat(r.walker.facing).normalized()
-				r.take_hit(puddle.owner_id, {"kb": PowerUp.arr(fwd * 7.0 + Vector3(0, 6.5, 0)), "e": "spin", "ed": 1.3, "s": "slick"}, self)
-				puddle.consume(true)
-				break
+			if hz is SlickPuddle:
+				var puddle: SlickPuddle = hz
+				if puddle.used or puddle._age < 0.3 or r.id == puddle.owner_id or not is_rival(puddle.owner_id, r.id):
+					continue
+				if puddle._touches(r.walker.pos):
+					var fwd: Vector3 = RouteMath.flat(r.walker.facing).normalized()
+					r.take_hit(puddle.owner_id, {"kb": PowerUp.arr(fwd * 7.0 + Vector3(0, 6.5, 0)), "e": "spin", "ed": 1.3, "s": "slick"}, self)
+					puddle.consume(true)
+					break
+			elif hz is PartyTornado:
+				var tw: PartyTornado = hz
+				var ck: String = "%s:%d" % [str(key), r.id]
+				if tw.owner_id == r.id or not is_rival(tw.owner_id, r.id) or float(_tornado_cd.get(ck, -1.0)) > clock:
+					continue
+				if tw._catches(r.walker.pos):
+					_tornado_cd[ck] = clock + 1.6
+					var out: Vector3 = RouteMath.flat(r.walker.pos - tw.global_position)
+					var tangent: Vector3 = out.normalized().cross(Vector3.UP) if out.length() > 0.1 else Vector3.RIGHT
+					r.take_hit(tw.owner_id, {"kb": PowerUp.arr(tangent * 9.0 + out.normalized() * 3.0 + Vector3(0, 17.0, 0)),
+						"st": 0.7, "e": "spin", "ed": 1.0, "s": "tornado"}, self)
 
 
 # ---- what a CPU does (called by CpuRacer / CpuItems) ---------------------------------------------------
@@ -363,7 +378,6 @@ func cpu_fail(r: CpuRacer, _cause: String) -> void:
 	var by: int = PartyRules.ko_credit(r.last_hit_by, r.last_hit_at, clock)
 	r.last_hit_by = 0
 	r.clear_buffs(self)
-	r.item = r.item   # (the slot survives a respawn, like a human's)
 	if by != 0 and by != r.id and not layer.round_over:
 		layer._apply_ko(by, r.id)
 		Net.send_party({"k": "cko", "by": by, "v": r.id})
