@@ -319,6 +319,11 @@ func hud_status() -> String:
 
 # ---- Legend Blade ---------------------------------------------------------------------------
 
+## A tap slashes on the press; the spin-attack charge starts after hold_threshold.
+func on_attack_press() -> void:
+	_slash()
+
+
 func on_attack_hold(held: float) -> void:
 	if held < hold_threshold:
 		return
@@ -349,8 +354,6 @@ func on_attack_release(held: float) -> void:
 		else:
 			fx("charge", {"on": false})
 		return
-	if held >= 0.0 and held < hold_threshold:
-		_slash()
 
 
 ## Charging: the blade is drawn back low behind the hero, tip glowing (or put back).

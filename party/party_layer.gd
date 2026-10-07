@@ -14,7 +14,10 @@ extends Node3D
 ##   hit       {kb, st, ko, e, ed, s, add} -> victim only: apply to your own Player
 ##   st        {e, d}                      the victim shows a status effect (ice, bubble, stars)
 ##   ko        {by, v}                     a victim fell / died within 4 s of by's hit (KO +3)
-##   swap      {pos}                       -> victim: teleport to pos (Swap Warp)
+##   swap      {pos, cp}                   -> victim: Swap Warp request (the caster's safe spot + checkpoint)
+##   swap_ok   {pos, cp, a, acp}           -> caster: accepted - go to pos / cp (broadcast as "swapped" too)
+##   swap_no   {}                          -> caster: blocked (Balloon Shield, protection, finished)
+##   swapped   {a, acp, b, bcp}            both racers' checkpoint progress traded (everyone's roster)
 ##   hz        {h}                         a placed hazard (puddle) was used up
 ##   pick      {b}                         -> host: I touched box b
 ##   box       {b, id, it, r}      (host)  box b was taken by id, who gets item it; back in r s
@@ -36,6 +39,21 @@ const BOX_RESPAWN: float = 4.0
 const HOST_KINDS: Array[String] = ["box", "bonus", "round_end"]
 ## Seconds a status visual stays on a ghost if its end never arrives.
 const MAX_STATUS: float = 8.0
+## A client waits this long for the host to answer a box touch before it may ask again.
+const PICK_TIMEOUT: float = 0.8
+## The host never grants the same racer two boxes inside this window.
+const GRANT_GAP: float = 0.6
+## A tap attack on a transformation fires on press; holding past this starts the charge.
+const HOLD_START: float = 0.2
+## Swap Warp reaches racers up to this many course metres ahead.
+const SWAP_RANGE: float = 160.0
+## A racer must be grounded this long for the spot to count as safe ground.
+const SAFE_SETTLE: float = 0.25
+## Shrink factor of the model and the collision capsule.
+const SHRINK_SCALE: float = 0.5
+## The player scene's capsule (player/player.tscn): radius 0.38, height 1.3, centred 0.65 up.
+const SHAPE_RADIUS: float = 0.38
+const SHAPE_HEIGHT: float = 1.3
 
 var level: LevelBase
 var rules: PartyRules
@@ -44,6 +62,8 @@ var sfx: PartySfx
 var hud: PartyHud
 var practice: bool = false
 var boxes: Array[ItemBox] = []
+## Boxes placed per respawn point (index 0 = the start, i = checkpoint i), for the placement test.
+var box_counts: Array[int] = []
 var dummies: Array[PracticeDummy] = []
 ## The item in our one slot ("" = empty).
 var item: String = ""
@@ -80,7 +100,24 @@ var last_rows: Array[Dictionary] = []
 var results: PartyResults
 var _rng := RandomNumberGenerator.new()
 var _practice_next: int = 0
-var _pick_wait: Dictionary = {}
+## One in-flight box touch per client: the box asked about and when.
+var _pick_box: int = -1
+var _pick_at: float = -9.0
+## Host: racer id -> clock of the last box granted to them.
+var _grants: Dictionary = {}
+## Seconds of respawn protection left (invulnerable, shell blinking).
+var protect_left: float = 0.0
+var _shell: MeshInstance3D
+## Last settled grounded spots: racer id -> Vector3 (ghosts); ours in _my_safe.
+var _safe_spots: Dictionary = {}
+var _ground_time: Dictionary = {}
+var _my_safe: Vector3 = Vector3.ZERO
+var _my_ground_time: float = 0.0
+## A Swap Warp request we sent and are waiting on (clock), -1 none.
+var _swap_wait: float = -1.0
+## Seconds since a relay "host lost connection" notice (-1 = host is fine).
+var _host_away: float = -1.0
+var _shrink_shape: CapsuleShape3D
 var _counter: int = 0
 var _attack_was: bool = false
 var _use_was: bool = false
@@ -109,6 +146,7 @@ func setup(p_level: LevelBase) -> void:
 	Net.party_message.connect(_on_message)
 	Net.racer_checkpoint.connect(_on_racer_checkpoint)
 	Net.roster_changed.connect(_on_roster_changed)
+	Net.relay_notice.connect(_on_relay_notice)
 	level.player_failed.connect(_on_player_failed)
 	level.player_respawned.connect(_on_player_respawned)
 	if rules.is_team():
@@ -147,6 +185,7 @@ func lawn_spots(xf: Transform3D, lateral: Array, forward: Array) -> Array[Vector
 	if lawn.is_empty():
 		return []
 	var ground: Object = lawn["collider"]
+	var lawn_y: float = (lawn["position"] as Vector3).y
 	var right: Vector3 = xf.basis.x.normalized()
 	var fwd: Vector3 = -xf.basis.z.normalized()
 	for f: Variant in forward:
@@ -155,11 +194,17 @@ func lawn_spots(xf: Transform3D, lateral: Array, forward: Array) -> Array[Vector
 			var p: Vector3 = base + fwd * float(f) + right * float(l)
 			var rq := PhysicsRayQueryParameters3D.create(p + Vector3(0, 2.5, 0), p + Vector3(0, -2.5, 0), 1)
 			var hit: Dictionary = space.intersect_ray(rq)
-			if hit.is_empty() or hit["collider"] != ground or (hit["normal"] as Vector3).y < 0.85:
+			if hit.is_empty() or (hit["normal"] as Vector3).y < 0.85:
 				continue
 			var y: float = (hit["position"] as Vector3).y
 			if absf(y - (base.y - 0.15)) > 0.9:
 				continue
+			# the checkpoint's own ground, or another static slab flush with it (courses build a
+			# lawn from several overlapping pieces) - never a moving platform
+			if hit["collider"] != ground:
+				var other: Object = hit["collider"]
+				if not (other is StaticBody3D) or other is AnimatableBody3D or absf(y - float(lawn_y)) > 0.12:
+					continue
 			out.append(Vector3(p.x, y, p.z))
 		if out.size() >= mini(2, lateral.size()):
 			return out
@@ -177,11 +222,18 @@ func place_boxes() -> void:
 	for b: ItemBox in boxes:
 		b.queue_free()
 	boxes.clear()
+	box_counts.clear()
 	var pts: Array[Transform3D] = respawn_points()
 	for i: int in pts.size():
 		var spots: Array[Vector3] = lawn_spots(pts[i], [-2.7, -0.9, 0.9, 2.7], [3.2, 2.2, 1.4, -2.0])
 		if spots.size() < 3:
 			spots = lawn_spots(pts[i], [-1.6, 0.0, 1.6], [3.0, 2.0, 1.2, -1.8])
+		if spots.size() < 3:
+			# a narrow platform (a 3 m wide car roof): a tight row close to the checkpoint
+			var tight: Array[Vector3] = lawn_spots(pts[i], [-1.0, 0.0, 1.0], [1.0, 1.6, 0.6, -1.0, -1.6])
+			if tight.size() > spots.size():
+				spots = tight
+		box_counts.append(spots.size())
 		for s: Vector3 in spots:
 			var box := ItemBox.new()
 			box.index = boxes.size()
@@ -219,12 +271,17 @@ func _physics_process(dt: float) -> void:
 	_tick_statuses(dt)
 	_apply_mods()
 	_tick_ghost_status(dt)
+	_tick_protection(dt)
 	if round_over:
 		return
+	_track_safe_spots(dt)
 	_read_input(dt)
 	_check_boxes()
-	if not practice and Net.is_host():
-		_host_check_round_end()
+	if not practice and Game.race_mode:
+		if Net.is_host():
+			_host_check_round_end()
+		else:
+			_client_watchdog(dt)
 
 
 func can_act() -> bool:
@@ -298,12 +355,37 @@ func _apply_mods() -> void:
 	player.gravity_mult = m.z
 	player.party_air_jumps = air
 	if statuses.has("freeze"):
-		player.velocity = Vector3.ZERO
+		# frozen solid: no running, but gravity keeps pulling (no hanging in mid-air)
+		player.velocity.x = 0.0
+		player.velocity.z = 0.0
 	var shrink: bool = statuses.has("shrink")
 	var s: float = player.visual.scale.x
-	var want: float = 0.5 if shrink else 1.0
+	var want: float = SHRINK_SCALE if shrink else 1.0
 	if absf(s - want) > 0.001:
-		player.visual.scale = Vector3.ONE * lerpf(s, want, 0.2)
+		s = lerpf(s, want, 0.2)
+		if absf(s - want) <= 0.001:
+			s = want
+		player.visual.scale = Vector3.ONE * s
+	_fit_collision(s)
+
+
+## The capsule follows the model's size (feet stay put), so a shrunk racer fits where it looks like it fits.
+func _fit_collision(s: float) -> void:
+	var col: CollisionShape3D = player.get_node_or_null("Collision") as CollisionShape3D
+	if col == null:
+		return
+	if _shrink_shape == null:
+		var cap: CapsuleShape3D = col.shape as CapsuleShape3D
+		if cap == null or is_equal_approx(s, 1.0):
+			return
+		# the scene's shape is a shared resource: this layer works on its own copy
+		_shrink_shape = cap.duplicate() as CapsuleShape3D
+		col.shape = _shrink_shape
+	if is_equal_approx(_shrink_shape.height, SHAPE_HEIGHT * s):
+		return
+	_shrink_shape.radius = SHAPE_RADIUS * s
+	_shrink_shape.height = SHAPE_HEIGHT * s
+	col.position.y = SHAPE_HEIGHT * 0.5 * s
 
 
 # ---- items ---------------------------------------------------------------------------------
@@ -319,10 +401,20 @@ func _check_boxes() -> void:
 			_take_box(b.index, Net.my_id(), _practice_item(), BOX_RESPAWN)
 		elif Net.is_host():
 			_host_pick(b.index, Net.my_id())
-		elif clock - float(_pick_wait.get(b.index, -9.0)) > 0.6:
-			_pick_wait[b.index] = clock
-			Net.send_party({"k": "pick", "b": b.index}, 1)
+		else:
+			_ask_host(b.index)
 		return
+
+
+## Client: asks the host for box `b`. One touch in flight at a time - the host answers it
+## before we may ask about another box (or PICK_TIMEOUT passes). False = held back.
+func _ask_host(b: int) -> bool:
+	if clock - _pick_at <= PICK_TIMEOUT:
+		return false
+	_pick_at = clock
+	_pick_box = b
+	Net.send_party({"k": "pick", "b": b}, 1)
+	return true
 
 
 func _practice_item() -> String:
@@ -335,6 +427,10 @@ func _practice_item() -> String:
 func _host_pick(b: int, id: int) -> void:
 	if round_over or b < 0 or b >= boxes.size() or not boxes[b].available or not Net.roster.has(id):
 		return
+	# never two boxes for one racer in a burst (a second touch already on the wire is dropped, not consumed)
+	if id != Net.my_id() and clock - float(_grants.get(id, -9.0)) < GRANT_GAP:
+		return
+	_grants[id] = clock
 	var msg: Dictionary = {"k": "box", "b": b, "id": id, "it": roll_for(id), "r": BOX_RESPAWN}
 	_take_box(b, id, str(msg["it"]), BOX_RESPAWN)
 	Net.send_party(msg)
@@ -348,7 +444,7 @@ func roll_for(id: int) -> String:
 		place = order.size()
 	var frac: float = PartyItems.place_fraction(place, order.size())
 	var it: String = PartyItems.roll(frac, _rng.randf())
-	if it == "swap" and place <= 1:
+	if place <= 1 and (it == "swap" or it == "thunder" or it == "jetpack"):
 		it = "balloon"
 	return it
 
@@ -360,8 +456,14 @@ func _take_box(b: int, id: int, it: String, respawn: float) -> void:
 	if box.available:
 		sfx.play_at("pickup", box.global_position, 0.8)
 	box.take(respawn)
-	if id == Net.my_id() and item == "":
-		give_item(it)
+	if id == Net.my_id():
+		_pick_at = -9.0
+		_pick_box = -1
+		if item == "":
+			give_item(it)
+	elif b == _pick_box:
+		_pick_at = -9.0   # somebody else got there first: free to ask about another box
+		_pick_box = -1
 
 
 func give_item(it: String) -> void:
@@ -375,11 +477,19 @@ func activate_item() -> PowerUp:
 	if item == "":
 		return null
 	var id: String = item
+	var pu: PowerUp = make_power(id, player, true, Net.my_id())
+	if pu != null and not pu.can_use():
+		# nothing to aim at: the item stays in the slot and a hint says why
+		var hint: String = pu.no_use_hint()
+		pu.free()
+		hud.announce(hint, PartyNames.item_color(id))
+		sfx.play("clank", 0.6, 1.5)
+		return null
 	item = ""
 	item_changed.emit("")
-	var pu: PowerUp = make_power(id, player, true, Net.my_id())
 	if pu == null:
 		return null
+	break_protection()
 	if pu.duration > 0.0:
 		for old: PowerUp in actives.duplicate():
 			if not old.ended and (old.item_id == id or (pu.takes_attack and old.takes_attack)):
@@ -563,7 +673,7 @@ func is_rival(id: int) -> bool:
 
 ## Our own Player can be hurt right now (racing, not finished, round still on).
 func local_vulnerable() -> bool:
-	return player != null and not level.finished and not round_over
+	return player != null and not level.finished and not round_over and protect_left <= 0.0
 
 
 ## Remembers `id` as the last to mess with us (a fall in the next few seconds is their KO).
@@ -581,26 +691,53 @@ func take_hazard(from_id: int, kb: Vector3, o: Dictionary = {}) -> void:
 		"e": str(o.get("e", "")), "ed": float(o.get("ed", 0.0)), "s": str(o.get("s", "")), "add": bool(o.get("add", false))})
 
 
-## Rivals ahead of us in the race (targets list entries), for Thunder Cloud. In Party Practice
-## every dummy within 80 m counts.
+# ---- course progress -------------------------------------------------------------------------
+
+## The course as a polyline: the start, every checkpoint's lawn, then the finish gate.
+func course_points() -> Array[Vector3]:
+	var pts: Array[Vector3] = [level._spawn.origin]
+	for cp: Checkpoint in level.checkpoints:
+		pts.append(cp.global_position)
+	for g: Node in level.find_children("*", "FinishGate", true, false):
+		pts.append((g as Node3D).global_position)
+		break
+	return pts
+
+
+## Metres along the course for a racer with `cp` checkpoints banked standing at `pos`.
+func progress_of(cp: int, pos: Vector3) -> float:
+	return PartyRules.route_progress(course_points(), cp, pos)
+
+
+## Our own course progress.
+func my_progress() -> float:
+	return progress_of(level.current_checkpoint, player.global_position)
+
+
+## A rival's course progress from the roster's checkpoint count and their ghost's position.
+func racer_progress(id: int) -> float:
+	var g: RemoteRacer = ghost(id)
+	if g == null or not Net.roster.has(id):
+		return -1.0
+	return progress_of(int(Net.roster[id].get("cp", 0)), g.global_position)
+
+
+## Rivals ahead of us on the course (targets list entries), for Thunder Cloud. In Party
+## Practice every dummy within 80 m counts.
 func targets_ahead() -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
-	var order: Array[int] = []
-	if Net.active:
-		order = Net.standings()
-	var mine: int = order.find(Net.my_id())
+	var mine: float = my_progress()
 	for t: Dictionary in targets():
 		if bool(t.get("dummy", false)):
 			if (t["center"] as Vector3).distance_to(player.global_position) < 80.0:
 				out.append(t)
 			continue
-		var at: int = order.find(int(t["id"]))
-		if at >= 0 and (mine < 0 or at < mine):
+		if racer_progress(int(t["id"])) > mine:
 			out.append(t)
 	return out
 
 
-## The racer directly ahead of us in the standings (Swap Warp), as a target entry, or {}.
+## The nearest racer ahead of us by real course distance (Swap Warp), as a target entry, or {}.
 ## In Party Practice: the nearest dummy.
 func target_ahead() -> Dictionary:
 	var best: Dictionary = {}
@@ -612,14 +749,76 @@ func target_ahead() -> Dictionary:
 				bd = dd
 				best = t
 		return best
-	var order: Array[int] = Net.standings()
-	var mine: int = order.find(Net.my_id())
-	var all: Array[Dictionary] = targets()
-	for i: int in range(mine - 1, -1, -1):
-		for t: Dictionary in all:
-			if int(t["id"]) == order[i]:
-				return t
+	var ahead: Dictionary = {}
+	for t: Dictionary in targets():
+		ahead[int(t["id"])] = racer_progress(int(t["id"]))
+	var pick: int = PartyRules.swap_target(my_progress(), ahead, SWAP_RANGE)
+	for t: Dictionary in targets():
+		if int(t["id"]) == pick:
+			return t
 	return best
+
+
+# ---- safe ground & respawn protection ---------------------------------------------------------
+
+## Remembers where each racer last stood still on the ground (Swap Warp lands you there).
+func _track_safe_spots(dt: float) -> void:
+	if player.grounded:
+		_my_ground_time += dt
+		if _my_ground_time >= SAFE_SETTLE:
+			_my_safe = player.global_position
+	else:
+		_my_ground_time = 0.0
+	for id: Variant in level._ghosts:
+		var g: RemoteRacer = level._ghosts[id]
+		if g.is_grounded():
+			_ground_time[id] = float(_ground_time.get(id, 0.0)) + dt
+			if float(_ground_time[id]) >= SAFE_SETTLE:
+				_safe_spots[id] = g.global_position
+		else:
+			_ground_time[id] = 0.0
+
+
+## Where we can safely be sent: our last settled grounded spot, else our checkpoint lawn.
+func my_safe_spot() -> Vector3:
+	if _my_safe != Vector3.ZERO:
+		return _my_safe
+	var pts: Array[Transform3D] = respawn_points()
+	return pts[clampi(level.current_checkpoint, 0, pts.size() - 1)].origin
+
+
+## A rival's last settled grounded spot (their ghost's feet), else where their ghost is.
+func safe_spot_of(id: int) -> Vector3:
+	if _safe_spots.has(id):
+		return _safe_spots[id]
+	var g: RemoteRacer = ghost(id)
+	return g.global_position if g != null else Vector3.ZERO
+
+
+## Respawn protection: invulnerable for a couple of seconds, a shell blinks round us.
+func protect(seconds: float) -> void:
+	protect_left = maxf(protect_left, seconds)
+	if _shell == null or not is_instance_valid(_shell):
+		var mat: StandardMaterial3D = PartyFx.glow_mat(Color(0.6, 0.9, 1.0, 0.28), 1.2, true)
+		_shell = PartyFx.part(player, PartyFx.sphere_mesh(0.95, 16), mat, Vector3(0, 0.75, 0))
+		_shell.name = "RespawnShell"
+
+
+## Using an item or attacking ends the protection (no camping the boxes).
+func break_protection() -> void:
+	if protect_left > 0.0:
+		protect_left = 0.0
+		_tick_protection(0.0)
+
+
+func _tick_protection(dt: float) -> void:
+	protect_left = maxf(protect_left - dt, 0.0)
+	if _shell != null and is_instance_valid(_shell):
+		if protect_left <= 0.0:
+			_shell.queue_free()
+			_shell = null
+		else:
+			_shell.visible = PartyFx.blink_on(protect_left, 1.0) and fmod(clock * 9.0, 1.0) < 0.7
 
 
 ## Ground under a point (ray straight down), or the point itself if nothing is below.
@@ -642,6 +841,7 @@ func do_shove() -> void:
 	if shove_cd > 0.0:
 		return
 	shove_cd = SHOVE_COOLDOWN
+	break_protection()
 	var dir: Vector3 = melee_dir(3.2)
 	player.facing_dir = dir
 	var hv := Vector3(player.velocity.x, 0, player.velocity.z)
@@ -689,7 +889,7 @@ static func _shove_dust(parent: Node, o: Vector3, dir: Vector3) -> void:
 # ---- being hit (victim side) ----------------------------------------------------------------
 
 func _on_hit(from_id: int, m: Dictionary) -> void:
-	if level.finished or round_over:
+	if not local_vulnerable():
 		return
 	for pw: PowerUp in actives:
 		if not pw.ended and pw.absorb_hit(from_id):
@@ -831,6 +1031,9 @@ func _on_player_failed(_cause: String) -> void:
 func _on_player_respawned() -> void:
 	clear_statuses()
 	player.visual.scale = Vector3.ONE
+	_my_safe = Vector3.ZERO
+	_my_ground_time = 0.0
+	protect(PartyRules.RESPAWN_PROTECTION)
 
 
 func _apply_ko(by: int, victim: int) -> void:
@@ -886,7 +1089,13 @@ func _on_message(from_id: int, m: Dictionary) -> void:
 			if int(m.get("v", 0)) == from_id and int(m.get("by", 0)) != from_id:
 				_apply_ko(int(m.get("by", 0)), from_id)
 		"swap":
-			_on_swap(from_id, PowerUp.v3(m.get("pos", [])))
+			_on_swap(from_id, PowerUp.v3(m.get("pos", [])), int(m.get("cp", 0)))
+		"swap_ok":
+			_on_swap_ok(from_id, PowerUp.v3(m.get("pos", [])), int(m.get("cp", 0)))
+		"swap_no":
+			_on_swap_no()
+		"swapped":
+			_apply_swapped(m)
 		"hz":
 			var h: Variant = hazards.get(str(m.get("h", "")), null)
 			if h != null and is_instance_valid(h) and (h as Node).has_method("consume"):
@@ -938,20 +1147,91 @@ func _remote_fx(from_id: int, p: String, a: String, d: Dictionary) -> void:
 		scr.call("remote_fx", self, from_id, a, d)
 
 
-## Swap Warp: the attacker took our place and sends us to theirs.
-func _on_swap(from_id: int, pos: Vector3) -> void:
-	if level.finished or round_over or pos == Vector3.ZERO:
+## Swap Warp, caster side: ask the racer `tg` to trade places. Nothing moves until they accept
+## (a Balloon Shield or respawn protection says no), so a blocked swap leaves both where they are.
+func request_swap(tg: Dictionary) -> void:
+	_swap_wait = clock
+	Net.send_party({"k": "swap", "pos": PowerUp.arr(my_safe_spot()), "cp": level.current_checkpoint}, int(tg["id"]))
+	hud.announce("Swapping...", Color(0.4, 1.0, 0.85))
+
+
+## Swap Warp, victim side: the caster's safe spot and checkpoint arrive. We either refuse (Balloon
+## Shield, protection, already home) or go there, taking their checkpoint, and send back ours.
+func _on_swap(from_id: int, pos: Vector3, cp: int) -> void:
+	if pos == Vector3.ZERO:
 		return
-	last_hit_by = from_id
-	last_hit_at = clock
+	if not local_vulnerable():
+		Net.send_party({"k": "swap_no"}, from_id)
+		return
+	for pw: PowerUp in actives:
+		if not pw.ended and pw.absorb_hit(from_id):
+			Net.send_party({"k": "swap_no"}, from_id)
+			return
+	var my_pos: Vector3 = my_safe_spot()
+	var my_cp: int = level.current_checkpoint
+	var caster_at: float = float(Net.roster.get(from_id, {}).get("cp_at", 0.0))
+	var my_at: float = float(Net.roster.get(Net.my_id(), {}).get("cp_at", 0.0))
+	Net.send_party({"k": "swap_ok", "pos": PowerUp.arr(my_pos), "cp": my_cp}, from_id)
+	var swapped: Dictionary = {"k": "swapped", "a": from_id, "acp": my_cp, "aat": my_at, "b": Net.my_id(), "bcp": cp, "bat": caster_at}
+	_apply_swapped(swapped)
+	Net.send_party(swapped)
+	_swap_land(pos, cp)
+	hit_taken.emit(from_id, "swap")
+
+
+## Swap Warp, caster side: they accepted - go to their safe spot and take their checkpoint.
+func _on_swap_ok(from_id: int, pos: Vector3, cp: int) -> void:
+	if _swap_wait < 0.0 or clock - _swap_wait > 3.0 or level.finished or round_over:
+		_swap_wait = -1.0
+		return
+	_swap_wait = -1.0
+	var a: Vector3 = player.global_position
+	var script: GDScript = PartyItems.script_for("swap")
+	script.call("_warp_fx", self, a, pos)
+	send_fx("swap", "warp", {"a": PowerUp.arr(a), "b": PowerUp.arr(pos)})
+	sfx.play("warp", 1.0)
+	_swap_land(pos, cp)
+	hud.announce("SWAP!", Color(0.4, 1.0, 0.85))
+	hit_landed.emit(from_id, "swap")
+
+
+func _on_swap_no() -> void:
+	if _swap_wait < 0.0:
+		return
+	_swap_wait = -1.0
+	hud.announce("Swap blocked!", Color(1.0, 0.7, 0.9))
+	sfx.play("pop", 0.8, 0.8)
+	PartyFx.burst(self, player.global_position + Vector3(0, 0.9, 0), Color(0.4, 1.0, 0.85), 18, 3.0, 0.2)
+
+
+## Both racers end a swap the same way: the portal pair, a teleport onto safe ground, the
+## other's checkpoint (so a fall respawns on the right lawn).
+func _swap_land(pos: Vector3, cp: int) -> void:
 	PartyFx.implode(self, player.global_position + Vector3(0, 0.8, 0), Color(0.4, 1.0, 0.85), 2.0)
-	PartyFx.portal(self, player.global_position + Vector3(0, 0.9, 0), Vector3.UP.cross(Basis(Vector3.UP, player.camera_yaw).x), Color(0.4, 1.0, 0.85), 1.1, 0.6)
 	player.teleport(Transform3D(Basis(Vector3.UP, player.camera_yaw), pos + Vector3(0, 0.1, 0)))
+	set_checkpoint(cp)
+	_my_safe = pos
 	PartyFx.burst(self, pos + Vector3(0, 0.8, 0), Color(0.4, 1.0, 0.85), 40, 6.0)
 	PartyFx.portal(self, pos + Vector3(0, 0.9, 0), Vector3.UP.cross(Basis(Vector3.UP, player.camera_yaw).x), Color(0.4, 1.0, 0.85), 1.1, 0.6)
 	sfx.play("warp", 1.0)
-	hud.announce("SWAPPED!", Color(0.4, 1.0, 0.85))
-	hit_taken.emit(from_id, "swap")
+
+
+## Puts our run on checkpoint `n` (0 = the start): respawns, the active gate and the roster follow.
+func set_checkpoint(n: int) -> void:
+	n = clampi(n, 0, level.checkpoints.size())
+	level.current_checkpoint = n
+	for c: Checkpoint in level.checkpoints:
+		c.set_active(c.index == n, false)
+
+
+## Everyone's roster: the two swapped racers traded checkpoint progress.
+func _apply_swapped(m: Dictionary) -> void:
+	for pair: Array in [["a", "acp", "aat"], ["b", "bcp", "bat"]]:
+		var id: int = int(m.get(pair[0], 0))
+		if Net.roster.has(id):
+			Net.roster[id]["cp"] = int(m.get(pair[1], 0))
+			Net.roster[id]["cp_at"] = float(m.get(pair[2], 0.0))
+	Net.roster_changed.emit()
 
 
 func ghost(id: int) -> RemoteRacer:
@@ -1004,10 +1284,25 @@ func _host_check_round_end() -> void:
 		host_end_round()
 
 
-## Host: score the round and tell everyone (they all show exactly these numbers).
-func host_end_round() -> void:
-	if round_over or not Net.is_host():
-		return
+## Client: the host went quiet. Past the round cap (plus a grace) or a while after the relay
+## said the host dropped, end the round with what we know so nobody is stuck on the course.
+func _client_watchdog(dt: float) -> void:
+	if _host_away >= 0.0:
+		_host_away += dt
+	var late: bool = Game.course_time >= PartyRules.ROUND_LIMIT + PartyRules.CLIENT_GRACE
+	if late or _host_away >= PartyRules.HOST_AWAY_GRACE:
+		local_end_round()
+
+
+func _on_relay_notice(text: String) -> void:
+	if text.begins_with("The host lost connection"):
+		_host_away = 0.0
+	elif text.begins_with("The host is back"):
+		_host_away = -1.0
+
+
+## The scoreboard message for the round as this peer knows it (host: authoritative).
+func build_round_end() -> Dictionary:
 	var finished: Array[int] = []
 	for id: int in Net.standings():
 		if float(Net.roster[id].get("finished", -1.0)) >= 0.0:
@@ -1021,9 +1316,24 @@ func host_end_round() -> void:
 		next.names[int(id)] = str(Net.roster[id]["name"])
 		next.teams[int(id)] = Net.team_of(int(id))
 	next.add_round(rows)
-	var msg: Dictionary = {"k": "round_end", "r": rules.round_no, "rows": rows, "cup": next.cup_to_wire()}
+	return {"k": "round_end", "r": rules.round_no, "rows": rows, "cup": next.cup_to_wire()}
+
+
+## Host: score the round and tell everyone (they all show exactly these numbers).
+func host_end_round() -> void:
+	if round_over or not Net.is_host():
+		return
+	var msg: Dictionary = build_round_end()
 	apply_round_end(msg)
 	Net.send_party(msg)
+
+
+## A client ends the round on its own numbers (host gone): the results panel then offers Leave.
+func local_end_round() -> void:
+	if round_over or practice:
+		return
+	hud.announce("Host lost - round over", Color(1.0, 0.7, 0.4))
+	apply_round_end(build_round_end())
 
 
 func apply_round_end(m: Dictionary) -> void:

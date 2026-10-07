@@ -10,7 +10,7 @@ const WEIGHTS: Dictionary = {
 	"balloon": [5.0, 1.0],
 	"slick": [5.0, 1.5],
 	"glove": [4.0, 2.0],
-	"jetpack": [3.0, 2.0],
+	"jetpack": [0.0, 2.0],   # never for the leader: a free skip is the last thing they need
 	"ice": [2.0, 2.5],
 	"gravity": [2.0, 2.5],
 	"magnet": [1.5, 2.5],

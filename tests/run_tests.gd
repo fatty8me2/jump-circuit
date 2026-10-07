@@ -2494,9 +2494,12 @@ func test_zp_practice_core_loop() -> void:
 	var d: PracticeDummy = p.dummies[0]
 	await _face_dummy(lvl, d, 1.8)
 	await _attack(p)
-	check(d.hits == 1 and d.knocked_out and d.last_src == "claw", "the Fox Claw KOs a practice dummy (hits %d, ko %s)" % [d.hits, d.knocked_out])
+	check(d.hits == 1 and not d.knocked_out and d.last_src == "claw" and d.vel.length() > 12.0, "the Fox Claw is a big knockback, not an instant KO (hits %d, ko %s, speed %.1f)" % [d.hits, d.knocked_out, d.vel.length()])
+	d.knock_out()
 	await seconds(2.0)
 	check(not d.knocked_out, "a KO'd dummy pops back home")
+	d.reset()
+	await ticks(2)
 	# charge and fire a Tailed Beast Bomb at it from further back
 	await _face_dummy(lvl, d, 7.0)
 	var before: int = d.hits
@@ -5959,3 +5962,383 @@ func test_ze_locker_emote_and_pose_tabs() -> void:
 	Settings.pose_id = keep_pose
 	Game.title_screen = "main"
 	SaveData.wipe()
+
+
+# ---- Party fixes (P1) ---------------------------------------------------------------------------
+
+## A Party race (not practice) with a roster of just us, so ghosts / host rules can be set up by hand.
+func _party_race_level(index: int) -> LevelBase:
+	Game.party = PartyRules.new("party")
+	Net.roster = {1: {"name": "Me", "color": 0, "cp": 0, "cp_at": 0.0, "finished": -1.0}}
+	var lvl: LevelBase = await load_level(index)
+	await ticks(4)
+	if lvl.party != null:
+		lvl.party.use_device_input = false
+		lvl.player.use_device_input = false
+		lvl.party.protect_left = 0.0
+	return lvl
+
+
+func _party_race_done() -> void:
+	Game.party = null
+	Net.active = false
+	Net.roster.clear()
+
+
+func _add_rival(lvl: LevelBase, id: int, at: Vector3, cp: int, cp_at: float) -> void:
+	Net.roster[id] = {"name": "Rival%d" % id, "color": id % 4, "cp": cp, "cp_at": cp_at, "finished": -1.0}
+	lvl._add_ghost(id, at)
+	(lvl._ghosts[id] as RemoteRacer).push_state(at, Vector3.ZERO, true, 1)
+
+
+func test_zp_fix_rules_round_limit_and_progress() -> void:
+	check(PartyRules.round_over([-1.0, -1.0], PartyRules.ROUND_LIMIT), "a round nobody finishes ends at the hard time limit")
+	check(not PartyRules.round_over([-1.0, -1.0], PartyRules.ROUND_LIMIT - 1.0), "...and not a second before")
+	check(PartyRules.ROUND_LIMIT == 240.0, "the default limit is 4 minutes")
+	check(PartyRules.time_left([-1.0], 100.0) < 0.0, "no countdown early in a round nobody has finished")
+	check(is_equal_approx(PartyRules.time_left([-1.0], PartyRules.ROUND_LIMIT - 20.0), 20.0), "the HUD counts down the last 30 s of the limit")
+	check(is_equal_approx(PartyRules.time_left([10.0, -1.0], 40.0), 15.0), "the 45 s after the first finisher still counts down")
+	check(is_equal_approx(PartyRules.time_left([200.0, -1.0], 230.0), 10.0), "whichever end comes first wins (limit in 10 s vs grace in 15 s)")
+	var pts: Array[Vector3] = [Vector3.ZERO, Vector3(0, 0, -10), Vector3(0, 0, -30)]
+	check(is_equal_approx(PartyRules.route_progress(pts, 0, Vector3.ZERO), 0.0), "progress at the start is 0")
+	check(is_equal_approx(PartyRules.route_progress(pts, 0, Vector3(0, 0, -4)), 4.0), "4 m towards the first checkpoint is 4 m of progress")
+	check(is_equal_approx(PartyRules.route_progress(pts, 1, Vector3(0, 0, -10)), 10.0), "standing on a checkpoint is the route length up to it")
+	check(PartyRules.route_progress(pts, 1, Vector3(0, 0, -20)) > PartyRules.route_progress(pts, 0, Vector3(0, 0, -9.9)), "a banked checkpoint always beats progress towards it")
+	check(PartyRules.route_progress(pts, 1, Vector3(50, 0, 0)) >= 10.0, "wandering off never loses the banked length")
+	var prog: Dictionary = {2: 30.0, 3: 12.0, 4: 8.0, 5: 400.0}
+	check(PartyRules.swap_target(10.0, prog, 160.0) == 3, "swap picks the nearest racer ahead by course distance (12 m, not 30 or 400)")
+	check(PartyRules.swap_target(10.0, {4: 8.0}, 160.0) == 0, "nobody ahead: no target")
+	check(PartyRules.swap_target(10.0, {5: 400.0}, 160.0) == 0, "a racer beyond the range is no target")
+	check(PartyItems.weight("jetpack", 0.0) == 0.0 and PartyItems.weight("jetpack", 1.0) > 0.0, "the Jetpack never rolls for the leader")
+
+
+func test_zp_fix_respawn_protection() -> void:
+	var lvl: LevelBase = await _party_race_level(0)
+	var p: PartyLayer = lvl.party
+	if p == null:
+		check(false, "party layer exists")
+		return
+	var pl: Player = lvl.player
+	check(p.local_vulnerable(), "a racer who is just racing can be hit")
+	lvl.fail("hazard")
+	await ticks(3)
+	check(p.protect_left > 1.5 and not p.local_vulnerable(), "a respawn gives about 2 s of protection (%.2f)" % p.protect_left)
+	var shell: Node = pl.get_node_or_null("RespawnShell")
+	check(shell != null, "a shell blinks round the protected racer")
+	pl.velocity = Vector3.ZERO
+	p._on_hit(9, {"kb": [0, 25, 0], "st": 1.0, "ko": false, "s": "test"})
+	p.take_hazard(9, Vector3(0, 25, 0), {"st": 1.0})
+	await ticks(2)
+	check(pl.velocity.y < 5.0 and pl.party_stun <= 0.0, "hits and hazards bounce off a protected racer (vy %.1f)" % pl.velocity.y)
+	var d0: int = lvl.deaths
+	p._on_hit(9, {"kb": [0, 0, 0], "ko": true, "s": "test"})
+	await ticks(2)
+	check(lvl.deaths == d0, "even a KO is ignored while protected")
+	await seconds(PartyRules.RESPAWN_PROTECTION + 0.3)
+	check(p.local_vulnerable() and pl.get_node_or_null("RespawnShell") == null, "protection ends after %.0f s and the shell goes" % PartyRules.RESPAWN_PROTECTION)
+	p._on_hit(9, {"kb": [0, 25, 0], "st": 1.0, "ko": false, "s": "test"})
+	await ticks(2)
+	check(pl.velocity.y > 10.0 or pl.party_stun > 0.0, "afterwards hits land again")
+	# using an item or shoving ends it early (no camping the boxes)
+	lvl.fail("hazard")
+	await ticks(3)
+	check(p.protect_left > 0.0, "protected again after the next respawn")
+	p.cmd_attack = true
+	await ticks(2)
+	p.cmd_attack = false
+	await ticks(2)
+	check(p.protect_left <= 0.0, "shoving drops the protection")
+	_party_race_done()
+
+
+func test_zp_fix_tap_fires_on_press_and_claw_is_not_a_ko() -> void:
+	var lvl: LevelBase = await _load_practice(0)
+	var p: PartyLayer = lvl.party
+	p.use_device_input = false
+	lvl.player.use_device_input = false
+	var d: PracticeDummy = p.dummies[0]
+	p.protect_left = 0.0
+	await _party_fresh(p, d)
+	var fox: PowerUp = await _use_item(p, "fox")
+	await _face_dummy(lvl, d, 1.8)
+	# press and keep holding: the claw lands on the press, not on the release
+	p.cmd_attack = true
+	await ticks(3)
+	check(d.hits == 1 and d.last_src == "claw", "a tap attack fires the moment Attack goes down (hits %d)" % d.hits)
+	check(not d.knocked_out and d.vel.length() > 12.0, "the claw is a big knockback, not a KO (speed %.1f)" % d.vel.length())
+	await ticks(30)
+	check(float((fox as Object).get("_charge")) >= 0.0, "holding on starts the Tailed Beast Bomb charge after 0.2 s")
+	p.cmd_attack = false
+	await ticks(3)
+	# the cooldown: a second tap within 1.2 s does nothing
+	d.reset()
+	await ticks(2)
+	await _face_dummy(lvl, d, 1.8)
+	var hits: int = d.hits
+	await _attack(p)
+	check(d.hits == hits, "a second claw inside the 1.2 s cooldown does not connect")
+	check(float((fox as Object).get("CLAW_COOLDOWN")) == 1.2, "the claw cooldown is 1.2 s")
+	await seconds(1.3)
+	await _face_dummy(lvl, d, 1.8)
+	await _attack(p)
+	check(d.hits == hits + 1, "after the cooldown it connects again")
+	# a short press (under 0.2 s) is only the tap
+	fox.finish()
+	await _party_fresh(p, d)
+	var tunic: PowerUp = await _use_item(p, "tunic")
+	await _face_dummy(lvl, d, 1.8)
+	var h0: int = d.hits
+	p.cmd_attack = true
+	await ticks(2)
+	check(d.hits == h0 + 1 and d.last_src == "blade", "Hero's Tunic: the slash comes on the press too (%s)" % d.last_src)
+	await ticks(30)
+	check(float((tunic as Object).get("_charge")) >= 0.0, "Hero's Tunic: the spin charge starts after the hold threshold")
+	p.cmd_attack = false
+	await ticks(3)
+	tunic.finish()
+	await _party_fresh(p, d)
+	var surge: PowerUp = await _use_item(p, "surge")
+	await _face_dummy(lvl, d, 3.0)
+	p.cmd_attack = true
+	await ticks(4)
+	check(d.last_src == "dash_punch" or float((surge as Object).get("_dash")) > 0.0, "Golden Surge Hair: the dash punch starts on the press")
+	p.cmd_attack = false
+	await ticks(3)
+	surge.finish()
+	Game.party = null
+
+
+func test_zp_fix_no_target_keeps_item() -> void:
+	var lvl: LevelBase = await _party_race_level(0)
+	var p: PartyLayer = lvl.party
+	var pts: Array[Vector3] = p.course_points()
+	for id: String in ["thunder", "swap"]:
+		p.item = ""
+		p.give_item(id)
+		var r: PowerUp = p.activate_item()
+		check(r == null and p.item == id, "%s with nobody ahead is not wasted (slot: '%s')" % [id, p.item])
+	# someone ahead: both fire and are used up
+	_add_rival(lvl, 2, pts[1], 1, 4.0)
+	await ticks(3)
+	p.item = ""
+	p.give_item("thunder")
+	p.activate_item()
+	await ticks(2)
+	check(p.item == "", "Thunder Cloud is used once a rival is ahead")
+	# a racer behind us is no target
+	lvl.current_checkpoint = 2
+	lvl.player.teleport(Transform3D(Basis(), pts[2] + Vector3(0, 0.1, 0)))
+	await ticks(3)
+	p.item = ""
+	p.give_item("swap")
+	check(p.activate_item() == null and p.item == "swap", "a racer behind is no Swap Warp target")
+	await seconds(1.2)   # (let the lightning's delayed effects finish before the level goes)
+	_party_race_done()
+
+
+func test_zp_fix_swap_warp_real_course() -> void:
+	var lvl: LevelBase = await _party_race_level(0)
+	var p: PartyLayer = lvl.party
+	var pl: Player = lvl.player
+	var pts: Array[Vector3] = p.course_points()
+	check(pts.size() >= 4, "the course polyline has the start, the checkpoints and the finish (%d points)" % pts.size())
+	Net.active = true
+	lvl.current_checkpoint = 1
+	Net.roster[1]["cp"] = 1
+	Net.roster[1]["cp_at"] = 12.0
+	pl.teleport(Transform3D(Basis(), pts[1] + Vector3(0, 0.1, 0)))
+	# ids 2 and 3 share my checkpoint; 2 reached it first (so standings put 2, 3, me) but 3 is the farther along
+	_add_rival(lvl, 2, pts[1].lerp(pts[2], 0.15), 1, 5.0)
+	_add_rival(lvl, 3, pts[1].lerp(pts[2], 0.5), 1, 9.0)
+	await seconds(0.6)
+	var order: Array[int] = Net.standings()
+	var tg: Dictionary = p.target_ahead()
+	check(order == [2, 3, 1] and not tg.is_empty() and int(tg["id"]) == 2, "Swap targets the nearest racer ahead by course distance, not the standings neighbour (%s -> %s)" % [str(order), str(tg.get("id", 0))])
+	check(p.my_safe_spot().distance_to(pl.global_position) < 0.5, "the safe spot is where we last stood still on the ground")
+	var dest: Vector3 = pts[2]
+	var here: Vector3 = pl.global_position
+	# the victim side: a Balloon Shield blocks it, and nothing moves
+	p.give_item("balloon")
+	var bal: PowerUp = p.activate_item()
+	await ticks(2)
+	p._on_swap(2, dest, 2)
+	await ticks(2)
+	check(bal.ended and pl.global_position.distance_to(here) < 1.0 and lvl.current_checkpoint == 1, "a Balloon Shield blocks Swap Warp: no move, no checkpoint change")
+	# so does respawn protection
+	p.protect(2.0)
+	p._on_swap(2, dest, 2)
+	await ticks(2)
+	check(pl.global_position.distance_to(here) < 1.0, "respawn protection blocks it too")
+	p.break_protection()
+	# accepted: we go to the caster's spot, take their checkpoint, and the roster trades progress
+	p._on_swap(2, dest, 2)
+	await ticks(2)
+	check(pl.global_position.distance_to(dest + Vector3(0, 0.1, 0)) < 1.0, "the swapped racer lands on the caster's safe ground")
+	check(lvl.current_checkpoint == 2 and int(Net.roster[1]["cp"]) == 2 and int(Net.roster[2]["cp"]) == 1, "checkpoint progress is swapped (me %d, them %d)" % [lvl.current_checkpoint, int(Net.roster[2]["cp"])])
+	# the caster side: nothing happens without a request, then an accept moves them
+	var away: Vector3 = pl.global_position
+	p._on_swap_ok(2, pts[1], 1)
+	await ticks(2)
+	check(pl.global_position.distance_to(away) < 0.5, "an unrequested accept is ignored")
+	p._swap_wait = p.clock
+	p._on_swap_ok(2, pts[1], 1)
+	await ticks(2)
+	check(pl.global_position.distance_to(pts[1] + Vector3(0, 0.1, 0)) < 1.0 and lvl.current_checkpoint == 1, "an accepted swap sends the caster to the target's safe spot and checkpoint")
+	p._swap_wait = p.clock
+	p._on_swap_no()
+	check(p._swap_wait < 0.0, "a refusal ends the wait")
+	# a fall now respawns on the swapped checkpoint
+	lvl.fail("fall")
+	await ticks(3)
+	check(pl.global_position.distance_to(lvl.checkpoints[0].respawn_transform().origin) < 1.5, "after a swap a fall respawns at the swapped checkpoint")
+	await seconds(1.2)   # (let the portals' delayed effects finish before the level goes)
+	_party_race_done()
+
+
+func test_zp_fix_box_grants_and_pick_throttle() -> void:
+	var lvl: LevelBase = await _party_race_level(0)
+	var p: PartyLayer = lvl.party
+	Net.roster[2] = {"name": "Rival2", "color": 1, "cp": 0, "cp_at": 0.0, "finished": -1.0}
+	check(p.boxes.size() >= 8, "boxes exist (%d)" % p.boxes.size())
+	# the host never grants one racer two boxes in a burst: the second box is not consumed
+	p._host_pick(0, 2)
+	p._host_pick(1, 2)
+	check(not p.boxes[0].available and p.boxes[1].available, "the host grants a racer one box; a second touch in the burst is dropped, the box stays")
+	p.clock += PartyLayer.GRANT_GAP + 0.1
+	p._host_pick(1, 2)
+	check(not p.boxes[1].available, "later the same racer can take another box")
+	# a client has one touch in flight: asking about a second box waits for the answer
+	check(p._ask_host(5), "the first touch is sent")
+	check(not p._ask_host(6), "a second touch while one is in flight is held back")
+	p._take_box(5, 1, "balloon", 4.0)
+	check(p._pick_at < 0.0 and p.item == "balloon", "the answer frees the next touch and fills the slot")
+	check(p._ask_host(6), "after the answer the next touch is sent")
+	p._take_box(6, 2, "jetpack", 4.0)
+	check(p._ask_host(7), "another racer winning the box we asked about frees us to ask again")
+	check(p.item == "balloon", "...and does not touch our slot")
+	_party_race_done()
+
+
+func test_zp_fix_round_end_and_host_drop() -> void:
+	var lvl: LevelBase = await _party_race_level(0)
+	var p: PartyLayer = lvl.party
+	Net.roster[2] = {"name": "Rival2", "color": 1, "cp": 1, "cp_at": 3.0, "finished": -1.0}
+	var keep_time: float = Game.course_time
+	# a quiet host past the limit: the client ends the round with its own numbers
+	Game.course_time = PartyRules.ROUND_LIMIT + 1.0
+	p._client_watchdog(0.1)
+	check(not p.round_over, "the client gives the host a grace past the limit")
+	Game.course_time = PartyRules.ROUND_LIMIT + PartyRules.CLIENT_GRACE + 1.0
+	p._client_watchdog(0.1)
+	await ticks(2)
+	check(p.round_over and p.last_rows.size() == 2, "past limit + grace the client ends the round locally with rows for everyone (%d)" % p.last_rows.size())
+	await seconds(1.8)
+	_party_race_done()
+	# the relay saying the host dropped: end after a short grace, unless they come back
+	lvl = await _party_race_level(0)
+	p = lvl.party
+	Game.course_time = 30.0
+	p._on_relay_notice("The host lost connection - waiting for them to come back...")
+	p._client_watchdog(PartyRules.HOST_AWAY_GRACE - 1.0)
+	check(not p.round_over, "a short host blip does not end the round")
+	p._on_relay_notice("The host is back.")
+	p._client_watchdog(PartyRules.HOST_AWAY_GRACE + 5.0)
+	check(not p.round_over, "...and a returning host cancels the countdown")
+	p._on_relay_notice("The host lost connection - waiting for them to come back...")
+	p._client_watchdog(PartyRules.HOST_AWAY_GRACE + 0.5)
+	await ticks(2)
+	check(p.round_over, "a host that stays away ends the round for the clients")
+	await seconds(1.8)
+	Game.course_time = keep_time
+	_party_race_done()
+
+
+func test_zp_fix_shrink_and_freeze() -> void:
+	var lvl: LevelBase = await _load_practice(0)
+	var p: PartyLayer = lvl.party
+	p.use_device_input = false
+	lvl.player.use_device_input = false
+	p.protect_left = 0.0
+	var pl: Player = lvl.player
+	var col: CollisionShape3D = pl.get_node("Collision") as CollisionShape3D
+	var full_h: float = (col.shape as CapsuleShape3D).height
+	p.apply_status("shrink", 3.0)
+	await seconds(0.6)
+	var cap: CapsuleShape3D = col.shape as CapsuleShape3D
+	check(pl.visual.scale.x < 0.55 and cap.height < full_h * 0.6 and cap.radius < 0.25, "Shrink scales the collision with the model (scale %.2f, capsule %.2f x %.2f)" % [pl.visual.scale.x, cap.height, cap.radius])
+	check(is_equal_approx(col.position.y, cap.height * 0.5), "the shrunk capsule still stands on the feet (y %.2f)" % col.position.y)
+	await seconds(3.0)
+	check(is_equal_approx(cap.height, full_h) and pl.visual.scale.x > 0.99, "when Shrink ends the capsule is full size again (%.2f)" % cap.height)
+	# Freeze: the racer cannot run but gravity still pulls them down
+	var up: Vector3 = p.boxes[0].global_position + Vector3(0, 7.0, 0)
+	pl.teleport(Transform3D(Basis(), up))
+	pl.velocity = Vector3(6, 0, 0)
+	p.apply_status("freeze", 3.0)
+	var y0: float = pl.global_position.y
+	await ticks(30)
+	check(pl.velocity.y < -3.0 and pl.global_position.y < y0 - 0.5, "a frozen racer in the air keeps falling (dy %.2f, vy %.1f)" % [pl.global_position.y - y0, pl.velocity.y])
+	check(absf(pl.velocity.x) < 0.01 and absf(pl.velocity.z) < 0.01, "...but cannot run (horizontal %.2f)" % Vector2(pl.velocity.x, pl.velocity.z).length())
+	p.clear_statuses()
+	Game.party = null
+
+
+func test_zp_fix_jetpack_skip_cap() -> void:
+	var lvl: LevelBase = await _load_practice(0)
+	var p: PartyLayer = lvl.party
+	p.use_device_input = false
+	lvl.player.use_device_input = false
+	var pl: Player = lvl.player
+	pl.velocity = Vector3(0, 0, -20)
+	await _use_item(p, "jetpack")
+	var h: float = Vector2(pl.velocity.x, pl.velocity.z).length()
+	check(h <= 10.01 and pl.velocity.y > 8.0, "the Jetpack burst caps its horizontal skip at 10 m/s (%.1f)" % h)
+	p.end_all_powers()
+	var rolled_by_leader: bool = false
+	for i: int in 400:
+		if PartyItems.roll(0.0, (float(i) + 0.5) / 400.0) == "jetpack":
+			rolled_by_leader = true
+	check(not rolled_by_leader, "the leader never rolls a Jetpack")
+	Game.party = null
+
+
+## Every course's party layer: boxes across the start and the checkpoint lawns.
+func test_zp_fix_boxes_on_every_course() -> void:
+	var bad: Array[String] = []
+	var total: int = 0
+	for i: int in Game.LEVELS.size():
+		if only_level >= 0 and i != only_level:
+			continue
+		var lvl: LevelBase = await _load_practice(i)
+		var p: PartyLayer = lvl.party
+		if p == null:
+			bad.append("%s: no party layer" % Game.LEVELS[i]["name"])
+			continue
+		var waited: int = 0
+		while not p._ready_done and waited < 60:
+			await ticks(1)
+			waited += 1
+		total += 1
+		var counts: Array[int] = p.box_counts
+		var short: Array[String] = []
+		if counts.is_empty() or counts[0] < 3:
+			short.append("start %d" % (counts[0] if not counts.is_empty() else 0))
+		for c: int in range(1, counts.size()):
+			if counts[c] < 2:
+				short.append("cp%d %d" % [c, counts[c]])
+		if counts.size() != lvl.checkpoints.size() + 1:
+			short.append("points %d vs %d" % [counts.size(), lvl.checkpoints.size() + 1])
+		var grounded: int = 0
+		for b: ItemBox in p.boxes:
+			var q := PhysicsRayQueryParameters3D.create(b.global_position, b.global_position + Vector3(0, -2.0, 0), 1)
+			if not lvl.get_world_3d().direct_space_state.intersect_ray(q).is_empty():
+				grounded += 1
+		if grounded != p.boxes.size():
+			short.append("%d boxes off the ground" % (p.boxes.size() - grounded))
+		if not short.is_empty():
+			bad.append("%s: %s" % [Game.LEVELS[i]["name"], ", ".join(short)])
+	check(bad.is_empty(), "every course gets >= 3 boxes at the start and >= 2 at each checkpoint, on solid ground (%d courses; problems: %s)" % [total, str(bad)])
+	Game.party = null
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)

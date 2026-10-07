@@ -6,7 +6,7 @@ extends Node
 ## Covers: connect, roster sync, clock sync, synchronized race start, ghost pose
 ## replication, checkpoint + finish reporting, standings, return to lobby; then a Party Mode
 ## round: mode sync, item boxes decided by the host (a box is consumed once), a Shove and a
-## Fox Claw KO crossing the wire, the KO credited on both ends, and identical round scores.
+## Fox Claw knockback crossing the wire, the fall it causes credited as a KO on both ends, and identical round scores.
 ## A watchdog ends the process (exit 1) if the run stalls, so a missing peer never hangs it.
 
 var role: String = "host"
@@ -290,7 +290,15 @@ func _party_round() -> void:
 			fox.finish()
 	else:
 		check(await wait_for(func() -> bool: return (p.remote_powers.get(1, {}) as Dictionary).has("fox"), 6.0), "the host's Nine-Tailed Fox appears on its ghost here")
-	check(await wait_for(func() -> bool: return int(p.kos.get(1, 0)) == 1, 6.0), "the Fox Claw KO is credited to the host on this end (kos %s)" % str(p.kos))
+		# the claw is a big knockback, not a KO: it only scores once the victim actually falls
+		knocked[0] = 0.0
+		check(await wait_for(func() -> bool: return str(from_host[0]) == "claw", 6.0), "the host's Fox Claw arrives (%s)" % str(from_host[0]))
+		await get_tree().physics_frame
+		await get_tree().physics_frame
+		check(float(knocked[0]) > 15.0, "the claw throws this player a long way (%.1f m/s)" % float(knocked[0]))
+		check(int(p.kos.get(1, 0)) == 0, "a claw that connects is not yet a KO")
+		lvl.fail("fall")
+	check(await wait_for(func() -> bool: return int(p.kos.get(1, 0)) == 1, 6.0), "the KO is credited to the host once the clawed guest falls (this end) (kos %s)" % str(p.kos))
 	if role == "client":
 		check(lvl.deaths >= 1, "the KO sent the guest back to its checkpoint")
 	# -- finish: host first, guest second; the host scores the round and everyone shows it

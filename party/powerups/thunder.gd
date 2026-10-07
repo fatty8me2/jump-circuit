@@ -10,6 +10,14 @@ const STUN: float = 0.8
 const SLOW: float = 3.0
 
 
+func can_use() -> bool:
+	return not layer.targets_ahead().is_empty()
+
+
+func no_use_hint() -> String:
+	return "Nobody ahead to zap!"
+
+
 func begin() -> void:
 	var pts: Array = []
 	var ahead: Array[Dictionary] = layer.targets_ahead()
@@ -24,8 +32,6 @@ func begin() -> void:
 	layer.sfx.play("zap", 1.0, 0.9)
 	PartyFx.shake(layer.level, 0.15)
 	fx("zap", {"o": arr(chest()), "t": pts, "s": seed_value})
-	if ahead.is_empty():
-		layer.hud.announce("Nobody ahead to zap!", BOLT)
 	finish()
 
 

@@ -2,7 +2,8 @@ extends PowerUp
 ## Nine-Tailed Fox: a licking chakra-flame cloak, flame fox ears, glowing red slit eyes and
 ## whisker marks, and nine living tails (FoxTails: they lag, whip on turns, fan out on jumps,
 ## stream back at speed and curl when idle). Speed x1.6, jump x1.35.
-##  Attack (tap): Fox Claw - a lunging three-streak swipe that KOs the rival it connects with.
+##  Attack (tap): Fox Claw - a lunging three-streak swipe that throws the rival it connects with a long way
+##  (a KO only if they fall; 1.2 s cooldown).
 ##  Attack (hold): charge a Tailed Beast Bomb (the tails arch forward and feed a dark sphere
 ##  in front of the mouth), release to fire it - a huge explosion that throws everyone in
 ##  its radius.
@@ -17,7 +18,7 @@ extends PowerUp
 
 const CLOAK := Color(1.0, 0.45, 0.06)
 const DARK := Color(0.28, 0.05, 0.4)
-const CLAW_COOLDOWN: float = 0.45
+const CLAW_COOLDOWN: float = 1.2
 const CHARGE_TIME: float = 1.2
 const BOMB_SPEED: float = 28.0
 const HOT := Color(2.4, 1.3, 0.45)
@@ -491,7 +492,11 @@ func hud_status() -> String:
 
 # ---- Fox Claw -------------------------------------------------------------------------------
 
-## A tap (released before the charge begins) is a claw.
+## A tap fires on the press; the charge for the bomb only starts after hold_threshold.
+func on_attack_press() -> void:
+	_claw()
+
+
 func _claw() -> void:
 	if _claw_cd > 0.0:
 		return
@@ -510,7 +515,7 @@ func _claw() -> void:
 	layer.sfx.play("slash", 1.0, 0.9)
 	fx("claw", {"o": arr(o), "d": arr(dir)})
 	for t: Dictionary in layer.targets_in_cone(o, dir, 3.0, 0.4):
-		layer.hit(t, dir * 20.0 + Vector3(0, 10, 0), {"ko": true, "s": "claw"})
+		layer.hit(t, dir * 26.0 + Vector3(0, 12, 0), {"st": 0.6, "s": "claw"})
 
 
 ## Three raking chakra claw streaks (a bright head sweeping across, white-hot at the core),
@@ -584,9 +589,7 @@ func on_attack_hold(held: float) -> void:
 
 func on_attack_release(held: float) -> void:
 	if _charge < 0.0:
-		if held >= 0.0 and held < hold_threshold:
-			_claw()
-		return
+		return   # a tap already clawed on the press
 	var power: float = charge_frac()
 	_charge = -1.0
 	_show_ball(false)

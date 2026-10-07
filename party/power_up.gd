@@ -26,7 +26,7 @@ var ended: bool = false
 ## True for the three transformations: they take over the Attack button.
 var takes_attack: bool = false
 ## Attack held longer than this is a charge, shorter is a tap.
-var hold_threshold: float = 0.22
+var hold_threshold: float = 0.2
 
 
 func setup(p_layer: PartyLayer, p_body: Node3D, p_local: bool, p_owner: int, p_id: String) -> void:
@@ -70,6 +70,16 @@ func begin() -> void:
 	pass
 
 
+## Can the item be used right now? Targeted items say no when nobody is in reach, and the
+## layer then keeps the item in the slot (and shows no_use_hint()).
+func can_use() -> bool:
+	return true
+
+
+func no_use_hint() -> String:
+	return "Nobody to target!"
+
+
 ## (speed, jump, gravity) multipliers while active.
 func mods() -> Vector3:
 	return Vector3.ONE
@@ -87,6 +97,8 @@ func remote_tick(_dt: float) -> void:
 	pass
 
 
+## Attack went down. A transformation fires its quick move here (a tap needs no release);
+## holding past hold_threshold turns the press into a charge instead (on_attack_hold).
 func on_attack_press() -> void:
 	pass
 
