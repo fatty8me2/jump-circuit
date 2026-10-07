@@ -617,3 +617,92 @@ func portal(entry_floor: Vector3, entry_yaw_deg: float, exit_floor: Vector3, exi
 	p.rotation_degrees.y = entry_yaw_deg
 	_add(p, entry_floor)
 	return p
+
+
+# ---- generic obstacle kit (docs/KIT_OBSTACLES.md) ---------------------------------------------
+# Reusable, theme-neutral obstacles for any course. Every one is driven by Game.course_time (so
+# it is identical for every racer and the route bot can predict it), gives a tell of at least
+# 0.8 s, and exposes prediction helpers for r_until / the k_* route steps.
+
+## Launch barrel. `floor_top` is the floor it stands on; a rider who walks in is held, shudders for
+## `tell` s and is fired along a fixed arc to land on `target` (a feet position, hold the stick
+## toward it). Fires on the clock grid (k + phase) * period, no sooner than `tell` after entry.
+## Route: r_barrel(barrel, target). Clips: kit_barrel_load/fuse/fire.
+func barrel(floor_top: Vector3, target: Vector3, arc: float = 3.0, period: float = 3.0, phase: float = 0.0, tell: float = 1.0) -> LaunchBarrel:
+	var b := LaunchBarrel.new()
+	b.target = target
+	b.arc = arc
+	b.period = period
+	b.phase = phase
+	b.tell = tell
+	_add(b, floor_top + Vector3(0, 1.15, 0))
+	return b
+
+
+## Zipline. `start_top` / `end_top` are floor points under each end of the cable: a rider hangs
+## from a trolley that waits `dwell` s at the start (lamp flashes), rides at ~`speed` m/s and
+## drops you at the far end; jump to let go early (momentum kept + a hop).
+## Route: r_zipline(zip, release_point, radius, to). Clips: kit_zipline_ready/grab/release/whirr.
+func zipline(start_top: Vector3, end_top: Vector3, speed: float = 11.0, dwell: float = 1.4, phase: float = 0.0) -> Zipline:
+	var z := Zipline.new()
+	var lift := Vector3(0, z.hang + 0.3, 0)
+	z.end = end_top + lift
+	z.speed = speed
+	z.dwell = dwell
+	z.phase = phase
+	_add(z, start_top + lift)
+	return z
+
+
+## Cannonball battery on the floor point `floor_pos`, firing down local -Z turned by yaw. Every
+## `period` s (offset by `phase`) it fires `salvo` balls `spacing` s apart that travel
+## `lane_length` m at `speed`. fly_height 0 = rolling balls (jump them), otherwise the ball
+## centre height. A ball kills. opts may set salvo/spacing/ball_radius/lane_width/tell.
+## Route: r_until(func(): return bat.is_clear_for(d0, d1, window)). Clips: kit_battery_fuse/fire.
+func battery(floor_pos: Vector3, yaw_deg: float = 0.0, lane_length: float = 22.0, speed: float = 9.0, period: float = 3.2, phase: float = 0.0, fly_height: float = 0.0, opts: Dictionary = {}) -> CannonBattery:
+	var c := CannonBattery.new()
+	c.lane_length = lane_length
+	c.speed = speed
+	c.period = period
+	c.phase = phase
+	c.fly_height = fly_height
+	for key: String in opts:
+		c.set(key, opts[key])
+	c.rotation_degrees.y = yaw_deg
+	_add(c, floor_pos)
+	return c
+
+
+## Rolling log along local X (turned by yaw). `top` = centre of its top line. Drags a rider
+## along local Z at `speed` m/s; with `period` > 0 the roll reverses on a sine (slow-down = tell).
+## Route: r_walk along it, r_until(func(): return log.is_calm_for(t, w)) to wait for a calm spell.
+## Clips: kit_log_roll (loop), kit_log_reverse.
+func log_roller(top: Vector3, length: float = 12.0, diameter: float = 2.4, yaw_deg: float = 0.0, speed: float = 4.0, period: float = 0.0, phase: float = 0.0) -> RollingLog:
+	var l := RollingLog.new()
+	l.length = length
+	l.radius = diameter * 0.5
+	l.speed = speed
+	l.period = period
+	l.phase = phase
+	l.rotation_degrees.y = yaw_deg
+	_add(l, top - Vector3(0, l.radius, 0))
+	return l
+
+
+## Seesaw plank (weight-driven tilt, a Seesaw/TiltPlatform). `top` = centre of its level top.
+## along_x false lays it along Z. bias_deg is a counterweight tilt at rest. opts sets any
+## TiltPlatform field (edge_tilt_deg, max_tilt_deg, damping_ratio, board_mass...).
+## Route: r_walk across it (it tips under you); r_until(func(): return ss.is_level()).
+## Clip: kit_seesaw_thunk.
+func seesaw(top: Vector3, length: float = 9.0, width: float = 2.6, along_x: bool = true, bias_deg: float = 0.0, opts: Dictionary = {}) -> Seesaw:
+	var s := Seesaw.new()
+	s.size = Vector3(length, 0.4, width)
+	s.along_x = along_x
+	s.bias_deg = bias_deg
+	s.edge_tilt_deg = 10.5
+	s.max_tilt_deg = 16.0
+	s.damping_ratio = 0.45
+	for key: String in opts:
+		s.set(key, opts[key])
+	_add(s, top - Vector3(0, 0.2, 0))
+	return s

@@ -4640,3 +4640,208 @@ func test_zz_no_fall_charged_at_load() -> void:
 		world.queue_free()
 		world = null
 		await ticks(2)
+
+
+# ---- generic obstacle kit (docs/KIT_OBSTACLES.md): run with  --only=test_zk_ ------------------------
+
+## Plays a test course end to end with the route bot (no teleporting).
+func _kit_bot(path: String, max_s: float, what: String) -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Game.level_index = -1
+	Game.race_mode = false
+	Game.course_time = 0.0
+	Game.course_running = true
+	var lvl: LevelBase = (load(path) as GDScript).new() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	var bot := RouteBot.new()
+	lvl.add_child(bot)
+	bot.attach(lvl)
+	var t: float = 0.0
+	while t < max_s and not bot.done and not bot.stuck:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+	for line: String in bot.log_lines:
+		print("        bot: ", line)
+	check(bot.done and bot.retries <= 1, "%s (%.1fs, %d respawns, step %d/%d)" % [what, lvl.run_time, bot.retries, bot.step_index, lvl.route.size()])
+
+
+func test_zk_barrel() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab()
+	var b: LaunchBarrel = kit.barrel(Vector3(0, 0, -6), Vector3(0, 0, -22), 3.0, 3.0, 0.0, 1.0)
+	check(b.tell >= 0.8, "the barrel's tell is at least 0.8 s (%.2f)" % b.tell)
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, 0)))
+	await seconds(0.3)
+	player.cmd_move = FWD
+	var got: bool = await wait_until(func() -> bool: return b.is_loaded(), 3.0, "walk into the barrel")
+	var t_in: float = Game.course_time
+	player.cmd_move = Vector2.ZERO
+	check(got and b.loaded_player() == player and not player.control_enabled, "walking into the mouth loads the rider and takes control")
+	var fire_t: float = b.fire_time_after(t_in)
+	check(fire_t - t_in >= 0.79, "it fires at least 0.8 s after you get in (%.2f s)" % (fire_t - t_in))
+	check(absf(fposmod(fire_t / 3.0, 1.0)) < 0.001 or absf(fposmod(fire_t / 3.0, 1.0) - 1.0) < 0.001, "and on the clock grid (k * period)")
+	await seconds(0.4)
+	check(player.global_position.distance_to(b.global_position) < 0.25 and b.is_loaded(), "the loaded rider is held at the barrel centre until it fires (%.3f m, loaded %s)" % [player.global_position.distance_to(b.global_position), str(b.is_loaded())])
+	var fired: bool = await wait_until(func() -> bool: return not b.is_loaded(), 4.0, "the barrel fires")
+	var t_out: float = Game.course_time
+	check(fired and absf(t_out - fire_t) < 0.06, "it fired on the predicted tick (predicted %.3f, actual %.3f)" % [fire_t, t_out])
+	check(player.control_enabled and player.velocity.y > 8.0 and player.velocity.z < -8.0, "the shot has the fixed launch velocity %s" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+	player.cmd_move = FWD
+	await wait_landing(4.0)
+	await seconds(0.1)
+	var miss: float = Vector2(player.global_position.x, player.global_position.z + 22.0).length()
+	metrics["barrel_landing_error_m"] = miss
+	check(miss < 2.5, "holding the stick toward the target, the arc lands within 2.5 m of it (%.2f m)" % miss)
+	player.cmd_move = Vector2.ZERO
+	# a second rider must wait out the cooldown rather than be re-captured at once
+	check(not b.is_loaded(), "the barrel does not catch the rider it just fired")
+
+
+func test_zk_zipline() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab()
+	var z: Zipline = kit.zipline(Vector3(0, 0, -5), Vector3(0, 0, -45), 11.0, 1.4, 0.0)
+	check(z.dwell >= 0.9, "the zipline waits at least 0.9 s at the start (the lamp flashes through the last second) (%.2f)" % z.dwell)
+	player.teleport(Transform3D(Basis(), z.stand_point()))
+	var grabbed: bool = await wait_until(func() -> bool: return z.carrying() == player, 4.0, "the trolley picks the rider up")
+	check(grabbed and not player.control_enabled, "standing under the trolley grabs it")
+	await seconds(0.3)
+	check(absf(player.global_position.y - z.rider_feet_at(Game.course_time).y) < 0.15, "the rider hangs %.1f m below the trolley" % z.hang)
+	var rides: bool = await wait_until(func() -> bool: return player.global_position.z < -15.0, 4.0, "ride along the cable")
+	check(rides and player.velocity.z < -9.0, "the ride runs at cable speed (%.1f m/s)" % player.velocity.z)
+	var pred: Vector3 = z.rider_feet_at(Game.course_time)
+	check(player.global_position.distance_to(pred) < 0.35, "the rider is where handle_at() says (err %.2f m)" % player.global_position.distance_to(pred))
+	# a real jump press (what the pad / keyboard sends) lets go with the speed kept, plus a hop
+	player.press_jump()
+	await ticks(3)
+	check(z.carrying() == null and player.control_enabled, "pressing jump releases the rider")
+	check(player.velocity.z < -9.0 and player.velocity.y > 3.0, "and keeps the cable's speed with a hop %s" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+	await wait_landing(3.0)
+	# riding to the end lets go there with the same speed
+	var again: bool = await wait_until(func() -> bool: return z.departs_in(Game.course_time) > 0.0 and z.departs_in(Game.course_time) < 1.0, 12.0, "the trolley is back at the start")
+	player.teleport(Transform3D(Basis(), z.stand_point()))
+	var got2: bool = await wait_until(func() -> bool: return z.carrying() == player, 4.0, "picked up again")
+	var released: bool = await wait_until(func() -> bool: return z.carrying() == null, 8.0, "auto release at the far end")
+	check(again and got2 and released and player.global_position.z < -40.0, "riding to the end lets go at the far end (z %.1f)" % player.global_position.z)
+	check(player.velocity.z < -8.0, "carrying the ride speed (%.1f m/s)" % player.velocity.z)
+
+
+func test_zk_battery() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var base: Vector3 = lvl.checkpoints[0].global_position + Vector3(40, 0, 0)
+	lvl.player.use_device_input = false
+	lvl.kit.plat(base, Vector3(40, 1, 30), "main", 0.0)
+	# fires along -X from x = base + 14: the muzzle is 1.9 m ahead of the node
+	var bat: CannonBattery = lvl.kit.battery(base + Vector3(14, 0, 0), 90.0, 24.0, 9.0, 3.2, 0.0, 0.0)
+	check(bat.tell >= 0.8, "the cannon's tell is at least 0.8 s (%.2f)" % bat.tell)
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(-12, 0.1, 8)))
+	await seconds(0.5)
+	# the strip on the floor flashes through the last second before a salvo
+	await wait_until(func() -> bool: return bat.time_to_salvo(Game.course_time) < 0.6 and bat.time_to_salvo(Game.course_time) > 0.1, 4.0, "the tell")
+	await get_tree().process_frame
+	var strip_alpha: float = ((bat._strip.material_override as StandardMaterial3D).albedo_color.a)
+	check(strip_alpha > 0.0, "the lane strip lights up during the tell (alpha %.2f)" % strip_alpha)
+	# the pool shows exactly the balls balls_at() predicts
+	await wait_until(func() -> bool: return bat.balls_at(Game.course_time).size() >= 1 and bat.balls_at(Game.course_time)[0] > 5.0, 4.0, "a ball in flight")
+	await get_tree().physics_frame
+	var pred: PackedFloat32Array = bat.balls_at(Game.course_time)
+	var shown: int = 0
+	for slot: Dictionary in bat._slots:
+		if (slot["node"] as Node3D).visible:
+			shown += 1
+	check(shown == pred.size() and pred.size() >= 1, "the visible balls match the clock's prediction (%d vs %d)" % [shown, pred.size()])
+	# a clear window is really clear, a blocked one kills
+	var d: float = 10.0
+	var d0: int = lvl.deaths
+	await wait_until(func() -> bool: return bat.is_clear_for(d - 1.0, d + 1.0, 0.5), 5.0, "a gap in the salvos")
+	lvl.player.teleport(Transform3D(Basis(), bat.to_global(Vector3(0, 0.1, -1.9 - d))))
+	await seconds(0.45)
+	check(lvl.deaths == d0, "standing in the lane while is_clear_for() says clear is safe")
+	await wait_until(func() -> bool: return lvl.deaths > d0, 5.0, "a ball finds the rider standing in the lane")
+	check(lvl.deaths == d0 + 1, "a cannonball kills the rider it hits")
+	# rolling balls can be jumped
+	var jumped: bool = true
+	var t_end: float = Game.course_time + 6.0
+	d0 = lvl.deaths
+	await wait_until(func() -> bool: return bat.is_clear_for(0.0, d + 1.0, 0.3), 5.0, "the lane empties")
+	lvl.player.teleport(Transform3D(Basis(), bat.to_global(Vector3(0, 0.1, -1.9 - d))))
+	await seconds(0.3)
+	t_end = Game.course_time + 6.0
+	while Game.course_time < t_end and lvl.deaths == d0:
+		var eta: float = 99.0
+		for b: float in bat.balls_at(Game.course_time):
+			if b < d:
+				eta = minf(eta, (d - b) / 9.0)
+		if eta < 0.38 and lvl.player.grounded:
+			lvl.player.press_jump()
+			lvl.player.cmd_jump = true
+		elif lvl.player.velocity.y <= 0.0:
+			lvl.player.cmd_jump = false
+		await get_tree().physics_frame
+	lvl.player.cmd_jump = false
+	jumped = lvl.deaths == d0
+	check(jumped, "a well-timed jump clears a rolling ball for two salvos")
+
+
+func test_zk_log() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab(Vector3(200, 1, 200), Vector3(0, -8, 0))
+	var lg: RollingLog = kit.log_roller(Vector3(0, 0, 0), 12.0, 3.0, 0.0, 3.0, 0.0)
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, 0)))
+	await seconds(0.25)
+	player.cmd_move = Vector2.ZERO
+	await seconds(0.2)
+	check(player.grounded and player.floor_body == lg, "the player stands on the log's top line")
+	check(player.velocity.z > 1.5 or player.global_position.z > 0.3, "the roll drags a standing rider sideways along the log's Z (v %s)" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+	check(lg.surface_velocity().is_equal_approx(Vector3(0, 0, 3.0)), "surface_velocity() is the push (%s)" % str(lg.surface_velocity()))
+	# a reversing log: sine push, predictable calm spells
+	var lr: RollingLog = kit.log_roller(Vector3(40, 0, 0), 12.0, 3.0, 0.0, 4.0, 6.0, 0.0)
+	check(absf(lr.speed_at(0.0)) < 0.001 and absf(lr.speed_at(1.5) - 4.0) < 0.001 and absf(lr.speed_at(4.5) + 4.0) < 0.001, "a reversing log pushes 0, +speed, 0, -speed through its period")
+	check(lr.is_calm_for(-0.1, 0.2) and not lr.is_calm_for(1.0, 0.2), "is_calm_for() finds the stand-still moments")
+	check(absf(lr.calm_in(1.5) - 1.5) < 0.6, "calm_in() says when the next one comes (%.2f s)" % lr.calm_in(1.5))
+	# stable footing: run its length without being thrown off (the bot test below does the real crossing)
+	player.teleport(Transform3D(Basis(), Vector3(35, 0.05, 0.0)))
+	await seconds(0.3)
+	for i: int in 96:
+		# run along +X, steering back to the log's line against the push
+		player.cmd_move = Vector2(1.0, clampf((player.global_position.z - lr.global_position.z) * 2.5, -1.0, 1.0))
+		await get_tree().physics_frame
+	player.cmd_move = Vector2.ZERO
+	check(player.global_position.y > -1.0, "a rider can run along a reversing log (y %.2f)" % player.global_position.y)
+
+
+func test_zk_seesaw() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab(Vector3(200, 1, 200), Vector3(0, -8, 0))
+	var s: Seesaw = kit.seesaw(Vector3(0, 0, 0), 9.0, 2.6, true, 0.0)
+	await seconds(0.3)
+	check(s.is_level(2.0), "an empty seesaw rests level (%.1f deg)" % s.axis_degrees())
+	player.teleport(Transform3D(Basis(), Vector3(3.9, 0.2, 0)))
+	await seconds(1.4)
+	var right: float = s.axis_degrees()
+	check(absf(right) > 6.0, "standing near one end tips that end down (%.1f deg)" % right)
+	player.teleport(Transform3D(Basis(), Vector3(-3.9, s.global_position.y + 0.9, 0)))
+	await seconds(1.6)
+	var left: float = s.axis_degrees()
+	check(absf(left) > 6.0 and signf(left) != signf(right), "standing near the other end tips it the other way (%.1f deg)" % left)
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.6, 0)))
+	await seconds(1.4)
+	check(absf(s.axis_degrees()) < 6.0, "standing on the pivot levels it (%.1f deg)" % s.axis_degrees())
+	# a counterweight tips the empty plank at rest
+	var w: Seesaw = kit.seesaw(Vector3(40, 0, 0), 9.0, 2.6, true, 10.0)
+	await seconds(1.5)
+	check(absf(w.axis_degrees()) > 5.0 and absf(w.axis_degrees()) < 14.0, "bias_deg tips the empty plank (%.1f deg)" % w.axis_degrees())
+	# the other orientation
+	var z: Seesaw = kit.seesaw(Vector3(80, 0, 0), 9.0, 2.6, false, 0.0)
+	player.teleport(Transform3D(Basis(), Vector3(80, 0.2, -3.9)))
+	await seconds(1.4)
+	check(absf(z.axis_degrees()) > 6.0, "a plank along Z tips about X (%.1f deg)" % z.axis_degrees())
+
+
+func test_zk_bot_slice1() -> void:
+	await _kit_bot("res://tests/kit_course.gd", 120.0, "the bot rides the barrel, zipline, cannon lane, rolling log and seesaw")
