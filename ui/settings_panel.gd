@@ -47,6 +47,7 @@ func _ready() -> void:
 		func(v: float) -> String: return "Low" if v <= 0.25 else ("Max" if v >= 1.95 else "%d%%" % roundi(v * 100.0)), 0.05)
 	_fullscreen_check = _check_row(box, "Fullscreen", Settings.fullscreen, func(on: bool) -> void: Settings.fullscreen = on)
 	_check_row(box, "V-Sync", Settings.vsync, func(on: bool) -> void: Settings.vsync = on)
+	_option_row(box, "Ghost (solo runs)", Settings.GHOST_NAMES, Settings.ghost_mode, func(i: int) -> void: Settings.ghost_mode = i)
 	var modes: Array[String] = ["auto", "on", "off"]
 	_option_row(box, "Run timer", ["After first clear", "Always", "Never"], modes.find(Settings.timer_mode), func(i: int) -> void: Settings.timer_mode = modes[i])
 

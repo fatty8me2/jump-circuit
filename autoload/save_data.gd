@@ -253,6 +253,8 @@ func delete_files() -> void:
 		var p: String = _path() + suffix
 		if FileAccess.file_exists(p):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+	if path_override != "":
+		GhostData.delete_all()   # (a test save's private ghost folder; never the real one)
 
 
 ## Whole hundredths of a second, as shown. The epsilon absorbs the float error that
