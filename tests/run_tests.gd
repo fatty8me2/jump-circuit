@@ -3192,6 +3192,7 @@ func test_z_world_sounds() -> void:
 	var old_theme: String = Sfx.get("_theme")
 	for th: String in ["gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert",
 			"manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void",
+			"toybox", "fungal", "olympus", "arcade", "carnival", "dino", "arcane", "siege",
 			"ascent"]:
 		Sfx.set_theme(th)
 		check(Sfx.themed("step") == "step_" + th and Sfx.themed("land") == "land_" + th,
@@ -3209,11 +3210,12 @@ func test_z_world_sounds() -> void:
 	# files exist, so a map whose mechanics land later (the frontier's, Doom Fortress's) is covered
 	# once they do.
 	var prefixes: Array[String] = ["manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon",
-		"doom", "abyss", "tempest", "void"]
+		"doom", "abyss", "tempest", "void", "toybox", "fungal", "olympus", "arcade", "carnival", "dino", "arcane", "siege"]
 	var srcs: Array[String] = []
 	for f: String in ["level_11_manor.gd", "level_12_armada.gd", "level_13_candy.gd", "level_14_carrier.gd",
 			"level_16_sakura.gd", "level_17_jungle.gd", "level_18_frontier.gd", "level_19_neon.gd",
-			"level_20_doom.gd", "level_21_abyss.gd", "level_22_tempest.gd", "level_23_void.gd"]:
+			"level_20_doom.gd", "level_21_abyss.gd", "level_22_tempest.gd", "level_23_void.gd",
+			"level_25_toybox.gd", "level_26_fungal.gd", "level_27_olympus.gd", "level_28_arcade.gd", "level_29_carnival.gd", "level_30_dino.gd", "level_31_arcane.gd", "level_32_siege.gd"]:
 		srcs.append("res://levels/" + f)
 	for f: String in DirAccess.get_files_at("res://mechanics"):
 		if f.ends_with(".gd") and prefixes.any(func(p: String) -> bool: return f.begins_with(p + "_")):
@@ -3221,7 +3223,8 @@ func test_z_world_sounds() -> void:
 	# the third and fourth sets' decor scripts own their waterfalls, vents, signs and thunder (the older
 	# maps' visual/ scripts stay out of this scan; armada_storm.gd now plays the ambience's thunder)
 	for f: String in DirAccess.get_files_at("res://visual"):
-		if f.ends_with(".gd") and ["sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void"].any(
+		if f.ends_with(".gd") and ["sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void",
+				"toybox", "fungal", "olympus", "arcade", "carnival", "dino", "arcane", "siege"].any(
 				func(p: String) -> bool: return f.begins_with(p + "_")):
 			srcs.append("res://visual/" + f)
 	var re := RegEx.create_from_string("\"((?:%s)_[a-z0-9_]+)\"" % "|".join(prefixes))
@@ -3539,6 +3542,17 @@ func test_zc_cosmetics_retroactive_and_one_time_toast() -> void:
 	SaveData.wipe()
 
 
+func test_zc_earned_rewards_never_relock() -> void:
+	# "beat every course" was earned and announced; then new courses were added, so the rule no
+	# longer holds - the reward must stay unlocked (a test's own levels dict still sees the rule)
+	SaveData.wipe()
+	check(not Cosmetics.is_unlocked("trail", "rainbow"), "Rainbow starts locked")
+	SaveData.mark_cosmetics_seen(["trail:rainbow"] as Array[String])
+	check(Cosmetics.is_unlocked("trail", "rainbow"), "an announced reward stays unlocked after courses are added")
+	check(not Cosmetics.is_unlocked("trail", "rainbow", {}), "an explicit levels dict still evaluates the rule")
+	SaveData.wipe()
+
+
 func test_zc_settings_sanitize_cosmetic_ids() -> void:
 	var old_t: String = Settings.trail_id
 	var old_f: String = Settings.finish_id
@@ -3768,7 +3782,7 @@ func test_zc_remote_racer_cosmetics() -> void:
 # ---- medal times and rewards (characters, hats, paints, titles) --------------------------------
 
 ## The four worlds still being built carry provisional medal times (no bot time yet).
-const _ZM_PROVISIONAL: Array[String] = []
+const _ZM_PROVISIONAL: Array[String] = ["toybox", "fungal", "olympus", "arcade", "carnival", "dino", "arcane", "siege"]
 
 
 ## A levels dict with these bests (id -> seconds), as SaveData stores them.

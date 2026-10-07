@@ -364,9 +364,10 @@ func _build_body(id: String) -> void:
 		"cyber", "golden":
 			_body_volt(id)
 		_:
-			_body_volt("volt")
+			if not BodiesExt.build(self, id):
+				_body_volt("volt")
 	# hat mount: the crown of the head
-	var head: Array = HEADS.get(id, HEADS["volt"])
+	var head: Array = HEADS.get(id, BodiesExt.HEADS.get(id, HEADS["volt"]))
 	_head_anchor = Node3D.new()
 	_head_anchor.name = "HeadAnchor"
 	_head_anchor.position = (head[0] as Vector3) + TZ
@@ -1424,7 +1425,7 @@ static func trail_layers(id: String, tint: Color = Color(1.0, 0.72, 0.2)) -> Arr
 				{"amount": 16, "lifetime": 0.6, "tex": Fx.Tex.STAR, "size": 0.2, "shape": "sphere", "radius": 0.3,
 					"speed": Vector2(0.0, 0.3), "spread": 180.0, "curve": "pop", "color": Color(2.2, 2.2, 2.2)},
 			]
-	return []
+	return LooksExt.trail_layers(id, tint)
 
 
 ## The equipped finish celebration on top of the cheer (sound included). Every emitter is
@@ -1444,6 +1445,8 @@ func play_finish(id: String) -> void:
 			_fin_ghost(at)
 		"jet":
 			_fin_jet(at)
+		_:
+			LooksExt.play_finish(self, id, at)
 	Sfx.play_at("fin_" + id, at + Vector3(0, 1, 0), 0.03, 0.9)
 
 

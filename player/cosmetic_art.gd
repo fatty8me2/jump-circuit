@@ -550,7 +550,7 @@ static func paint_material(id: String) -> Material:
 			return m
 	if id in PAINT_SHADERS:
 		return shader(id)
-	return null
+	return LooksExt.paint_material(id)
 
 
 # ---- part helpers ----------------------------------------------------------------------------
@@ -594,7 +594,7 @@ static func pivot(parent: Node3D, pos: Vector3, rot: Vector3 = Vector3.ZERO) -> 
 const OPEN_HATS: Array[String] = ["none", "horns", "headphones", "crown", "halo", "snorkel"]
 
 static func covers_crown(id: String) -> bool:
-	return not (id in OPEN_HATS)
+	return not (id in OPEN_HATS or id in HatsExt.OPEN_HATS)
 
 
 ## Builds hat `id` (a Cosmetics.HATS id other than "none") for visual `v`.
@@ -802,4 +802,6 @@ static func hat(id: String, v: PlayerVisual) -> Node3D:
 			var tilt: Node3D = pivot(h, Vector3(0, -0.06, 0), Vector3(0, 0, 0.18))
 			part(tilt, cyl(0.0, 0.5, 16), shader("party"), Vector3(0, 0.21, 0), Vector3(0.32, 0.42, 0.32))
 			part(tilt, sphere(0), v.accent_material("base"), Vector3(0, 0.43, 0), Vector3.ONE * 0.1)
+		_:
+			HatsExt.build(id, h, v)
 	return h

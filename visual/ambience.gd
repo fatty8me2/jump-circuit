@@ -653,6 +653,62 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"size": Vector2(0.25, 6.0), "radius": 100.0, "pick": PackedColorArray([Color(2.4, 0.8, 1.7), Color(0.8, 2.2, 2.6)]),
 					"dir": Vector3.UP, "spread": 6.0, "speed": Vector2(18.0, 30.0), "fade": PackedFloat32Array([0.0, 1.0, 0.0])},
 			]
+		"toybox":
+			return [
+				# PLACEHOLDER - the Toybox Tumble level agent replaces this case (near / mid / far layers)
+				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
+					"color": Color(1.00, 0.85, 0.15), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
+		"fungal":
+			return [
+				# PLACEHOLDER - the Mushroom Hollow level agent replaces this case (near / mid / far layers)
+				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
+					"color": Color(1.00, 0.95, 0.85), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
+		"olympus":
+			return [
+				# PLACEHOLDER - the Sky Citadel level agent replaces this case (near / mid / far layers)
+				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
+					"color": Color(1.00, 0.78, 0.25), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
+		"arcade":
+			return [
+				# PLACEHOLDER - the Pixel Panic level agent replaces this case (near / mid / far layers)
+				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
+					"color": Color(1.00, 0.95, 0.20), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
+		"carnival":
+			return [
+				# PLACEHOLDER - the Carnival Chaos level agent replaces this case (near / mid / far layers)
+				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
+					"color": Color(1.00, 0.82, 0.20), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
+		"dino":
+			return [
+				# PLACEHOLDER - the Dino Valley level agent replaces this case (near / mid / far layers)
+				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
+					"color": Color(0.95, 0.70, 0.30), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
+		"arcane":
+			return [
+				# PLACEHOLDER - the Arcane Library level agent replaces this case (near / mid / far layers)
+				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
+					"color": Color(1.00, 0.80, 0.35), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
+		"siege":
+			return [
+				# PLACEHOLDER - the Castle Siege level agent replaces this case (near / mid / far layers)
+				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
+					"color": Color(0.85, 0.20, 0.15), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking

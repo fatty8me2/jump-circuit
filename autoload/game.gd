@@ -8,23 +8,31 @@ const LEVELS: Array[Dictionary] = [
 	{"id": "balance", "name": "Balance Works", "scene": "res://levels/level_3_balance.tscn", "blurb": "Boards that answer to your weight - and tip you off.", "medals": {"gold": 160, "silver": 190, "bronze": 240}},
 	{"id": "clockwork", "name": "Clockwork Heights", "scene": "res://levels/level_4_clockwork.tscn", "blurb": "Watch the rhythm, commit, never stop.", "medals": {"gold": 195, "silver": 235, "bronze": 295}},
 	{"id": "reef", "name": "Coral Depths", "scene": "res://levels/level_5_reef.tscn", "blurb": "A sunken reef. Ride the currents, mind the eels.", "medals": {"gold": 135, "silver": 160, "bronze": 200}},
+	{"id": "toybox", "name": "Toybox Tumble", "scene": "res://levels/level_25_toybox.tscn", "blurb": "A giant kid's bedroom. Wind-up cars, block towers and a jack-in-the-box with a grudge.", "medals": {"gold": 165, "silver": 200, "bronze": 250}},  # PROVISIONAL
 	{"id": "orbital", "name": "Orbital Drift", "scene": "res://levels/level_6_orbital.tscn", "blurb": "A station in low orbit. Run the walls, don't drift.", "medals": {"gold": 160, "silver": 195, "bronze": 245}},
 	{"id": "xeno", "name": "Xeno Wilds", "scene": "res://levels/level_7_xeno.tscn", "blurb": "A glowing alien jungle under a ringed giant. Mind what bites.", "medals": {"gold": 155, "silver": 185, "bronze": 235}},
+	{"id": "fungal", "name": "Mushroom Hollow", "scene": "res://levels/level_26_fungal.tscn", "blurb": "A storybook forest floor where you are the size of a beetle. Bounce on the caps, ride the spores.", "medals": {"gold": 165, "silver": 200, "bronze": 250}},  # PROVISIONAL
 	{"id": "volcano", "name": "Cinder Peak", "scene": "res://levels/level_8_volcano.tscn", "blurb": "The mountain is erupting. Outclimb the lava, dodge the bombs.", "medals": {"gold": 165, "silver": 195, "bronze": 245}},
 	{"id": "glacier", "name": "Frostbite Pass", "scene": "res://levels/level_9_glacier.tscn", "blurb": "An ice fortress in a blizzard. Mind the icicles, outrun the avalanche.", "medals": {"gold": 185, "silver": 225, "bronze": 280}},
 	{"id": "desert", "name": "Scarab Sands", "scene": "res://levels/level_10_desert.tscn", "blurb": "Dunes, mirages and a sun temple full of traps. When the plate clicks, run.", "medals": {"gold": 160, "silver": 195, "bronze": 245}},
+	{"id": "carnival", "name": "Carnival Chaos", "scene": "res://levels/level_29_carnival.tscn", "blurb": "A funfair at sunset. Ride the coaster, dodge the moles, get fired from a cannon.", "medals": {"gold": 165, "silver": 200, "bronze": 250}},  # PROVISIONAL
 	{"id": "manor", "name": "Phantom Manor", "scene": "res://levels/level_11_manor.tscn", "blurb": "A haunted mansion under a blood moon. Not everything solid stays solid.", "medals": {"gold": 185, "silver": 220, "bronze": 275}},
 	{"id": "armada", "name": "Storm Armada", "scene": "res://levels/level_12_armada.tscn", "blurb": "Cross a sky-pirate fleet ship to ship through a thunderstorm. Mind the cannons.", "medals": {"gold": 190, "silver": 230, "bronze": 290}},
 	{"id": "candy", "name": "Sugar Rush", "scene": "res://levels/level_13_candy.tscn", "blurb": "A candy dreamworld. Sweet, bouncy, merciless.", "medals": {"gold": 185, "silver": 220, "bronze": 280}},
+	{"id": "olympus", "name": "Sky Citadel", "scene": "res://levels/level_27_olympus.tscn", "blurb": "Marble temples adrift on golden clouds. The gods are not watching. Mostly.", "medals": {"gold": 175, "silver": 210, "bronze": 265}},  # PROVISIONAL
 	{"id": "carrier", "name": "Super Carrier", "scene": "res://levels/level_14_carrier.tscn", "blurb": "Launch day on a supercarrier. Stay out of the foam, off the catapults, up the tower.", "medals": {"gold": 190, "silver": 230, "bronze": 285}},
 	{"id": "sakura", "name": "Sakura Peaks", "scene": "res://levels/level_16_sakura.tscn", "blurb": "A feudal-Japan mountain at dusk, through blossoms and pagodas to the castle keep.", "medals": {"gold": 200, "silver": 240, "bronze": 300}},
 	{"id": "jungle", "name": "Jungle Temple", "scene": "res://levels/level_17_jungle.tscn", "blurb": "Overgrown ruins, a rolling boulder and a step pyramid. Do not touch the glyphs.", "medals": {"gold": 185, "silver": 220, "bronze": 280}},
+	{"id": "dino", "name": "Dino Valley", "scene": "res://levels/level_30_dino.tscn", "blurb": "A lush prehistoric valley. Geysers, tar pits, pterodactyls - and something big is following you.", "medals": {"gold": 175, "silver": 210, "bronze": 265}},  # PROVISIONAL
 	{"id": "frontier", "name": "Wild West Heist", "scene": "res://levels/level_18_frontier.tscn", "blurb": "Rob the train. Run the cars, ride the carts, beat the dynamite to the engine.", "medals": {"gold": 170, "silver": 205, "bronze": 255}},
 	{"id": "neon", "name": "Neon City", "scene": "res://levels/level_19_neon.tscn", "blurb": "Rain, neon and hover traffic. Ride the lanes to the top of the tallest tower.", "medals": {"gold": 175, "silver": 210, "bronze": 265}},
+	{"id": "arcane", "name": "Arcane Library", "scene": "res://levels/level_31_arcane.tscn", "blurb": "An endless wizard's library. The books fly, the ink flows, and the shelves rearrange themselves.", "medals": {"gold": 175, "silver": 210, "bronze": 265}},  # PROVISIONAL
 	{"id": "doom", "name": "Doom Fortress", "scene": "res://levels/level_20_doom.tscn", "blurb": "Inside a doomsday machine that is tearing itself apart. Nothing here wants you alive.", "medals": {"gold": 160, "silver": 190, "bronze": 240}},
 	{"id": "abyss", "name": "The Abyss", "scene": "res://levels/level_21_abyss.tscn", "blurb": "Down a black ocean trench by the light of things that glow. The current is not your friend.", "medals": {"gold": 140, "silver": 165, "bronze": 210}},
 	{"id": "tempest", "name": "Tempest Tower", "scene": "res://levels/level_22_tempest.tscn", "blurb": "Climb the outside of a mile-high tower in a hurricane. Lightning picks the tallest thing.", "medals": {"gold": 180, "silver": 220, "bronze": 275}},
 	{"id": "void", "name": "The Void", "scene": "res://levels/level_23_void.tscn", "blurb": "Impossible geometry in a dream that is coming apart. Up is a suggestion.", "medals": {"gold": 120, "silver": 145, "bronze": 180}},
+	{"id": "arcade", "name": "Pixel Panic", "scene": "res://levels/level_28_arcade.tscn", "blurb": "Inside a retro arcade cabinet. Blocks fall, chompers chase, and the screen keeps scrolling.", "medals": {"gold": 150, "silver": 180, "bronze": 230}},  # PROVISIONAL
+	{"id": "siege", "name": "Castle Siege", "scene": "res://levels/level_32_siege.tscn", "blurb": "Storm a castle mid-siege. Boulders fall, rams swing, oil pours - and the trebuchet is your ride in.", "medals": {"gold": 150, "silver": 180, "bronze": 230}},  # PROVISIONAL
 	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_24_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon.", "medals": {"gold": 180, "silver": 215, "bronze": 270}},
 ]
 ## Medal targets ("medals" in each LEVELS entry, whole seconds) come from the route bot:
@@ -34,9 +42,29 @@ const LEVELS: Array[Dictionary] = [
 ## of the full bot runs); tests check every Gold against it. Re-time and update both when a
 ## course is rebuilt.
 const BOT_TIMES: Dictionary = {
-	"gardens": 150.3, "foundry": 136.4, "balance": 139.8, "clockwork": 172.1, "reef": 116.1,
-	"orbital": 142.5, "xeno": 136.3, "volcano": 144.1, "glacier": 163.4, "desert": 141.2,
-	"manor": 161.5, "armada": 168.5, "candy": 162.5, "carrier": 167.4, "sakura": 175.0, "jungle": 162.6, "frontier": 150.0, "neon": 153.4, "doom": 140.2, "abyss": 122.1, "tempest": 159.6, "void": 104.8,
+	# one id per line, so parallel medal updates never conflict
+	"gardens": 150.3,
+	"foundry": 136.4,
+	"balance": 139.8,
+	"clockwork": 172.1,
+	"reef": 116.1,
+	"orbital": 142.5,
+	"xeno": 136.3,
+	"volcano": 144.1,
+	"glacier": 163.4,
+	"desert": 141.2,
+	"manor": 161.5,
+	"armada": 168.5,
+	"candy": 162.5,
+	"carrier": 167.4,
+	"sakura": 175.0,
+	"jungle": 162.6,
+	"frontier": 150.0,
+	"neon": 153.4,
+	"doom": 140.2,
+	"abyss": 122.1,
+	"tempest": 159.6,
+	"void": 104.8,
 	"ascent": 158.7,
 }
 const MEDAL_MULT: Dictionary = {"gold": 1.12, "silver": 1.35, "bronze": 1.7}

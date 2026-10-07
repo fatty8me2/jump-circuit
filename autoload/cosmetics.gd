@@ -301,6 +301,10 @@ static func total_runs(levels: Dictionary) -> int:
 static func is_unlocked(kind: String, id: String, levels: Variant = null, stats: Variant = null) -> bool:
 	if not has_item(kind, id):
 		return false
+	# once earned, always earned: anything already announced stays unlocked even if its rule
+	# stops holding (new courses would otherwise re-lock "beat every course" rewards)
+	if levels == null and SaveData.cosmetics_seen().has("%s:%s" % [kind, id]):
+		return true
 	return rule_met(catalogue(kind)[id]["rule"], _levels_or_save(levels), stats)
 
 
