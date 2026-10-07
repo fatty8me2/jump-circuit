@@ -158,6 +158,8 @@ func show_screen(id: String) -> void:
 			_screen = _settings_screen()
 		"practice":
 			_screen = _practice_screen()
+		"partycpu":
+			_screen = _partycpu_screen()
 		"locker":
 			_screen = _locker_screen()
 		"victory":
@@ -175,7 +177,7 @@ func show_screen(id: String) -> void:
 ## getting a race or party together, the grand reprise once every course is beaten.
 static func screen_music(id: String) -> String:
 	match id:
-		"race", "lobby", "practice":
+		"race", "lobby", "practice", "partycpu":
 			return "lobby"
 		"victory":
 			return "victory"
@@ -199,7 +201,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	match Game.title_screen:
-		"levels", "victory", "update", "practice", "locker":
+		"levels", "victory", "update", "practice", "locker", "partycpu":
 			show_screen("main")
 		"settings":
 			Settings.save_settings()  # same as the panel's Done
@@ -208,6 +210,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			Net.leave()
 			show_screen("main")
 		"lobby":
+			if Net.local_session:
+				Net.leave()
+				show_screen("main")
+				Sfx.play("ui", 0.05, 0.6)
+				get_viewport().set_input_as_handled()
+				return
 			if Net.is_host():
 				return  # a stray Esc must not disband everyone's lobby: use Leave
 			Net.leave()
@@ -281,6 +289,8 @@ func _main_screen() -> Control:
 	box.add_child(race_btn)
 	var practice_btn: Button = UiKit.button(PartyNames.mode_name("practice"), func() -> void: show_screen("practice"), 380)
 	box.add_child(practice_btn)
+	var partycpu_btn: Button = UiKit.button("Party vs CPU", func() -> void: show_screen("partycpu"), 380)
+	box.add_child(partycpu_btn)
 	var locker_btn: Button = UiKit.button("Locker", func() -> void: show_screen("locker"), 380)
 	box.add_child(locker_btn)
 	var settings_btn: Button = UiKit.button("Settings", func() -> void: show_screen("settings"), 380)
@@ -319,7 +329,7 @@ func _main_screen() -> Control:
 		box.add_child(note)
 		box.move_child(note, 1)
 		spacer.queue_free()
-	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn, "practice": practice_btn, "locker": locker_btn}
+	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn, "practice": practice_btn, "locker": locker_btn, "partycpu": partycpu_btn}
 	_focus_pref = openers.get(_prev_screen, play)
 	return _left_column(box)
 
@@ -460,6 +470,13 @@ static func level_medal_text(level_id: String, medal: int, played: bool) -> Stri
 		# a course not yet run still shows what Gold asks for
 		out += "     Gold target %s" % Hud.target_text(Game.medal_target(level_id, 3))
 	return out
+
+
+## Party vs CPU: the solo party-cup setup (mode, CPU count, difficulty, course) - see party/cpu/cpu_menu.gd.
+func _partycpu_screen() -> Control:
+	var built: Dictionary = CpuMenu.build_screen(self)
+	_focus_pref = built["focus"]
+	return _left_column(built["content"], 560)
 
 
 ## Party Practice: pick any unlocked course; the right column lists every power-up.
@@ -886,8 +903,10 @@ func _set_status(text: String) -> void:
 
 func _lobby_screen() -> Control:
 	var box: VBoxContainer = UiKit.vbox(10)
-	box.add_child(UiKit.label("RACE LOBBY", 36, Color.WHITE))
-	if Net.is_host():
+	box.add_child(UiKit.label("PARTY VS CPU" if Net.local_session else "RACE LOBBY", 36, Color.WHITE))
+	if Net.local_session:
+		box.add_child(UiKit.label("Solo Party Cup. Pick the course and start the next round.", 17, UiKit.TEAL))
+	elif Net.is_host():
 		var code_row: HBoxContainer = UiKit.hbox(10)
 		code_row.add_child(UiKit.label("ROOM CODE   %s" % Net.room_code, 23, UiKit.TEAL))
 		var copy_button: Button = UiKit.button("Copy", func() -> void:
@@ -902,6 +921,8 @@ func _lobby_screen() -> Control:
 	if Net.is_host():
 		# game mode: Race (unchanged classic), Party, Team Party
 		var modes: Array[String] = ["race", "party", "team"]
+		if Net.local_session:
+			modes = ["party", "team"]
 		var mode_pick := OptionButton.new()
 		mode_pick.custom_minimum_size = Vector2(0, 46)
 		for m: String in modes:
@@ -909,6 +930,7 @@ func _lobby_screen() -> Control:
 		mode_pick.selected = maxi(modes.find(Net.game_mode), 0)
 		mode_pick.item_selected.connect(func(i: int) -> void: Net.host_set_mode(modes[i]))
 		box.add_child(mode_pick)
+		CpuMenu.add_lobby_controls(box)
 	_mode_label = UiKit.label("", 15, UiKit.SOFT)
 	_mode_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_mode_label.custom_minimum_size = Vector2(520, 0)
@@ -926,8 +948,9 @@ func _lobby_screen() -> Control:
 		_start_button = UiKit.button("Start Race", func() -> void: Net.host_start_race(_lobby_level), 520)
 		box.add_child(_start_button)
 	var leave: Button = UiKit.button("Leave", func() -> void:
+		var solo: bool = Net.local_session
 		Net.leave()
-		show_screen("race"), 520)
+		show_screen("main" if solo else "race"), 520)
 	box.add_child(leave)
 	var p: PanelContainer = UiKit.panel(Vector2(580, 0))
 	p.add_child(box)
@@ -968,9 +991,11 @@ func _refresh_lobby() -> void:
 	for id: int in ids:
 		var e: Dictionary = Net.roster[id]
 		var col: Color = Settings.RACER_COLORS[int(e["color"]) % Settings.RACER_COLORS.size()]
-		var tag: String = "  (host)" if id == 1 else ""
+		var tag: String = "  (host)" if id == 1 and not Net.local_session else ""
 		if id == Net.my_id():
 			tag += "  (you)"
+		if bool(e.get("cpu", false)):
+			tag += "  (CPU)"
 		var last: String = ""
 		if float(e.get("finished", -1.0)) >= 0.0 and mode == "race":
 			last = "     last race %s" % SaveData.format_time(float(e["finished"]))
