@@ -23,6 +23,9 @@ const LEAFG := Color(0.4, 0.66, 0.24)
 const CREAM := Color(0.97, 0.92, 0.8)
 const GOLD := Color(1.0, 0.82, 0.3)
 
+## Speed (m/s) a runner carries off the end of the dew-leaf slide (measured with the bot).
+const SLIDE_SPEED: float = 14.0
+
 ## The forest floor, far below the course (a fall is called well before the player reaches it).
 const GROUND_Y: float = -13.0
 
@@ -280,7 +283,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -393,6 +396,251 @@ func _stage_3() -> Vector3:
 	r_checkpoint()
 	return cp["c"]
 
+
+# ---- shared dressing and machine helpers --------------------------------------------------------------
+
+## Fork signpost: two wooden posts with a glowing toadstool on each and a strip on the floor in the route's colour.
+func _sign(p: Vector3, col: Color) -> void:
+	for sx: float in [-1.0, 1.0]:
+		add_child(Look.cylinder(0.07, 1.6, Look.flat(Color(0.5, 0.34, 0.2), 0.9), _w(p + Vector3(sx * 1.1, 0.8, 0)), 0.06, 8))
+		var cap := Look.sphere(0.28, Look.flat(col, 0.5, 0.0, 0.6), _w(p + Vector3(sx * 1.1, 1.7, 0)))
+		cap.scale = Vector3(1.0, 0.6, 1.0)
+		cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(cap)
+	kit.glow_strip(_w(p + Vector3(0, 0.03, -0.5)), _sz(Vector3(1.2, 0.05, 0.25)), col)
+
+
+## A dewdrop: hangs over local floor point `c`. `hit` = the course time (relative to the bot's start)
+## at which the drop should become deadly; the phase is set from it.
+func _drip(c: Vector3, height: float, period: float, hit: float) -> FungalDrip:
+	var d := FungalDrip.new()
+	d.drop_height = height
+	d.period = period
+	var c0: float = d.swell + d.fall_time() * 0.88
+	d.phase = fposmod((c0 - hit) / period, 1.0)
+	d.position = _w(c)
+	add_child(d)
+	return d
+
+
+## True when none of the listed drops is deadly over its window: [[drip, from, to], ...] (seconds from now).
+static func _drips_ok(spec: Array) -> bool:
+	for e: Array in spec:
+		if not (e[0] as FungalDrip).clear_over(Game.course_time, float(e[1]), float(e[2])):
+			return false
+	return true
+
+
+## Re-skin a SurfacePlatform's slick sheet as a dew-covered leaf (glossy green, water sheen).
+func _dew_leaf(sp: SurfacePlatform) -> void:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.42, 0.74, 0.34)
+	mat.roughness = 0.06
+	mat.metallic = 0.1
+	mat.metallic_specular = 0.9
+	mat.rim_enabled = true
+	mat.rim = 0.5
+	mat.emission_enabled = true
+	mat.emission = Color(0.5, 0.9, 0.6)
+	mat.emission_energy_multiplier = 0.15
+	for c: Node in sp.get_children():
+		if c is MeshInstance3D:
+			(c as MeshInstance3D).material_override = mat
+			break
+	# a pale midrib down the sheet, and water beads
+	var rib := Look.box(Vector3(0.1, 0.03, sp.size.z * 0.98), Look.flat(Color(0.75, 0.92, 0.6), 0.4), Vector3(0, sp.size.y * 0.5 + 0.02, 0))
+	rib.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sp.add_child(rib)
+	for i: int in 6:
+		var bead := Look.sphere(0.12, Look.flat(Color(0.8, 0.95, 1.0, 0.8), 0.05, 0.0, 0.3), Vector3(kit.rng.randf_range(-1.0, 1.0), sp.size.y * 0.5 + 0.03, (float(i) / 5.0 - 0.5) * sp.size.z * 0.9))
+		bead.scale = Vector3(1.0, 0.4, 1.0)
+		bead.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		sp.add_child(bead)
+
+
+## Solve the launch speed (12..26) whose bounce comes down `dist` m ahead on a surface `dy` higher.
+func _solve_strength(dy: float, dist: float) -> float:
+	var lo: float = 12.0
+	var hi: float = 26.0
+	for i: int in 24:
+		var mid: float = (lo + hi) * 0.5
+		if _pad_reach(mid, dy) < dist:
+			lo = mid
+		else:
+			hi = mid
+	return (lo + hi) * 0.5
+
+
+# ---- stage 4: Dewdrop Valley (BRANCH) - the dew-leaf slide | stepping leaves under dripping dew -------
+# [shortcut: two springcaps down the middle]
+
+func _stage_4() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.78, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	# LEFT: a slide down a wet leaf, a jump off its lip onto a plank, then up to the merge
+	var pitch: float = -20.0
+	var slide_len: float = 12.0
+	var drop: float = slide_len * sin(deg_to_rad(-pitch))
+	var run: float = slide_len * cos(deg_to_rad(-pitch))
+	var sx: float = -3.5
+	var dew: SurfacePlatform = kit.slick(_w(Vector3(sx, -0.05 - drop * 0.5, f0 - 0.1 - run * 0.5)), Vector3(2.8, 0.4, slide_len), _yaw, pitch)
+	_dew_leaf(dew)
+	var lip_y: float = -0.05 - drop
+	var lip_z: float = f0 - 0.1 - run
+	var v_lip: float = SLIDE_SPEED
+	var lp: Vector3 = Ballistics.landing_point(_tuning, Vector3.ZERO, Vector3(0, _tuning.jump_velocity, -v_lip), -0.6)
+	var gap: float = 0.62 * absf(lp.z) - 0.75
+	var plank_len: float = 5.0
+	var plank: Dictionary = _blk(Vector3(sx, lip_y - 0.6, lip_z - gap - plank_len * 0.5), 3.0, plank_len, "alt", 0.8)
+	var mc: Vector3 = _ahead(plank, 0.74, 1.25, 3.0, -sx)
+	var merge: Dictionary = _blk(mc, 11.0, 3.0)
+	# RIGHT: three stepping platforms (cap, leaf, cap) down to the merge, dew dripping on the last two
+	var t_total: float = f0 - (mc.z + 1.5)
+	var dia: Array[float] = [2.2, 2.6, 2.2]
+	var gap_r: float = (t_total - 7.0) / 4.0
+	var steps: Array[Dictionary] = []
+	var zc: float = f0
+	for i: int in 3:
+		var cz: float = zc - gap_r - dia[i] * 0.5
+		var cc := Vector3(3.5, -0.875 * float(i + 1), cz)
+		match i:
+			0:
+				steps.append(_cap_plat(cc, dia[i] * 0.5, ORANGE))
+			1:
+				steps.append(_leaf_plat(cc, dia[i] * 0.5))
+			_:
+				steps.append(_cap_plat(cc, dia[i] * 0.5, PINKCAP))
+		zc = cz - dia[i] * 0.5
+	print("S4 t_total ", t_total, " gap_r ", gap_r, " pct ", (gap_r + 0.75) / _reach(-0.875), " slide gap ", gap, " mc ", mc)
+	var arrive: Array[float] = [1.0, 1.9, 2.9]
+	var d1: FungalDrip = _drip((steps[1]["c"] as Vector3), 7.0, 5.5, arrive[1] + 2.7)
+	var d2: FungalDrip = _drip((steps[2]["c"] as Vector3), 7.0, 5.5, arrive[2] + 2.7)
+	# SHORTCUT: springcap A on the fork's front, springcap B halfway, both bounce down the middle
+	var a_c: Vector3 = _ahead(_area(fc, 5.5, 1.5), 0.74, 0.0, 3.2)
+	var b_z: float = (a_c.z + mc.z) * 0.5
+	var b_c := Vector3(0.0, a_c.y - 1.5, b_z)
+	var s_ab: float = _solve_strength(-1.5, a_c.z - b_z)
+	var s_bm: float = _solve_strength(mc.y - b_c.y, b_z - mc.z)
+	var cap_a: FungalCap = _spring_cap(a_c, 1.6, RED)
+	cap_a.high = s_ab
+	cap_a.low = s_ab - 7.0
+	var cap_b: FungalCap = _spring_cap(b_c, 1.6, YELLOW)
+	cap_b.high = s_bm
+	cap_b.low = s_bm - 7.0
+	var cp: Dictionary = _cp(_ahead(merge, 0.76, 0.0, 5.0))
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 2:
+		r_walk(_w(Vector3(0, 0, fc.z + 0.2)))
+		_hop(_area(fc, 5.5, 1.5), _area(a_c, 1.6, 1.6))
+		r_pad(_w(a_c), _w(b_c))
+		r_pad(_w(b_c), _w(mc))
+	elif route_variant == 1:
+		r_walk(_w(Vector3(sx, 0, fc.z + 0.4)))
+		r_walk(_w(Vector3(sx, 0, f0 - 1.2)))
+		r_jump(_w(Vector3(sx, lip_y, lip_z + 0.35)), _w((plank["c"] as Vector3) + Vector3(0, 0, plank_len * 0.5 - 1.0)))
+		route[route.size() - 1]["speed"] = v_lip
+		r_walk(_w(Vector3(sx, lip_y - 0.6, (plank["c"] as Vector3).z - plank_len * 0.5 + 0.8)))
+		_hop(plank, merge, Vector3(sx, 0, 0.6))
+	else:
+		r_walk(_w(Vector3(3.5, 0, fc.z + 0.4)))
+		_wait(func() -> bool: return _drips_ok([[d1, arrive[1] - 0.5, arrive[1] + 0.7 + 1.5], [d2, arrive[2] - 0.5, arrive[2] + 0.7 + 1.5]]),
+			_w(Vector3(3.5, 0, fc.z + 0.4)))
+		var prev: Dictionary = _area(Vector3(3.5, 0, fc.z), 1.5, 1.5)
+		for st: Dictionary in steps:
+			_hop(prev, st)
+			prev = st
+		_hop(prev, merge, Vector3(3.5, 0, 0.6))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	_sign(Vector3(sx, 0, fc.z + 1.2), ORANGE)
+	_sign(Vector3(3.5, 0, fc.z + 1.2), Color(0.5, 0.7, 1.0))
+	_sign(Vector3(0, 0, fc.z + 1.2), GOLD)
+	return cp["c"]
+
+
+# ---- stage 5: Snail Ferry - ride the snail across the stream ------------------------------------------------
+
+func _stage_5() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var d1: Dictionary = _blk(_ahead(cp0, 0.76, 0.0, 4.0), 4.0, 4.0, "alt", 0.8)
+	var dc: Vector3 = d1["c"]
+	var travel: float = 22.0
+	var snail := FungalSnail.new()
+	snail.size = Vector3(2.8, 0.4, 2.8)
+	var pts: Array[Vector3] = [Vector3.ZERO, _d(Vector3(0, 0, -travel))]
+	snail.points = pts
+	snail.period = 16.0
+	snail.dwell = 0.12
+	var start := Vector3(dc.x, dc.y, dc.z - 2.0 - 1.4 - 1.4)
+	snail.position = _w(start) - Vector3(0, 0.2, 0)
+	add_child(snail)
+	var d2c := Vector3(dc.x, dc.y, start.z - travel - 1.4 - 1.4 - 2.0)
+	var d2: Dictionary = _blk(d2c, 4.0, 4.0, "alt", 0.8)
+	var cp: Dictionary = _cp(_ahead(d2, 0.76, 0.0, 5.0))
+	_hop(cp0, d1)
+	r_walk(_w(Vector3(dc.x, dc.y, dc.z - 0.2)))
+	route.append({"kind": "candy_board", "from": _w(Vector3(dc.x, dc.y, dc.z - 1.5)), "cars": [snail], "reach": 3.4, "lead": 0.45, "local": Vector3(0, 0.1, 0)})
+	var end_w: Vector3 = _w(start + Vector3(0, 0, -travel))
+	route.append({"kind": "candy_ride", "stand": Vector3(0, 0.1, 0), "to": _w(d2c), "until": func() -> bool:
+		return Vector2(snail.global_position.x - end_w.x, snail.global_position.z - end_w.z).length() < 0.35})
+	r_walk(_w(Vector3(d2c.x, d2c.y, d2c.z - 1.0)))
+	_hop(d2, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	# the twig the snail crawls along, over the stream
+	var twig_len: float = travel + 8.0
+	var twig_mid: Vector3 = _w(Vector3(dc.x, start.y - 2.4, start.z - travel * 0.5))
+	deco.fallen_log(twig_mid - Vector3(0, 0.55, 0), twig_len, 0.55, deg_to_rad(_yaw) + PI * 0.5)
+	return cp["c"]
+
+
+# ---- stage 6: Spore Lift - the puffball lifts you on a cloud of spores, twice ---------------------------------
+
+## A puffball shelf at local ground point `c` (its walkable top is at c): the column rises from its middle.
+func _puff(c: Vector3, height: float = 9.0, period: float = 8.0, phase: float = 0.0) -> FungalPuff:
+	var p := FungalPuff.new()
+	p.height = height
+	p.period = period
+	p.phase = phase
+	p.position = _w(c)
+	add_child(p)
+	var r: float = p.radius + p.shelf
+	_floors.append({"top": _w(c), "size": Vector3(r * 2.0, 0, r * 2.0), "drop": 0.5, "kind": 0})
+	return p
+
+
+func _stage_6() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var pr: float = 3.0
+	var pf1_c: Vector3 = _ahead(cp0, 0.74, 0.0, pr * 2.0)
+	var pf1: FungalPuff = _puff(pf1_c, 9.0, 8.0, 0.0)
+	var ledge_a: Dictionary = _blk(Vector3(pf1_c.x, pf1_c.y + 8.0, pf1_c.z - pr - 1.2 - 2.5), 5.0, 5.0, "alt", 0.8)
+	var la: Vector3 = ledge_a["c"]
+	var pf2_c: Vector3 = _ahead(ledge_a, 0.76, 0.0, pr * 2.0)
+	var pf2: FungalPuff = _puff(pf2_c, 9.0, 8.0, 0.5)
+	var cp_c := Vector3(pf2_c.x, pf2_c.y + 7.0, pf2_c.z - pr - 1.2 - 2.5)
+	var cp: Dictionary = _cp(cp_c)
+	_hop(cp0, _area(pf1_c, pr, pr))
+	_lift(pf1, pf1_c, pr, la, 8.4)
+	r_walk(_w(Vector3(la.x, la.y, la.z - 0.5)))
+	_hop(ledge_a, _area(pf2_c, pr, pr))
+	_lift(pf2, pf2_c, pr, cp_c, 7.4)
+	r_checkpoint()
+	return cp["c"]
+
+
+## Bot: stand off to the side of the column on the shelf until the puffball will keep blowing long enough,
+## step in, ride the spores up above `above` and fly onto the ledge centre `to`.
+func _lift(pf: FungalPuff, c: Vector3, shelf_r: float, to: Vector3, above: float) -> void:
+	var stand: Vector3 = _w(Vector3(c.x + (shelf_r - 0.5), c.y, c.z + 0.3))
+	var mid: Vector3 = _w(c)
+	r_walk(stand)
+	_wait(func() -> bool: return pf.on_over(Game.course_time, 0.5, 4.0), stand)
+	r_walk(mid)
+	var top_y: float = _w(Vector3(0, c.y + above, 0)).y
+	route.append({"kind": "desert_fly", "to": mid, "until": func() -> bool: return player.global_position.y > top_y})
+	route.append({"kind": "desert_fly", "to": _w(to)})
 
 # @@STAGES@@
 
@@ -596,3 +844,16 @@ func _finish_sequence() -> void:
 	# SOUND: fungal_finish - the great toadstool blooms: a rising chime and a puff of spores
 	WorldAudio.at(self, "fungal_finish", _finish_pos + Vector3(0, 3.0, 0), 1.0, 120.0)
 	await get_tree().create_timer(0.9).timeout
+
+
+# ---- temporary debugging ----------------------------------------------------------------------------
+
+const DEBUG_JUMPS: bool = true
+var _dbg_connected: bool = false
+
+
+func _process(_dt: float) -> void:
+	if DEBUG_JUMPS and player != null and not _dbg_connected:
+		_dbg_connected = true
+		player_failed.connect(func(cause: String) -> void: print("FAIL ", cause, " t=", snappedf(Game.course_time, 0.01), " at ", player.global_position.snapped(Vector3.ONE * 0.01)))
+		player.jumped.connect(func() -> void: print("JUMP t=", snappedf(Game.course_time, 0.01), " at ", player.global_position.snapped(Vector3.ONE * 0.01), " hspeed ", snappedf(player.horizontal_speed(), 0.01)))

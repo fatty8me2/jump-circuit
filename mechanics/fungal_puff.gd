@@ -16,6 +16,8 @@ extends Area3D
 @export var warn: float = 1.1
 @export var lift: float = 66.0
 @export var max_rise: float = 9.0
+## The walkable shelf round the column's footprint (metres beyond `radius`).
+@export var shelf: float = 1.4
 
 var _ball: Node3D
 var _ball_mat: StandardMaterial3D
@@ -136,7 +138,7 @@ func _build_visual() -> void:
 	floor_body.collision_layer = 1
 	floor_body.collision_mask = 0
 	var fshape := CylinderShape3D.new()
-	fshape.radius = radius + 0.5
+	fshape.radius = radius + shelf
 	fshape.height = 0.5
 	var fcs := CollisionShape3D.new()
 	fcs.shape = fshape
@@ -144,13 +146,13 @@ func _build_visual() -> void:
 	floor_body.position = Vector3(0, -0.25, 0)
 	add_child(floor_body)
 	var tan_mat: StandardMaterial3D = Look.flat(Color(0.93, 0.84, 0.62), 0.9)
-	floor_body.add_child(Look.cylinder(radius + 0.5, 0.5, tan_mat, Vector3.ZERO, radius + 0.35, 28))
-	floor_body.add_child(Look.cylinder(radius + 0.2, 1.4, Look.flat(Color(0.78, 0.66, 0.46), 0.9), Vector3(0, -0.95, 0), radius * 0.4, 20))
+	floor_body.add_child(Look.cylinder(radius + shelf, 0.5, tan_mat, Vector3.ZERO, radius + shelf - 0.15, 28))
+	floor_body.add_child(Look.cylinder(radius + shelf - 0.3, 1.4, Look.flat(Color(0.78, 0.66, 0.46), 0.9), Vector3(0, -0.95, 0), radius * 0.4, 20))
 	var ray_mat: StandardMaterial3D = Look.flat(Color(0.8, 0.66, 0.42), 0.9)
 	for i: int in 8:
-		var ray := Look.box(Vector3(radius + 0.2, 0.02, 0.22), ray_mat, Vector3(0, 0.26, 0))
+		var ray := Look.box(Vector3(radius + shelf - 0.3, 0.02, 0.22), ray_mat, Vector3(0, 0.26, 0))
 		ray.rotation.y = TAU * float(i) / 8.0
-		ray.position = Vector3(cos(ray.rotation.y), 0.0, -sin(ray.rotation.y)) * (radius + 0.2) * 0.5 + Vector3(0, 0.26, 0)
+		ray.position = Vector3(cos(ray.rotation.y), 0.0, -sin(ray.rotation.y)) * (radius + shelf - 0.3) * 0.5 + Vector3(0, 0.26, 0)
 		ray.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		floor_body.add_child(ray)
 	# the lip of moss round the edge
