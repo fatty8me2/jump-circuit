@@ -20,6 +20,10 @@ const EMOTE_LEN: Dictionary = {
 const POSE_LEN: Dictionary = {
 	"cheer": 3.4, "strongman": 3.4, "salute": 3.4, "hero": 3.4, "dab": 3.4, "rockstar": 3.4,
 }
+## Characters whose wide robe or skirt would dig into the floor when the torso pitches or rolls
+## (the Wizard's hem): their torso tilt is scaled down.
+const TILT_SCALE: Dictionary = {"wizard": 0.35}
+
 ## Small particle puffs: id -> [[time, type], ...]; type is "stars", "dust" or "sparks".
 const PUFFS: Dictionary = {
 	"thumbsup": [[0.35, "stars"]], "dance": [[1.0, "stars"]], "flex": [[0.5, "stars"]],
