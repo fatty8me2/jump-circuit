@@ -85,7 +85,7 @@ func set_open(on: bool) -> void:
 	_root.visible = on
 	if not on:
 		_click_guard_until = 0
-	if not Game.race_mode:
+	if not Game.race_mode or Net.local_session:   # (a solo Party vs CPU round really pauses)
 		get_tree().paused = on
 		Sfx.muffle(on)
 	level.player.control_enabled = (not on) and (not level.finished) and (not Game.race_mode or Game.course_time >= 0.0)
@@ -108,7 +108,7 @@ func _clear() -> void:
 func _show_menu(focus_settings: bool = false) -> void:
 	_clear()
 	var box: VBoxContainer = UiKit.vbox(10)
-	box.add_child(UiKit.label("PAUSED" if not Game.race_mode else "MENU (race continues)", 30, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(UiKit.label("PAUSED" if not Game.race_mode or Net.local_session else "MENU (race continues)", 30, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER))
 	box.add_child(UiKit.label(str(Game.level_info()["name"]), 18, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER))
 	var resume: Button = UiKit.button("Resume", func() -> void: set_open(false))
 	box.add_child(resume)

@@ -299,6 +299,9 @@ func fixed_action_for(event: InputEvent) -> String:
 
 func _physics_process(dt: float) -> void:
 	if race_mode:
+		if Net.local_session and get_tree().paused:
+			Net.race_start_time += dt   # solo Party vs CPU: the paused race clock stands still
+			return
 		_advance_race_clock(dt)
 	elif course_running and not get_tree().paused:
 		course_time += dt
