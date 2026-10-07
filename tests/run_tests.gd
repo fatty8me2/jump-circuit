@@ -3985,13 +3985,15 @@ func test_zm_catalogue_and_kinds() -> void:
 	check(Cosmetics.ids("character") == ["volt", "knight", "ninja", "astronaut", "dino", "skeleton", "catbot", "outlaw", "cyber", "golden", "wizard", "pirate", "yeti", "robopup", "pixel"], "characters: %s" % [Cosmetics.ids("character")])
 	check(Cosmetics.ids("paint") == ["white", "chrome", "camo", "lava", "galaxy", "candy", "ghost", "neon", "goldleaf", "pixel", "marble", "toxic", "aurora", "stained"], "paints: %s" % [Cosmetics.ids("paint")])
 	check(Cosmetics.ids("title") == ["rookie", "globetrotter", "speed_demon", "gold_rush", "flawless", "lap_king", "marathoner"], "titles: %s" % [Cosmetics.ids("title")])
-	# one hat per world, for Silver on it
+	# one hat per world, for Silver on it (Gold medal hats are checked separately)
 	var worlds: Dictionary = {}
 	for id: String in Cosmetics.ids("hat"):
 		var r: Dictionary = Cosmetics.catalogue("hat")[id]["rule"]
-		if r["type"] == "medal":
-			check(int(r["tier"]) == 2 and not worlds.has(r["level"]), "hat %s: Silver on %s" % [id, r["level"]])
+		if r["type"] == "medal" and int(r["tier"]) == 2:
+			check(not worlds.has(r["level"]), "hat %s: Silver on %s" % [id, r["level"]])
 			worlds[r["level"]] = id
+		elif r["type"] == "medal":
+			check(int(r["tier"]) == 3 and not Game.level_by_id(str(r["level"])).is_empty(), "hat %s: a Gold medal hat on %s" % [id, r["level"]])
 	for info: Dictionary in Game.LEVELS:
 		check(worlds.has(info["id"]), "%s has its own Silver hat" % info["name"])
 	check(worlds.size() == Game.LEVELS.size(), "%d world hats for %d worlds" % [worlds.size(), Game.LEVELS.size()])
