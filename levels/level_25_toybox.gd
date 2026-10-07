@@ -139,16 +139,27 @@ func _reach(dy: float) -> float:
 	return absf(land.z)
 
 
+## How far the near edge of a landing lies past the takeoff's front edge (less the 0.35 m inset) when
+## the jump needs `pct` of max reach by test_m's measure (to 0.4 m past the near edge, scanned in
+## 0.2 m steps: rounded up, so it needs `pct` to `pct` + 3%).
+func _e(pct: float, dy: float) -> float:
+	var m: float = pct * _reach(dy)
+	var k: int = ceili((m - 0.4) / 0.2 - 0.001)
+	return float(k) * 0.2 - 0.03
+
+
 ## Local top centre of a landing `sz` deep straight ahead (-z) of `a`, placed so that the jump from
-## 0.35 m inside a's front edge needs `pct` of max reach by test_m's measure (to 0.4 m past the near
-## edge, scanned in 0.2 m steps: rounded up, so it needs `pct` to `pct` + 3%).
+## 0.35 m inside a's front edge needs `pct` of max reach (see _e).
 func _ahead(a: Dictionary, pct: float, dy: float, sz: float, dx: float = 0.0) -> Vector3:
 	var ac: Vector3 = a["c"]
 	var front: float = ac.z - float(a["hz"])
-	var m: float = pct * _reach(dy)
-	var k: int = ceili((m - 0.4) / 0.2 - 0.001)
-	var e: float = float(k) * 0.2 - 0.03
-	return Vector3(ac.x + dx, ac.y + dy, front + 0.35 - e - sz * 0.5)
+	return Vector3(ac.x + dx, ac.y + dy, front + 0.35 - _e(pct, dy) - sz * 0.5)
+
+
+## The mirror image of _ahead: the z of the centre of a block `depth` deep whose front edge sits so that
+## the jump from it onto a landing whose near edge is at z `near_z` (landing `dy` higher) needs `pct`.
+func _behind(near_z: float, pct: float, dy: float, depth: float) -> float:
+	return near_z - 0.35 + _e(pct, dy) + depth * 0.5
 
 
 ## Checkpoint slab facing the next stage's heading (_next_yaw).
@@ -232,7 +243,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -376,6 +387,264 @@ func _stage_3() -> Vector3:
 	return cp["c"]
 
 
+# ---- machine helpers --------------------------------------------------------------------------------
+
+## Seconds until a piston next starts to punch (its ram is out from 0.45 of the cycle).
+static func _until_punch(p: Piston, t: float) -> float:
+	return fposmod(0.45 - fposmod(t / p.period + p.phase, 1.0), 1.0) * p.period
+
+
+## Seconds until a press next slams (it falls at 0.5 of the cycle).
+static func _until_slam(c: Crusher, t: float) -> float:
+	return fposmod(0.50 - fposmod(t / c.period + c.phase, 1.0), 1.0) * c.period
+
+
+## A toy warning lamp at local `at` that counts down `left(course_time)` (seconds to the hazard).
+func _tell(at: Vector3, left: Callable, stem: float = 0.0) -> void:
+	var t := ToyboxTell.new()
+	t.left = left
+	t.stem = stem
+	t.position = _w(at)
+	add_child(t)
+
+
+## A toy laser pointer beam across local x between two posts (centre `c`), with a 1.0 s guide flicker
+## before it fires and a warning lamp beside the left post.
+func _laser(c: Vector3, period: float, on: float, phase: float) -> LaserGate:
+	var g: LaserGate = kit.laser(_w(c), Vector3(3.2, 2.4, 0.2), period, on, phase, _yaw)
+	g.warn = 1.0
+	_dress_laser(g)
+	_tell(c + Vector3(-2.6, 1.0, 0.0), func(tm: float) -> float: return g.time_until_on(tm), 1.0)
+	return g
+
+
+## A boxing glove on a spring: the piston, dressed. `top` is the ram's top centre when shut; it punches
+## toward local +x (across a beam to its right).
+func _glove(top: Vector3, period: float, phase: float) -> Piston:
+	var size := Vector3(1.6, 1.3, 1.2)
+	var p: Piston = kit.piston(_w(top), size, _yaw - 90.0, 2.6, period, phase, 10.0)
+	_dress_glove(_w(top), size, 2.6, _yaw - 90.0)
+	_glove_visual(p)
+	_tell(top + Vector3(-1.1, 1.9, 0.0), func(tm: float) -> float: return _until_punch(p, tm), 0.9)
+	return p
+
+
+## A giant dice that slams down: the crusher, dressed.
+func _die(floor_c: Vector3, size: Vector3, lift: float, period: float, phase: float) -> Crusher:
+	var c: Crusher = kit.crusher(_w(floor_c), size, lift, period, phase, _yaw)
+	_dress_die(c)
+	_tell(floor_c + Vector3(size.x * 0.5 + 0.9, lift + size.y + 0.4, 0.0), func(tm: float) -> float: return _until_slam(c, tm), 0.8)
+	return c
+
+
+# ---- stage 4: Tower Bridge (BRANCH) - the block tower topples across the gap | wall run and mantle ----
+# [shortcut: a stepping block in the middle of the gap]
+
+## A block tower hinged at local `hinge` (the top edge of the platform you cross from); flat, it
+## bridges `length` m toward local -Z.
+func _tower(hinge: Vector3, length: float, phase_s: float) -> ToyboxTower:
+	var t := ToyboxTower.new()
+	t.length = length
+	t.phase = phase_s
+	t.rotation.y = deg_to_rad(_yaw)
+	t.position = _w(hinge)
+	add_child(t)
+	_floors.append({"top": _w(hinge + Vector3(0, 0, -length * 0.5)), "size": _sz(Vector3(t.width, 0, length)), "drop": t.thickness, "tower": true})
+	return t
+
+
+## True when the tower lies flat as a bridge over all of [now + a, now + b].
+static func _bridge_ok(t: ToyboxTower, a: float, b: float) -> bool:
+	return t.flat_over(Game.course_time, a, b)
+
+
+func _stage_4() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.78, 0.0, 3.2), 11.0, 3.2)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.6
+	var fork_area: Dictionary = _area(fc, 5.5, 1.6)
+	# LEFT (blue): the block tower topples across a 9 m gap to a dock, then two blocks, then the merge
+	var tlen: float = 9.0
+	var tower: ToyboxTower = _tower(Vector3(-3.5, 0, f0), tlen, 0.0)
+	var dock: Dictionary = _blk(Vector3(-3.5, 0, f0 - tlen - 1.4), 2.8, 2.8, "main", 0.8)
+	var q1: Dictionary = _post(_ahead(dock, 0.80, 0.0, 2.0, 0.4), 2.0, 2.0)
+	var q2: Dictionary = _post(_ahead(q1, 0.82, 0.6, 2.0, -0.4), 2.0, 2.0)
+	var q2c: Vector3 = q2["c"]
+	var mc: Vector3 = _ahead(q2, 0.82, 0.0, 3.2, -q2c.x)
+	var merge: Dictionary = _blk(Vector3(0, mc.y, mc.z), 11.0, 3.2)
+	# RIGHT (yellow): wall run the bed rail over the void, a block, MANTLE the pillow stack, drop to the merge
+	kit.wallrun(_w(Vector3(5.7, 1.2, f0 - 9.0)), Vector3(15.0, 6.5, 0.6), _yaw + 90.0)
+	_post(Vector3(3.6, 0.0, f0 - 19.6), 2.0, 2.0)
+	var case_top := Vector3(3.6, 3.3, f0 - 19.6 - 1.0 - 1.6 - 0.8)
+	var pillow: Dictionary = _ledge(case_top, Vector3(2.6, 9.0, 1.6))
+	# SHORTCUT: a stepping block in the middle of the gap - one 92% leap, then an easy hop to the dock
+	var b1: Dictionary = _post(_ahead(_area(Vector3(0.2, 0, fc.z), 1.5, 1.6), 0.92, 0.0, 1.8), 1.8, 1.8, "accent")
+	var cp: Dictionary = _cp(_ahead(merge, 0.82, 0.0, 5.0))
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant != 1:
+		if route_variant == 2:
+			r_walk(_w(Vector3(0.2, 0, fc.z)))
+			_hop(fork_area, b1)
+			_hop(b1, dock)
+		else:
+			r_walk(_w(Vector3(-3.5, 0, f0 + 0.6)))
+			_wait(func() -> bool: return _bridge_ok(tower, 0.0, 3.6), _w(Vector3(-3.5, 0, f0 + 0.6)))
+			r_walk(_w(Vector3(-3.5, 0, f0 - tlen - 0.9)))
+		_hop(dock, q1)
+		_hop(q1, q2)
+		_hop(q2, merge, Vector3(q2c.x, 0, 0.6))
+	else:
+		r_walk(_w(Vector3(3.6, 0, fc.z + 0.6)))
+		r_wallrun(_w(Vector3(4.0, 0, f0 + 0.35)), _w(Vector3(5.2, 1.4, f0 - 3.4)), _w(Vector3(5.2, 1.4, f0 - 12.6)), _w(Vector3(3.6, 0, f0 - 19.4)))
+		r_mantle(_w(Vector3(3.6, 0, f0 - 19.6 - 0.65)), _w(case_top + Vector3(0, 0, 0.2)))
+		_hop(pillow, merge, Vector3(3.6, 0, 0.6))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 5: Crayon Beams - a long crayon under two toy laser pointers --------------------------------
+
+func _stage_5() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _post(_ahead(cp0, 0.80, 0.0, 2.0), 2.0, 2.0)
+	var blen: float = 14.0
+	var beam: Dictionary = _blk(_ahead(p1, 0.82, 0.0, blen), 1.6, blen, "alt", 0.6)
+	var bc: Vector3 = beam["c"]
+	var near: float = bc.z + blen * 0.5
+	var l1: LaserGate = _laser(Vector3(bc.x, bc.y + 1.2, near - 5.0), 6.0, 0.25, 0.0)
+	var l2: LaserGate = _laser(Vector3(bc.x, bc.y + 1.2, near - 8.0), 6.0, 0.25, 0.0)
+	var p2: Dictionary = _post(_ahead(beam, 0.84, 0.6, 2.0), 2.0, 2.0)
+	var cp: Dictionary = _cp(_ahead(p2, 0.82, 0.0, 5.0))
+	_hop(cp0, p1)
+	_hop(p1, beam, Vector3(0, 0, blen * 0.5 - 0.8))
+	var hold: Vector3 = _w(Vector3(bc.x, bc.y, near - 2.4))
+	r_walk(hold)
+	_wait(func() -> bool: return _dark(l1, 0.1, 0.9 + 1.5) and _dark(l2, 0.8, 1.5 + 1.5), hold)
+	r_walk(_w(Vector3(bc.x, bc.y, bc.z - blen * 0.5 + 0.9)))
+	_hop(beam, p2)
+	_hop(p2, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 6: Spinning Tops - ride two big tops across the rug ----------------------------------------
+
+## A spinning top you stand on: a round disc turning about its centre (top surface at local `c`).
+func _top(c: Vector3, radius: float, period: float, phase_t: float) -> RotatingPlatform:
+	var arms: Array[Dictionary] = []
+	var r: RotatingPlatform = kit.spinner(_w(c), period, arms, radius, phase_t, 0.5)
+	return r
+
+
+func _stage_6() -> Vector3:
+	var rad: float = 3.0
+	var t1c: Vector3 = Vector3(0, 0, -2.5 - 3.4 - rad)
+	_top(t1c, rad, 8.0, 0.0)
+	var mid: Dictionary = _blk(Vector3(0, 0, t1c.z - rad - 3.2 - 1.4), 2.8, 2.8, "main", 0.8)
+	var mcz: float = (mid["c"] as Vector3).z
+	var t2c: Vector3 = Vector3(0, 0, mcz - 1.4 - 3.2 - rad)
+	_top(t2c, rad, -8.0, 0.5)
+	var cp: Dictionary = _cp(Vector3(0, 0, t2c.z - rad - 3.2 - 2.5))
+	# onto the first top (a metre inside its rim), walk to its far rim, jump to the block; again for the second
+	r_jump(_w(Vector3(0, 0, -2.15)), _w(t1c + Vector3(0, 0, 2.0)))
+	r_walk(_w(t1c + Vector3(0, 0, -2.3)))
+	r_jump(_w(t1c + Vector3(0, 0, -2.3)), _w(Vector3(0, 0, mcz)))
+	r_jump(_w(Vector3(0, 0, mcz - 1.05)), _w(t2c + Vector3(0, 0, 2.0)))
+	r_walk(_w(t2c + Vector3(0, 0, -2.3)))
+	r_jump(_w(t2c + Vector3(0, 0, -2.3)), _w((cp["c"] as Vector3) + Vector3(0, 0, 1.5)))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 7: Jack Shelf - a jack-in-the-box throws you up onto the dollhouse, mantle its roof -----------
+
+## A jack-in-the-box whose cushion (at rest) is at local `c`; `launch` is in the stage's frame.
+func _jack(c: Vector3, period: float, phase_t: float, launch: Vector3, tint: Color) -> ToyboxJack:
+	var j := ToyboxJack.new()
+	j.period = period
+	j.phase = phase_t
+	j.launch = launch
+	j.tint = tint
+	j.rotation.y = deg_to_rad(_yaw)
+	j.position = _w(c)
+	add_child(j)
+	_floors.append({"top": _w(c), "size": _sz(Vector3(2.6, 0, 2.6)), "drop": 1.6})
+	return j
+
+
+func _stage_7() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var jc: Vector3 = _ahead(cp0, 0.78, 0.0, 2.6)
+	var jack: ToyboxJack = _jack(jc, 4.5, 0.0, Vector3(0, 20.5, -3.0), BLUE)
+	var ja: Dictionary = _area(jc, 1.3, 1.3)
+	var shelf: Dictionary = _blk(Vector3(jc.x, 5.0, jc.z - 1.3 - 2.0 - 2.5), 5.0, 5.0, "main", 1.0)
+	var sc: Vector3 = shelf["c"]
+	var roof_top := Vector3(sc.x, 5.0 + 3.3, sc.z - 2.5 - 1.6 - 0.8)
+	var roof: Dictionary = _ledge(roof_top, Vector3(3.4, 9.0, 1.6))
+	var cp: Dictionary = _cp(_ahead(roof, 0.80, 0.0, 5.0, -jc.x))
+	_wait(func() -> bool: return _resting(jack, 0.0, 2.0))
+	_hop(cp0, ja)
+	_kick(jc, Vector3(sc.x, 5.0, sc.z + 1.2))
+	r_walk(_w(Vector3(sc.x, 5.0, sc.z - 1.6)))
+	r_mantle(_w(Vector3(sc.x, 5.0, sc.z - 2.5 + 0.35)), _w(roof_top + Vector3(0, 0, 0.2)))
+	_hop(roof, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 8: Glove Alley (BRANCH) - boxing gloves over the beam | the cardboard-tube portal ---------------
+
+func _stage_8() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.78, 0.0, 3.2), 11.0, 3.2)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.6
+	# RIGHT (yellow): the tube sends you up to a lintel beam, then two blocks down to the merge
+	var hi: Dictionary = _blk(Vector3(3.5, 4.5, f0 - 9.0), 1.6, 5.0, "alt", 0.6)
+	var door: WarpPortal = kit.portal(_w(Vector3(3.5, 0, fc.z - 0.6)), _yaw, _w(Vector3(3.5, 4.5, f0 - 7.2)), _yaw, 7.0)
+	_dress_portal(_w(Vector3(3.5, 0, fc.z - 0.6)), _yaw, ORANGE)
+	_dress_portal(_w(Vector3(3.5, 4.5, f0 - 7.2)), _yaw, BLUE)
+	var la: Dictionary = _post(_ahead(hi, 0.80, -1.5, 2.0, 0.3), 2.0, 2.0)
+	var la2: Dictionary = _post(_ahead(la, 0.80, -1.5, 2.0, -0.3), 2.0, 2.0)
+	var mc: Vector3 = _ahead(la2, 0.80, -1.5, 3.2, -((la2["c"] as Vector3).x))
+	var merge: Dictionary = _blk(Vector3(0, mc.y, mc.z), 11.0, 3.2)
+	# LEFT (red): a long crayon past two boxing gloves, a block, the merge
+	var left: Dictionary = _area(Vector3(-3.5, 0, fc.z), 1.5, 1.6)
+	var beam_near: float = f0 + 0.35 - _e(0.84, 0.0)
+	var pa_c: float = _behind(mc.z + 1.6, 0.80, 0.0, 2.0)
+	var pa: Dictionary = _post(Vector3(-3.5, 0, pa_c), 2.0, 2.0)
+	var beam_far: float = (pa_c + 1.0) - 0.35 + _e(0.84, 0.0)
+	var blen: float = beam_near - beam_far
+	var beam: Dictionary = _blk(Vector3(-3.5, 0, (beam_near + beam_far) * 0.5), 1.6, blen, "alt", 0.6)
+	var g1z: float = beam_near - 4.0
+	var g2z: float = beam_near - 7.0
+	var gl1: Piston = _glove(Vector3(-4.85, 1.35, g1z), 8.0, 0.0)
+	var gl2: Piston = _glove(Vector3(-4.85, 1.35, g2z), 8.0, 0.0)
+	var cp: Dictionary = _cp(_ahead(merge, 0.82, 0.0, 5.0))
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant != 1:
+		var hold: Vector3 = _w(Vector3(-3.5, 0, beam_near - 1.7))
+		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
+		_hop(left, beam, Vector3(0, 0, (blen * 0.5) - 0.9 + 0.0))
+		r_walk(hold)
+		_wait(func() -> bool: return _ram_clear(gl1, 0.0, 0.6 + 1.5) and _ram_clear(gl2, 0.2, 0.9 + 1.5), hold)
+		r_walk(_w(Vector3(-3.5, 0, beam_far + 0.9)))
+		_hop(beam, pa)
+		_hop(pa, merge, Vector3(-3.5, 0, 0.6))
+	else:
+		r_walk(_w(Vector3(3.5, 0, fc.z + 0.6)))
+		r_portal(_w(Vector3(3.5, 0, fc.z - 0.9)), door.exit_point())
+		r_walk(_w(Vector3(3.5, 4.5, f0 - 10.0)))
+		_hop(hi, la)
+		_hop(la, la2)
+		_hop(la2, merge, Vector3(3.5, 0, 0.6))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
 # ---- environment ----------------------------------------------------------------------------------
 
 func _restyle_environment() -> void:
@@ -395,3 +664,83 @@ func _toy_materials() -> void:
 
 func _stage_18() -> void:
 	pass
+
+
+# ---- machine dressing ---------------------------------------------------------------------------
+
+## A toy flashlight cap and a glowing bead on each post of a laser pointer beam.
+func _dress_laser(g: LaserGate) -> void:
+	var post_h: float = maxf(g.size.y + 0.8, 1.2)
+	for sx: float in [-1.0, 1.0]:
+		var x: float = sx * (g.size.x * 0.5 + 0.18)
+		g.add_child(Look.cylinder(0.42, 0.4, Look.flat(YELLOW, 0.4), Vector3(x, post_h * 0.5 + 0.2, 0), 0.26, 12))
+		g.add_child(Look.sphere(0.16, Look.flat(RED, 0.3, 0.0, 2.0), Vector3(x, post_h * 0.5 + 0.55, 0)))
+
+
+## The boxing glove's housing: a painted toy chest round the ram's rod (the glove slides out of its
+## face) with a lid stripe and brass corners. `top` / `yaw_deg` as given to kit.piston (world).
+func _dress_glove(top: Vector3, size: Vector3, stroke: float, yaw_deg: float) -> void:
+	var b := Basis(Vector3.UP, deg_to_rad(yaw_deg))
+	var depth: float = stroke + 0.45
+	var c: Vector3 = top - Vector3(0, size.y * 0.5, 0) + b * Vector3(0, 0, size.z * 0.5 + depth * 0.5 + 0.02)
+	var n := Node3D.new()
+	n.transform = Transform3D(b, c)
+	add_child(n)
+	var red: StandardMaterial3D = Look.flat(RED, 0.5)
+	var yellow: StandardMaterial3D = Look.flat(YELLOW, 0.45)
+	var h: float = size.y + 1.6
+	var w: float = size.x + 0.8
+	n.add_child(Look.box(Vector3(0.4, h, depth), red, Vector3(-w * 0.5 + 0.2, 0, 0)))
+	n.add_child(Look.box(Vector3(0.4, h, depth), red, Vector3(w * 0.5 - 0.2, 0, 0)))
+	n.add_child(Look.box(Vector3(w - 0.8, 0.78, depth), red, Vector3(0, h * 0.5 - 0.39, 0)))
+	n.add_child(Look.box(Vector3(w - 0.8, 0.78, depth), red, Vector3(0, -h * 0.5 + 0.39, 0)))
+	n.add_child(Look.box(Vector3(w + 0.12, 0.12, depth + 0.12), yellow, Vector3(0, h * 0.5 + 0.06, 0)))
+	for sy: float in [-1.0, 1.0]:
+		n.add_child(Look.box(Vector3(w - 0.9, 0.16, 0.05), yellow, Vector3(0, sy * (h * 0.5 - 0.39), -depth * 0.5 - 0.03)))
+	for sx: float in [-1.0, 1.0]:
+		for sy: float in [-1.0, 1.0]:
+			n.add_child(Look.sphere(0.12, Look.flat(Color(1.0, 0.85, 0.4), 0.3, 0.8), Vector3(sx * (w * 0.5 - 0.05), sy * (h * 0.5 - 0.05), -depth * 0.5)))
+
+
+## A red boxing glove on the ram of a piston (moves with it): fist, thumb and cuff.
+func _glove_visual(p: Piston) -> void:
+	var z: float = -p.size.z * 0.5
+	var red: StandardMaterial3D = Look.flat(RED, 0.4)
+	var fist := Look.sphere(0.62, red, Vector3(0, 0.05, z - 0.55))
+	fist.scale = Vector3(1.05, 0.95, 1.1)
+	p.add_child(fist)
+	p.add_child(Look.sphere(0.24, red, Vector3(0.56, -0.1, z - 0.4)))
+	var cuff := Look.cylinder(0.5, 0.34, Look.flat(CREAM, 0.6), Vector3(0, 0, z + 0.05), -1.0, 14)
+	cuff.rotation.x = PI * 0.5
+	p.add_child(cuff)
+
+
+## A giant dice: pips on the four sides of the press (it moves with the press).
+func _dress_die(c: Crusher) -> void:
+	var s: Vector3 = c.size
+	var pip: StandardMaterial3D = Look.flat(Color(0.12, 0.12, 0.18), 0.4)
+	var layouts: Array = [[Vector2(0, 0)], [Vector2(-0.3, -0.25), Vector2(0.3, 0.25)],
+		[Vector2(-0.3, -0.25), Vector2(0, 0), Vector2(0.3, 0.25)], [Vector2(-0.3, -0.25), Vector2(0.3, -0.25), Vector2(-0.3, 0.25), Vector2(0.3, 0.25)]]
+	for f: int in 4:
+		var sx: float = 1.0 if f % 2 == 0 else -1.0
+		var on_x: bool = f < 2
+		for q: Vector2 in (layouts[f] as Array):
+			var d: float = (s.x if on_x else s.z) * 0.5 + 0.02
+			var at: Vector3 = Vector3(sx * d, q.y * s.y * 0.8, q.x * s.z * 0.6) if on_x else Vector3(q.x * s.x * 0.6, q.y * s.y * 0.8, sx * d)
+			var dot := Look.cylinder(0.17, 0.05, pip, at, -1.0, 12)
+			dot.rotation = Vector3(0, 0, PI * 0.5) if on_x else Vector3(PI * 0.5, 0, 0)
+			c.add_child(dot)
+
+
+## A doorway for a warp ring: a stack of three painted blocks each side and a lintel block across.
+## `floor_pos` / yaw as given to kit.portal (world).
+func _dress_portal(floor_pos: Vector3, yaw_deg: float, col: Color) -> void:
+	var n := Node3D.new()
+	n.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(yaw_deg)), floor_pos)
+	add_child(n)
+	var cols: Array[Color] = [RED, YELLOW, BLUE]
+	for sx: float in [-1.0, 1.0]:
+		for i: int in 3:
+			n.add_child(Look.box(Vector3(0.7, 1.1, 0.7), Look.flat(cols[(i + (0 if sx < 0.0 else 1)) % 3], 0.45), Vector3(sx * 1.85, 0.55 + 1.1 * float(i), 0)))
+	n.add_child(Look.box(Vector3(4.5, 0.6, 0.8), Look.flat(GREEN, 0.45), Vector3(0, 3.6, 0)))
+	n.add_child(Look.box(Vector3(3.2, 0.08, 0.08), Look.flat(col, 0.3, 0.0, 2.4), Vector3(0, 3.28, -0.3)))
