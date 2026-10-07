@@ -3058,6 +3058,218 @@ func test_zp_party_finish_bar() -> void:
 	Game.party = null
 
 
+# ---- party HUD: standings, feed, warnings, roulette, results ---------------------------------------
+
+func _zp_roster(entries: Dictionary) -> void:
+	Net.roster = {}
+	for id: Variant in entries:
+		var e: Dictionary = entries[id]
+		Net.roster[int(id)] = {"name": str(e.get("name", "R%d" % int(id))), "color": int(id) % 8, "cp": int(e.get("cp", 0)),
+			"cp_at": float(e.get("cp_at", 0.0)), "finished": float(e.get("finished", -1.0))}
+
+
+func test_zp_hud_standings_order() -> void:
+	# the pure board: order, live points, team sums, ordinals
+	var roster: Dictionary = {1: {"name": "Me", "color": 0, "cp": 2, "finished": -1.0}, 5: {"name": "Ana", "color": 1, "cp": 4, "finished": -1.0},
+		7: {"name": "Bo", "color": 2, "cp": 3, "finished": 41.0}}
+	var list: Array[Dictionary] = PartyBoard.entries([7, 5, 1], roster, {5: 2}, {1: 1, 7: 1}, {1: 10}, {1: 0, 5: 1, 7: 0}, 1)
+	check(list.size() == 3 and int(list[0]["id"]) == 7 and int(list[2]["id"]) == 1 and int(list[2]["place"]) == 3, "board entries keep the race order")
+	check(bool(list[0]["finished"]) and not bool(list[1]["finished"]) and bool(list[2]["you"]), "board entries flag finished and you")
+	check(int(list[1]["pts"]) == 2 * PartyRules.KO_POINTS and int(list[0]["pts"]) == PartyRules.BONUS_POINTS, "live points are KOs x3 + bonuses x2")
+	var tl: Array[int] = PartyBoard.team_live(list)
+	check(tl[0] == PartyRules.BONUS_POINTS * 2 and tl[1] == 6, "team live totals sum each side (%s)" % str(tl))
+	check(PartyBoard.suffix(1) == "st" and PartyBoard.suffix(2) == "nd" and PartyBoard.suffix(3) == "rd" and PartyBoard.suffix(11) == "th" and PartyBoard.suffix(22) == "nd", "ordinal suffixes")
+	# the arrow maths: on screen stays put, off screen clamps to the edge, behind flips
+	var sz := Vector2(1600, 900)
+	check(bool(PartyBoard.edge_point(Vector2(800, 450), false, sz, 40.0)["on_screen"]), "a rival in the middle needs no arrow")
+	var far: Dictionary = PartyBoard.edge_point(Vector2(3000, 450), false, sz, 40.0)
+	check(not bool(far["on_screen"]) and absf((far["pos"] as Vector2).x - 1560.0) < 0.5 and absf(float(far["angle"])) < 0.01, "a rival off to the right gets an arrow on the right edge")
+	var back: Dictionary = PartyBoard.edge_point(Vector2(1000, 450), true, sz, 40.0)
+	check(not bool(back["on_screen"]) and (back["pos"] as Vector2).x < 800.0, "a rival behind the camera flips to the opposite side")
+	# live: the strip follows Net.standings() and the big readout shows our place
+	var saved_roster: Dictionary = Net.roster
+	var saved_teams: Dictionary = Net.teams
+	Game.party = PartyRules.new("party")
+	var lvl: LevelBase = await load_level(0)
+	await ticks(4)
+	var p: PartyLayer = lvl.party
+	_zp_roster({1: {"cp": 2}, 5: {"cp": 4, "name": "Ana"}, 7: {"cp": 1, "name": "Bo"}})
+	p.hud.update_standings()
+	var want: Array[int] = [5, 1, 7]
+	check(p.hud.standings.shown_order == want and p.hud.standings.shown_order == Net.standings(), "the strip lists racers in Net.standings() order %s" % str(p.hud.standings.shown_order))
+	check(p.hud.standings.my_place() == 2 and p.hud.standings.place_label.text == "2" and p.hud.standings.suffix_label.text == "ND", "the big readout shows our place (2ND)")
+	Net.roster[7]["cp"] = 3
+	Net.roster[7]["cp_at"] = 5.0
+	p.hud.update_standings()
+	want = [5, 7, 1]
+	check(p.hud.standings.shown_order == want and p.hud.standings.my_place() == 3, "an overtake reorders the strip and the readout")
+	var passed: bool = false
+	for f: Dictionary in p.hud.feed_log:
+		passed = passed or (str(f["kind"]) == "pass" and str(f["text"]).contains("Bo passed you"))
+	check(passed, "being passed shows in the feed")
+	check(not p.hud.standings.team_label.visible, "no team line in Party")
+	# Team Party: team totals
+	p.rules.mode = "team"
+	Net.teams = {1: 0, 5: 1, 7: 0}
+	p.kos = {5: 2}
+	p.bonus = {1: 1}
+	p.hud.update_standings()
+	check(p.hud.standings.team_label.visible and p.hud.standings.team_label.text.contains(PartyNames.team_name(0) + " 2") and p.hud.standings.team_label.text.contains("6 " + PartyNames.team_name(1)),
+		"Team Party shows both teams' live totals (%s)" % p.hud.standings.team_label.text)
+	Net.roster = saved_roster
+	Net.teams = saved_teams
+	Game.party = null
+
+
+func test_zp_hud_feed_entries() -> void:
+	var saved_roster: Dictionary = Net.roster
+	Game.party = PartyRules.new("party")
+	var lvl: LevelBase = await load_level(0)
+	await ticks(4)
+	var p: PartyLayer = lvl.party
+	_zp_roster({1: {"name": "Me"}, 5: {"name": "Ana"}, 7: {"name": "Bo"}})
+	var h: PartyHud = p.hud
+	var n0: int = h.feed_log.size()
+	p.hit_landed.emit(5, "ice")
+	check(h.feed_log.size() == n0 + 1 and str(h.feed_log[n0]["text"]) == "You iced Ana!" and str(h.feed_log[n0]["kind"]) == "hit" and str(h.feed_log[n0]["icon"]) == "ice",
+		"our item hit reads 'You iced Ana!' with the Ice icon (%s)" % str(h.feed_log.back()))
+	p.hit_landed.emit(7, "ice")
+	check(h.feed_log.size() == n0 + 1 and str(h.feed_log[n0]["text"]) == "You iced Ana, Bo!", "a blast that hits two racers shares one line (%s)" % str(h.feed_log[n0]["text"]))
+	h.on_remote_hit(5, 7, "thunder")
+	check(str(h.feed_log.back()["text"]) == "Ana zapped Bo!", "a rival's hit on a third racer reaches our feed (%s)" % str(h.feed_log.back()["text"]))
+	h.on_remote_hit(7, 1, "shove")
+	check(str(h.feed_log.back()["text"]) == "Bo shoved you!", "a hit on us reads 'Bo shoved you!'")
+	h.on_remote_hit(1, 5, "glove")
+	check(str(h.feed_log.back()["text"]) == "Bo shoved you!", "our own hit echoed back by the network is not shown twice")
+	p._apply_ko(5, 7)
+	check(str(h.feed_log.back()["kind"]) == "ko" and str(h.feed_log.back()["text"]).begins_with("Ana KO'd Bo"), "KOs are in the feed")
+	p._apply_bonus(7, 1)
+	check(str(h.feed_log.back()["kind"]) == "bonus", "first-through bonuses are in the feed")
+	h.on_item_used(5, "fox")
+	check(str(h.feed_log.back()["kind"]) == "use" and str(h.feed_log.back()["text"]).begins_with("Ana turned into"), "a rival's transformation is announced (%s)" % str(h.feed_log.back()["text"]))
+	check(PartyFeedText.verb("nonsense") == "hit" and PartyFeedText.item_for("claw") == "fox" and PartyFeedText.item_for("glove") == "glove" and PartyFeedText.item_for("shove") == "",
+		"feed wording: unknown sources fall back, moves map to their item's icon")
+	Net.roster = saved_roster
+	Game.party = null
+
+
+func test_zp_hud_targeted_warnings() -> void:
+	var saved_roster: Dictionary = Net.roster
+	Game.party = PartyRules.new("party")
+	var lvl: LevelBase = await load_level(0)
+	await ticks(4)
+	var p: PartyLayer = lvl.party
+	var h: PartyHud = p.hud
+	_zp_roster({1: {"cp": 3}, 5: {"cp": 1, "name": "Ana"}, 7: {"cp": 5, "name": "Bo"}, 9: {"cp": 2, "name": "Cy"}})
+	h.on_item_used(7, "thunder")
+	check(h.warn_log.is_empty(), "a Thunder Cloud from someone ahead of us can't hit us")
+	h.on_item_used(5, "thunder")
+	check(h.warn_log.size() == 1 and int(h.warn_log[0]["id"]) == 5 and h.threats().has(5), "Thunder from a racer behind us warns 'Targeted!'")
+	h.on_item_used(5, "swap")
+	check(h.warn_log.size() == 1, "Swap from a racer who isn't right behind us doesn't warn")
+	_zp_roster({1: {"cp": 3}, 5: {"cp": 2, "name": "Ana"}, 7: {"cp": 5, "name": "Bo"}})
+	h.on_item_used(5, "swap")
+	check(h.warn_log.size() == 2 and str(h.warn_log[1]["what"]) == PartyNames.item_name("swap"), "Swap from the racer right behind us warns")
+	h.on_remote_fx(7, "surge", "charge", {"on": true})
+	check(h.threats().has(7), "a rival charging an attack is a threat")
+	h._sync_danger()
+	check(h.radar.danger.has(7) and h.radar.danger.has(5), "the arrow table follows the threats")
+	h.on_remote_fx(7, "surge", "charge", {"on": false})
+	check(not h.threats().has(7), "and stops being one when the charge is released")
+	Net.roster = saved_roster
+	Game.party = null
+
+
+func test_zp_hud_roulette_lands() -> void:
+	var r := PartyRoulette.new()
+	for id: String in ["ice", "fox", "balloon"]:
+		r.start(id, 11)
+		var steps: int = 0
+		var seen: Dictionary = {}
+		while r.active and steps < 200:
+			r.step(1.0 / 60.0)
+			seen[r.current] = true
+			steps += 1
+		check(not r.active and r.current == id and steps >= 46 and steps <= 52, "the roulette lands on %s after ~0.8 s (%d steps)" % [id, steps])
+		check(r.ticks >= 7 and seen.size() >= 6, "it ticks through several icons first (%d ticks, %d icons)" % [r.ticks, seen.size()])
+	# live: the slot spins, then shows exactly the rolled item
+	Game.party = PartyRules.new("party")
+	var lvl: LevelBase = await load_level(0)
+	await ticks(4)
+	var p: PartyLayer = lvl.party
+	var h: PartyHud = p.hud
+	var t0: int = h.roulette_ticks_total
+	p.give_item("magnet")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	check(h.roulette.active and h._slot_name.text == "? ? ?", "right after a pickup the slot is spinning")
+	await seconds(1.0)
+	check(not h.roulette.active and h._slot_icon.item_id == "magnet" and h._slot_name.text == PartyNames.item_name("magnet"), "it lands on the rolled item (%s)" % h._slot_name.text)
+	check(h.roulette_ticks_total - t0 >= 7, "and ticked on the way (%d)" % (h.roulette_ticks_total - t0))
+	Game.party = null
+
+
+func test_zp_hud_results_pad() -> void:
+	# the pure callouts
+	var rows: Array[Dictionary] = PartyRules.score_round([5, 1, 7], [1, 5, 7], {7: 3}, {1: 1})
+	var cup_after: Dictionary = {1: 22, 5: 10, 7: 20}
+	var co: Array[Dictionary] = PartyBoard.callouts(rows, cup_after, true)
+	var keys: Array[String] = []
+	for c: Dictionary in co:
+		keys.append(str(c["key"]))
+	check(keys.has("mvp") and keys.has("kos") and keys.has("bonus"), "callouts: MVP, most KOs and checkpoint hunter %s" % str(keys))
+	var kos_c: Dictionary = co[keys.find("kos")]
+	check(int(kos_c["id"]) == 7 and str(kos_c["detail"]) == "3 KOs", "the most-KOs callout names the racer with 3 KOs")
+	var no_prev: Array[Dictionary] = PartyBoard.callouts(rows, cup_after, false)
+	var has_comeback: bool = false
+	for c: Dictionary in no_prev:
+		has_comeback = has_comeback or str(c["key"]) == "comeback"
+	check(not has_comeback, "no comeback in round 1")
+	# a screen: the host's results, driven by the pad
+	Game.party = PartyRules.new("party")
+	var lvl: LevelBase = await load_level(0)
+	await ticks(4)
+	var p: PartyLayer = lvl.party
+	check(Net.host(24611) == OK, "hosting opens a session")
+	await ticks(3)
+	PartyResults.history = {1: {1: 8, 5: 10, 7: 2}}
+	p.rules.round_no = 2
+	p.rules.cup = {1: 8, 5: 10, 7: 2}
+	var rows2: Array[Dictionary] = PartyRules.score_round([1, 5, 7], [1, 5, 7], {1: 2}, {5: 1})
+	p.rules.add_round(rows2)
+	p.last_rows = rows2
+	p.show_results()
+	await seconds(0.9)
+	var res: PartyResults = p.results
+	check(res != null and p.hud.has_panel() and _focused_text().begins_with("Next Round"), "the host's results open focused on Next Round (%s)" % _focused_text())
+	check(not res.done, "the tallies are still counting")
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(res.done, "a D-pad press skips the counting")
+	check(_focused_text() != "" and not _focused_text().begins_with("Next Round"), "the D-pad moves on from Next Round (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(_focused_text() == "End Cup - Back to Lobby", "and reaches End Cup (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_UP))
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_UP))
+	check(_focused_text().begins_with("Next Round"), "and back up again (%s)" % _focused_text())
+	var labels: String = ""
+	for l: Node in res.find_children("*", "Label", true, false):
+		labels += (l as Label).text + "|"
+	check(labels.contains("R1") and labels.contains("R2") and labels.contains("THIS ROUND") and labels.contains("ROUND MVP"), "the cup table has a per-round breakdown and the MVP chip is up")
+	Net.leave()
+	await ticks(2)
+	Game.party = null
+
+
+func test_zp_hud_main_mode_pure() -> void:
+	Game.party = null
+	var lvl: LevelBase = await load_level(0)
+	await ticks(4)
+	check(lvl.find_children("*", "PartyHud", true, false).is_empty() and lvl.find_children("*", "PartyStandings", true, false).is_empty() and lvl.find_children("*", "PartyRadar", true, false).is_empty(),
+		"the main mode builds no party HUD, standings strip or rival arrows")
+	var board: Control = lvl.hud._board
+	check(board != null and board.visible == Game.race_mode, "the level's own race board is untouched in the main mode")
+
+
 # ---- soundscapes --------------------------------------------------------------------------------
 
 ## Every map's ambience (sound/soundscape.gd): its bed (and second layer) load as looping Ogg and

@@ -20,6 +20,8 @@ extends Node3D
 ##   box       {b, id, it, r}      (host)  box b was taken by id, who gets item it; back in r s
 ##   bonus     {id, cp}            (host)  id was first through checkpoint cp (+2)
 ##   round_end {r, rows, cup}      (host)  the round is over: its scoreboard and the cup totals
+##   hf        {v, s}                      sender's attack s connected with racer v (feed line, from the HUD)
+##   use       {p}                         sender used item p (feed line + Thunder / Swap "Targeted!", from the HUD)
 
 signal item_changed(id: String)
 ## Our attack connected (target id: peer id, or a dummy's negative id).
@@ -365,8 +367,7 @@ func _take_box(b: int, id: int, it: String, respawn: float) -> void:
 func give_item(it: String) -> void:
 	item = it
 	item_changed.emit(it)
-	sfx.play("roll", 0.7)
-	hud.item_rolled(it)
+	hud.item_rolled(it)   # the HUD's roulette ticks and lands (party_tick / party_land)
 
 
 ## Uses the item in the slot.
@@ -899,6 +900,10 @@ func _on_message(from_id: int, m: Dictionary) -> void:
 			_apply_bonus(int(m.get("id", 0)), int(m.get("cp", 0)))
 		"round_end":
 			apply_round_end(m)
+		"hf":
+			hud.on_remote_hit(from_id, int(m.get("v", 0)), str(m.get("s", "")))
+		"use":
+			hud.on_item_used(from_id, str(m.get("p", "")))
 
 
 func _remote_power(from_id: int, p: String, on: bool, dur: float) -> void:
@@ -920,6 +925,7 @@ func _remote_power(from_id: int, p: String, on: bool, dur: float) -> void:
 
 
 func _remote_fx(from_id: int, p: String, a: String, d: Dictionary) -> void:
+	hud.on_remote_fx(from_id, p, a, d)
 	if p == "shove":
 		remote_fx_shove(self, from_id, a, d)
 		return

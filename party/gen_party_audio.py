@@ -195,8 +195,57 @@ def p_clank():
     save("clank", y)
 
 
+def p_tick():
+    # one crisp roulette tick: a short wooden click with a tiny pitch
+    t = tvec(0.06)
+    y = osc(1900.0) * np.exp(-t / 0.008) + 0.5 * osc(950.0) * np.exp(-t / 0.014)
+    y += 0.3 * fft_band(noise("tick", len(t)), SR, 3000.0, 9000.0, 2) * np.exp(-t / 0.003)
+    save("tick", y, fout=0.01)
+
+
+def p_land():
+    # the roulette lands: a bright two-note ding with a sparkle
+    x = np.zeros(int(0.6 * SR))
+    place(x, 0.0, ga.bell(mtof(79), 0.5, SR, 0.14) * 0.8)
+    place(x, 0.07, ga.bell(mtof(86), 0.5, SR, 0.2))
+    t = tvec(0.6)
+    sp = fft_band(noise("land", len(t)), SR, 6000.0, 12000.0, 2) * ad_env(t, 0.08, 0.1)
+    save("land", x + 0.12 * sp / np.max(np.abs(sp)), fout=0.05)
+
+
+def p_warn():
+    # "Targeted!": a falling two-tone alarm blip
+    x = np.zeros(int(0.5 * SR))
+    for i, f in enumerate((880.0, 660.0, 880.0, 660.0)):
+        t = tvec(0.1)
+        blip = (osc(f * (1.0 + 0.02 * np.sin(TAU * 40.0 * t))) + 0.4 * osc(f * 2.0)) * np.minimum(t / 0.005, 1.0) * np.exp(-t / 0.07)
+        place(x, 0.11 * i, blip)
+    save("warn", x, fout=0.04)
+
+
+def p_tally():
+    # a tiny coin-counter blip for the results tallies
+    t = tvec(0.07)
+    y = (osc(1568.0) + 0.5 * osc(2349.0)) * np.minimum(t / 0.003, 1.0) * np.exp(-t / 0.025)
+    save("tally", y, fout=0.012)
+
+
+def p_fanfare():
+    # MVP callout: a short rising brass-ish fanfare
+    x = np.zeros(int(1.1 * SR))
+    for i, (m, d) in enumerate(((67, 0.14), (72, 0.14), (76, 0.14), (79, 0.7))):
+        tt = (0.0, 0.14, 0.28, 0.42)[i]
+        t = tvec(d + 0.1)
+        f = mtof(m)
+        y = (osc(f) + 0.5 * osc(f * 2.0) + 0.25 * osc(f * 3.0)) * np.minimum(t / 0.01, 1.0) * np.exp(-t / (0.25 if i == 3 else 0.12))
+        place(x, tt, y * 0.6)
+        place(x, tt, ga.bell(f * 2.0, d + 0.1, SR, 0.3) * 0.25)
+    save("fanfare", x, fout=0.1)
+
+
+
 ALL = [p_pickup, p_roll, p_whoosh, p_hit, p_ko, p_boom, p_zap, p_charge, p_beam, p_slash, p_powerup,
-       p_pop, p_spring, p_freeze, p_warp, p_chime, p_wind, p_clank]
+       p_pop, p_spring, p_freeze, p_warp, p_chime, p_wind, p_clank, p_tick, p_land, p_warn, p_tally, p_fanfare]
 
 if __name__ == "__main__":
     print("Party Mode effects -> audio/party_*.wav")
