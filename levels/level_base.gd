@@ -656,6 +656,17 @@ func r_checkpoint() -> void:
 	route.append({"kind": "checkpoint"})
 
 
+## Kit launch barrel: walk in, wait out its tell, get fired, steer to `to` (docs/KIT_OBSTACLES.md).
+func r_barrel(barrel: LaunchBarrel, to: Vector3) -> void:
+	route.append({"kind": "k_barrel", "barrel": barrel, "to": to})
+
+
+## Kit zipline: get picked up at its start, let go when the trolley is within `radius` of `point`
+## (a world point on the cable), steer to `to`.
+func r_zipline(zip: Zipline, point: Vector3, radius: float, to: Vector3) -> void:
+	route.append({"kind": "k_zip", "zip": zip, "point": point, "radius": radius, "to": to})
+
+
 # ---- run it again (race laps) ---------------------------------------------------------
 # After your first race finish the results offer "Run It Again": you go back to the start
 # and run lap after lap. The first finish time, the save and your placing never change;

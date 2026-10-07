@@ -141,6 +141,7 @@ func _physics_process(dt: float) -> void:
 		"ascent_stream": _do_ascent_stream(step)
 		"desert_fly": _do_desert_fly(step)
 		"candy_board", "candy_ride": _do_candy(step)
+		"k_barrel", "k_zip": _do_kit(step)
 	# a bounce handed over by the previous step (_air_phase) is for the step that follows it: pad /
 	# x_pad / kick read it on their first tick. Left set, it made some LATER pad or kick skip its run-up.
 	if first_tick and step_index == index_before:
@@ -252,7 +253,7 @@ func _steer_ground(to: Vector3) -> void:
 	var fb: Object = player.floor_body
 	if fb != null and is_instance_valid(fb) and fb.has_method("surface_velocity"):
 		var belt: Vector3 = _flat(fb.call("surface_velocity"))
-		if belt.length() > 0.1 and belt.dot(want) < 0.0:
+		if belt.length() > 0.1 and (belt.dot(want) < 0.0 or fb is RollingLog):
 			want = want - belt / player.tuning.max_speed
 	_set_wish(want)
 
@@ -834,3 +835,39 @@ func _do_candy(step: Dictionary) -> void:
 		_steer_air(step["to"])
 	if player.grounded and _was_air:
 		_next()
+
+
+# ---- generic obstacle kit steps (additive; docs/KIT_OBSTACLES.md) ------------------------------
+#   k_barrel {barrel, to}               walk into the launch barrel, sit out its tell, then air-steer to `to`
+#   k_zip    {zip, point, radius, to}   stand under the zipline's start until it picks us up, ride, let go once
+#                                       the trolley is within `radius` of `point`, then air-steer to `to`
+# (every other kit machine is plain r_walk / r_jump plus r_until(<its is_clear_for / is_calm_for / ...>))
+
+func _do_kit(step: Dictionary) -> void:
+	match str(step["kind"]):
+		"k_barrel":
+			var b: LaunchBarrel = step["barrel"]
+			if _phase == 0:
+				_steer_ground(b.global_position)
+				if b.loaded_player() == player:
+					_phase = 1
+			elif _phase == 1:
+				player.cmd_move = Vector2.ZERO
+				if b.loaded_player() != player and b.fired_within(0.3):
+					_phase = 2
+			else:
+				_air_phase(step["to"])
+		"k_zip":
+			var z: Zipline = step["zip"]
+			if _phase == 0:
+				_steer_ground(z.stand_point())
+				if z.carrying() == player:
+					_phase = 1
+			elif _phase == 1:
+				player.cmd_move = Vector2.ZERO
+				if z.carrying() != player:
+					_phase = 2
+				elif z.handle_at(Game.course_time).distance_to(step["point"]) <= float(step["radius"]):
+					z.release_rider()
+			else:
+				_air_phase(step["to"])
