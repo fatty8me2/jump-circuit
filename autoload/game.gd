@@ -301,6 +301,9 @@ func fixed_action_for(event: InputEvent) -> String:
 
 func _physics_process(dt: float) -> void:
 	if race_mode:
+		if Net.local_session and get_tree().paused:
+			Net.race_start_time += dt   # solo Party vs CPU: the paused race clock stands still
+			return
 		_advance_race_clock(dt)
 	elif course_running and not get_tree().paused:
 		course_time += dt
@@ -348,6 +351,16 @@ func play_party_practice(index: int) -> void:
 	party = PartyRules.new("practice")
 	level_index = clampi(index, 0, LEVELS.size() - 1)
 	_load_level()
+
+
+## Party vs CPU: a solo party cup against `count` CPU racers (`mode` "party" or "team", `diff` a
+## CpuSkill level). Runs the normal party race flow on a one-person local session.
+func play_party_cpu(index: int, mode: String, count: int, diff: String) -> void:
+	Net.host_local()
+	CpuField.configure_local(count, diff)
+	CpuField.sync_roster()
+	Net.host_set_mode(mode if mode in ["party", "team"] else "party")   # (team: balances the CPUs too)
+	Net.host_start_race(clampi(index, 0, LEVELS.size() - 1), 3.0)
 
 
 func _on_race_starting(index: int, start_time: float) -> void:

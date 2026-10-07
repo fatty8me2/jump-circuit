@@ -188,6 +188,24 @@ for _n, _d in (("abyss_current_loop", 2.0), ("abyss_surge_loop", 2.0),
                ("doom_pour_loop", 2.0), ("doom_reactor_hum", 2.0), ("doom_grate_buzz", 1.0), ("doom_gear_grind", 1.5)):
     _reg(_n, _d, True)
 
+# the kit obstacles (docs/KIT_OBSTACLES.md) and the emotes / poses (each plays its emote_<id> clip)
+for _n, _d in (("kit_barrel_load", 0.9), ("kit_barrel_fuse", 0.08), ("kit_barrel_fire", 1.0),
+               ("kit_zipline_ready", 0.5), ("kit_zipline_grab", 0.5), ("kit_zipline_release", 0.5),
+               ("kit_battery_fuse", 0.7), ("kit_battery_fire", 0.6), ("kit_log_reverse", 0.6),
+               ("kit_seesaw_thunk", 0.6), ("kit_flipper_tell", 0.5), ("kit_flipper_swat", 0.5),
+               ("kit_flipper_return", 0.6), ("kit_drawbridge_chains", 1.0), ("kit_drawbridge_raise", 1.2),
+               ("kit_drawbridge_lower", 1.2), ("kit_drawbridge_thud", 0.8), ("kit_gapwall_warn", 0.8),
+               ("kit_gapwall_slide", 1.0), ("kit_gapwall_thud", 0.6), ("kit_block_tell", 0.9),
+               ("kit_block_slam", 0.8), ("kit_block_rise", 1.0), ("kit_hammer_tell", 0.9),
+               ("kit_hammer_swing", 0.8), ("kit_hammer_park", 0.6),
+               ("emote_wave", 0.9), ("emote_thumbsup", 0.5), ("emote_dance", 1.4), ("emote_bow", 1.0),
+               ("emote_laugh", 1.2), ("emote_flex", 0.8), ("emote_spin", 0.9), ("emote_facepalm", 1.0),
+               ("emote_taunt", 1.0), ("emote_sit", 0.6), ("emote_strongman", 0.9), ("emote_salute", 1.0),
+               ("emote_hero", 1.4), ("emote_dab", 0.6), ("emote_rockstar", 1.2)):
+    _reg(_n, _d)
+for _n, _d in (("kit_zipline_whirr", 1.0), ("kit_log_roll", 1.5)):
+    _reg(_n, _d, True)
+
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -5491,6 +5509,424 @@ def gen_doom():
 
 
 # ===========================================================================
+# the kit obstacles (docs/KIT_OBSTACLES.md) - gen_kit
+# ===========================================================================
+def gen_kit():
+    # the barrel: the hatch clunks shut on you, the hollow staves ring and the air is pushed in
+    name = "kit_barrel_load"
+    r = rng(name)
+    t = tv(dur(name))
+    x = thud(t, 150, 60, 0.05, 0.08) + 0.6 * click(r, dur(name), 600, 5000, 0.003)
+    x += 0.35 * modes(t, bar_modes(260.0, 0.25), r, 0.02, hard=2500)
+    x += 0.3 * whoosh(r, dur(name), 300, 900, 200, 0.5, 0.25)
+    save(name, space(r, x, 0.8, 0.2, 120, 4000), fin=0.002, fout=0.15)
+
+    # one tick of the fuse (played every 0.2 s while it burns down)
+    name = "kit_barrel_fuse"
+    r = rng(name)
+    t = tv(dur(name))
+    x = click(r, dur(name), 1500, 6000, 0.0025) + 0.35 * tone(2600.0, t) * env(t, 0.0008, 0.003)
+    save(name, x, fin=0.0005, fout=0.01)
+
+    # the launch: a black-powder crack and thump, and the rush of air up the barrel
+    name = "kit_barrel_fire"
+    r = rng(name)
+    x = cannon_boom(r, dur(name), 85.0, 0.8) + 0.6 * whoosh(r, dur(name), 350.0, 2200.0, 700.0, 0.25, 0.35)
+    save(name, space(r, x, 1.2, 0.25, 100, 5000, predelay=0.02), fin=0.001, fout=0.25)
+
+    # the zipline's lamp comes on: a bright glass ping and a rattle of the trolley
+    name = "kit_zipline_ready"
+    r = rng(name)
+    x = fm_glass(midi(84), dur(name), 0.2, 0.5)
+    for t0 in (0.06, 0.16, 0.26):
+        place(x, t0, click(r, 0.03, 2000, 7000, 0.002), 0.4)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # the hands clamp on the grip: a clack, a thump and the rope snapping taut
+    name = "kit_zipline_grab"
+    r = rng(name)
+    t = tv(dur(name))
+    x = click(r, dur(name), 800, 6000, 0.004) + 0.5 * thud(t, 260, 120, 0.02, 0.04, harm=(0.3, 0.1))
+    x += 0.4 * whoosh(r, dur(name), 500, 1800, 900, 0.12, 0.08)
+    save(name, x, fin=0.0008, fout=0.12)
+
+    # the let-go: the rope springing free and a whoosh away
+    name = "kit_zipline_release"
+    r = rng(name)
+    x = whoosh(r, dur(name), 900, 3000, 1200, 0.12, 0.12) + 0.4 * click(r, dur(name), 1000, 7000, 0.003)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # the trolley riding the cable (loop): wheels ticking over the wire, a steady pulley hum
+    name = "kit_zipline_whirr"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    wheel = cband(r.standard_normal(n), 2500, 7000) * (0.7 + 0.3 * clfo(n, 12))
+    hum = tone(cyc(190.0, n), t) + 0.4 * tone(cyc(380.0, n), t)
+    save_loop(name, 0.6 * unit(wheel) + 0.4 * unit(hum))
+
+    # the cannon's fuse: a fizz that builds and a spit of sparks
+    name = "kit_battery_fuse"
+    r = rng(name)
+    t = tv(dur(name))
+    fizz = noise(r, len(t), 2000, 8000) * np.clip(t / dur(name), 0.0, 1.0) ** 1.5
+    x = 0.6 * fizz + 0.8 * sparks(r, dur(name), 16, 0.0, 0.6, 1500, 6000)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # one salvo: a cannon pop with a short tail
+    name = "kit_battery_fire"
+    r = rng(name)
+    x = cannon_boom(r, dur(name), 120.0, 0.55)
+    save(name, space(r, x, 0.5, 0.15, 150, 5000), fin=0.0005, fout=0.12)
+
+    # the log rolling (loop): a low rumble of bark on the ground and a knock every stride
+    name = "kit_log_roll"
+    r = rng(name)
+    n = ns(dur(name))
+    rumble = cnoise(r, n, 60, 380) * (0.8 + 0.2 * crand(r, n, 5))
+    kn = np.zeros(n)
+    for k in range(6):
+        cplace(kn, k * dur(name) / 6.0 + r.uniform(0.0, 0.02), wood_knock(r, 0.12, r.uniform(150.0, 220.0), 0.02, 3000.0),
+               r.uniform(0.6, 1.0))
+    save_loop(name, unit(rumble) + 0.5 * unit(kn))
+
+    # the log reversing: a long timber groan and the thunk of it catching
+    name = "kit_log_reverse"
+    r = rng(name)
+    t = tv(dur(name))
+    x = groan(r, dur(name), 120.0, 1.0, (25.0, 50.0)) + thud(t, 110, 50, 0.04, 0.07, harm=(0.4, 0.15))
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the plank hits the ground
+    name = "kit_seesaw_thunk"
+    r = rng(name)
+    t = tv(dur(name))
+    x = thud(t, 170, 65, 0.03, 0.07, harm=(0.4, 0.15)) + 0.5 * modes(t, bar_modes(230.0, 0.12), r, 0.02, hard=2500)
+    x += 0.5 * click(r, dur(name), 800, 4000, 0.004)
+    save(name, space(r, x, 0.6, 0.2, 120, 4000), fin=0.001, fout=0.1)
+
+    # the flipper winds back: an electric whine climbing and a ratchet's clicks
+    name = "kit_flipper_tell"
+    r = rng(name)
+    t = tv(dur(name))
+    x = 0.45 * turbine(t, 240.0, 560.0, dur(name) * 0.9, (1.0, 2.0, 3.02)) * env(t, 0.03, 0.5)
+    for k in range(5):
+        place(x, 0.04 + 0.09 * k, click(r, 0.02, 2500, 7000, 0.002), 0.6)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the swat: a heavy whack, a crack of click and a whoosh of the paddle through the air
+    name = "kit_flipper_swat"
+    r = rng(name)
+    t = tv(dur(name))
+    x = thud(t, 190, 90, 0.02, 0.05) + 0.7 * click(r, dur(name), 1000, 6000, 0.003)
+    x += 0.5 * whoosh(r, dur(name), 400, 2000, 600, 0.08, 0.05)
+    save(name, x, fin=0.0005, fout=0.08)
+
+    # the paddle settles on its stop: a spring boing and a small rattle
+    name = "kit_flipper_return"
+    r = rng(name)
+    t = tv(dur(name))
+    x = modes(t, bar_modes(340.0, 0.09), r, 0.02, hard=3000) + 0.4 * thud(t, 160, 110, 0.02, 0.05)
+    x += 0.3 * click(r, dur(name), 1500, 6000, 0.002)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # the chains rattle through the warning: loose links clinking over an iron creak
+    name = "kit_drawbridge_chains"
+    r = rng(name)
+    x = iron_creak(r, dur(name), 180.0, (14.0, 30.0)) * 0.4
+    for _ in range(16):
+        place(x, r.uniform(0.0, dur(name) - 0.06), click(r, 0.05, 2000, 7000, 0.003), r.uniform(0.3, 1.0))
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the deck rises: a winch whine climbing, the chains dragging taut and iron complaining
+    name = "kit_drawbridge_raise"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    winch = voice(glide(110.0, 170.0, t, dur(name)), n, 10, 1.4, 0.001, 5.0, r)
+    x = 0.4 * winch * np.clip((dur(name) - t) / 0.15, 0.0, 1.0)
+    x += 0.5 * iron_creak(r, dur(name), 150.0, (12.0, 26.0))
+    for k in range(int(dur(name) * 6)):
+        place(x, k / 6.0 + 0.02, click(r, 0.02, 2000, 7000, 0.003), 0.25)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # the deck lowers: the winch paying out, falling from a whine to a growl, with a groan of timber
+    name = "kit_drawbridge_lower"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    winch = voice(glide(170.0, 100.0, t, dur(name)), n, 10, 1.4, 0.001, 5.0, r)
+    x = 0.4 * winch * np.clip(t / 0.1, 0.0, 1.0) * np.clip((dur(name) - t) / 0.15, 0.0, 1.0)
+    x += 0.4 * groan(r, dur(name), 110.0, 1.0, (15.0, 30.0))
+    save(name, x, fin=0.002, fout=0.12)
+
+    # the deck slams down: a heavy thud and the timber boom under it
+    name = "kit_drawbridge_thud"
+    r = rng(name)
+    t = tv(dur(name))
+    x = thud(t, 75, 38, 0.1, 0.18, harm=(0.5, 0.25)) + 0.6 * click(r, dur(name), 300, 3000, 0.006)
+    x += 0.4 * modes(t, bar_modes(120.0, 0.2), r, 0.02, hard=1500)
+    save(name, space(r, x, 0.8, 0.2, 80, 2500), fin=0.0008, fout=0.2)
+
+    # the amber lamp: two warning beeps
+    name = "kit_gapwall_warn"
+    x = np.zeros(ns(dur(name)))
+    for t0 in (0.0, 0.4):
+        tt = tv(0.3)
+        beep = (tone(740.0, tt) + 0.25 * tone(1480.0, tt)) * np.minimum(tt / 0.006, 1.0) * np.clip((0.3 - tt) / 0.03, 0.0, 1.0)
+        place(x, t0, beep, 0.8)
+    save(name, x, fin=0.001, fout=0.05)
+
+    # the wall slides shut: a stone slab grinding sideways along its rails
+    name = "kit_gapwall_slide"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    grind = creak(r, dur(name), lambda u: 28.0, [(90.0, 1.0, 0.03), (260.0, 0.6, 0.02), (700.0, 0.3, 0.01)])
+    rail = noise(r, n, 200, 1500) * (0.6 + 0.4 * np.sin(TAU * 6.0 * t))
+    x = 0.8 * grind + 0.4 * rail
+    save(name, x, fin=0.01, fout=0.1)
+
+    # the wall lands: a stone thud and a dull ring from the frame
+    name = "kit_gapwall_thud"
+    r = rng(name)
+    t = tv(dur(name))
+    x = thud(t, 110, 45, 0.05, 0.1, harm=(0.4, 0.15)) + 0.5 * click(r, dur(name), 300, 3000, 0.006)
+    x += 0.35 * modes(t, bar_modes(150.0, 0.12), r, 0.02, hard=2000)
+    save(name, space(r, x, 0.6, 0.2, 90, 3000), fin=0.0008, fout=0.15)
+
+    # the block's winch cocks it: a rising whine that pulses on and off as a warning
+    name = "kit_block_tell"
+    t = tv(dur(name))
+    f = glide(420.0, 900.0, t, dur(name))
+    gate = 0.5 + 0.5 * np.clip(40.0 * np.sin(TAU * t / 0.45), -1.0, 1.0)
+    x = (0.6 * tone(f) + 0.3 * tone(f * 2.0)) * gate * np.minimum(t / 0.01, 1.0)
+    save(name, x, fin=0.002, fout=0.08)
+
+    # the block drops: a heavy slam into the floor, a plate ringing and dust hissing off
+    name = "kit_block_slam"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = thud(t, 85, 30, 0.12, 0.2, harm=(0.5, 0.25)) + 0.5 * click(r, dur(name), 200, 4000, 0.006)
+    x += 0.35 * modes(t, plate_modes(r.uniform(160.0, 200.0), 1.8, 0.2, 8, 0.7, r), r, 0.02, hard=2500)
+    x += 0.35 * noise(r, n, 60, 900) * env(t, 0.002, 0.25)
+    save(name, space(r, x, 1.3, 0.25, 80, 3000, predelay=0.02), fin=0.0008, fout=0.2)
+
+    # the block is hauled back up: a hydraulic hiss and a whirr climbing, then a clank at the top
+    name = "kit_block_rise"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    hiss = noise(r, n, 1500, 6000) * np.clip(t / dur(name), 0.0, 1.0) ** 1.2
+    whirr = voice(glide(120.0, 200.0, t, dur(name)), n, 6, 1.6, 0.001, 5.0, r)
+    x = 0.3 * hiss + 0.3 * whirr
+    place(x, dur(name) - 0.1, click(r, 0.1, 500, 3000, 0.02), 1.0)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the hammer winds back: a grinding bearing and a rising whine
+    name = "kit_hammer_tell"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = 0.45 * iron_creak(r, dur(name), 210.0, (8.0, 22.0))
+    x += 0.4 * voice(glide(160.0, 380.0, t, dur(name)), n, 8, 1.5, 0.001, 5.0, r) * env(t, 0.05, 0.8)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # the head whips past and strikes: a whoosh, a thud and the clang of iron
+    name = "kit_hammer_swing"
+    r = rng(name)
+    t = tv(dur(name))
+    x = whoosh(r, dur(name), 300, 1500, 500, 0.4, 0.15)
+    x += 0.6 * thud(t, 120, 60, 0.03, 0.06) + 0.35 * modes(t, bar_modes(640.0, 0.35), r, 0.01, hard=4000)
+    save(name, x, fin=0.001, fout=0.12)
+
+    # the head clunks into its rest
+    name = "kit_hammer_park"
+    r = rng(name)
+    t = tv(dur(name))
+    x = thud(t, 160, 80, 0.03, 0.06, harm=(0.4, 0.15)) + 0.5 * click(r, dur(name), 800, 5000, 0.003)
+    x += 0.3 * modes(t, bar_modes(480.0, 0.08), r, 0.01, hard=3000)
+    save(name, x, fin=0.0008, fout=0.12)
+
+
+# ===========================================================================
+# the emotes and poses - gen_emotes (one clip per id: emote_<id>)
+# ===========================================================================
+def whistle(f0, f1, secs, vib=0.012):
+    """A cheery whistled note: a sine gliding f0 -> f1 with a little vibrato and a soft second partial."""
+    t = tv(secs)
+    f = glide(f0, f1, t, secs * 0.6) * (1.0 + vib * np.sin(TAU * 6.0 * t))
+    x = tone(f) + 0.12 * tone(f * 2.0)
+    return taper(unit(x) * np.minimum(t / 0.03, 1.0) * np.clip((secs - t) / 0.08, 0.0, 1.0))
+
+
+def pluck(f, secs, tau=0.09):
+    """A plucked bass note: a bright buzzy tone that dies away fast."""
+    t = tv(secs)
+    v = voice(f, len(t), 12, 1.2, 0.0, 5.0)
+    return taper(svf(v, f * 3.0, 1.1) * env(t, 0.002, tau))
+
+
+def syllable(f0, f1, secs):
+    """One giggle 'ha': a quick pitch-falling blip."""
+    t = tv(secs)
+    f = glide(f0, f1, t, secs)
+    x = tone(f) + 0.3 * tone(f * 2.0)
+    return taper(unit(x) * env(t, 0.006, secs * 0.45))
+
+
+def brass(r, secs, f0, f1, form=(700.0, 1800.0), attack=0.03, release=0.1):
+    """A brass or reed note gliding f0 -> f1 (Hz) through two formants: a trombone, a bugle, a horn."""
+    t = tv(secs)
+    v = voice(glide(f0, f1, t, secs), len(t), 24, 1.0, 0.002, 5.5, r)
+    v = unit(svf(v, form[0], 1.6) + 0.5 * svf(v, form[1], 2.5))
+    return taper(v * np.minimum(t / attack, 1.0) * np.clip((secs - t) / release, 0.0, 1.0))
+
+
+def gen_emotes():
+    # wave: a cheery two-note whistle, "ooo-wee"
+    name = "emote_wave"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.0, whistle(midi(76), midi(83), 0.36), 0.8)
+    place(x, 0.4, whistle(midi(83), midi(88), 0.48), 0.8)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # thumbs up: a bright double ding
+    name = "emote_thumbsup"
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.0, fm_glass(midi(84), 0.45, 0.2, 0.6), 0.8)
+    place(x, 0.1, fm_glass(midi(91), 0.4, 0.18, 0.5), 0.6)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # dance: a short funky groove - eight stepped bass plucks with hi-hat ticks and a bright lead
+    name = "emote_dance"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    step = 0.175
+    for k, m in enumerate((45, 45, 48, 50, 45, 52, 50, 48)):
+        t0 = k * step
+        place(x, t0, pluck(midi(m), 0.16), 0.9)
+        place(x, t0 + step / 2, click(r, 0.04, 6000, 12000, 0.008), 0.25)
+        if k % 2 == 1:
+            place(x, t0 + step / 2, fm_glass(midi(m + 24), 0.16, 0.06, 0.8), 0.45)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # bow: a soft swoosh and two chimes
+    name = "emote_bow"
+    r = rng(name)
+    x = 0.6 * whoosh(r, dur(name), 250, 900, 300, 0.45, 0.2)
+    place(x, 0.5, fm_glass(midi(79), 0.9, 0.35, 0.5), 0.7)
+    place(x, 0.62, fm_glass(midi(86), 0.8, 0.3, 0.4), 0.45)
+    save(name, x, fin=0.002, fout=0.2)
+
+    # laugh: a bubbly giggle - six falling 'ha' blips, each with a bubble popping in
+    name = "emote_laugh"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for k in range(6):
+        t0 = 0.02 + k * 0.18
+        place(x, t0, syllable(midi(76 + (k % 2) * 2), midi(70 + (k % 2) * 2), 0.15), 0.7)
+        place(x, t0 + 0.05, bubble(520.0 + 40.0 * k, 0.12, 0.02, 0.6), 0.25)
+    save(name, x, fin=0.002, fout=0.15)
+
+    # flex: a power-up whoomp - a low sweep rising with a rush of air and a bright glint
+    name = "emote_flex"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    x = 0.8 * tone(glide(90.0, 280.0, t, 0.5)) * env(t, 0.01, 0.35)
+    x += 0.35 * noise(r, n, 300, 3000) * env(t, 0.02, 0.3)
+    place(x, 0.22, fm_glass(midi(79), 0.5, 0.25, 0.5), 0.5)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # spin: a whirl - a tone swooping up and down, and two swishes
+    name = "emote_spin"
+    r = rng(name)
+    t = tv(dur(name))
+    x = 0.5 * tone(320.0 * 2.0 ** (2.0 * np.sin(np.pi * t / dur(name)))) * np.sin(np.pi * t / dur(name)) ** 0.7
+    x += 0.6 * whoosh(r, dur(name), 400, 2000, 600, 0.45, 0.25)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # facepalm: a slap, then a sad trombone - wah, wah, waaah
+    name = "emote_facepalm"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.0, click(r, 0.06, 800, 6000, 0.008), 1.0)
+    place(x, 0.0, thud(tv(0.12), 260, 120, 0.02, 0.03, harm=(0.3, 0.1)), 0.9)
+    place(x, 0.22, brass(r, 0.2, midi(62), midi(62), (500.0, 1100.0), 0.05, 0.08), 0.8)
+    place(x, 0.44, brass(r, 0.2, midi(61), midi(61), (500.0, 1100.0), 0.05, 0.08), 0.8)
+    place(x, 0.66, brass(r, 0.32, midi(59), midi(55), (500.0, 1100.0), 0.05, 0.15), 0.8)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # taunt: a cheeky "nyah-nyah-nyaaah" warble, the pitch climbing as it goes
+    name = "emote_taunt"
+    r = rng(name)
+    t = tv(dur(name))
+    n = len(t)
+    v = voice(glide(midi(60), midi(67), t, dur(name)) * (1.0 + 0.04 * np.sin(TAU * 9.0 * t)), n, 16, 1.2, 0.0, 5.0, r)
+    v = unit(svf(v, 900.0, 2.5) + 0.6 * svf(v, 2200.0, 3.0))
+    gate = 0.2 + 0.8 * np.abs(np.sin(np.pi * 3.0 * t))
+    x = v * gate * np.minimum(t / 0.02, 1.0) * np.clip((dur(name) - t) / 0.1, 0.0, 1.0)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # sit: a soft plop - a bubble dropping in and a low thump
+    name = "emote_sit"
+    r = rng(name)
+    t = tv(dur(name))
+    x = bubble(180.0, dur(name), 0.08, 1.2) + 0.5 * thud(t, 130, 60, 0.05, 0.05)
+    x += 0.3 * click(r, dur(name), 200, 1500, 0.01)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # strongman: a brass hit - a fat horn chord and a low thud
+    name = "emote_strongman"
+    r = rng(name)
+    t = tv(dur(name))
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.0, brass(r, 0.85, midi(45), midi(45), (500.0, 1200.0), 0.01, 0.25), 0.8)
+    place(x, 0.0, brass(r, 0.85, midi(52), midi(52), (500.0, 1200.0), 0.01, 0.25), 0.55)
+    place(x, 0.0, thud(t, 90, 40, 0.05, 0.12, harm=(0.4, 0.2)), 0.6)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # salute: a bugle call - a short note, then a long one
+    name = "emote_salute"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.0, brass(r, 0.28, midi(67), midi(67), (900.0, 2200.0), 0.01, 0.05), 0.8)
+    place(x, 0.3, brass(r, 0.65, midi(72), midi(72), (900.0, 2200.0), 0.01, 0.2), 0.8)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # hero: a rising heroic sting - a horn arpeggio up to a held high note with a shimmer
+    name = "emote_hero"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for t0, m, d in ((0.0, 60, 0.2), (0.18, 64, 0.2), (0.36, 67, 0.2), (0.56, 72, 0.84)):
+        place(x, t0, brass(r, d, midi(m), midi(m), (700.0, 1800.0), 0.02, 0.12), 0.8)
+    place(x, 0.56, fm_glass(midi(84), 0.8, 0.4, 0.6), 0.3)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # dab: a zippy swoosh with a snap at the end
+    name = "emote_dab"
+    r = rng(name)
+    x = whoosh(r, dur(name), 500, 3500, 1000, 0.25, 0.1, q=2.0)
+    place(x, 0.5, click(r, 0.04, 2000, 8000, 0.004), 0.5)
+    save(name, x, fin=0.001, fout=0.08)
+
+    # rock star: a distorted power chord (E2 B2 E3) with a pick attack
+    name = "emote_rockstar"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    chord = np.zeros(n)
+    for m in (40, 47, 52):
+        chord += buzz_wave(midi(m), n, 16, 1.0, 1.0)
+    x = np.tanh(3.5 * unit(chord) * env(t, 0.003, 0.9))
+    x = band(x, 80, 5000) + 0.4 * click(r, dur(name), 1500, 6000, 0.01)
+    save(name, x, fin=0.001, fout=0.2)
+
+
+# ===========================================================================
 # verification
 # ===========================================================================
 def verify():
@@ -5550,7 +5986,7 @@ def verify():
 GENERATORS = (gen_steps, gen_wall, gen_movement_loops, gen_lasers, gen_crusher_piston, gen_swings, gen_surfaces,
               gen_foundry, gen_reef, gen_orbital, gen_clockwork, gen_balance, gen_gardens, gen_ascent, gen_xeno,
               gen_volcano, gen_glacier, gen_desert, gen_manor, gen_armada, gen_candy, gen_carrier,
-              gen_sakura, gen_jungle, gen_frontier, gen_neon, gen_doom, gen_abyss, gen_tempest, gen_void)
+              gen_sakura, gen_jungle, gen_frontier, gen_neon, gen_doom, gen_abyss, gen_tempest, gen_void, gen_kit, gen_emotes)
 
 
 def main():

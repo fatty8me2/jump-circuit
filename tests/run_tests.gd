@@ -65,6 +65,8 @@ func _ready() -> void:
 		var gen: int = _test_gen
 		# physics-time budget (process_in_physics, scaled): the bot levels get 1300 s each
 		var limit: float = 1300.0 * Game.LEVELS.size() if n == "test_n_bot_levels" else watchdog_s
+		if n.begins_with("test_zcpu_"):
+			limit = 2400.0   # whole CPU races under Engine.time_scale (physics seconds)
 		if n == "test_z_world_sounds":
 			# loads every level and walks each machine kind: scale with the level count
 			limit = maxf(watchdog_s, 30.0 * Game.LEVELS.size())
@@ -3388,7 +3390,15 @@ const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_l
 	"tempest_scaffold_fall", "tempest_load_bell", "tempest_gondola_start", "tempest_crane_horn", "tempest_ram_hiss",
 	"tempest_driver_hiss", "tempest_thunder", "tempest_checkpoint", "tempest_finish_strike", "tempest_beacon",
 	"void_phase_warn", "void_phase_swap", "void_rift_enter", "void_tumble_warn", "void_tumble_turn", "void_tumble_thud",
-	"void_collapse_start", "void_fragment_crack", "void_fragment_fall", "void_checkpoint", "void_finish"]
+	"void_collapse_start", "void_fragment_crack", "void_fragment_fall", "void_checkpoint", "void_finish",
+	"kit_barrel_load", "kit_barrel_fuse", "kit_barrel_fire", "kit_zipline_ready", "kit_zipline_grab",
+	"kit_zipline_release", "kit_battery_fuse", "kit_battery_fire", "kit_log_reverse", "kit_seesaw_thunk",
+	"kit_flipper_tell", "kit_flipper_swat", "kit_flipper_return", "kit_drawbridge_chains", "kit_drawbridge_raise",
+	"kit_drawbridge_lower", "kit_drawbridge_thud", "kit_gapwall_warn", "kit_gapwall_slide", "kit_gapwall_thud",
+	"kit_block_tell", "kit_block_slam", "kit_block_rise", "kit_hammer_tell", "kit_hammer_swing", "kit_hammer_park",
+	"emote_wave", "emote_thumbsup", "emote_dance", "emote_bow", "emote_laugh", "emote_flex", "emote_spin",
+	"emote_facepalm", "emote_taunt", "emote_sit", "emote_strongman", "emote_salute", "emote_hero", "emote_dab",
+	"emote_rockstar"]
 const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
 	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
 	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz",
@@ -3400,7 +3410,8 @@ const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "
 	"jungle_waterfall", "neon_car_hum", "neon_drone_hum", "neon_holo_hum", "neon_gondola_motor", "neon_steam_hiss",
 	"neon_sign_buzz", "frontier_fuse_hiss", "frontier_collapse_rumble", "frontier_steam_hiss", "frontier_cart_rumble",
 	"doom_pour_loop", "doom_reactor_hum", "doom_grate_buzz", "doom_gear_grind", "abyss_current_loop", "abyss_surge_loop",
-	"tempest_wind", "tempest_trolley", "tempest_gondola_motor", "tempest_crane_slew", "void_rift_hum", "void_collapse_rumble"]
+	"tempest_wind", "tempest_trolley", "tempest_gondola_motor", "tempest_crane_slew", "void_rift_hum", "void_collapse_rumble",
+	"kit_zipline_whirr", "kit_log_roll"]
 
 
 func test_z_world_sounds() -> void:
@@ -6874,3 +6885,1348 @@ func test_zp_items_mid_course_boxes() -> void:
 		world.queue_free()
 		world = null
 		await ticks(2)
+
+
+# ---- generic obstacle kit (docs/KIT_OBSTACLES.md): run with  --only=test_zk_ ------------------------
+
+## Plays a test course end to end with the route bot (no teleporting).
+func _kit_bot(path: String, max_s: float, what: String) -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Game.level_index = -1
+	Game.race_mode = false
+	Game.course_time = 0.0
+	Game.course_running = true
+	var lvl: LevelBase = (load(path) as GDScript).new() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	var bot := RouteBot.new()
+	lvl.add_child(bot)
+	bot.attach(lvl)
+	var t: float = 0.0
+	while t < max_s and not bot.done and not bot.stuck:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+	for line: String in bot.log_lines:
+		print("        bot: ", line)
+	check(bot.done and bot.retries <= 1, "%s (%.1fs, %d respawns, step %d/%d)" % [what, lvl.run_time, bot.retries, bot.step_index, lvl.route.size()])
+
+
+func test_zk_barrel() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab()
+	var b: LaunchBarrel = kit.barrel(Vector3(0, 0, -6), Vector3(0, 0, -22), 3.0, 3.0, 0.0, 1.0)
+	check(b.tell >= 0.8, "the barrel's tell is at least 0.8 s (%.2f)" % b.tell)
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, 0)))
+	await seconds(0.3)
+	player.cmd_move = FWD
+	var got: bool = await wait_until(func() -> bool: return b.is_loaded(), 3.0, "walk into the barrel")
+	var t_in: float = Game.course_time
+	player.cmd_move = Vector2.ZERO
+	check(got and b.loaded_player() == player and not player.control_enabled, "walking into the mouth loads the rider and takes control")
+	var fire_t: float = b.fire_time_after(t_in)
+	check(fire_t - t_in >= 0.79, "it fires at least 0.8 s after you get in (%.2f s)" % (fire_t - t_in))
+	check(absf(fposmod(fire_t / 3.0, 1.0)) < 0.001 or absf(fposmod(fire_t / 3.0, 1.0) - 1.0) < 0.001, "and on the clock grid (k * period)")
+	await seconds(0.4)
+	check(player.global_position.distance_to(b.global_position) < 0.25 and b.is_loaded(), "the loaded rider is held at the barrel centre until it fires (%.3f m, loaded %s)" % [player.global_position.distance_to(b.global_position), str(b.is_loaded())])
+	var fired: bool = await wait_until(func() -> bool: return not b.is_loaded(), 4.0, "the barrel fires")
+	var t_out: float = Game.course_time
+	check(fired and absf(t_out - fire_t) < 0.06, "it fired on the predicted tick (predicted %.3f, actual %.3f)" % [fire_t, t_out])
+	check(player.control_enabled and player.velocity.y > 8.0 and player.velocity.z < -8.0, "the shot has the fixed launch velocity %s" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+	player.cmd_move = FWD
+	await wait_landing(4.0)
+	await seconds(0.1)
+	var miss: float = Vector2(player.global_position.x, player.global_position.z + 22.0).length()
+	metrics["barrel_landing_error_m"] = miss
+	check(miss < 2.5, "holding the stick toward the target, the arc lands within 2.5 m of it (%.2f m)" % miss)
+	player.cmd_move = Vector2.ZERO
+	# a second rider must wait out the cooldown rather than be re-captured at once
+	check(not b.is_loaded(), "the barrel does not catch the rider it just fired")
+
+
+func test_zk_zipline() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab()
+	var z: Zipline = kit.zipline(Vector3(0, 0, -5), Vector3(0, 0, -45), 11.0, 1.4, 0.0)
+	check(z.dwell >= 0.9, "the zipline waits at least 0.9 s at the start (the lamp flashes through the last second) (%.2f)" % z.dwell)
+	player.teleport(Transform3D(Basis(), z.stand_point()))
+	var grabbed: bool = await wait_until(func() -> bool: return z.carrying() == player, 4.0, "the trolley picks the rider up")
+	check(grabbed and not player.control_enabled, "standing under the trolley grabs it")
+	await seconds(0.3)
+	check(absf(player.global_position.y - z.rider_feet_at(Game.course_time).y) < 0.15, "the rider hangs %.1f m below the trolley" % z.hang)
+	var rides: bool = await wait_until(func() -> bool: return player.global_position.z < -15.0, 4.0, "ride along the cable")
+	check(rides and player.velocity.z < -9.0, "the ride runs at cable speed (%.1f m/s)" % player.velocity.z)
+	var pred: Vector3 = z.rider_feet_at(Game.course_time)
+	check(player.global_position.distance_to(pred) < 0.35, "the rider is where handle_at() says (err %.2f m)" % player.global_position.distance_to(pred))
+	# a real jump press (what the pad / keyboard sends) lets go with the speed kept, plus a hop
+	player.press_jump()
+	await ticks(3)
+	check(z.carrying() == null and player.control_enabled, "pressing jump releases the rider")
+	check(player.velocity.z < -9.0 and player.velocity.y > 3.0, "and keeps the cable's speed with a hop %s" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+	await wait_landing(3.0)
+	# riding to the end lets go there with the same speed
+	var again: bool = await wait_until(func() -> bool: return z.departs_in(Game.course_time) > 0.0 and z.departs_in(Game.course_time) < 1.0, 12.0, "the trolley is back at the start")
+	player.teleport(Transform3D(Basis(), z.stand_point()))
+	var got2: bool = await wait_until(func() -> bool: return z.carrying() == player, 4.0, "picked up again")
+	var released: bool = await wait_until(func() -> bool: return z.carrying() == null, 8.0, "auto release at the far end")
+	check(again and got2 and released and player.global_position.z < -40.0, "riding to the end lets go at the far end (z %.1f)" % player.global_position.z)
+	check(player.velocity.z < -8.0, "carrying the ride speed (%.1f m/s)" % player.velocity.z)
+
+
+func test_zk_battery() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var base: Vector3 = lvl.checkpoints[0].global_position + Vector3(40, 0, 0)
+	lvl.player.use_device_input = false
+	lvl.kit.plat(base, Vector3(40, 1, 30), "main", 0.0)
+	# fires along -X from x = base + 14: the muzzle is 1.9 m ahead of the node
+	var bat: CannonBattery = lvl.kit.battery(base + Vector3(14, 0, 0), 90.0, 24.0, 9.0, 3.2, 0.0, 0.0)
+	check(bat.tell >= 0.8, "the cannon's tell is at least 0.8 s (%.2f)" % bat.tell)
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(-12, 0.1, 8)))
+	await seconds(0.5)
+	# the strip on the floor flashes through the last second before a salvo
+	await wait_until(func() -> bool: return bat.time_to_salvo(Game.course_time) < 0.6 and bat.time_to_salvo(Game.course_time) > 0.1, 4.0, "the tell")
+	await get_tree().process_frame
+	var strip_alpha: float = ((bat._strip.material_override as StandardMaterial3D).albedo_color.a)
+	check(strip_alpha > 0.0, "the lane strip lights up during the tell (alpha %.2f)" % strip_alpha)
+	# the pool shows exactly the balls balls_at() predicts
+	await wait_until(func() -> bool: return bat.balls_at(Game.course_time).size() >= 1 and bat.balls_at(Game.course_time)[0] > 5.0, 4.0, "a ball in flight")
+	await get_tree().physics_frame
+	var pred: PackedFloat32Array = bat.balls_at(Game.course_time)
+	var shown: int = 0
+	for slot: Dictionary in bat._slots:
+		if (slot["node"] as Node3D).visible:
+			shown += 1
+	check(shown == pred.size() and pred.size() >= 1, "the visible balls match the clock's prediction (%d vs %d)" % [shown, pred.size()])
+	# a clear window is really clear, a blocked one kills
+	var d: float = 10.0
+	var d0: int = lvl.deaths
+	await wait_until(func() -> bool: return bat.is_clear_for(d - 1.0, d + 1.0, 0.5), 5.0, "a gap in the salvos")
+	lvl.player.teleport(Transform3D(Basis(), bat.to_global(Vector3(0, 0.1, -1.9 - d))))
+	await seconds(0.45)
+	check(lvl.deaths == d0, "standing in the lane while is_clear_for() says clear is safe")
+	await wait_until(func() -> bool: return lvl.deaths > d0, 5.0, "a ball finds the rider standing in the lane")
+	check(lvl.deaths == d0 + 1, "a cannonball kills the rider it hits")
+	# rolling balls can be jumped
+	var jumped: bool = true
+	var t_end: float = Game.course_time + 6.0
+	d0 = lvl.deaths
+	await wait_until(func() -> bool: return bat.is_clear_for(0.0, d + 1.0, 0.3), 5.0, "the lane empties")
+	lvl.player.teleport(Transform3D(Basis(), bat.to_global(Vector3(0, 0.1, -1.9 - d))))
+	await seconds(0.3)
+	t_end = Game.course_time + 6.0
+	while Game.course_time < t_end and lvl.deaths == d0:
+		var eta: float = 99.0
+		for b: float in bat.balls_at(Game.course_time):
+			if b < d:
+				eta = minf(eta, (d - b) / 9.0)
+		if eta < 0.38 and lvl.player.grounded:
+			lvl.player.press_jump()
+			lvl.player.cmd_jump = true
+		elif lvl.player.velocity.y <= 0.0:
+			lvl.player.cmd_jump = false
+		await get_tree().physics_frame
+	lvl.player.cmd_jump = false
+	jumped = lvl.deaths == d0
+	check(jumped, "a well-timed jump clears a rolling ball for two salvos")
+
+
+func test_zk_log() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab(Vector3(200, 1, 200), Vector3(0, -8, 0))
+	var lg: RollingLog = kit.log_roller(Vector3(0, 0, 0), 12.0, 3.0, 0.0, 3.0, 0.0)
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, 0)))
+	await seconds(0.25)
+	player.cmd_move = Vector2.ZERO
+	await seconds(0.2)
+	check(player.grounded and player.floor_body == lg, "the player stands on the log's top line")
+	check(player.velocity.z > 1.5 or player.global_position.z > 0.3, "the roll drags a standing rider sideways along the log's Z (v %s)" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+	check(lg.surface_velocity().is_equal_approx(Vector3(0, 0, 3.0)), "surface_velocity() is the push (%s)" % str(lg.surface_velocity()))
+	# a reversing log: sine push, predictable calm spells
+	var lr: RollingLog = kit.log_roller(Vector3(40, 0, 0), 12.0, 3.0, 0.0, 4.0, 6.0, 0.0)
+	check(absf(lr.speed_at(0.0)) < 0.001 and absf(lr.speed_at(1.5) - 4.0) < 0.001 and absf(lr.speed_at(4.5) + 4.0) < 0.001, "a reversing log pushes 0, +speed, 0, -speed through its period")
+	check(lr.is_calm_for(-0.1, 0.2) and not lr.is_calm_for(1.0, 0.2), "is_calm_for() finds the stand-still moments")
+	check(absf(lr.calm_in(1.5) - 1.5) < 0.6, "calm_in() says when the next one comes (%.2f s)" % lr.calm_in(1.5))
+	# stable footing: run its length without being thrown off (the bot test below does the real crossing)
+	player.teleport(Transform3D(Basis(), Vector3(35, 0.05, 0.0)))
+	await seconds(0.3)
+	for i: int in 96:
+		# run along +X, steering back to the log's line against the push
+		player.cmd_move = Vector2(1.0, clampf((player.global_position.z - lr.global_position.z) * 2.5, -1.0, 1.0))
+		await get_tree().physics_frame
+	player.cmd_move = Vector2.ZERO
+	check(player.global_position.y > -1.0, "a rider can run along a reversing log (y %.2f)" % player.global_position.y)
+
+
+func test_zk_seesaw() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab(Vector3(200, 1, 200), Vector3(0, -8, 0))
+	var s: Seesaw = kit.seesaw(Vector3(0, 0, 0), 9.0, 2.6, true, 0.0)
+	await seconds(0.3)
+	check(s.is_level(2.0), "an empty seesaw rests level (%.1f deg)" % s.axis_degrees())
+	player.teleport(Transform3D(Basis(), Vector3(3.9, 0.2, 0)))
+	await seconds(1.4)
+	var right: float = s.axis_degrees()
+	check(absf(right) > 6.0, "standing near one end tips that end down (%.1f deg)" % right)
+	player.teleport(Transform3D(Basis(), Vector3(-3.9, s.global_position.y + 0.9, 0)))
+	await seconds(1.6)
+	var left: float = s.axis_degrees()
+	check(absf(left) > 6.0 and signf(left) != signf(right), "standing near the other end tips it the other way (%.1f deg)" % left)
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.6, 0)))
+	await seconds(1.4)
+	check(absf(s.axis_degrees()) < 6.0, "standing on the pivot levels it (%.1f deg)" % s.axis_degrees())
+	# a counterweight tips the empty plank at rest
+	var w: Seesaw = kit.seesaw(Vector3(40, 0, 0), 9.0, 2.6, true, 10.0)
+	await seconds(1.5)
+	check(absf(w.axis_degrees()) > 5.0 and absf(w.axis_degrees()) < 14.0, "bias_deg tips the empty plank (%.1f deg)" % w.axis_degrees())
+	# the other orientation
+	var z: Seesaw = kit.seesaw(Vector3(80, 0, 0), 9.0, 2.6, false, 0.0)
+	player.teleport(Transform3D(Basis(), Vector3(80, 0.2, -3.9)))
+	await seconds(1.4)
+	check(absf(z.axis_degrees()) > 6.0, "a plank along Z tips about X (%.1f deg)" % z.axis_degrees())
+
+
+func test_zk_bot_slice1() -> void:
+	await _kit_bot("res://tests/kit_course.gd", 120.0, "the bot rides the barrel, zipline, cannon lane, rolling log and seesaw")
+
+
+## The longest run of `ph` phases (seconds) over one period, sampled every 10 ms.
+func _kit_phase_span(period: float, phase_of: Callable, ph: int) -> float:
+	var best: float = 0.0
+	var run: float = 0.0
+	var t: float = 0.0
+	while t < period * 2.0:
+		if int(phase_of.call(t)) == ph:
+			run += 0.01
+			best = maxf(best, run)
+		else:
+			run = 0.0
+		t += 0.01
+	return best
+
+
+func test_zk_flipper() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab(Vector3(60, 1, 60), Vector3(0, -0.04, 0))
+	var f: Flipper = kit.flipper(Vector3(0, 0, 0), 5.0, 0.0, 80.0, 4.0, 0.0)
+	check(_kit_phase_span(f.period, f.phase_at, 1) >= 0.8, "the flipper winds up for at least 0.8 s before it swats (%.2f s)" % _kit_phase_span(f.period, f.phase_at, 1))
+	check(absf(f.angle_at(0.0)) < 0.01 and absf(f.angle_at(f._rest_len + f.tell + 0.2) - 80.0) < 0.5, "it rests at rest_deg and ends the swat at rest_deg + swing_deg")
+	check(f.swat_free_for(0.0, 1.0) and not f.swat_free_for(0.0, f._rest_len + f.tell + 0.05), "swat_free_for() matches the clock")
+	var pred: Vector3 = f.throw_velocity(Vector3(3.5, 0, 0))
+	check(pred.z < -8.0 and pred.y > 6.0 and absf(pred.x) < 0.5, "a rider near the tip is thrown along the swing toward -Z %s" % str(pred.snapped(Vector3.ONE * 0.1)))
+	check(f.throw_velocity(Vector3(1.0, 0, 0)).length() < pred.length(), "and thrown less near the pivot")
+	player.teleport(Transform3D(Basis(), Vector3(3.5, 0.2, 0)))
+	await settle()
+	var thrown: bool = await wait_until(func() -> bool: return player.velocity.y > 5.0 and player.velocity.z < -6.0, 6.0, "the swat")
+	check(thrown, "standing on the paddle when it swats throws the rider (v %s)" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+	var landed: float = await wait_landing(4.0)
+	check(landed < 4.0 and player.global_position.z < -4.0, "and carries them well clear of it (z %.1f)" % player.global_position.z)
+
+
+func test_zk_drawbridge() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab(Vector3(60, 1, 60), Vector3(0, -9, 0))
+	kit.plat(Vector3(0, 0, 4), Vector3(8, 1, 8))
+	var br: Drawbridge = kit.drawbridge(Vector3(0, 0, 0), 8.0, 3.4, 0.0, 9.0, 0.0)
+	check(_kit_phase_span(br.period, br.phase_at, 1) >= 0.8, "the chains rattle for at least 0.8 s before it rises (%.2f s)" % _kit_phase_span(br.period, br.phase_at, 1))
+	check(br.angle_at(0.0) == 0.0 and absf(br.angle_at(br._down_hold + br.warn + br.RAISE + 0.2) - br.raise_deg) < 0.01, "flat for the down hold, raised after the rise")
+	check(br.is_down_for(0.0, br._down_hold - 0.1) and not br.is_down_for(0.0, br._down_hold + 0.1), "is_down_for() covers exactly the down hold")
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.1, -6)))
+	await seconds(0.5)
+	check(player.grounded and player.floor_body == br._deck, "the lowered deck is solid ground")
+	check(absf(br._deck.rotation.x - deg_to_rad(br.angle_at(Game.course_time))) < 0.01, "the deck's pose is the clock's")
+	# let it rise under the rider: they are dumped back toward the hinge, not carried up
+	await wait_until(func() -> bool: return br.angle_at(Game.course_time) > 60.0, 12.0, "the deck rises")
+	await seconds(0.3)
+	check(player.global_position.z > -3.0 or player.global_position.y < -1.0, "a rider on the rising deck slides off it (z %.1f y %.1f)" % [player.global_position.z, player.global_position.y])
+	await wait_until(func() -> bool: return br.phase_at(Game.course_time) == 0, 12.0, "the deck is down again")
+
+
+func test_zk_gapwall() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab()
+	var w: GapWall = kit.gap_wall(Vector3(0, 0, -10), 0.0, 3.4, 8.0, 0.0)
+	check(w.move_time >= 0.8 and w.warn >= 0.8, "the wall's slide and its lamp warning are at least 0.8 s (%.1f, %.1f)" % [w.move_time, w.warn])
+	check(w.is_open_for(0.0, 1.5) and not w.is_open_for(0.0, 4.5) and absf(w.offset_at(w.open_time + w.move_time + 0.2)) > w.gap * 0.5 + 1.5, "open at the start, shut through its closed time")
+	check(w.open_in(w.open_time + 0.5) > 0.0 and w.open_in(0.0) == 0.0, "open_in() finds the next opening")
+	# shut: it stops the rider
+	await wait_until(func() -> bool: return w.state_at(Game.course_time) == 3, 10.0, "the wall to shut")
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, -4)))
+	player.cmd_move = FWD
+	await seconds(0.9)
+	check(player.global_position.z > -9.2, "a shut wall blocks the lane (z %.2f)" % player.global_position.z)
+	player.cmd_move = Vector2.ZERO
+	# open: it lets the rider through
+	await wait_until(func() -> bool: return w.is_open_for(Game.course_time, 2.0) and w.state_at(Game.course_time) == 0, 12.0, "the doorway to line up")
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, -5.5)))
+	player.cmd_move = FWD
+	var through: bool = await wait_until(func() -> bool: return player.global_position.z < -12.5, 3.0, "walk through the doorway")
+	player.cmd_move = Vector2.ZERO
+	check(through, "an open doorway lets the rider straight through")
+
+
+func test_zk_block() -> void:
+	var lvl: LevelBase = await load_level(0)
+	var base: Vector3 = lvl.checkpoints[0].global_position + Vector3(40, 0, 0)
+	lvl.player.use_device_input = false
+	lvl.kit.plat(base, Vector3(30, 1, 30), "main", 0.0)
+	var b: FallingBlock = lvl.kit.falling_block(base, Vector3(3, 1.6, 3), 7.0, 5.0, 0.0)
+	check(b.tell >= 0.8 and _kit_phase_span(b.period, b.phase_at, 1) >= 0.8, "the shadow grows for at least 0.8 s before the drop (%.2f s)" % _kit_phase_span(b.period, b.phase_at, 1))
+	check(b.gap_at(0.0) == 7.0 and b.gap_at(b._rest_len + b.tell + b.FALL + 0.1) == 0.0, "it hangs high, lands on the floor and rests there")
+	await seconds(0.3)
+	# the shadow swells through the tell
+	await wait_until(func() -> bool: return b.phase_at(Game.course_time) == 1, 6.0, "the tell begins")
+	await get_tree().physics_frame
+	var a0: float = (b._shadow.material_override as StandardMaterial3D).albedo_color.a
+	var s0: float = b._shadow.scale.x
+	await seconds(0.7)
+	var a1: float = (b._shadow.material_override as StandardMaterial3D).albedo_color.a
+	check(a1 > a0 + 0.1 and b._shadow.scale.x > s0 + 0.2, "the floor shadow darkens and grows through the tell (alpha %.2f -> %.2f)" % [a0, a1])
+	# standing clear when is_clear_for() says so is safe; standing under it through the drop is not
+	var d0: int = lvl.deaths
+	await wait_until(func() -> bool: return b.is_clear_for(Game.course_time, 0.4) and b.phase_at(Game.course_time) == 0, 8.0, "a clear moment")
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(0, 0.1, 0)))
+	await seconds(0.3)
+	check(lvl.deaths == d0, "standing under it while is_clear_for() holds is safe")
+	var hit: bool = await wait_until(func() -> bool: return lvl.deaths > d0, 5.0, "the drop")
+	var land_t: float = b._rest_len + b.tell + b.FALL
+	check(hit and fposmod(Game.course_time, b.period) > land_t - 0.2, "the block kills a rider who stays under it through the drop")
+	# approach mode: idle until someone comes near, then the same tell and drop
+	var a: FallingBlock = lvl.kit.falling_block(base + Vector3(14, 0, 0), Vector3(3, 1.6, 3), 7.0, 5.0, 0.0, true)
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(14, 0.1, 12)))
+	await seconds(1.0)
+	check(a.phase_at(Game.course_time) == 0 and a.gap_at(Game.course_time) == 7.0, "an approach block stays up while nobody is near")
+	d0 = lvl.deaths
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(14, 0.1, 4.0)))
+	var armed: bool = await wait_until(func() -> bool: return a.phase_at(Game.course_time) == 1, 1.0, "the approach block to arm")
+	var armed_at: float = Game.course_time
+	check(armed, "coming within the trigger radius starts the tell at once")
+	lvl.player.teleport(Transform3D(Basis(), base + Vector3(14, 0.1, 0)))
+	await wait_until(func() -> bool: return lvl.deaths > d0, 4.0, "the approach block lands")
+	check(Game.course_time - armed_at >= 0.8, "and it fell no sooner than the tell (%.2f s after arming)" % (Game.course_time - armed_at))
+
+
+func test_zk_hammer() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab()
+	var h: SpinHammer = kit.hammer(Vector3(0, 0, 0), 5.0, 4.8, 0.0, 180.0, 1.0)
+	check(_kit_phase_span(h.period, h.phase_at, 1) >= 0.8, "the hammer winds back for at least 0.8 s (%.2f s)" % _kit_phase_span(h.period, h.phase_at, 1))
+	check(absf(h.angle_at(0.0) - 180.0) < 0.01 and absf(h.angle_at(h._rest_len + h.tell + h.swing_time - 0.001) - 540.0) < 0.5, "it parks at park_deg and sweeps one full turn")
+	check(h.is_parked_for(0.0, 2.0) and not h.is_parked_for(0.0, h._rest_len + 0.2) and h.tip_speed_at(0.5) < 0.1 and h.tip_speed_at(h._rest_len + h.tell + h.swing_time * 0.5) > 15.0, "is_parked_for() and the head speed follow the clock")
+	var knocks: Array[int] = [0]
+	player.knocked.connect(func(_v: Vector3) -> void: knocks[0] += 1)
+	# parked: standing right at the parked head is harmless (arm points -X)
+	await wait_until(func() -> bool: return h.phase_at(Game.course_time) == 0 and h.parked_left(Game.course_time) > 1.5, 8.0, "the hammer to park")
+	player.teleport(Transform3D(Basis(), Vector3(2.5, 0.05, 0)))
+	await seconds(0.6)
+	check(knocks[0] == 0 and player.grounded, "a rider on the clear side of a parked hammer is untouched")
+	# in the way of the swing: knocked outward and up
+	player.teleport(Transform3D(Basis(), Vector3(-4.0, 0.05, 0)))
+	var got: bool = await wait_until(func() -> bool: return knocks[0] > 0, 8.0, "the hammer reaches the rider")
+	check(got and player.velocity.y > 5.0 and player.velocity.length() > 8.0, "the swing knocks the rider away (v %s)" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+
+
+func test_zk_bot_slice2() -> void:
+	await _kit_bot("res://tests/kit_course2.gd", 150.0, "the bot passes the gap wall, falling block, hammer, flipper and drawbridge")
+
+
+func test_zk_gallery() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Game.level_index = -1
+	Game.race_mode = false
+	Game.course_time = 0.0
+	Game.course_running = true
+	var lvl: LevelBase = (load("res://levels/playground.tscn") as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	var kinds: Array[String] = ["LaunchBarrel", "Zipline", "CannonBattery", "RollingLog", "Seesaw", "Flipper", "Drawbridge", "GapWall", "FallingBlock", "SpinHammer"]
+	var missing: Array[String] = []
+	for k: String in kinds:
+		if lvl.find_children("*", k, true, false).is_empty():
+			missing.append(k)
+	check(missing.is_empty(), "the Kit Gallery shows all ten obstacles (missing: %s)" % str(missing))
+	check(lvl.find_children("*", "Label3D", true, false).size() >= 11, "and labels them")
+	lvl.player.use_device_input = false
+	lvl.player.teleport(Transform3D(Basis(), Vector3(60, 0.1, -2)))
+	await seconds(0.8)
+	check(lvl.player.grounded and lvl.deaths == 0, "the gallery floor is solid and joined to the playground (y %.2f)" % lvl.player.global_position.y)
+	lvl.player.cmd_move = Vector2(-1, 0)
+	await seconds(2.6)
+	lvl.player.cmd_move = Vector2.ZERO
+	check(lvl.player.global_position.x < 40.0 and lvl.player.grounded and lvl.deaths == 0, "and you can walk back over the join to the playground (x %.1f)" % lvl.player.global_position.x)
+
+
+# ======================================================================================
+# anim-depth (C6): online move mirroring, idle fidgets and flourishes, landing variety, the
+# checkpoint touch and the respawn materialize.
+# ======================================================================================
+
+## A built, settled visual standing at the origin of the test world.
+func _zn_visual(character: String = "volt") -> PlayerVisual:
+	var v := PlayerVisual.new()
+	v.set_character(character)
+	add_child(v)
+	await ticks(2)
+	for i: int in 20:
+		v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	return v
+
+
+## Flags -> wire -> flags, over the relay event and the direct RPC handler.
+func test_zn_move_flags_wire() -> void:
+	check(MoveFlags.clean(null) == 0 and MoveFlags.clean("7") == 0 and MoveFlags.clean(-3) == 0 and MoveFlags.clean(99) == 0
+		and MoveFlags.clean(NAN) == 0 and MoveFlags.clean([1]) == 0, "junk flags mean no move")
+	check(MoveFlags.clean(MoveFlags.WALL_RIGHT) == 0 and MoveFlags.clean(float(MoveFlags.KICK)) == MoveFlags.KICK, "a wall side without a wall is dropped; floats are fine")
+	check(MoveFlags.clean(MoveFlags.WALL | MoveFlags.WALL_RIGHT) == 3 and MoveFlags.wall_side(3) == 1.0 and MoveFlags.wall_side(1) == -1.0 and MoveFlags.wall_side(MoveFlags.KICK) == 0.0, "wall side")
+	var plain: Dictionary = Net.pose_packet(Vector3(1, 2, 3), Vector3.ZERO, true, 4)
+	var moving: Dictionary = Net.pose_packet(Vector3(1, 2, 3), Vector3.ZERO, false, 4, MoveFlags.WALL | MoveFlags.KICK)
+	check(not plain.has("f") and moving.get("f") == 9, "a plain pose packet carries no flags key; a move adds one small int")
+	var lvl: LevelBase = await _zm_race_level()
+	var g: RemoteRacer = lvl._ghosts.get(2)
+	var got: Array = []
+	var catcher := func(id: int, _pos: Vector3, _vel: Vector3, _grounded: bool, _seq: int) -> void: got.append([id, Net.pose_flags.get(id, -1)])
+	Net.racer_pose.connect(catcher)
+	# the relay path: JSON in, flags out (the key survives the round trip)
+	var wire: Variant = JSON.parse_string(JSON.stringify(moving))
+	Net._handle_relay_event(2, "pose", wire)
+	check(got == [[2, 9]] and Net.pose_flags[2] == 9, "the relay event delivers the move bits (%s)" % [got])
+	check(g.move_flags() == 9, "and the racer shows them")
+	# an older client's packet (no key) means no move, and clears the old bits
+	Net._handle_relay_event(2, "pose", JSON.parse_string(JSON.stringify(plain)))
+	check(Net.pose_flags[2] == 0 and g.move_flags() == 0, "a packet without flags clears them")
+	# garbage never gets through
+	for bad: Variant in ["x", 99, -1, null, [3], {"a": 1}]:
+		var pk: Dictionary = plain.duplicate()
+		pk["f"] = bad
+		Net._handle_relay_event(2, "pose", pk)
+		check(Net.pose_flags[2] == 0, "junk flags %s are ignored" % [bad])
+	# the direct path: the _pose_f RPC handler (the sender id is 0 outside a real RPC)
+	Net.roster[0] = Net.roster[2]
+	Net._pose_f(Vector3.ZERO, Vector3.ZERO, false, 0, MoveFlags.MANTLE)
+	check(Net.pose_flags.get(0) == MoveFlags.MANTLE, "the direct RPC delivers the bits")
+	Net._pose(Vector3.ZERO, Vector3.ZERO, true, 0)
+	check(Net.pose_flags.get(0) == 0, "and the plain RPC means none")
+	Net._pose_f(Vector3.ZERO, Vector3.ZERO, false, 0, 4096)
+	check(Net.pose_flags.get(0) == 0, "junk over the RPC is ignored too")
+	Net.roster.erase(0)
+	Net.pose_flags.erase(0)
+	# sending outside a link is harmless, flags or not
+	Net.send_pose(Vector3.ZERO, Vector3.ZERO, true, MoveFlags.WALL)
+	Net.racer_pose.disconnect(catcher)
+	await _zm_end_race()
+
+
+## The sender's side: what the local player reports.
+func test_zn_player_reports_moves() -> void:
+	await new_world()
+	check(player.net_move_flags() == 0, "standing still shows no move")
+	player._wall_body = player
+	player._wall_normal = Vector3(-1, 0, 0)   # the panel is on the player's right when facing -z
+	check(player.net_move_flags() == (MoveFlags.WALL | MoveFlags.WALL_RIGHT), "wall running on the right")
+	player._wall_normal = Vector3(1, 0, 0)
+	check(player.net_move_flags() == MoveFlags.WALL, "wall running on the left")
+	player._wall_body = null
+	player._mantle_t = 0.2
+	check(player.net_move_flags() == MoveFlags.MANTLE, "mantling")
+	player._mantle_t = -1.0
+	player._wall_jump()
+	check(player.net_move_flags() & MoveFlags.KICK != 0, "a wall kick raises its bit")
+	player._nf_kick_until = 0
+	check(player.net_move_flags() & MoveFlags.KICK == 0, "and drops it after the hold")
+	player.knockback(Vector3(4, 6, 0))
+	check(player.net_move_flags() & MoveFlags.KNOCK != 0, "a knock raises its bit")
+	player._nf_knock_until = 0
+	check(player.net_move_flags() == 0, "and drops it too")
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+## The receiving side: remote racers drive the same visual hooks.
+func test_zn_remote_racer_mirrors_moves() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var e0: int = trap.count()
+	var r := RemoteRacer.new()
+	add_child(r)
+	await ticks(1)
+	r.setup("Ada", Settings.RACER_COLORS[1])
+	var v: PlayerVisual = r.visual()
+	var pos := Vector3(0, 1, 0)
+	var run := Vector3(0, 0, -8)
+	r.push_state(pos, run, true, 0)   # (the four-argument call of an older caller still works)
+	await _frames(3)
+	# the wall run: latch fx, lean away from the wall, the wall-side mitt reaches
+	r.push_state(pos, run, false, 0, MoveFlags.WALL | MoveFlags.WALL_RIGHT)
+	check(v.wall_roll == 1.0 and v.wall_normal != Vector3.ZERO and r.move_flags() == 3, "a wall run on the right shows (roll %.1f)" % v.wall_roll)
+	check(absf(v.wall_normal.dot(r.facing().cross(Vector3.UP))) > 0.9 and v.wall_normal.dot(r.facing().cross(Vector3.UP)) < 0.0, "the panel is on the right of their heading")
+	await _frames(25)
+	check(v._lean.y > 0.25, "they lean away from the wall (%.2f)" % v._lean.y)
+	check(v._air_t == 0.0, "the wall run counts as on the ground for the pose")
+	r.push_state(pos, run, false, 0, MoveFlags.WALL)
+	check(v.wall_roll == -1.0, "the other side too")
+	# the wall kick: a flip and the radial burst, once per rising edge
+	var jump_before: float = v._jump_t
+	r.push_state(pos, Vector3(2, 9, 0), false, 0, MoveFlags.KICK)
+	check(v._flip_t == 0.0 and v._kick_t > 0.3 and v.wall_roll == 0.0, "a wall kick flips")
+	check(v._jump_t == jump_before, "and is not also guessed as a plain jump")
+	v._flip_t = 5.0
+	r.push_state(pos, Vector3(2, 9, 0), false, 0, MoveFlags.KICK)
+	check(v._flip_t == 5.0, "a held bit does not retrigger")
+	r.push_state(pos, Vector3(2, 9, 0), false, 0, 0)
+	r.push_state(pos, Vector3(2, 9, 0), false, 0, MoveFlags.KICK)
+	check(v._flip_t == 0.0, "but the next one does")
+	# the mantle scramble
+	r.push_state(pos, Vector3.ZERO, false, 0, 0)
+	await _frames(3)
+	r.push_state(pos, Vector3(0, 3, 0), false, 0, MoveFlags.MANTLE)
+	check(v._mantle_t == 0.0, "a mantle starts the scramble")
+	await _frames(10)
+	check(v._mantle_t > 0.0 and v._mantle_t < v._mantle_len * 1.2, "it plays out (%.2f)" % v._mantle_t)
+	# the knock flail
+	r.push_state(pos, Vector3.ZERO, true, 0, 0)
+	await _frames(25)
+	r.push_state(pos, Vector3(5, 7, 0), false, 0, MoveFlags.KNOCK)
+	check(v._knock_t == 0.0, "a knock flails")
+	# without the flag the old guesses still work
+	r.push_state(pos, Vector3.ZERO, true, 0, 0)
+	r.push_state(pos, Vector3(0, 8, 0), false, 0, 0)
+	check(v._jump_t == 0.0, "a jump with no flags is still guessed")
+	# a respawn (new seq) drops the bits
+	r.push_state(pos, run, false, 1, MoveFlags.WALL)
+	r.push_state(pos, run, true, 2, 0)
+	check(r.move_flags() == 0 and v.wall_roll == 0.0, "a respawn clears the move")
+	# junk is clamped by MoveFlags.clean
+	r.push_state(pos, run, true, 2, 4096)
+	check(r.move_flags() == 0, "an out-of-range value is no move")
+	await _frames(10)
+	check(trap.count() == e0, "no errors %s" % trap.since(e0))
+	r.queue_free()
+	await ticks(2)
+
+
+## The ghost keeps the move bits too (and an older ghost, which has none, still plays).
+func test_zn_ghost_keeps_moves() -> void:
+	var g := GhostData.new()
+	g.level_id = "gardens"
+	g.rev = GhostData.current_rev("gardens")
+	g.time = 3.0
+	g.add(Vector3(0, 0, 0), 0.0, true, false, false)
+	g.add(Vector3(0, 0, -1), 0.0, false, true, false, MoveFlags.WALL | MoveFlags.WALL_RIGHT)
+	g.add(Vector3(0, 1, -2), 0.0, false, false, false, MoveFlags.MANTLE)
+	g.add(Vector3(0, 2, -3), 0.0, false, false, false, MoveFlags.KICK | MoveFlags.KNOCK)
+	g.add(Vector3(0, 2, -4), 0.0, true, false, true, 99)
+	check(g.moves_at(0) == 0 and g.moves_at(1) == 3 and g.moves_at(2) == MoveFlags.MANTLE and g.moves_at(3) == (MoveFlags.KICK | MoveFlags.KNOCK) and g.moves_at(4) == 0,
+		"each sample keeps its bits (junk dropped)")
+	var back: GhostData = GhostData.decode(g.encode(), "gardens")
+	check(back != null and back.moves_at(1) == 3 and back.moves_at(3) == 24, "they survive the file")
+	check(int(back.sample(1.0 / float(GhostData.HZ))["moves"]) == 3 and bool(back.sample(1.0 / float(GhostData.HZ))["wall"]), "sample() reports them")
+	# a ghost recorded before this update has only the old bits
+	var old := GhostData.new()
+	old.add(Vector3.ZERO, 0.0, true, false, false)
+	old.add(Vector3.ZERO, 0.0, false, true, false)
+	old.add(Vector3.ZERO, 0.0, true, false, true)
+	check(old.moves_at(0) == 0 and old.moves_at(1) == MoveFlags.WALL and old.moves_at(2) == 0, "an older ghost reads as wall-or-nothing (the snap bit is not a move)")
+	# a racer replaying them
+	var r := RemoteRacer.new()
+	add_child(r)
+	await ticks(1)
+	r.make_ghost("PB", Color.WHITE)
+	r.push_state(Vector3.ZERO, Vector3.ZERO, true, 0, 0)
+	r.push_state(Vector3.ZERO, Vector3.ZERO, true, 0, g.moves_at(1))
+	check(r.visual().wall_roll == 1.0, "the ghost wall-runs when it did")
+	r.push_state(Vector3.ZERO, Vector3.ZERO, true, 0, g.moves_at(3))
+	check(r.visual()._knock_t == 0.0 and r.visual()._flip_t < 1.0, "and kicks / flails")
+	r.queue_free()
+	await ticks(2)
+
+
+## Fidgets 4-7 and every character's flourish: finite, above the floor, and each really moves
+## something.
+func test_zn_fidgets_and_flourishes() -> void:
+	await new_world()
+	var chars: Array = Cosmetics.ids("character")
+	check(chars.size() >= 15, "all the characters are covered (%d)" % chars.size())
+	var seen: Dictionary = {}
+	for n: int in 10:
+		seen[Flourish.pick(n, 0.0, 0.0)] = true
+	check(seen.size() == Flourish.COUNT, "the fidget rotation reaches all %d fidgets (%s)" % [Flourish.COUNT, str(seen.keys())])
+	for r2: float in [0.0, 0.3, 0.6, 0.999, 1.0]:
+		check(Flourish.pick(3, 0.9, r2) >= 0 and Flourish.pick(3, 0.9, r2) < Flourish.COUNT, "a random pick stays in range (%.2f)" % r2)
+	var e0: int = trap.count()
+	var f := Flourish.Pose.new()
+	for c: String in chars:
+		check(Flourish.OF_CHARACTER.has(c) and Flourish.LEN.has(Flourish.OF_CHARACTER[c]), "%s has its own flourish" % c)
+		var v: PlayerVisual = await _zn_visual(c)
+		var floor_y: float = v.global_position.y
+		for fid: int in range(Flourish.FIRST_NEW, Flourish.COUNT):
+			var clip: String = Flourish.clip_for(fid, c)
+			var len: float = Flourish.length(fid, c)
+			check(clip != "" and len > 1.0, "%s fidget %d is the clip '%s' (%.1f s)" % [c, fid, clip, len])
+			# the pure pose: finite, and the clip does something
+			var moved: float = 0.0
+			var finite: bool = true
+			var t: float = 0.0
+			while t < len:
+				Flourish.sample(f, clip, t)
+				for p: Vector3 in [f.hr, f.hl, f.fr, f.fl, f.torso_rot]:
+					finite = finite and p.is_finite()
+				finite = finite and is_finite(f.torso_y) and is_finite(f.root_y) and is_finite(f.spin) and is_finite(f.eye) and is_finite(f.ant_scale) and f.ant_kick.is_finite()
+				moved = maxf(moved, maxf((f.hr - Flourish.HAND).length(), (f.hl - Vector3(-Flourish.HAND.x, Flourish.HAND.y, Flourish.HAND.z)).length()))
+				moved = maxf(moved, maxf((f.fr - Flourish.FOOT).length(), (f.fl - Vector3(-Flourish.FOOT.x, Flourish.FOOT.y, Flourish.FOOT.z)).length()))
+				moved = maxf(moved, maxf(f.torso_rot.length(), maxf(absf(f.root_y), maxf(f.sway * 0.3, absf(f.ant_scale - 1.0)))))
+				t += 0.05
+			check(finite, "%s / %s: the sampled pose is finite" % [c, clip])
+			check(moved > 0.05, "%s / %s: it moves something (%.2f)" % [c, clip, moved])
+			# played on the rig: every mesh finite, nothing sinks below the floor
+			v._fidget = fid
+			v._fidget_t = 0.0
+			v._fl_puffs = 0
+			var low: float = INF
+			var ok: bool = true
+			var frames: int = int(len * 60.0) + 12
+			for i: int in frames:
+				v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+				if i % 6 == 0:
+					for mi: MeshInstance3D in _zm_meshes(v._root):
+						var o: Vector3 = mi.global_transform.origin
+						ok = ok and o.is_finite() and mi.global_transform.basis.is_finite()
+					var box: AABB = _zm_aabb(v._root)
+					low = minf(low, box.position.y - floor_y)
+			check(ok, "%s / %s: every mesh transform stays finite" % [c, clip])
+			check(low > -0.05, "%s / %s: nothing sinks below the floor (lowest %.3f)" % [c, clip, low])
+			# the fidget is over (animate ended it) and the body is back at rest
+			check(v._fidget == -1 or v._fidget_t < len, "%s / %s: the fidget ends" % [c, clip])
+			v._fidget = -1
+			for i: int in 30:
+				v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+			check(v._fl_clip == "" and v._sway_boost == 0.0 and absf(v._torso.rotation.x) < 0.001 and absf(v._torso.rotation.z) < 0.001 and v._antenna.scale.is_equal_approx(Vector3.ONE),
+				"%s / %s: everything it touched goes back to rest" % [c, clip])
+		v.queue_free()
+	check(trap.count() == e0, "no errors %s" % trap.since(e0))
+	# the secondary motion really changes: the dino's tail, the pirate's parrot, the wizard's orb, the knight's sword
+	var dino: PlayerVisual = await _zn_visual("dino")
+	var wag: float = 0.0
+	dino._fidget = Flourish.FLOURISH
+	dino._fidget_t = 0.0
+	for i: int in 90:
+		dino.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+		wag = maxf(wag, absf(dino._sways[0].node.rotation.y))
+	check(wag > 0.3, "the dino's tail wags hard in its flourish (%.2f rad)" % wag)
+	dino.queue_free()
+	var pirate: PlayerVisual = await _zn_visual("pirate")
+	var flap: float = 0.0
+	pirate._fidget = Flourish.FLOURISH
+	pirate._fidget_t = 0.0
+	for i: int in 90:
+		pirate.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+		flap = maxf(flap, absf(pirate._sways[0].node.rotation.x - pirate._sways[0].base.x))
+	check(flap > 0.15, "the parrot flaps (%.2f rad)" % flap)
+	pirate.queue_free()
+	var wiz: PlayerVisual = await _zn_visual("wizard")
+	var orb: float = 1.0
+	wiz._fidget = Flourish.FLOURISH
+	wiz._fidget_t = 0.0
+	for i: int in 100:
+		wiz.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+		orb = maxf(orb, wiz._antenna.scale.x)
+	check(orb > 1.5, "the wizard's orb pulses (x%.2f)" % orb)
+	wiz.queue_free()
+	var knight: PlayerVisual = await _zn_visual("knight")
+	var base_meshes: int = _zm_meshes(knight._root).size()
+	knight._fidget = Flourish.FLOURISH
+	knight._fidget_t = 0.0
+	var shown: bool = false
+	for i: int in 100:
+		knight.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+		shown = shown or (knight._fl_prop != null and knight._fl_prop.visible)
+	check(shown, "the knight's sword comes out")
+	for i: int in 120:
+		knight.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(knight._fl_prop != null and not knight._fl_prop.visible, "and goes away")
+	check(_zm_meshes(knight._root).size() <= ZM_MESH_BUDGET - 8 and _zm_meshes(knight._root).size() <= base_meshes + 3, "the sword stays inside the mesh budget (%d -> %d)" % [base_meshes, _zm_meshes(knight._root).size()])
+	knight.set_character("ninja")
+	check(knight._fl_prop == null, "swapping the body drops the sword")
+	knight.queue_free()
+	# moving cancels a fidget quickly and cleanly
+	var ninja: PlayerVisual = await _zn_visual("ninja")
+	ninja._fidget = Flourish.FLOURISH
+	ninja._fidget_t = 0.0
+	for i: int in 60:
+		ninja.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(ninja._fl_w > 0.5, "the ninja is mid-flourish")
+	for i: int in 30:
+		ninja.animate(1.0 / 60.0, Vector3(0, 0, -7), true, Vector3.FORWARD)
+	check(ninja._fidget == -1 and ninja._fl_clip == "" and ninja._fl_w == 0.0, "running off ends it")
+	ninja.queue_free()
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+## Landing variety: a tap after a hop, a deep crouch and a dust ring after a big fall.
+func test_zn_landing_scales_with_fall() -> void:
+	await new_world()
+	check(PlayerVisual.landing_heaviness(4.0) == 0.0 and PlayerVisual.landing_heaviness(14.0) == 0.0 and PlayerVisual.landing_heaviness(22.0) > 0.4 and PlayerVisual.landing_heaviness(40.0) == 1.0,
+		"heaviness is zero up to a full jump and grows with the fall")
+	var results: Array = []
+	for impact: float in [4.0, 12.0, 20.0, 30.0]:
+		var v: PlayerVisual = await _zn_visual("volt")
+		var kids: int = v.get_child_count()
+		v.on_land(impact)
+		var rings: int = v.get_child_count() - kids
+		var low: float = 1.0
+		var squash_low: float = 1.0
+		var crouch_frames: int = 0
+		for i: int in 60:
+			v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+			low = minf(low, v._torso.position.y)
+			squash_low = minf(squash_low, v._squash)
+			if v._torso.position.y < 0.2 - 0.01:
+				crouch_frames += 1
+		results.append({"impact": impact, "dip": 0.2 - low, "squash": -squash_low, "frames": crouch_frames, "rings": rings, "h": v._land_h})
+		v.queue_free()
+	for i: int in range(1, results.size()):
+		var a: Dictionary = results[i - 1]
+		var b: Dictionary = results[i]
+		check(float(b["dip"]) > float(a["dip"]) and float(b["squash"]) >= float(a["squash"]) and int(b["frames"]) >= int(a["frames"]),
+			"a harder landing (%.0f vs %.0f m/s) crouches deeper and longer (dip %.3f vs %.3f, squash %.2f vs %.2f, %d vs %d frames)" % [b["impact"], a["impact"], b["dip"], a["dip"], b["squash"], a["squash"], b["frames"], a["frames"]])
+	check(float(results[3]["squash"]) > float(results[0]["squash"]) + 0.2 and float(results[0]["dip"]) < 0.05 and float(results[3]["dip"]) > 0.12, "a tap barely dips; a big fall drops the body (%.3f / %.3f)" % [results[0]["dip"], results[3]["dip"]])
+	check(int(results[3]["frames"]) > int(results[1]["frames"]) + 6, "and it takes longer to recover (%d vs %d frames)" % [results[3]["frames"], results[1]["frames"]])
+	check(int(results[0]["rings"]) == 0 and int(results[1]["rings"]) == 0 and int(results[2]["rings"]) >= 1 and int(results[3]["rings"]) >= 1, "only a big fall adds the dust ring (%s)" % str(results.map(func(d: Dictionary) -> int: return d["rings"])))
+	check(float(results[0]["h"]) == 0.0 and float(results[3]["h"]) > 0.9, "the heaviness is recorded")
+	# a remote racer lands the same way from the reported fall speed
+	var r := RemoteRacer.new()
+	add_child(r)
+	await ticks(1)
+	r.push_state(Vector3(0, 5, 0), Vector3(0, -26, 0), false, 0)
+	r.push_state(Vector3(0, 0, 0), Vector3(0, -26, 0), true, 0)
+	check(r.visual()._land_h > 0.5, "a remote racer's big fall lands heavy")
+	r.queue_free()
+	# the ring follows the particle slider
+	var amounts: Array = []
+	var old_slider: float = Settings.particles
+	for slider: float in [0.2, 2.0]:
+		Settings.particles = slider
+		var v2: PlayerVisual = await _zn_visual("volt")
+		var before: Array = v2.get_children()
+		v2.on_land(30.0)
+		for ch: Node in v2.get_children():
+			if not before.has(ch) and ch is GPUParticles3D and (ch as GPUParticles3D).one_shot:
+				amounts.append((ch as GPUParticles3D).amount)
+				break
+		v2.queue_free()
+	Settings.particles = old_slider
+	check(amounts.size() == 2 and amounts[1] > amounts[0], "the landing ring scales with the particle setting (%s)" % str(amounts))
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+## The checkpoint touch rotates between a fist pump, a spin and a two-fisted pump; a respawn
+## materializes (a thin beam that fills out, sparkles climbing it).
+func test_zn_checkpoint_flourish_and_respawn() -> void:
+	await new_world()
+	var v: PlayerVisual = await _zn_visual("volt")
+	var seen: Array[int] = []
+	var wide: Array[float] = []
+	for k: int in 3:
+		for i: int in 60:
+			v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+		v.on_checkpoint()
+		seen.append(v._cp_variant)
+		var spun: bool = v._flip_axis.y != 0.0 and v._flip_t < v._flip_len
+		var reach: float = 0.0
+		var finite: bool = true
+		for i: int in 40:
+			v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+			reach = maxf(reach, minf(v._hand_r.position.y, v._hand_l.position.y))
+			finite = finite and v._hand_r.position.is_finite() and v._hand_l.position.is_finite() and v._flip.basis.is_finite()
+		wide.append(reach)
+		check(finite, "checkpoint flourish %d stays finite" % k)
+		check(spun == (k == 1), "only the second touch spins (touch %d: spun %s)" % [k, spun])
+	check(seen == [0, 1, 2], "the touch rotates through its variants (%s)" % str(seen))
+	check(wide[1] > 0.7, "the spin throws both mitts up (%.2f)" % wide[1])
+	for i: int in 60:
+		v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(v._flip.basis.is_equal_approx(Basis.IDENTITY), "the spin lands square")
+	# respawn
+	var kids: int = v.get_child_count()
+	v.on_respawn()
+	check(v._appear_fx == 0, "the sparkle-in is pending")
+	v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(v._rig.scale.x < v._rig.scale.y, "it starts as a thin beam (%s)" % str(v._rig.scale))
+	for i: int in 30:
+		v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(v._appear_fx == v.MATERIALIZE_AT.size(), "all the sparkle bands fired")
+	check(v.get_child_count() >= kids + 3, "as three bursts (%d new)" % (v.get_child_count() - kids))
+	for i: int in 30:
+		v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
+	check(v._rig.scale.is_equal_approx(Vector3.ONE), "and settles at full size (%s)" % str(v._rig.scale))
+	v.queue_free()
+	world.queue_free()
+	world = null
+	await ticks(2)
+
+
+# ---- CPU racers (party/cpu/) -----------------------------------------------------------------------
+
+## A CPU walker following a level's route from the start to the finish, headless. Returns the walker.
+func _cpu_walk(index: int, diff: String, budget_s: float) -> RouteWalker:
+	var lvl: LevelBase = await load_level(index)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 4242 + index
+	var w := RouteWalker.new()
+	w.setup(lvl, CpuSkill.personal(diff, rng), 4242 + index, lvl._spawn.origin)
+	var label: String = str(Game.LEVELS[index]["name"])
+	# (Engine.time_scale scales the physics step: use the course clock's own delta)
+	var last: float = Game.course_time
+	var t: float = 0.0
+	while t < budget_s and not w.done:
+		await get_tree().physics_frame
+		var dt: float = Game.course_time - last
+		last = Game.course_time
+		w.tick(dt)
+		w.events.clear()
+		t += dt
+	check(w.done, "%s: a %s CPU follows the route to the finish (%.0fs, %d respawns, %d skipped steps, step %d/%d)" % [label, diff, t, w.deaths, w.skipped, w.step, lvl.route.size()])
+	check(w.cp >= lvl.checkpoints.size() - 1 and w.skipped <= 3, "%s: the CPU banked its checkpoints (%d/%d) without skipping the route" % [label, w.cp, lvl.checkpoints.size()])
+	metrics["%s cpu %s time s" % [Game.LEVELS[index]["id"], diff]] = snappedf(t, 0.1)
+	return w
+
+
+func test_zcpu_route_coverage() -> void:
+	for i: int in Game.LEVELS.size():
+		if only_level >= 0 and i != only_level:
+			continue
+		var lvl: LevelBase = await load_level(i)
+		var marks: int = 0
+		for s: Dictionary in lvl.route:
+			if str(s["kind"]) == "checkpoint":
+				marks += 1
+		var gates: int = lvl.find_children("*", "FinishGate", true, false).size()
+		check(lvl.route.size() > 5 and gates >= 1, "%s: a route (%d steps, %d checkpoint marks for %d checkpoints) and a finish gate for the CPUs" % [Game.LEVELS[i]["name"], lvl.route.size(), marks, lvl.checkpoints.size()])
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+
+
+## Early, mid and late course: a CPU drives the course's own route to the finish.
+func test_zcpu_finishes_early_mid_late() -> void:
+	var picks: Array[int] = [0, 13, 24]
+	if only_level >= 0:
+		picks = [only_level]
+	Engine.time_scale = 8.0
+	for i: int in picks:
+		await _cpu_walk(i, "hard", 700.0)
+	Engine.time_scale = 1.0
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+
+
+## Easy botches more jumps than Hard and is slower; the skill table orders the three levels.
+func test_zcpu_skill_levels() -> void:
+	var easy: Dictionary = CpuSkill.TABLE[CpuSkill.EASY]
+	var norm: Dictionary = CpuSkill.TABLE[CpuSkill.NORMAL]
+	var hard: Dictionary = CpuSkill.TABLE[CpuSkill.HARD]
+	check(float(easy["speed"]) < float(norm["speed"]) and float(norm["speed"]) < float(hard["speed"]), "Easy < Normal < Hard in running speed")
+	check(float(easy["jump_fail"]) > float(norm["jump_fail"]) and float(norm["jump_fail"]) > float(hard["jump_fail"]), "Easy botches more jumps than Normal, Normal more than Hard")
+	check(float(easy["react"]) > float(hard["react"]) and bool(hard["cut"]) and not bool(easy["cut"]), "Hard reacts faster and cuts corners")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1
+	var a: Dictionary = CpuSkill.personal("normal", rng)
+	var b: Dictionary = CpuSkill.personal("normal", rng)
+	check(a["speed"] != b["speed"], "two CPUs of one level do not drive identically")
+	# a botched long jump respawns the CPU at its checkpoint like a human
+	var lvl: LevelBase = await load_level(0)
+	var w := RouteWalker.new()
+	var p: Dictionary = CpuSkill.personal("easy", rng)
+	p["jump_fail"] = 1.0
+	w.setup(lvl, p, 7, lvl._spawn.origin)
+	Engine.time_scale = 5.0
+	var last: float = Game.course_time
+	var t: float = 0.0
+	while t < 120.0 and w.deaths == 0:
+		await get_tree().physics_frame
+		var dt: float = Game.course_time - last
+		last = Game.course_time
+		w.tick(dt)
+		t += dt
+	Engine.time_scale = 1.0
+	check(w.deaths >= 1, "a botched long jump makes the CPU fall and respawn (%.0fs in)" % t)
+	check(w.hold > 0.0 or w.pos.distance_to(w.respawn_point()) < 6.0, "...and it stands at its respawn point for a beat")
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+
+
+func _cpu_cleanup() -> void:
+	Engine.time_scale = 1.0
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Net.leave()
+	Game.party = null
+	Game.race_mode = false
+
+
+## Starts a solo Party vs CPU round the way Game.play_party_cpu does, but loads the course under this
+## test (play_party_cpu changes scenes, which would unload the runner).
+func _cpu_round(index: int, count: int, diff: String, mode: String = "party", countdown: float = 1.5) -> LevelBase:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Net.host_local()
+	CpuField.configure_local(count, diff)
+	CpuField.sync_roster()
+	Net.host_set_mode(mode)
+	Net.race_starting.disconnect(Game._on_race_starting)
+	Net.host_start_race(index, countdown)
+	Net.race_starting.connect(Game._on_race_starting)
+	Game.race_mode = true
+	Game.party = PartyRules.new(Net.game_mode)
+	Game.party.round_no = Net.party_round
+	Game.level_index = index
+	Game.course_time = Net.now() - Net.race_start_time
+	Game.course_running = true
+	var lvl: LevelBase = (load(Game.LEVELS[index]["scene"]) as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(6)
+	return lvl
+
+
+func _cpu_field(lvl: LevelBase) -> CpuField:
+	return lvl.party.find_child("CpuField", false, false) as CpuField
+
+
+## The menu: Party vs CPU is on the main menu, reachable and operable with a pad alone.
+func test_zcpu_menu_pad() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	add_child(title)
+	title.call("show_screen", "main")
+	await ticks(3)
+	var e0: int = trap.count()
+	# the column must fit the 900 px canvas minus its 60 px margins (the headless window is not 1600x900)
+	var top: float = INF
+	var bottom: float = 0.0
+	for c: Node in (title.get("_screen") as Control).find_children("*", "Control", true, false):
+		if c is Button or c is Label:
+			top = minf(top, (c as Control).get_global_rect().position.y)
+			bottom = maxf(bottom, (c as Control).get_global_rect().end.y)
+	check(bottom > top and bottom - top <= 880.0, "the main menu with its new button still fits the 900 px canvas (%.0f px of 880)" % (bottom - top))
+	var found: bool = false
+	for i: int in 10:
+		if _focused_text() == "Party vs CPU":
+			found = true
+			break
+		await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(found, "the D-pad reaches Party vs CPU on the main menu")
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	await ticks(3)
+	check(Game.title_screen == "partycpu", "A opens the Party vs CPU screen")
+	check(_focused_text() == "Start the Cup", "the screen starts on its Start button (%s)" % _focused_text())
+	# up through the rows: course, difficulty, CPU count, mode
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_UP))
+	check(_focused_text().begins_with("Course:"), "D-pad up reaches the Course row (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_UP))
+	check(_focused_text().begins_with("Difficulty:"), "...then Difficulty (%s)" % _focused_text())
+	var before: String = _focused_text()
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_RIGHT))
+	check(_focused_text() != before and _focused_text().begins_with("Difficulty:"), "D-pad right cycles the value (%s -> %s)" % [before, _focused_text()])
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_LEFT))
+	check(_focused_text() == before, "D-pad left steps back (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	check(_focused_text() != before and _focused_text().begins_with("Difficulty:"), "A also cycles the focused row (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_UP))
+	check(_focused_text().begins_with("CPU racers:"), "...then the CPU count (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_UP))
+	check(_focused_text().begins_with("Mode:"), "...then the mode (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_B))
+	await ticks(3)
+	check(Game.title_screen == "main" and _focused_text() == "Party vs CPU", "B goes back onto the Party vs CPU button (%s)" % _focused_text())
+	# the solo lobby (between rounds): CPU rows, no room code, B leaves
+	Net.host_local()
+	CpuField.configure_local(3, "normal")
+	CpuField.sync_roster()
+	Net.host_set_mode("party")
+	title.call("show_screen", "lobby")
+	await ticks(3)
+	var labels: String = ""
+	for l: Node in title.find_children("*", "Label", true, false):
+		labels += (l as Label).text + "|"
+	check(labels.contains("PARTY VS CPU") and labels.contains("(CPU)") and not labels.contains("ROOM CODE"), "the solo lobby lists the CPU racers and has no room code")
+	check(Net.roster.size() == 4 and CpuField.cpu_ids().size() == 3, "three CPUs joined the roster (%d racers)" % Net.roster.size())
+	var count_btn: Button = null
+	for b: Node in title.find_children("*", "Button", true, false):
+		if (b as Button).text.begins_with("CPU racers:"):
+			count_btn = b as Button
+	check(count_btn != null, "the lobby host can change the CPU count")
+	if count_btn != null:
+		count_btn.grab_focus()
+		await _zp_press(_zp_pad(JOY_BUTTON_DPAD_RIGHT))
+		check(CpuField.cpu_ids().size() == 4 and Net.roster.size() == 5, "D-pad right adds a CPU (%d)" % CpuField.cpu_ids().size())
+	await _zp_press(_zp_pad(JOY_BUTTON_B))
+	await ticks(3)
+	check(Game.title_screen == "main" and not Net.active, "B in the solo lobby leaves the session")
+	check(trap.count() == e0, ("the CPU menus build without errors %s" % trap.since(e0)).strip_edges())
+	title.queue_free()
+	await ticks(2)
+	Game.title_screen = "main"
+
+
+## The online lobby: the host's "Fill with CPUs" option, and how it tops the roster up.
+func test_zcpu_online_fill() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	add_child(title)
+	check(Net.host(24593) == OK, "hosting opens the lobby")
+	await ticks(3)
+	var fill: Button = null
+	for b: Node in title.find_children("*", "Button", true, false):
+		if (b as Button).name == "FillCpus":
+			fill = b as Button
+	check(fill != null and fill.text.ends_with("Off"), "the host's lobby offers Fill with CPUs (off by default)")
+	Net.host_set_mode("party")
+	if fill != null:
+		fill.pressed.emit()
+	check(CpuField.fill_online, "...and it switches on")
+	CpuField.sync_roster()
+	check(Net.roster.size() == 8 and CpuField.cpu_ids().size() == 7, "the roster fills to 8 racers with CPUs (%d)" % Net.roster.size())
+	# a classic Race has no CPUs
+	Net.host_set_mode("race")
+	CpuField.sync_roster()
+	check(CpuField.cpu_ids().is_empty() and Net.roster.size() == 1, "a plain Race strips the CPUs again")
+	Net.host_set_mode("team")
+	CpuField.sync_roster()
+	var t0: int = 0
+	for id: int in Net.roster:
+		if Net.team_of(id) == 0:
+			t0 += 1
+	check(Net.roster.size() == 8 and absi(t0 - (8 - t0)) <= 1, "Team Party balances the CPUs into two even teams (%d / %d)" % [t0, 8 - t0])
+	CpuField.clear_roster()
+	check(Net.roster.size() == 1, "ending the cup takes the CPUs out of the roster again")
+	CpuField.fill_online = false
+	title.queue_free()
+	Net.leave()
+	await ticks(2)
+	Game.title_screen = "main"
+
+
+## A solo round with 3 CPUs: they race (poses, checkpoints, finish), item boxes feed them, the round ends
+## and the cup scores everyone.
+func test_zcpu_solo_round_scores() -> void:
+	var lvl: LevelBase = await _cpu_round(0, 3, "hard")
+	var p: PartyLayer = lvl.party
+	var f: CpuField = _cpu_field(lvl)
+	check(p != null and f != null and f.racers.size() == 3, "a solo round has a party layer and three simulated CPUs")
+	if p == null or f == null:
+		await _cpu_cleanup()
+		return
+	check(lvl._ghosts.size() == 3 and Net.roster.size() == 4, "each CPU has a ghost on the course (%d ghosts, %d racers)" % [lvl._ghosts.size(), Net.roster.size()])
+	for id: int in f.racers:
+		var g: RemoteRacer = lvl._ghosts[id]
+		check(g.racer_name == str(Net.roster[id]["name"]) and bool(Net.roster[id]["cpu"]), "CPU %d shows up as %s with its own look" % [id, g.racer_name])
+	check(p.rules.mode == "party", "a Party round (free for all)")
+	var start_pos: Array[Vector3] = []
+	for id: int in f.racers:
+		start_pos.append((f.racers[id] as CpuRacer).walker.pos)
+	Engine.time_scale = 5.0
+	await wait_until(func() -> bool: return Game.course_time > 25.0, 120.0, "25 s of racing")
+	var moved: int = 0
+	var i: int = 0
+	for id: int in f.racers:
+		if (f.racers[id] as CpuRacer).walker.pos.distance_to(start_pos[i]) > 20.0:
+			moved += 1
+		i += 1
+	check(moved == 3, "all three CPUs ran at least 20 m in 25 s (%d)" % moved)
+	var ghost_moved: int = 0
+	for id: int in lvl._ghosts:
+		if (lvl._ghosts[id] as RemoteRacer).global_position.distance_to(start_pos[0]) > 10.0:
+			ghost_moved += 1
+	check(ghost_moved >= 2, "their ghosts follow the poses the field sends (%d moved)" % ghost_moved)
+	var cps: int = 0
+	for id: int in f.racers:
+		cps += int(Net.roster[id]["cp"])
+	check(cps >= 1, "CPUs bank checkpoints in the roster (%d in total)" % cps)
+	var held: int = 0
+	var taken: int = 0
+	for b: ItemBox in p.boxes:
+		if not b.available:
+			taken += 1
+	for id: int in f.racers:
+		if (f.racers[id] as CpuRacer).item != "":
+			held += 1
+	check(taken + held >= 1, "item boxes feed the CPUs (%d boxes taken, %d CPUs holding an item)" % [taken, held])
+	# the round ends 45 s after the first finisher; the CPUs finish, the idle human does not
+	await wait_until(func() -> bool: return p.round_over, 700.0, "the round to end")
+	Engine.time_scale = 1.0
+	var finished: int = 0
+	for id: int in f.racers:
+		if float(Net.roster[id]["finished"]) >= 0.0:
+			finished += 1
+	check(finished >= 2, "at least two CPUs finished the course (%d of 3)" % finished)
+	check(p.round_over and p.last_rows.size() == 4, "the round scored all four racers (%d rows)" % p.last_rows.size())
+	var human_row: Dictionary = {}
+	var top: Dictionary = p.last_rows[0]
+	for r: Dictionary in p.last_rows:
+		if int(r["id"]) == 1:
+			human_row = r
+	check(CpuField.is_cpu_id(int(top["id"])) and int(top["place"]) == 1 and int(top["place_pts"]) == 10, "a CPU won the round and got the 10 placement points")
+	check(not human_row.is_empty() and int(human_row["place"]) == 0 and int(human_row["place_pts"]) == 0, "the idle human got no placement points")
+	var total: int = 0
+	for id: Variant in Game.party.cup:
+		total += int(Game.party.cup[id])
+	check(Game.party.cup.size() == 4 and total >= 10 + 8, "the Party Cup holds everyone's points (%d racers, %d points)" % [Game.party.cup.size(), total])
+	await _cpu_cleanup()
+
+
+## Being hit, KO credit, hitting back, pick-ups and the items, on a live CPU.
+func test_zcpu_hits_items_ko() -> void:
+	var lvl: LevelBase = await _cpu_round(0, 3, "normal", "party", 0.5)
+	var p: PartyLayer = lvl.party
+	var f: CpuField = _cpu_field(lvl)
+	await wait_until(func() -> bool: return Game.course_time > 3.0 and p._ready_done, 60.0, "the round to get going")
+	var ids: Array = f.racers.keys()
+	ids.sort()
+	var a: CpuRacer = f.racers[ids[0]]
+	var b: CpuRacer = f.racers[ids[1]]
+	a.protect_left = 0.0
+	b.protect_left = 0.0
+	# the human shoves a CPU: the message goes through Net.send_party and reaches the CPU
+	var kb := Vector3(8, 5, 0)
+	Net.send_party({"k": "hit", "kb": PowerUp.arr(kb), "st": 0.5, "ko": false, "e": "", "ed": 0.0, "s": "shove", "add": false}, a.id)
+	check(a.last_hit_by == 1 and a.walker.mode == RouteWalker.Mode.AIR and a.walker.hold > 0.0, "a human's hit on a CPU knocks and stuns it and is remembered (by %d)" % a.last_hit_by)
+	# a fall within the KO window is the attacker's KO
+	var kos: int = int(p.kos.get(1, 0))
+	a.walker.die("fall")
+	await ticks(2)
+	check(int(p.kos.get(1, 0)) == kos + 1, "a CPU that falls right after a hit is the hitter's KO (+%d)" % PartyRules.KO_POINTS)
+	check(a.protect_left > 0.0 and a.walker.deaths == 1, "...and it respawns with a protection window")
+	a.protect_left = 0.0
+	# a CPU's hit on the human is credited to the CPU
+	var human: Dictionary = {}
+	for r: Dictionary in f.rivals_of(b):
+		if int(r["id"]) == 1:
+			human = r
+	check(not human.is_empty(), "the human is one of a CPU's rivals")
+	p.protect_left = 0.0   # (no respawn grace on the human)
+	f.hit_rival(b, human, Vector3(0, 6, 0), {"st": 0.4, "s": "shove"})
+	check(p.last_hit_by == b.id and lvl.player.party_stun > 0.0, "a CPU's shove stuns the human and is credited to the CPU (by %d)" % p.last_hit_by)
+	var deaths: int = lvl.deaths
+	lvl.fail("fall")
+	await ticks(2)
+	check(int(p.kos.get(b.id, 0)) == 1 and lvl.deaths == deaths + 1, "the human falling after that hit is the CPU's KO")
+	# pick-up: a CPU standing in a box takes it
+	var box: ItemBox = null
+	for bx: ItemBox in p.boxes:
+		if bx.available:
+			box = bx
+			break
+	b.item = ""
+	b.p["greed"] = 1.0
+	b.walker.teleport(box.global_position - Vector3(0, 1.1, 0))
+	await ticks(3)
+	check(not box.available and b.item != "", "a CPU that runs into an item box takes it (%s)" % b.item)
+	# using items
+	b.protect_left = 0.0
+	b.item = "balloon"
+	b.item_age = 10.0
+	b._item_wait = 0.0
+	CpuItems.consider(b, f, f.rivals_of(b))
+	check(b.item == "" and b.shield_left > 0.0, "a CPU uses a Balloon Shield (soaks the next hit)")
+	var last: int = b.last_hit_by
+	b.take_hit(1, {"kb": PowerUp.arr(Vector3(5, 3, 0)), "s": "shove"}, f)
+	check(b.shield_left == 0.0 and b.last_hit_by == last and b.walker.mode != RouteWalker.Mode.AIR, "...which absorbs a hit")
+	b.item = "fox"
+	b.item_age = 10.0
+	CpuItems.consider(b, f, f.rivals_of(b))
+	check(b.form == "fox" and b.boost_left > 0.0 and b.boost_mult > 1.0, "a CPU transforms into the Nine-Tailed Fox and runs faster")
+	b.clear_buffs(f)
+	# Thunder Cloud when behind: aimed at everyone ahead
+	a.protect_left = 0.0
+	b.item = "thunder"
+	b.item_age = 20.0
+	f._stand_t = -1000.0
+	f._standing.clear()
+	f._standing.append_array([ids[2], ids[0], 1, ids[1]])
+	Net.roster[a.id]["cp"] = 3   # (ahead by course distance)
+	Net.roster[b.id]["cp"] = 0
+	CpuItems.consider(b, f, f.rivals_of(b))
+	check(b.item == "", "a CPU in last place uses Thunder Cloud")
+	check(a.slow_left > 0.0 and a.walker.hold > 0.0, "...and the racers ahead are zapped (slow %.1f, hold %.1f)" % [a.slow_left, a.walker.hold])
+	await seconds(2.0)   # (let the storm effects play out before the course is freed)
+	await _cpu_cleanup()
+
+
+## The main mode never sees a CPU, a local session or a party layer.
+func test_zcpu_main_mode_pure() -> void:
+	Game.party = null
+	check(not Net.local_session and CpuField.cpu_ids().is_empty(), "no local session / CPUs outside Party vs CPU")
+	var lvl: LevelBase = await load_level(0)
+	await ticks(4)
+	check(lvl.party == null and lvl.find_children("*", "CpuField", true, false).is_empty(), "the main mode adds no party layer and no CPU field")
+	check(lvl.find_children("*", "ItemBox", true, false).is_empty(), "no item boxes in the main mode")
+	# a plain race (even one hosted with the Fill option on) has no CPUs
+	CpuField.fill_online = true
+	check(Net.host(24591) == OK, "hosting")
+	CpuField.sync_roster()
+	check(CpuField.cpu_ids().is_empty() and Net.game_mode == "race", "Fill with CPUs does nothing in the Race mode")
+	CpuField.fill_online = false
+	Net.leave()
+	check(CpuField.wanted_count() == 0, "...and nothing is wanted once the session is gone")
+
+
+
+## A solo Party vs CPU round really pauses (the CPUs and the course clock stand still).
+func test_zcpu_pause_local() -> void:
+	var lvl: LevelBase = await _cpu_round(0, 2, "normal", "party", 0.5)
+	var f: CpuField = _cpu_field(lvl)
+	await wait_until(func() -> bool: return Game.course_time > 4.0, 60.0, "the round to get going")
+	var pause: PauseMenu = lvl.find_children("*", "PauseMenu", true, false)[0] as PauseMenu
+	pause.set_open(true)
+	await get_tree().process_frame
+	check(get_tree().paused, "the pause menu pauses a solo CPU round")
+	var t0: float = Game.course_time
+	var pos0: Array[Vector3] = []
+	for id: int in f.racers:
+		pos0.append((f.racers[id] as CpuRacer).walker.pos)
+	await get_tree().create_timer(1.0, true, false, true).timeout
+	check(absf(Game.course_time - t0) < 0.05, "the course clock stands still while paused (%.3f)" % (Game.course_time - t0))
+	var still: bool = true
+	var i: int = 0
+	for id: int in f.racers:
+		if (f.racers[id] as CpuRacer).walker.pos.distance_to(pos0[i]) > 0.05:
+			still = false
+		i += 1
+	check(still, "the CPUs stand still while paused")
+	pause.set_open(false)
+	var t1: float = Game.course_time
+	await wait_until(func() -> bool: return Game.course_time > t1 + 0.5, 20.0, "the clock to run again")
+	check(Game.course_time - t1 < 1.5 and not get_tree().paused, "the race carries on from where it stopped (+%.2fs)" % (Game.course_time - t1))
+	await _cpu_cleanup()
+
+
+## Team Party with CPUs: even teams, CPUs never hit teammates, nor do the human's attacks.
+func test_zcpu_team_round() -> void:
+	var lvl: LevelBase = await _cpu_round(0, 3, "team", "team", 0.5)
+	var p: PartyLayer = lvl.party
+	var f: CpuField = _cpu_field(lvl)
+	check(p != null and f != null and p.rules.is_team(), "a Team Party round with CPUs")
+	if p == null or f == null:
+		await _cpu_cleanup()
+		return
+	var sizes: Array[int] = [0, 0]
+	for id: int in Net.roster:
+		sizes[Net.team_of(id)] += 1
+	check(sizes[0] == 2 and sizes[1] == 2, "two teams of two (%d / %d)" % [sizes[0], sizes[1]])
+	await wait_until(func() -> bool: return Game.course_time > 1.0 and p._ready_done, 30.0, "the round to start")
+	var mate: int = 0
+	for id: int in f.racers:
+		if Net.team_of(id) == Net.team_of(1):
+			mate = id
+	check(mate != 0, "the human has a CPU teammate")
+	var mate_racer: CpuRacer = f.racers[mate]
+	var seen_mate: bool = false
+	for r: Dictionary in f.rivals_of(mate_racer):
+		if Net.team_of(int(r["id"])) == Net.team_of(mate):
+			seen_mate = true
+	check(not seen_mate, "a CPU never counts its own team as rivals")
+	var targets_have_mate: bool = false
+	for t: Dictionary in p.targets():
+		if int(t["id"]) == mate:
+			targets_have_mate = true
+	check(not targets_have_mate, "the human's attacks never target the CPU teammate")
+	await _cpu_cleanup()
+
+
+
+## Swap Warp handshake with CPUs (accept / refuse / keep the item), respawn protection, HUD feed.
+func test_zcpu_swap_and_hud() -> void:
+	var lvl: LevelBase = await _cpu_round(0, 2, "normal", "party", 0.5)
+	var p: PartyLayer = lvl.party
+	var f: CpuField = _cpu_field(lvl)
+	await wait_until(func() -> bool: return Game.course_time > 3.0 and p._ready_done, 60.0, "the round to get going")
+	var ids: Array = f.racers.keys()
+	ids.sort()
+	var a: CpuRacer = f.racers[ids[0]]
+	var b: CpuRacer = f.racers[ids[1]]
+	for r: CpuRacer in [a, b]:
+		r.protect_left = 0.0
+		r.shield_left = 0.0
+	# b is a checkpoint ahead of a
+	var cp1: Vector3 = lvl.checkpoints[0].global_position
+	b.walker.teleport(cp1)
+	b.walker.cp = 1
+	Net.roster[b.id]["cp"] = 1
+	a.walker.cp = 0
+	Net.roster[a.id]["cp"] = 0
+	f._standing = [b.id, a.id, 1]
+	f._stand_t = -1000.0
+	var b_pos: Vector3 = b.walker.pos
+	a.item = "swap"
+	a.item_age = 10.0
+	a._item_wait = 0.0
+	CpuItems.consider(a, f, f.rivals_of(a))
+	check(a.item == "" and a.walker.cp == 1 and b.walker.cp == 0, "a CPU's Swap Warp trades places and checkpoints with the CPU ahead (a cp %d, b cp %d)" % [a.walker.cp, b.walker.cp])
+	check(int(Net.roster[a.id]["cp"]) == 1 and int(Net.roster[b.id]["cp"]) == 0, "...and the roster follows the swap")
+	check(a.walker.pos.distance_to(b_pos) < 3.0, "...the caster lands where the victim stood")
+	# a protected (or shielded) CPU refuses: nothing moves, the item is spent like a human's
+	b.protect_left = 2.0
+	var a_cp: int = a.walker.cp
+	b.walker.cp = 2
+	Net.roster[b.id]["cp"] = 2
+	a.item = "swap"
+	a.item_age = 10.0
+	CpuItems.consider(a, f, f.rivals_of(a))
+	check(a.walker.cp == a_cp and b.walker.cp == 2 and a.swap_wait < 0.0, "a CPU in respawn protection refuses a Swap Warp (swap_no)")
+	# nobody ahead: the item is kept
+	Net.roster[a.id]["cp"] = 9
+	a.item = "swap"
+	a.item_age = 10.0
+	CpuItems.consider(a, f, f.rivals_of(a))
+	check(a.item == "swap", "with nobody ahead the Swap Warp is kept, not wasted")
+	Net.roster[a.id]["cp"] = a_cp
+	# the human swaps with a CPU through the same handshake
+	b.protect_left = 0.0
+	b.walker.teleport(cp1)
+	b.walker.cp = 1
+	Net.roster[b.id]["cp"] = 1
+	var before: int = lvl.current_checkpoint
+	await ticks(30)
+	p.request_swap({"id": b.id})
+	await ticks(10)
+	check(lvl.current_checkpoint == 1 and b.walker.cp == before, "a human's Swap Warp on a CPU is answered with swap_ok (human cp %d, CPU cp %d)" % [lvl.current_checkpoint, b.walker.cp])
+	# respawn protection shrugs off hits
+	b.protect_left = 2.0
+	var by: int = b.last_hit_by
+	b.take_hit(1, {"kb": PowerUp.arr(Vector3(6, 4, 0)), "s": "shove"}, f)
+	check(b.last_hit_by == by and b.walker.mode != RouteWalker.Mode.AIR, "respawn protection shrugs off a hit on a CPU")
+	# HUD: the feed hears of CPU hits and item use
+	var lines: int = p.hud.feed_log.size()
+	f.cpu_hit_feed(a.id, 1, "shove")
+	f.cpu_used(a, "thunder")
+	check(p.hud.feed_log.size() > lines, "the party feed shows a CPU's hit / item (%d new lines)" % (p.hud.feed_log.size() - lines))
+	await seconds(1.0)
+	await _cpu_cleanup()

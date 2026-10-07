@@ -152,6 +152,20 @@ var _idle_t: float = 0.0
 var _fidget: int = -1
 var _fidget_t: float = 0.0
 var _fidget_n: int = 0
+# fidgets 4-8 (player/flourish.gd): the clip being blended, its weight and extras
+var _fl_pose: Flourish.Pose = Flourish.Pose.new()
+var _fl_clip: String = ""
+var _fl_w: float = 0.0
+var _fl_puffs: int = 0
+var _fl_t: float = 0.0
+var _sway_boost: float = 0.0       # extra flapping on every sway part (tails, ears, parrot, cape)
+var _sway_phase: float = 0.0
+var _fl_prop: Node3D               # the knight's sword, built the first time it twirls
+var _cp_variant: int = 0           # which checkpoint flourish (0 fist pump, 1 spin, 2 double pump)
+var _cp_n: int = 0
+var _land_h: float = 0.0           # how heavy the last landing was, 0 (a tap) .. 1 (a big fall)
+var _appear_fx: int = 3            # respawn sparkle-in stages already fired (3 = none pending)
+const MATERIALIZE_AT: Array[float] = [0.06, 0.16, 0.26]   # seconds into the pop-in
 # emotes / victory poses (player/emotes.gd): one clip at a time, blended over everything else
 var pose_id: String = "cheer"      # played after the finish twirl (Cosmetics.POSES)
 var _emote: String = ""            # id of the clip playing, "" when none
@@ -330,6 +344,8 @@ func set_character(id: String) -> void:
 			c.queue_free()
 	_hat = null
 	_build_body(character_id)
+	_fidget = -1          # a new body starts at rest (the old one's fidget does not carry over)
+	_fidget_t = 1.2
 	_foot_l.position = keep[0]
 	_foot_r.position = keep[1]
 	_hand_l.position = keep[2]
@@ -353,6 +369,10 @@ func _build_body(id: String) -> void:
 	_sways.clear()
 	_twinkles.clear()
 	_crown_parts.clear()
+	_fl_prop = null    # (freed with the old rig; the sword is rebuilt on demand)
+	_fl_clip = ""
+	_fl_w = 0.0
+	_sway_boost = 0.0
 	_eye_base = Vector3(0.09, 0.12, 0.06)
 	_bulb_base = 0.12
 	match id:
@@ -1116,7 +1136,11 @@ func on_jump() -> void:
 
 func on_land(impact: float) -> void:
 	var k: float = clampf(impact / 22.0, 0.15, 1.0)
-	_squash_vel -= 9.0 * k
+	_land_h = landing_heaviness(impact)
+	# a short hop is a soft tap (barely a squash); a big fall adds a deep crouch on top
+	if impact < LAND_TAP:
+		k = minf(k, 0.15) * clampf(impact / LAND_TAP, 0.3, 1.0)
+	_squash_vel -= 9.0 * k + 8.0 * _land_h
 	_step_quiet = 0.12
 	_land_t = 0.0
 	_land_k = clampf((impact - 3.0) / 25.0, 0.0, 1.0)
@@ -1130,8 +1154,11 @@ func on_land(impact: float) -> void:
 	if _mantle_pending > 0.0:
 		# topped out a climb: a little hop puff
 		_mantle_pending = 0.0
+		_land_h = 0.0
 		_pop(_hop_puff, _feet())
 		return
+	if _land_h > 0.0:
+		_land_dust_ring(_land_h)
 	# big landings (a plain full jump lands at ~14 m/s): shockwave, dust wave, grit
 	var big: float = clampf((impact - 16.5) / 16.0, 0.0, 1.0)
 	if big > 0.0:
@@ -1142,6 +1169,24 @@ func on_land(impact: float) -> void:
 		_pop(_land_sparks, _feet() + Vector3(0, 0.05, 0), Vector3.UP, 0.3 + big * 0.7)
 		_pop(_land_haze, _feet(), Vector3.UP, 0.4 + big * 0.6)
 		_flash(Color(1.0, 0.92, 0.8), 1.2 + big * 3.0, 0.3)
+
+
+## Landing speeds (m/s) below which a landing is a soft tap, and from which a fall is "heavy".
+const LAND_TAP: float = 7.0
+const LAND_HEAVY: float = 14.0
+
+## 0 for a tap or a normal jump landing (a full jump lands at ~14), up to 1 for the biggest falls.
+static func landing_heaviness(impact: float) -> float:
+	return clampf((impact - LAND_HEAVY) / 16.0, 0.0, 1.0)
+
+
+## A ring of dust rolling out from the feet after a heavy fall (more and wider the harder it was).
+func _land_dust_ring(heavy: float) -> void:
+	if not is_inside_tree():
+		return
+	Fx.spawn(self, Fx.smoke({"amount": 10 + int(14.0 * heavy), "lifetime": 0.7 + 0.3 * heavy, "size": 0.45 + 0.2 * heavy,
+		"shape": "ring", "ring_radius": 0.3, "dir": Vector3.UP, "spread": 80.0, "speed": Vector2(1.6, 2.6 + 2.0 * heavy),
+		"color": Color(0.85, 0.84, 0.8, 0.6), "layers": 2}), global_position + Vector3(0, 0.05, 0))
 
 
 func on_bounce(strength: float) -> void:
@@ -1260,6 +1305,11 @@ func on_checkpoint() -> void:
 	_squash_vel += 4.0
 	_cp_t = 0.0
 	_antenna_vel.x -= 6.0
+	# the touch flourish rotates: fist pump, a quick spin, a two-fisted pump
+	_cp_variant = _cp_n % 3
+	_cp_n += 1
+	if _cp_variant == 1:
+		_start_flip(Vector3(0, TAU_F, 0), 0.5, 0.04, 0.0)
 	if _cp_helix != null and _cp_helix.is_inside_tree():
 		_cp_helix.restart()
 		_pop(_cp_ring, _feet() + Vector3(0, 0.05, 0))
@@ -1375,8 +1425,9 @@ func _animate_emote(dt: float, speed: float, on_floor: bool) -> void:
 	_foot_r.position = _foot_r.position.lerp(f.fr, w)
 	_foot_l.position = _foot_l.position.lerp(f.fl, w)
 	_torso.position.y = lerpf(_torso.position.y, f.torso_y, w)
-	_torso.rotation.x = f.torso_rot.x * w
-	_torso.rotation.z = f.torso_rot.z * w
+	var tilt: float = float(Emotes.TILT_SCALE.get(built_character, 1.0))
+	_torso.rotation.x = f.torso_rot.x * w * tilt
+	_torso.rotation.z = f.torso_rot.z * w * tilt
 	_torso.rotation.y = lerp_angle(_torso.rotation.y, f.torso_rot.y, w)
 	_root.position.y = lerpf(_root.position.y, f.root_y, w)
 	if f.spin != 0.0:
@@ -1388,6 +1439,83 @@ func _animate_emote(dt: float, speed: float, on_floor: bool) -> void:
 	while _emote_puffs < puffs.size() and _emote_t >= float((puffs[_emote_puffs] as Array)[0]):
 		_emote_puff(str((puffs[_emote_puffs] as Array)[1]))
 		_emote_puffs += 1
+
+
+## Idle fidgets 4-7 and the character's flourish (fidget 8), blended over the animate() pose by
+## a weight that eases in and out and fades fast if the body moves (player/flourish.gd). Also
+## drives the secondary motion (sway boost, antenna orb, the knight's sword).
+func _animate_flourish(dt: float, on_floor: bool) -> void:
+	var live: bool = _fidget >= Flourish.FIRST_NEW and on_floor and _emote == ""
+	if not live and _fl_clip == "":
+		return
+	var target: float = 0.0
+	if live:
+		_fl_clip = Flourish.clip_for(_fidget, built_character)
+		target = Flourish.weight(_fidget_t, Flourish.length(_fidget, built_character))
+	_fl_w = move_toward(_fl_w, target, dt * 8.0)
+	if not live and _fl_w <= 0.0:
+		_end_flourish()
+		return
+	var t: float = _fidget_t if live else _fl_t + dt
+	_fl_t = t
+	var f: Flourish.Pose = _fl_pose
+	var w: float = _fl_w
+	Flourish.sample(f, _fl_clip, t)
+	_hand_r.position = _hand_r.position.lerp(f.hr, w)
+	_hand_l.position = _hand_l.position.lerp(f.hl, w)
+	_foot_r.position = _foot_r.position.lerp(f.fr, w)
+	_foot_l.position = _foot_l.position.lerp(f.fl, w)
+	_torso.position.y = lerpf(_torso.position.y, f.torso_y, w)
+	var tilt: float = float(Flourish.TILT_SCALE.get(built_character, 1.0))
+	_torso.rotation.x = f.torso_rot.x * w * tilt
+	_torso.rotation.z = f.torso_rot.z * w * tilt
+	_torso.rotation.y = lerp_angle(_torso.rotation.y, f.torso_rot.y, w)
+	_root.position.y = lerpf(_root.position.y, f.root_y, w)
+	if f.spin != 0.0:
+		_flip.basis = Basis(Vector3.UP, f.spin * w) * _flip.basis
+	var eye_y: float = lerpf(_eye_l.scale.y, _eye_base.y * clampf(f.eye, 0.08, 1.4), w)
+	_eye_l.scale.y = eye_y
+	_eye_r.scale.y = eye_y
+	_sway_boost = f.sway * w
+	_antenna.scale = Vector3.ONE * lerpf(1.0, f.ant_scale, w)
+	_antenna_vel += f.ant_kick * (w * dt)
+	if f.flare > 0.0:
+		_flare = maxf(_flare, f.flare * w)
+	_flourish_prop(f.prop_on and w > 0.01, f.prop_angle)
+	var puffs: Array = Flourish.PUFFS.get(_fl_clip, [])
+	while live and _fl_puffs < puffs.size() and _fidget_t >= float((puffs[_fl_puffs] as Array)[0]):
+		_emote_puff(str((puffs[_fl_puffs] as Array)[1]))
+		_fl_puffs += 1
+
+
+## The flourish is over (or cut short and faded out): everything it touched goes back to rest.
+func _end_flourish() -> void:
+	_fl_clip = ""
+	_fl_w = 0.0
+	_sway_boost = 0.0
+	_torso.rotation.x = 0.0
+	_torso.rotation.z = 0.0
+	_antenna.scale = Vector3.ONE
+	_flourish_prop(false, 0.0)
+
+
+## The knight's twirling sword: a blade and guard on a pivot that follows the right mitt, built
+## the first time it is needed and hidden otherwise.
+func _flourish_prop(on: bool, angle: float) -> void:
+	if not on:
+		if _fl_prop != null and is_instance_valid(_fl_prop):
+			_fl_prop.visible = false
+		return
+	if _fl_prop == null or not is_instance_valid(_fl_prop):
+		_fl_prop = Node3D.new()
+		_fl_prop.name = "FlourishProp"
+		_rig.add_child(_fl_prop)
+		var steel: Material = CosmeticArt.std(Color(0.88, 0.9, 0.95), 0.22, 0.85)
+		CosmeticArt.part(_fl_prop, CosmeticArt.box(), steel, Vector3(0, 0.34, 0), Vector3(0.05, 0.56, 0.022))
+		CosmeticArt.part(_fl_prop, CosmeticArt.box(), CosmeticArt.std(Color(1.0, 0.82, 0.3), 0.3, 0.8, 0.4), Vector3(0, 0.05, 0), Vector3(0.2, 0.04, 0.06))
+	_fl_prop.visible = true
+	_fl_prop.position = _hand_r.position
+	_fl_prop.rotation = Vector3(angle, 0.0, 0.0)
 
 
 ## Already fading out (a second cancel must not stretch the release).
@@ -1787,6 +1915,8 @@ func on_respawn() -> void:
 	_hand_l.position = Vector3(-HAND_REST.x, HAND_REST.y, HAND_REST.z)
 	_hand_r.position = HAND_REST
 	_appear_t = 0.0
+	_appear_fx = 0
+	_land_h = 0.0
 	stop_emote()
 	_flip_t = 9.0
 	_mantle_t = 9.0
@@ -1807,6 +1937,17 @@ func on_respawn() -> void:
 	_pop(_arrive_suck, _feet())
 	_pop(_arrive_motes, _feet() + Vector3(0, 0.2, 0))
 	_flash(accent.lerp(Color.WHITE, 0.3), 4.5, 0.6)
+
+
+## One band of the respawn sparkle-in: a ring of stars that rises with the beam (stage 0 at the
+## feet, 2 at the head), in the racer colour. Particle counts follow the graphics setting.
+func _sparkle_in(stage: int) -> void:
+	if not is_inside_tree():
+		return
+	var y: float = 0.1 + 0.45 * float(stage)
+	Fx.spawn(self, Fx.burst({"amount": 9, "lifetime": 0.65, "tex": Fx.Tex.STAR, "shape": "ring", "ring_radius": 0.45 - 0.1 * float(stage),
+		"dir": Vector3.UP, "spread": 25.0, "speed": Vector2(0.7, 1.7), "size": 0.17, "curve": "pop",
+		"color": Fx.hot(accent.lerp(Color.WHITE, 0.35), 2.4), "layers": 2}), global_position + Vector3(0, y, 0))
 
 
 func snap_facing(dir: Vector3) -> void:
@@ -1989,7 +2130,12 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 		var c1: float = 2.2
 		pop = maxf(1.0 + (c1 + 1.0) * pow(ap - 1.0, 3.0) + c1 * pow(ap - 1.0, 2.0), 0.05)
 	rotation.y = _yaw + pow(1.0 - ap, 2.0) * TAU_F * 0.75
-	_rig.scale = Vector3.ONE * pop
+	# materialize: a thin beam that fills out as it lands, with sparkles climbing it
+	var beam: float = lerpf(0.35, 1.0, smoothstep(0.0, 0.7, ap))
+	_rig.scale = Vector3(pop * beam, pop, pop * beam)
+	while _appear_fx < MATERIALIZE_AT.size() and _appear_t >= MATERIALIZE_AT[_appear_fx]:
+		_sparkle_in(_appear_fx)
+		_appear_fx += 1
 
 	# ---- motion measures ----
 	var hvel := Vector3(vel.x, 0, vel.z)
@@ -2024,12 +2170,13 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 		if _fidget < 0:
 			_fidget_t -= dt
 			if _fidget_t <= 0.0 and _idle_t > 2.0:
-				_fidget = [0, 1, 3, 2][_fidget_n % 4] if _hash(_fidget_n) < 0.7 else int(_hash(_fidget_n + 99) * 4.0)
+				_fidget = Flourish.pick(_fidget_n, _hash(_fidget_n), _hash(_fidget_n + 99))
 				_fidget_n += 1
 				_fidget_t = 0.0
+				_fl_puffs = 0
 		else:
 			_fidget_t += dt
-			if _fidget_t > 1.7:
+			if _fidget_t > Flourish.length(_fidget, built_character):
 				_fidget = -1
 				_fidget_t = 1.6 + _hash(_fidget_n + 7) * 2.0
 	else:
@@ -2040,7 +2187,7 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 	var idle_w: float = clampf(_idle_t * 2.0, 0.0, 1.0)
 
 	# ---- envelopes for the one-off moves ----
-	var land_w: float = _env(_land_t, 0.16 + 0.22 * _land_k, 0.03)
+	var land_w: float = _env(_land_t, 0.16 + 0.22 * _land_k + 0.3 * _land_h, 0.03)
 	var cp_w: float = _env(_cp_t, 0.95, 0.08)
 	var cheer_w: float = _env(_cheer_t, 3.6, 0.15)
 	var knock_w: float = _env(_knock_t, 0.65, 0.05)
@@ -2125,8 +2272,8 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 			fl.y += 0.04
 			fr.y += 0.04
 		# landing crouch: feet spread; skid: feet braced ahead
-		fl += Vector3(-0.06, 0.0, -0.02) * land_w
-		fr += Vector3(0.06, 0.0, 0.03) * land_w
+		fl += Vector3(-0.06, 0.0, -0.02) * land_w * (1.0 + 1.5 * _land_h)
+		fr += Vector3(0.06, 0.0, 0.03) * land_w * (1.0 + 1.5 * _land_h)
 		fl += Vector3(-0.03, 0.0, -0.16) * _skid
 		fr += Vector3(0.02, 0.02, -0.05) * _skid
 		# idle fidget: a foot tap
@@ -2245,8 +2392,17 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 	# checkpoint: a fist pump (two punches at the sky)
 	if cp_w > 0.0:
 		var pump: float = absf(sin(_cp_t * 8.5))
-		hr = hr.lerp(Vector3(0.56, 0.9 + 0.2 * pump, -0.12), cp_w)
-		hl = hl.lerp(Vector3(-0.5, 0.56, -0.08), cp_w * 0.6)
+		match _cp_variant:
+			1:   # the spin: both mitts thrown wide and up while the body turns
+				hr = hr.lerp(Vector3(0.62, 0.85 + 0.1 * pump, 0.0), cp_w)
+				hl = hl.lerp(Vector3(-0.62, 0.85 + 0.1 * pump, 0.0), cp_w)
+			2:   # both fists, one after the other
+				var alt: float = sin(_cp_t * 9.0)
+				hr = hr.lerp(Vector3(0.5, 0.78 + 0.28 * maxf(alt, 0.0), -0.1), cp_w)
+				hl = hl.lerp(Vector3(-0.5, 0.78 + 0.28 * maxf(-alt, 0.0), -0.1), cp_w)
+			_:
+				hr = hr.lerp(Vector3(0.56, 0.9 + 0.2 * pump, -0.12), cp_w)
+				hl = hl.lerp(Vector3(-0.5, 0.56, -0.08), cp_w * 0.6)
 	# the finish: both mitts up, waving
 	if cheer_w > 0.0:
 		hr = hr.lerp(Vector3(0.66 + sin(_t * 11.0) * 0.08, 1.06 + cos(_t * 11.0) * 0.1, -0.06), cheer_w)
@@ -2265,7 +2421,7 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 
 	# ---- torso: bob, twist, breathing, the landing dip ----
 	var bob: float = absf(cos(_stride)) * 0.035 * amp if on_floor else 0.0
-	var dip: float = land_w * (0.03 + 0.1 * _land_k)
+	var dip: float = land_w * (0.03 + 0.1 * _land_k + 0.12 * _land_h)
 	_torso.position.y = 0.2 + bob - dip
 	var twist: float = cos(_stride) * 0.13 * amp * (1.0 - 0.6 * _sprint) if on_floor and not walling else 0.0
 	if _fidget == 0:
@@ -2310,6 +2466,7 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 	_flare = maxf(_flare - dt * 2.5, 0.0)
 	_bulb_mat.emission_energy_multiplier = 2.0 + _flare * 7.0
 	_bulb.scale = Vector3.ONE * (_bulb_base * (1.0 + _flare * 0.42))
+	_animate_flourish(dt, on_floor)
 	_animate_emote(dt, speed, on_floor)
 	_animate_extras(dt, amp, speed)
 
@@ -2332,6 +2489,7 @@ func animate(dt: float, vel: Vector3, on_floor: bool, facing: Vector3) -> void:
 ## Secondary motion on the spring (tails, plumes, hat stalks), spinning / floating hat parts
 ## and Golden Volt's twinkles. No allocation: everything was gathered when it was built.
 func _animate_extras(dt: float, amp: float, speed: float) -> void:
+	_sway_phase = fposmod(_sway_phase + dt * (3.4 + 9.0 * _sway_boost), TAU)
 	for s: Sway in _sways:
 		_apply_sway(s, amp)
 	for s: Sway in _hat_sways:
@@ -2348,8 +2506,8 @@ func _animate_extras(dt: float, amp: float, speed: float) -> void:
 
 func _apply_sway(s: Sway, amp: float) -> void:
 	var ph: float = _t * 13.0 + s.phase
-	var fl: float = s.flutter * (0.25 + amp)
+	var fl: float = s.flutter * (0.25 + amp) + minf(s.flutter * 6.0, 0.35) * _sway_boost
 	s.node.rotation = s.base + Vector3(
 		_antenna_sway.x * s.pitch + s.lift * amp + fl * sin(ph),
-		s.wag * (0.35 + 0.65 * amp) * sin(_t * 3.4 + s.phase),
+		s.wag * (0.35 + 0.65 * amp + 1.6 * _sway_boost) * sin(_sway_phase + s.phase),
 		_antenna_sway.y * s.roll + fl * 0.6 * sin(ph * 1.3 + 1.0))

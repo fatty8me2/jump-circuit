@@ -525,6 +525,7 @@ func _wall_jump() -> void:
 	_jumping = true
 	_no_snap = 0.12
 	_begin_flight_stats()
+	_nf_kick_until = Time.get_ticks_msec() + int(MoveFlags.EVENT_HOLD * 1000.0)
 	wall_jumped.emit()
 	jumped.emit()
 
@@ -674,6 +675,7 @@ func knockback(v: Vector3) -> void:
 	_buffer = 0.0
 	_no_snap = maxf(_no_snap, 0.12)
 	_begin_flight_stats()
+	_nf_knock_until = Time.get_ticks_msec() + int(MoveFlags.EVENT_HOLD * 1000.0)
 	knocked.emit(v)
 
 
@@ -715,6 +717,27 @@ func horizontal_speed() -> float:
 # ---- presentation glue (cosmetic only) ------------------------------------
 
 @onready var visual: PlayerVisual = $Visual as PlayerVisual
+## ticks_msec until which the one-off pose bits (wall kick, knock) stay raised.
+var _nf_kick_until: int = 0
+var _nf_knock_until: int = 0
+
+
+## The move bits (MoveFlags) a pose packet / ghost sample carries: what the others should see
+## us doing. Read-only; nothing here touches movement.
+func net_move_flags() -> int:
+	var f: int = 0
+	if is_wall_running():
+		f |= MoveFlags.WALL
+		if wall_side() > 0.0:
+			f |= MoveFlags.WALL_RIGHT
+	if is_mantling():
+		f |= MoveFlags.MANTLE
+	var now: int = Time.get_ticks_msec()
+	if now < _nf_kick_until:
+		f |= MoveFlags.KICK
+	if now < _nf_knock_until:
+		f |= MoveFlags.KNOCK
+	return f
 var _shadow: Decal
 
 

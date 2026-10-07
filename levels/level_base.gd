@@ -232,7 +232,7 @@ func _add_ghost(id: int, at: Vector3) -> void:
 func _on_racer_pose(id: int, pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
 	# (poses still arrive for a moment after the scene change back to the lobby)
 	if _ghosts.has(id) and is_inside_tree():
-		(_ghosts[id] as RemoteRacer).push_state(pos, vel, grounded, seq)
+		(_ghosts[id] as RemoteRacer).push_state(pos, vel, grounded, seq, int(Net.pose_flags.get(id, 0)))
 
 
 func _on_roster_changed() -> void:
@@ -337,7 +337,7 @@ func _physics_process(dt: float) -> void:
 			hud.go()
 		_pose_tick += 1
 		if _pose_tick % 4 == 0:
-			Net.send_pose(player.global_position, player.velocity, player.grounded)
+			Net.send_pose(player.global_position, player.velocity, player.grounded, player.net_move_flags())
 	if _started and not finished:
 		SaveData.tick_play(dt)
 		run_time = Game.course_time
@@ -654,6 +654,17 @@ func r_until(test: Callable) -> void:
 
 func r_checkpoint() -> void:
 	route.append({"kind": "checkpoint"})
+
+
+## Kit launch barrel: walk in, wait out its tell, get fired, steer to `to` (docs/KIT_OBSTACLES.md).
+func r_barrel(barrel: LaunchBarrel, to: Vector3) -> void:
+	route.append({"kind": "k_barrel", "barrel": barrel, "to": to})
+
+
+## Kit zipline: get picked up at its start, let go when the trolley is within `radius` of `point`
+## (a world point on the cable), steer to `to`.
+func r_zipline(zip: Zipline, point: Vector3, radius: float, to: Vector3) -> void:
+	route.append({"kind": "k_zip", "zip": zip, "point": point, "radius": radius, "to": to})
 
 
 # ---- run it again (race laps) ---------------------------------------------------------

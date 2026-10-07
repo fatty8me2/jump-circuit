@@ -64,10 +64,13 @@ func duration() -> float:
 	return float(maxi(pos.size() - 1, 0)) / float(HZ)
 
 
-func add(p: Vector3, facing_yaw: float, grounded: bool, wall: bool, snap: bool) -> void:
+## `moves` = MoveFlags the player showed (the wall bit is stored as F_WALL; the side, mantle,
+## kick and knock bits ride the spare high bits, which an older ghost simply has clear).
+func add(p: Vector3, facing_yaw: float, grounded: bool, wall: bool, snap: bool, moves: int = 0) -> void:
 	pos.append(p)
 	yaw.append(facing_yaw)
 	var f: int = (F_GROUNDED if grounded else 0) | (F_WALL if wall else 0) | (F_SNAP if snap else 0)
+	f |= (MoveFlags.clean(moves) & 0x1E) << 2
 	flags.append(f)
 
 
@@ -192,4 +195,13 @@ func sample(t: float) -> Dictionary:
 	var vel: Vector3 = Vector3.ZERO if (jump or i == j) else (b - a) * float(HZ)
 	return {"pos": p, "vel": vel, "yaw": lerp_angle(yaw[i], yaw[j], 0.0 if jump else k),
 		"grounded": (flags[i] & F_GROUNDED) != 0, "wall": (flags[i] & F_WALL) != 0,
-		"snap": (flags[i] & F_SNAP) != 0, "ended": t >= duration()}
+		"snap": (flags[i] & F_SNAP) != 0, "ended": t >= duration(), "moves": moves_at(i)}
+
+
+## The MoveFlags of sample `i` (0 for a ghost recorded before moves were kept).
+func moves_at(i: int) -> int:
+	var f: int = flags[i]
+	var m: int = (f >> 2) & 0x1E
+	if f & F_WALL != 0:
+		m |= MoveFlags.WALL
+	return MoveFlags.clean(m)

@@ -73,6 +73,9 @@ var game_mode: String = "race"
 var teams: Dictionary = {}
 ## Party Cup round of the race in progress (sent with the race start; 0 = not a party race).
 var party_round: int = 0
+## Party vs CPU: a one-person "session" (host, no peers) that runs the normal party race flow
+## with CPU racers (party/cpu/). Never set in the main mode.
+var local_session: bool = false
 
 var _clock_offset: float = 0.0
 var _best_rtt: float = 999.0
@@ -100,6 +103,10 @@ var _pose_last_pos: Vector3 = Vector3.INF
 var _pose_last_vel: Vector3 = Vector3.INF
 var _pose_last_seq: int = -1
 var _pose_last_at: float = -100.0
+var _pose_last_flags: int = 0
+## Latest move bits (MoveFlags) of each remote racer's pose; absent / 0 = none. The level reads
+## it right after racer_pose.
+var pose_flags: Dictionary = {}
 
 
 func _ready() -> void:
@@ -275,6 +282,7 @@ func _shutdown() -> void:
 	game_mode = "race"
 	teams.clear()
 	party_round = 0
+	local_session = false
 	if preferred_color >= 0:
 		Settings.color_index = preferred_color
 		preferred_color = -1
@@ -582,8 +590,10 @@ func _handle_relay_event(from_id: int, event: String, raw_data: Variant) -> void
 			var p: Array = data.get("pos", [])
 			var v: Array = data.get("vel", [])
 			if p.size() == 3 and v.size() == 3:
+				# "f" (move bits) is optional: an older client simply never sends it
 				_emit_pose(from_id, Vector3(float(p[0]), float(p[1]), float(p[2])),
-					Vector3(float(v[0]), float(v[1]), float(v[2])), bool(data.get("grounded", false)), int(data.get("seq", 0)))
+					Vector3(float(v[0]), float(v[1]), float(v[2])), bool(data.get("grounded", false)), int(data.get("seq", 0)),
+					MoveFlags.clean(data.get("f", 0)))
 		"checkpoint":
 			_apply_checkpoint(from_id, int(data.get("index", 0)), float(data.get("at", 0.0)))
 		"finished":
@@ -600,6 +610,8 @@ func _relay_send_event(event: String, data: Dictionary, to_id: int = 0) -> void:
 
 
 func _broadcast_roster() -> void:
+	if local_session:
+		return
 	if _relay_mode:
 		_relay_send_event("roster", {"players": _roster_to_wire(), "party": _party_cfg()})
 	else:
@@ -742,6 +754,12 @@ func _apply_pong(client_time: float, server_time: float) -> void:
 
 
 func update_identity() -> void:
+	if local_session:
+		roster[1]["name"] = Settings.player_name
+		roster[1]["color"] = Settings.color_index
+		roster[1].merge(_my_cosmetics(), true)
+		roster_changed.emit()
+		return
 	if _relay_mode:
 		if not _relay_ready:
 			return
@@ -773,7 +791,10 @@ func update_identity() -> void:
 func host_start_race(level_index: int, countdown: float = 4.0) -> void:
 	# every party race is the next round of the Party Cup (the round travels with the start)
 	var round_no: int = party_round + 1 if game_mode != "race" else 0
-	if _relay_mode and is_host() and _relay_ready:
+	CpuField.sync_roster()   # Party vs CPU / "Fill with CPUs": the CPUs racing this round
+	if local_session:
+		_start_race(level_index, now() + countdown, game_mode, round_no)
+	elif _relay_mode and is_host() and _relay_ready:
 		var start_time := now() + countdown
 		_start_race(level_index, start_time, game_mode, round_no)
 		_relay_send_event("start_race", {"level_index": level_index, "start_time": start_time, "mode": game_mode, "round": round_no})
@@ -802,7 +823,11 @@ func _start_race(level_index: int, start_time: float, mode: String = "", round_n
 
 
 func host_return_to_lobby() -> void:
-	if _relay_mode and is_host() and _relay_ready:
+	if not local_session and is_host():
+		CpuField.clear_roster()   # "Fill with CPUs" CPUs only exist while a cup is on
+	if local_session:
+		_return_to_lobby()
+	elif _relay_mode and is_host() and _relay_ready:
 		_return_to_lobby()
 		_relay_send_event("return_lobby", {})
 	elif is_host():
@@ -821,31 +846,45 @@ func _return_to_lobby() -> void:
 	lobby_requested.emit()
 
 
-func send_pose(pos: Vector3, vel: Vector3, grounded: bool) -> void:
+func send_pose(pos: Vector3, vel: Vector3, grounded: bool, flags: int = 0) -> void:
 	# every relay message counts against the relay's request budget: 15 poses a second at most,
 	# and a racer standing still only sends a heartbeat (ghosts extrapolate from velocity)
 	var t := _local_time()
 	if t - _pose_last_at < POSE_INTERVAL - 0.002:
 		return
+	flags = MoveFlags.clean(flags)
 	var moving: bool = _pose_last_seq != _pose_seq or pos.distance_to(_pose_last_pos) > 0.03 \
-		or vel.distance_to(_pose_last_vel) > 0.15
+		or vel.distance_to(_pose_last_vel) > 0.15 or flags != _pose_last_flags
 	if not moving and t - _pose_last_at < POSE_IDLE_INTERVAL:
 		return
 	_pose_last_at = t
 	_pose_last_pos = pos
 	_pose_last_vel = vel
 	_pose_last_seq = _pose_seq
+	_pose_last_flags = flags
 	if _relay_mode:
 		if active and roster.size() > 1:
-			_relay_send_event("pose", {
-				"pos": [pos.x, pos.y, pos.z],
-				"vel": [vel.x, vel.y, vel.z],
-				"grounded": grounded,
-				"seq": _pose_seq,
-			})
+			_relay_send_event("pose", pose_packet(pos, vel, grounded, _pose_seq, flags))
 		return
 	if active and multiplayer.get_peers().size() > 0:
-		_pose.rpc(pos, vel, grounded, _pose_seq)
+		if flags == 0:
+			_pose.rpc(pos, vel, grounded, _pose_seq)
+		else:
+			_pose_f.rpc(pos, vel, grounded, _pose_seq, flags)
+
+
+## The relay's "pose" event data. "f" (MoveFlags) rides along only while a move is showing, so a
+## plain pose is as small as it always was and an older client just never sees the key.
+static func pose_packet(pos: Vector3, vel: Vector3, grounded: bool, seq: int, flags: int = 0) -> Dictionary:
+	var msg: Dictionary = {
+		"pos": [pos.x, pos.y, pos.z],
+		"vel": [vel.x, vel.y, vel.z],
+		"grounded": grounded,
+		"seq": seq,
+	}
+	if flags != 0:
+		msg["f"] = flags
+	return msg
 
 
 ## The local racer teleported (respawn, checkpoint skip): poses sent from now on carry a
@@ -859,13 +898,20 @@ func _pose(pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
 	_emit_pose(multiplayer.get_remote_sender_id(), pos, vel, grounded, seq)
 
 
-func _emit_pose(id: int, pos: Vector3, vel: Vector3, grounded: bool, seq: int) -> void:
+## The same pose with the move bits (MoveFlags) riding along; a plain pose uses _pose.
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func _pose_f(pos: Vector3, vel: Vector3, grounded: bool, seq: int, flags: int) -> void:
+	_emit_pose(multiplayer.get_remote_sender_id(), pos, vel, grounded, seq, MoveFlags.clean(flags))
+
+
+func _emit_pose(id: int, pos: Vector3, vel: Vector3, grounded: bool, seq: int, flags: int = 0) -> void:
 	if roster.has(id):
+		pose_flags[id] = flags
 		racer_pose.emit(id, pos, vel, grounded, seq)
 
 
 func send_checkpoint(index: int) -> void:
-	if _relay_mode and active:
+	if (_relay_mode or local_session) and active:
 		var at := now()
 		_apply_checkpoint(my_id(), index, at)
 		_relay_send_event("checkpoint", {"index": index, "at": at})
@@ -889,7 +935,7 @@ func _apply_checkpoint(id: int, index: int, at: float) -> void:
 
 
 func send_finished(time: float) -> void:
-	if _relay_mode and active:
+	if (_relay_mode or local_session) and active:
 		_apply_finished(my_id(), time)
 		_relay_send_event("finished", {"time": time})
 	elif active:
@@ -948,6 +994,8 @@ func all_finished() -> bool:
 ## older game builds.
 func send_party(msg: Dictionary, to_id: int = 0) -> void:
 	if not active or to_id == my_id():
+		return
+	if CpuField.is_cpu_id(to_id) and CpuField.route_to_cpu(to_id, msg):
 		return
 	if _relay_mode:
 		if roster.size() > 1:
@@ -1026,6 +1074,20 @@ func _apply_party_cfg(raw: Variant) -> void:
 				teams[int(e[0])] = clampi(int(e[1]), 0, 1)
 	if not in_race:
 		party_round = int(cfg.get("round", party_round))
+
+
+## Party vs CPU: starts the one-person session (the caller opens the lobby or starts a round).
+func host_local() -> void:
+	leave()
+	local_session = true
+	active = true
+	_clock_offset = 0.0
+	teams.clear()
+	party_round = 0
+	game_mode = "party"
+	CpuField.reset_identities()
+	roster = {1: _my_entry()}
+	roster_changed.emit()
 
 
 # ---- router-free lobby ------------------------------------------------------------
