@@ -3982,7 +3982,7 @@ func test_zm_catalogue_and_kinds() -> void:
 		"new kinds name themselves")
 	check(Cosmetics.catalogue("nope").is_empty() and Cosmetics.default_id("nope") == "", "an unknown kind is empty")
 	# the catalogue as planned
-	check(Cosmetics.ids("character") == ["volt", "knight", "ninja", "astronaut", "dino", "skeleton", "catbot", "outlaw", "cyber", "golden"], "characters: %s" % [Cosmetics.ids("character")])
+	check(Cosmetics.ids("character") == ["volt", "knight", "ninja", "astronaut", "dino", "skeleton", "catbot", "outlaw", "cyber", "golden", "wizard", "pirate", "yeti", "robopup", "pixel"], "characters: %s" % [Cosmetics.ids("character")])
 	check(Cosmetics.ids("paint") == ["white", "chrome", "camo", "lava", "galaxy", "candy", "ghost", "neon", "goldleaf", "pixel", "marble", "toxic", "aurora", "stained"], "paints: %s" % [Cosmetics.ids("paint")])
 	check(Cosmetics.ids("title") == ["rookie", "globetrotter", "speed_demon", "gold_rush", "flawless", "lap_king", "marathoner"], "titles: %s" % [Cosmetics.ids("title")])
 	# one hat per world, for Silver on it

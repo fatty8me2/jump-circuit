@@ -40,6 +40,11 @@ const CHARACTERS: Dictionary = {
 	"outlaw": {"name": "Outlaw", "rule": {"type": "medal", "level": "frontier", "tier": 3}},
 	"cyber": {"name": "Cyber Volt", "rule": {"type": "medal", "level": "neon", "tier": 3}},
 	"golden": {"name": "Golden Volt", "rule": {"type": "all_medals", "tier": 3}},
+	"wizard": {"name": "Wizard", "rule": {"type": "medal", "level": "arcane", "tier": 3}},
+	"pirate": {"name": "Pirate", "rule": {"type": "stat", "key": "runs", "n": 60}},
+	"yeti": {"name": "Yeti", "rule": {"type": "stat", "key": "laps_dealt", "n": 10}},
+	"robopup": {"name": "Robo-Pup", "rule": {"type": "medal", "level": "toybox", "tier": 3}},
+	"pixel": {"name": "Pixel Hero", "rule": {"type": "medal", "level": "arcade", "tier": 3}},
 }
 
 ## One hat per world for Silver on it, plus three specials.
