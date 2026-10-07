@@ -126,7 +126,6 @@ static func _pirate(v: PlayerVisual) -> void:
 ## tufts at the shoulders and hips that swing, crystals on its back and huge clawed mitts.
 static func _yeti(v: PlayerVisual) -> void:
 	var fur: Material = CosmeticArt.std(Color(0.93, 0.95, 1.0), 0.95)
-	var ice: Material = CosmeticArt.std(Color(0.6, 0.78, 0.92), 0.7)
 	var dark: Material = CosmeticArt.std(Color(0.07, 0.09, 0.15), 0.6)
 	v._body = v._paintable(v._tp(CosmeticArt.sphere(2), fur, Vector3(0, 0.62, 0), Vector3(0.86, 0.9, 0.82)))
 	v._tp(CosmeticArt.sphere(1), CosmeticArt.std(Color(0.72, 0.86, 0.96), 0.7), Vector3(0, 0.7, -0.26), Vector3(0.5, 0.4, 0.32))
@@ -140,7 +139,7 @@ static func _yeti(v: PlayerVisual) -> void:
 	for side: float in [-1.0, 1.0]:
 		v._paintable(_hang(v, Vector3(0.37 * side, 0.82, 0.0), tuft, fur, 0.14, Vector3(0.17, 0.32, 0.17), Vector3(0, 0, 0.35 * side), [-0.5, 0.6, 0.12, 0.0, -0.4]))
 		v._paintable(_hang(v, Vector3(0.3 * side, 0.4, 0.12), tuft, fur, 0.13, Vector3(0.16, 0.3, 0.16), Vector3(0, 0, 0.3 * side), [-0.5, 0.6, 0.12, 0.0, -0.4]))
-	v._belt(CosmeticArt.torus(0.34, 0.41), Vector3(0, 0.36, 0), Vector3.ONE, ice)
+	v._belt(CosmeticArt.torus(0.34, 0.41), Vector3(0, 0.36, 0))
 	# icy crystals on the back
 	var crystal: Material = CosmeticArt.std(Color(0.7, 0.9, 1.0), 0.15, 0.1, 0.7)
 	v._pack(CosmeticArt.cyl(0.0, 0.5, 6), crystal, Vector3(0, 0.74, 0.4), Vector3(0.2, 0.5, 0.16), Vector3(-0.25, 0, 0))
