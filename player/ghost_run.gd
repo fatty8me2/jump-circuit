@@ -81,7 +81,7 @@ func _physics_process(_dt: float) -> void:
 
 func _sample_player() -> void:
 	var p: Player = level.player
-	recording.add(p.global_position, GhostData.yaw_of(p.facing_dir), p.grounded, p.is_wall_running(), _snap_pending)
+	recording.add(p.global_position, GhostData.yaw_of(p.facing_dir), p.grounded, p.is_wall_running(), _snap_pending, p.net_move_flags())
 	_snap_pending = false
 
 
@@ -133,5 +133,5 @@ func _process(dt: float) -> void:
 	if bool(s["snap"]) and idx != _snap_idx:
 		_snap_idx = idx   # the pose jumps here once (respawn): the ghost respawns too
 		_seq += 1
-	racer.push_state(s["pos"], v, bool(s["grounded"]) or bool(s["wall"]), _seq)
+	racer.push_state(s["pos"], v, bool(s["grounded"]) or bool(s["wall"]), _seq, int(s["moves"]))
 	racer.set_exact_facing(GhostData.facing_of(float(s["yaw"])))
