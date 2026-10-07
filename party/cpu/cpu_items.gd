@@ -19,12 +19,14 @@ static func consider(r: CpuRacer, f: CpuField, rivals: Array[Dictionary]) -> voi
 	var fwd: Vector3 = r.walker.facing
 	var my_rank: int = f.rank_of(r.id)
 	var ahead: Array[Dictionary] = []
+	var mine: float = f.progress_of(r.id, me)
 	for rv: Dictionary in rivals:
 		var flat: Vector3 = RouteMath.flat((rv["pos"] as Vector3) - me)
 		rv["dist"] = flat.length()
 		rv["fwd"] = flat.normalized().dot(fwd) if flat.length() > 0.1 else 1.0
-		if f.rank_of(int(rv["id"])) < my_rank:
-			ahead.append(rv)
+		rv["prog"] = f.progress_of(int(rv["id"]), rv["pos"] as Vector3)
+		if float(rv["prog"]) > mine + 0.5:
+			ahead.append(rv)   # (ahead by real course distance, like the human items)
 	var age: float = r.item_age
 	var used: bool = false
 	match r.item:
@@ -34,8 +36,7 @@ static func consider(r: CpuRacer, f: CpuField, rivals: Array[Dictionary]) -> voi
 			if not ahead.is_empty() and (my_rank >= 3 or ahead.size() >= 2 or age > 9.0):
 				used = _thunder(r, f, ahead)
 		"swap":
-			if my_rank > 1:
-				used = _swap(r, f, rivals, my_rank)
+			used = _swap(r, f, rivals, mine)
 		"ice":
 			var t: Dictionary = _nearest(rivals, 18.0, 0.7)
 			if not t.is_empty():
@@ -84,6 +85,8 @@ static func consider(r: CpuRacer, f: CpuField, rivals: Array[Dictionary]) -> voi
 				f.hit_rival(r, t4, Vector3.ZERO, {"e": "float", "ed": 2.0, "s": "gravity", "quiet": true, "add": true})
 				used = true
 	if used:
+		f.cpu_used(r, r.item)
+		r.protect_left = 0.0   # using an item ends the respawn grace (no box camping)
 		r.item = ""
 		r.item_age = 0.0
 	elif age > STALE:
@@ -126,29 +129,29 @@ static func _thunder(r: CpuRacer, f: CpuField, ahead: Array[Dictionary]) -> bool
 	return true
 
 
-static func _swap(r: CpuRacer, f: CpuField, rivals: Array[Dictionary], my_rank: int) -> bool:
-	var tg: Dictionary = {}
-	var best_rank: int = -1
+## Swap Warp, caster side: the nearest racer ahead by course distance (PartyRules.swap_target) is
+## asked to trade; nothing moves until they accept (the handshake a human answers too).
+static func _swap(r: CpuRacer, f: CpuField, rivals: Array[Dictionary], mine: float) -> bool:
+	var prog: Dictionary = {}
 	for rv: Dictionary in rivals:
-		var rk: int = f.rank_of(int(rv["id"]))
-		if rk < my_rank and rk > best_rank:
-			best_rank = rk
+		prog[int(rv["id"])] = float(rv["prog"])
+	var pick: int = PartyRules.swap_target(mine, prog, PartyLayer.SWAP_RANGE)
+	if pick == 0:
+		return false   # nobody to swap with: the item is kept
+	var tg: Dictionary = {}
+	for rv: Dictionary in rivals:
+		if int(rv["id"]) == pick:
 			tg = rv
-	if tg.is_empty() or float(tg.get("dist", 999.0)) > 70.0:
-		return false
-	var a: Vector3 = r.walker.pos
-	var b: Vector3 = tg["pos"]
-	f.cpu_fx(r.id, "swap", "warp", {"a": PowerUp.arr(a), "b": PowerUp.arr(b)})
-	r.walker.teleport(b)
-	r.walker.relocate(b)
-	r.walker.stun(0.4)
+	var pos: Vector3 = r.walker.pos
+	var cp: int = r.walker.cp
+	r.swap_wait = f.clock
 	var o: CpuRacer = tg.get("cpu") as CpuRacer
 	if o != null:
-		o.swapped(r.id, a, f)
+		o.swap_request(r.id, pos, cp, f)
 	elif bool(tg.get("local", false)):
-		f.layer._on_swap(r.id, a)
+		f.layer._on_swap(r.id, pos, cp)
 	else:
-		Net.send_party({"k": "cswap", "by": r.id, "pos": PowerUp.arr(a)}, int(tg["id"]))
+		Net.send_party({"k": "cswap", "by": r.id, "pos": PowerUp.arr(pos), "cp": cp}, pick)
 	return true
 
 

@@ -18,7 +18,9 @@ extends Node
 ## Party packets (k), all from the host unless noted:
 ##   cpose {l: [[id, px,py,pz, vx,vy,vz, grounded, seq] ...]}   cp {id, i, at}   cfin {id, t}
 ##   cst {id, e, d} status look   cpw {id, p, on, d} power-up mirror   cfx {id, p, a, d} replay an item action
-##   cko {by, v} a CPU was KO'd   chit {by, m} -> victim: apply hit m   cswap {by, pos} -> victim
+##   cko {by, v} a CPU was KO'd   chit {by, m} -> victim: apply hit m   cswap {by, pos, cp} -> victim
+##   chf {by, v, s} HUD feed line for a CPU's hit   cuse {by, p} HUD feed line / warning for a CPU's item
+##   cwrap also carries the Swap handshake (swap, swap_ok, swap_no) answered by / sent to CPUs
 ##   cwrap {to, m}  (guest -> host) a hit / swap on CPU `to`
 
 const BASE_ID: int = 900
@@ -302,6 +304,43 @@ func catch_up(r: CpuRacer) -> float:
 	return 1.0
 
 
+## Course progress (metres) of racer `id` at `pos`, the way PartyLayer ranks Swap / Thunder targets.
+func progress_of(id: int, pos: Vector3) -> float:
+	return layer.progress_of(int(Net.roster.get(id, {}).get("cp", 0)), pos)
+
+
+## HUD feed ("Bolt iced Ana!") for a CPU's hit; everyone's feed hears of it.
+func cpu_hit_feed(by: int, victim: int, src: String) -> void:
+	if src == "" or victim <= 0:
+		return
+	layer.hud.on_hit_event(by, victim, src)
+	Net.send_party({"k": "chf", "by": by, "v": victim, "s": src})
+
+
+## A CPU used an item: the feed line, and the "Targeted!" warning for those it threatens.
+func cpu_used(r: CpuRacer, item: String) -> void:
+	layer.hud.on_item_used(r.id, item)
+	Net.send_party({"k": "cuse", "by": r.id, "p": item})
+
+
+## An answer in the Swap handshake: to a CPU, to the host's own human, or over the wire.
+func reply(to_id: int, from_id: int, msg: Dictionary) -> void:
+	if racers.has(to_id):
+		_deliver_swap(racers[to_id], msg)
+	elif to_id == Net.my_id():
+		layer._on_message(from_id, msg)
+	else:
+		Net.send_party(msg, to_id)
+
+
+func _deliver_swap(r: CpuRacer, msg: Dictionary) -> void:
+	match str(msg.get("k", "")):
+		"swap_ok":
+			r.swap_ok(PowerUp.v3(msg.get("pos", [])), int(msg.get("cp", 0)), self)
+		"swap_no":
+			r.swap_no()
+
+
 func new_key(id: int) -> String:
 	_key_n += 1
 	return "%d_c%d" % [id, _key_n]
@@ -410,6 +449,7 @@ func hit_rival(r: CpuRacer, rival: Dictionary, kb: Vector3, o: Dictionary = {}) 
 		layer._on_hit(r.id, m)
 	else:
 		Net.send_party({"k": "chit", "by": r.id, "m": m}, rid)
+	cpu_hit_feed(r.id, rid, str(o.get("s", "")))
 	if not bool(o.get("quiet", false)):
 		layer.hit_fx(rival["center"] as Vector3, kb)
 
@@ -417,6 +457,7 @@ func hit_rival(r: CpuRacer, rival: Dictionary, kb: Vector3, o: Dictionary = {}) 
 ## The Shove - or, in a transformation, its stronger melee.
 func cpu_shove(r: CpuRacer, rival: Dictionary, dir: Vector3) -> void:
 	var strong: bool = r.form != ""
+	r.protect_left = 0.0   # attacking ends the respawn grace
 	var k: float = 1.0
 	var tv: Vector3 = RouteMath.flat(rival["vel"] as Vector3)
 	if tv.length() > 1.5 and tv.normalized().dot(dir) > 0.4:
@@ -445,7 +486,9 @@ func _apply_wrapped(from_id: int, to_id: int, m: Dictionary) -> void:
 		"hit":
 			r.take_hit(from_id, m, self)
 		"swap":
-			r.swapped(from_id, PowerUp.v3(m.get("pos", [])), self)
+			r.swap_request(from_id, PowerUp.v3(m.get("pos", [])), int(m.get("cp", 0)), self)
+		"swap_ok", "swap_no":
+			_deliver_swap(r, m)
 
 
 func _on_message(from_id: int, m: Dictionary) -> void:
@@ -482,4 +525,8 @@ func _on_message(from_id: int, m: Dictionary) -> void:
 			if typeof(m.get("m")) == TYPE_DICTIONARY:
 				layer._on_hit(int(m.get("by", 0)), m["m"] as Dictionary)
 		"cswap":
-			layer._on_swap(int(m.get("by", 0)), PowerUp.v3(m.get("pos", [])))
+			layer._on_swap(int(m.get("by", 0)), PowerUp.v3(m.get("pos", [])), int(m.get("cp", 0)))
+		"chf":
+			layer.hud.on_hit_event(int(m.get("by", 0)), int(m.get("v", 0)), str(m.get("s", "")))
+		"cuse":
+			layer.hud.on_item_used(int(m.get("by", 0)), str(m.get("p", "")))

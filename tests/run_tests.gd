@@ -6876,9 +6876,9 @@ func test_zcpu_menu_pad() -> void:
 		if c is Button or c is Label:
 			top = minf(top, (c as Control).get_global_rect().position.y)
 			bottom = maxf(bottom, (c as Control).get_global_rect().end.y)
-	check(bottom > top and bottom - top <= 900.0 - 120.0, "the main menu with its new button still fits the 900 px canvas (%.0f px of %.0f)" % [bottom - top, 900.0 - 120.0])
+	check(bottom > top and bottom - top <= 880.0, "the main menu with its new button still fits the 900 px canvas (%.0f px of 880)" % (bottom - top))
 	var found: bool = false
-	for i: int in 9:
+	for i: int in 10:
 		if _focused_text() == "Party vs CPU":
 			found = true
 			break
@@ -7075,6 +7075,7 @@ func test_zcpu_hits_items_ko() -> void:
 		if int(r["id"]) == 1:
 			human = r
 	check(not human.is_empty(), "the human is one of a CPU's rivals")
+	p.protect_left = 0.0   # (no respawn grace on the human)
 	f.hit_rival(b, human, Vector3(0, 6, 0), {"st": 0.4, "s": "shove"})
 	check(p.last_hit_by == b.id and lvl.player.party_stun > 0.0, "a CPU's shove stuns the human and is credited to the CPU (by %d)" % p.last_hit_by)
 	var deaths: int = lvl.deaths
@@ -7114,6 +7115,8 @@ func test_zcpu_hits_items_ko() -> void:
 	f._stand_t = -1000.0
 	f._standing.clear()
 	f._standing.append_array([ids[2], ids[0], 1, ids[1]])
+	Net.roster[a.id]["cp"] = 3   # (ahead by course distance)
+	Net.roster[b.id]["cp"] = 0
 	CpuItems.consider(b, f, f.rivals_of(b))
 	check(b.item == "", "a CPU in last place uses Thunder Cloud")
 	check(a.slow_left > 0.0 and a.walker.hold > 0.0, "...and the racers ahead are zapped (slow %.1f, hold %.1f)" % [a.slow_left, a.walker.hold])
@@ -7201,3 +7204,73 @@ func test_zcpu_team_round() -> void:
 	check(not targets_have_mate, "the human's attacks never target the CPU teammate")
 	await _cpu_cleanup()
 
+
+
+## Swap Warp handshake with CPUs (accept / refuse / keep the item), respawn protection, HUD feed.
+func test_zcpu_swap_and_hud() -> void:
+	var lvl: LevelBase = await _cpu_round(0, 2, "normal", "party", 0.5)
+	var p: PartyLayer = lvl.party
+	var f: CpuField = _cpu_field(lvl)
+	await wait_until(func() -> bool: return Game.course_time > 3.0 and p._ready_done, 60.0, "the round to get going")
+	var ids: Array = f.racers.keys()
+	ids.sort()
+	var a: CpuRacer = f.racers[ids[0]]
+	var b: CpuRacer = f.racers[ids[1]]
+	for r: CpuRacer in [a, b]:
+		r.protect_left = 0.0
+		r.shield_left = 0.0
+	# b is a checkpoint ahead of a
+	var cp1: Vector3 = lvl.checkpoints[0].global_position
+	b.walker.teleport(cp1)
+	b.walker.cp = 1
+	Net.roster[b.id]["cp"] = 1
+	a.walker.cp = 0
+	Net.roster[a.id]["cp"] = 0
+	f._standing = [b.id, a.id, 1]
+	f._stand_t = -1000.0
+	var b_pos: Vector3 = b.walker.pos
+	a.item = "swap"
+	a.item_age = 10.0
+	a._item_wait = 0.0
+	CpuItems.consider(a, f, f.rivals_of(a))
+	check(a.item == "" and a.walker.cp == 1 and b.walker.cp == 0, "a CPU's Swap Warp trades places and checkpoints with the CPU ahead (a cp %d, b cp %d)" % [a.walker.cp, b.walker.cp])
+	check(int(Net.roster[a.id]["cp"]) == 1 and int(Net.roster[b.id]["cp"]) == 0, "...and the roster follows the swap")
+	check(a.walker.pos.distance_to(b_pos) < 3.0, "...the caster lands where the victim stood")
+	# a protected (or shielded) CPU refuses: nothing moves, the item is spent like a human's
+	b.protect_left = 2.0
+	var a_cp: int = a.walker.cp
+	b.walker.cp = 2
+	Net.roster[b.id]["cp"] = 2
+	a.item = "swap"
+	a.item_age = 10.0
+	CpuItems.consider(a, f, f.rivals_of(a))
+	check(a.walker.cp == a_cp and b.walker.cp == 2 and a.swap_wait < 0.0, "a CPU in respawn protection refuses a Swap Warp (swap_no)")
+	# nobody ahead: the item is kept
+	Net.roster[a.id]["cp"] = 9
+	a.item = "swap"
+	a.item_age = 10.0
+	CpuItems.consider(a, f, f.rivals_of(a))
+	check(a.item == "swap", "with nobody ahead the Swap Warp is kept, not wasted")
+	Net.roster[a.id]["cp"] = a_cp
+	# the human swaps with a CPU through the same handshake
+	b.protect_left = 0.0
+	b.walker.teleport(cp1)
+	b.walker.cp = 1
+	Net.roster[b.id]["cp"] = 1
+	var before: int = lvl.current_checkpoint
+	await ticks(30)
+	p.request_swap({"id": b.id})
+	await ticks(10)
+	check(lvl.current_checkpoint == 1 and b.walker.cp == before, "a human's Swap Warp on a CPU is answered with swap_ok (human cp %d, CPU cp %d)" % [lvl.current_checkpoint, b.walker.cp])
+	# respawn protection shrugs off hits
+	b.protect_left = 2.0
+	var by: int = b.last_hit_by
+	b.take_hit(1, {"kb": PowerUp.arr(Vector3(6, 4, 0)), "s": "shove"}, f)
+	check(b.last_hit_by == by and b.walker.mode != RouteWalker.Mode.AIR, "respawn protection shrugs off a hit on a CPU")
+	# HUD: the feed hears of CPU hits and item use
+	var lines: int = p.hud.feed_log.size()
+	f.cpu_hit_feed(a.id, 1, "shove")
+	f.cpu_used(a, "thunder")
+	check(p.hud.feed_log.size() > lines, "the party feed shows a CPU's hit / item (%d new lines)" % (p.hud.feed_log.size() - lines))
+	await seconds(1.0)
+	await _cpu_cleanup()

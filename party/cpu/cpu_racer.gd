@@ -8,7 +8,7 @@ extends RefCounted
 const SHOVE_COOLDOWN: float = 0.85
 const CLAW_COOLDOWN: float = 1.2
 ## Same grace as a human after a respawn: hits during it do nothing.
-const PROTECT: float = 2.0
+const PROTECT: float = PartyRules.RESPAWN_PROTECTION
 
 var id: int = 0
 var racer_name: String = "CPU"
@@ -36,6 +36,7 @@ var last_hit_by: int = 0
 var last_hit_at: float = -99.0
 var finished: bool = false
 var _ai_t: float = 0.0
+var swap_wait: float = -1.0
 var _enc: Dictionary = {}
 var _skip_box: Dictionary = {}
 var _magnet_pulse: float = 0.0
@@ -247,12 +248,42 @@ func take_hit(by: int, m: Dictionary, f: CpuField) -> void:
 			f.cpu_status(id, "stun", st)
 
 
-## Swap Warp from `by`: land where they stood.
-func swapped(by: int, to: Vector3, f: CpuField) -> void:
-	if finished or protect_left > 0.0:
+## Swap Warp, victim side (the same handshake a human answers): refuse while a Balloon Shield or
+## respawn protection is up, else trade places and checkpoints with the caster.
+func swap_request(by: int, pos: Vector3, cp: int, f: CpuField) -> void:
+	if pos == Vector3.ZERO:
+		return
+	if finished or walker.done or protect_left > 0.0 or shield_left > 0.0:
+		f.reply(by, id, {"k": "swap_no"})
 		return
 	last_hit_by = by
 	last_hit_at = f.clock
-	walker.teleport(to)
-	walker.relocate(to)
-	walker.stun(0.6)
+	var my_pos: Vector3 = walker.pos
+	var my_cp: int = walker.cp
+	var caster_at: float = float(Net.roster.get(by, {}).get("cp_at", 0.0))
+	var my_at: float = float(Net.roster.get(id, {}).get("cp_at", 0.0))
+	f.reply(by, id, {"k": "swap_ok", "pos": PowerUp.arr(my_pos), "cp": my_cp})
+	var sw: Dictionary = {"k": "swapped", "a": by, "acp": my_cp, "aat": my_at, "b": id, "bcp": cp, "bat": caster_at}
+	f.layer._apply_swapped(sw)
+	Net.send_party(sw)
+	_land_swap(pos, cp)
+
+
+## Swap Warp, caster side: they accepted - go to their spot, take their checkpoint.
+func swap_ok(pos: Vector3, cp: int, f: CpuField) -> void:
+	if swap_wait < 0.0 or f.clock - swap_wait > 3.0:
+		swap_wait = -1.0
+		return
+	swap_wait = -1.0
+	f.cpu_fx(id, "swap", "warp", {"a": PowerUp.arr(walker.pos), "b": PowerUp.arr(pos)})
+	_land_swap(pos, cp)
+
+
+func swap_no() -> void:
+	swap_wait = -1.0
+
+
+func _land_swap(pos: Vector3, cp: int) -> void:
+	walker.teleport(pos)
+	walker.relocate(pos, cp)
+	walker.stun(0.5)

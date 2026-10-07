@@ -188,7 +188,7 @@ func teleport(to: Vector3) -> void:
 
 
 ## After being put somewhere else: carry on from the route step nearest to here.
-func relocate(to: Vector3) -> void:
+func relocate(to: Vector3, set_cp: int = -1) -> void:
 	var best: int = step
 	var best_d: float = INF
 	for i: int in route.size():
@@ -200,7 +200,9 @@ func relocate(to: Vector3) -> void:
 			best_d = d
 			best = i
 	step = best
-	if _marks.size() == level.checkpoints.size():
+	if set_cp >= 0:
+		cp = clampi(set_cp, 0, level.checkpoints.size())
+	elif _marks.size() == level.checkpoints.size():
 		var n: int = 0
 		for m: int in _marks:
 			if m < step:
