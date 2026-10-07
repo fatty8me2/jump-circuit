@@ -20,6 +20,9 @@ var racer_name: String = ""
 var title_id: String = "rookie"
 var _shadow: Decal
 var _team_name: String = ""
+## Ghost replay (GhostRun): follow the pushed pose exactly (no easing or extrapolation) and
+## take the heading from set_exact_facing() instead of the velocity.
+var exact: bool = false
 
 
 func _ready() -> void:
@@ -70,12 +73,26 @@ func apply_cosmetics(entry: Dictionary) -> void:
 	_visual.set_hat(Cosmetics.clean("hat", entry.get("hat")))
 	_visual.set_paint(Cosmetics.clean("paint", entry.get("paint")))
 	set_title(entry.get("title"))
+	_visual.pose_id = Cosmetics.clean("pose", entry.get("pose"))
 
 
 func set_title(id: Variant) -> void:
 	title_id = Cosmetics.clean("title", id)
 	if _label != null:
 		_label.text = _tag_text(_team_name)
+
+
+## They played an emote / victory pose (kind "emote" | "pose") or cut it short (kind "stop").
+## Ids are checked against the catalogue (Net validates them too); movement ends an emote on
+## its own (PlayerVisual stops it when the reported speed or air time says they moved).
+func play_emote(kind: String, id: String) -> void:
+	match kind:
+		"emote":
+			_visual.play_emote(id)
+		"pose":
+			_visual.play_pose(id, false, 0.0)
+		"stop":
+			_visual.cancel_emote()
 
 
 ## They crossed the line: their own finish celebration.
@@ -147,10 +164,40 @@ func _process(dt: float) -> void:
 	if not _has_state:
 		return
 	_age += dt
-	var predicted: Vector3 = _pos + _vel * minf(_age, 0.2)
-	global_position = global_position.lerp(predicted, 1.0 - exp(-16.0 * dt))
-	var flat := Vector3(_vel.x, 0, _vel.z)
-	if flat.length() > 0.5:
-		_facing = flat.normalized()
+	if exact:
+		global_position = _pos
+	else:
+		var predicted: Vector3 = _pos + _vel * minf(_age, 0.2)
+		global_position = global_position.lerp(predicted, 1.0 - exp(-16.0 * dt))
+		var flat := Vector3(_vel.x, 0, _vel.z)
+		if flat.length() > 0.5:
+			_facing = flat.normalized()
 	_visual.animate(dt, _vel, _grounded, _facing)
 	BlobShadow.fit(_shadow, get_world_3d().direct_space_state, global_position, 1 | 8)
+
+
+# ---- ghost replay ---------------------------------------------------------------------
+
+## Turns this racer into a personal-best ghost: translucent, tinted, no shadow, a bare tag.
+## Call after add_child (the rig is built in _ready).
+func make_ghost(tag: String, color: Color) -> void:
+	exact = true
+	setup(tag, color)
+	_label.text = tag
+	_label.no_depth_test = false
+	_shadow.visible = false
+	_visual.set_character("volt")
+	_fade(_visual)
+
+
+func _fade(n: Node) -> void:
+	if n is MeshInstance3D:
+		(n as MeshInstance3D).transparency = 0.6
+		(n as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for c: Node in n.get_children():
+		_fade(c)
+
+
+func set_exact_facing(dir: Vector3) -> void:
+	if dir.length() > 0.01:
+		_facing = dir.normalized()

@@ -22,6 +22,8 @@ extends RefCounted
 ##   {"type": "medals", "tier": T, "n": N}  tier T or better on N different courses
 ##   {"type": "all_medals", "tier": T}      tier T or better on every course
 ##   {"type": "stat", "key": <k>, "n": N}   SaveData stats[k] >= N ("runs" is the total run count)
+##   {"type": "challenges", "n": N}        N course challenges done (see Challenges)
+##   {"type": "all_challenges"}             every course challenge done
 ## Medals are derived from min(best, legacy_best) (Game.medal_for), so a layout rebuild never
 ## takes one away and old saves earn them retroactively.
 
@@ -40,6 +42,11 @@ const CHARACTERS: Dictionary = {
 	"outlaw": {"name": "Outlaw", "rule": {"type": "medal", "level": "frontier", "tier": 3}},
 	"cyber": {"name": "Cyber Volt", "rule": {"type": "medal", "level": "neon", "tier": 3}},
 	"golden": {"name": "Golden Volt", "rule": {"type": "all_medals", "tier": 3}},
+	"wizard": {"name": "Wizard", "rule": {"type": "medal", "level": "arcane", "tier": 3}},
+	"pirate": {"name": "Pirate", "rule": {"type": "stat", "key": "runs", "n": 60}},
+	"yeti": {"name": "Yeti", "rule": {"type": "stat", "key": "laps_dealt", "n": 10}},
+	"robopup": {"name": "Robo-Pup", "rule": {"type": "medal", "level": "toybox", "tier": 3}},
+	"pixel": {"name": "Pixel Hero", "rule": {"type": "medal", "level": "arcade", "tier": 3}},
 }
 
 ## One hat per world for Silver on it, plus three specials.
@@ -71,6 +78,25 @@ const HATS: Dictionary = {
 	"crown": {"name": "Crown", "rule": {"type": "medals", "tier": 3, "n": 10}},
 	"halo": {"name": "Halo", "rule": {"type": "stat", "key": "flawless_golds", "n": 1}},
 	"party": {"name": "Party Hat", "rule": {"type": "stat", "key": "laps_dealt", "n": 3}},
+	# v2.0: the eight new worlds' Silver hats, then Gold, medal-count, run and stat hats
+	"windup": {"name": "Wind-Up Key", "rule": {"type": "medal", "level": "toybox", "tier": 2}},
+	"toadstool": {"name": "Toadstool Cap", "rule": {"type": "medal", "level": "fungal", "tier": 2}},
+	"ringmaster": {"name": "Ringmaster Top Hat", "rule": {"type": "medal", "level": "carnival", "tier": 2}},
+	"laurel": {"name": "Laurel Wreath", "rule": {"type": "medal", "level": "olympus", "tier": 2}},
+	"dinoskull": {"name": "Dino Skull", "rule": {"type": "medal", "level": "dino", "tier": 2}},
+	"wizard": {"name": "Arcane Wizard Hat", "rule": {"type": "medal", "level": "arcane", "tier": 2}},
+	"pixel_crown": {"name": "Pixel Crown", "rule": {"type": "medal", "level": "arcade", "tier": 2}},
+	"knight_helm": {"name": "Knight's Helm", "rule": {"type": "medal", "level": "siege", "tier": 2}},
+	"toque": {"name": "Chef's Toque", "rule": {"type": "runs", "n": 15}},
+	"bunny": {"name": "Bunny Ears", "rule": {"type": "stat", "key": "laps_dealt", "n": 6}},
+	"flower_crown": {"name": "Flower Crown", "rule": {"type": "medals", "tier": 1, "n": 15}},
+	"monocle_hat": {"name": "Monocle Top Hat", "rule": {"type": "medal", "level": "clockwork", "tier": 3}},
+	"cone": {"name": "Traffic Cone", "rule": {"type": "runs", "n": 50}},
+	"gilded_viking": {"name": "Gilded Viking Helm", "rule": {"type": "medal", "level": "glacier", "tier": 3}},
+	"gilded_tricorn": {"name": "Gilded Pirate Tricorne", "rule": {"type": "medal", "level": "armada", "tier": 3}},
+	"gilded_cowboy": {"name": "Gilded Cowboy Hat", "rule": {"type": "medal", "level": "frontier", "tier": 3}},
+	"gilded_beanie": {"name": "Gilded Summit Beanie", "rule": {"type": "medal", "level": "ascent", "tier": 3}},
+	"gilded_headphones": {"name": "Gilded Neon Headphones", "rule": {"type": "medal", "level": "neon", "tier": 3}},
 }
 
 const PAINTS: Dictionary = {
@@ -82,6 +108,12 @@ const PAINTS: Dictionary = {
 	"candy": {"name": "Candy Stripe", "rule": {"type": "medal", "level": "candy", "tier": 3}},
 	"ghost": {"name": "Ghost", "rule": {"type": "medal", "level": "manor", "tier": 2}},
 	"neon": {"name": "Neon Glow", "rule": {"type": "medal", "level": "neon", "tier": 2}},
+	"goldleaf": {"name": "Gold Leaf", "rule": {"type": "medal", "level": "olympus", "tier": 3}},
+	"pixel": {"name": "Pixel", "rule": {"type": "medal", "level": "arcade", "tier": 2}},
+	"marble": {"name": "Marble", "rule": {"type": "medal", "level": "arcane", "tier": 2}},
+	"toxic": {"name": "Toxic", "rule": {"type": "medal", "level": "fungal", "tier": 3}},
+	"aurora": {"name": "Aurora", "rule": {"type": "medal", "level": "void", "tier": 3}},
+	"stained": {"name": "Stained Glass", "rule": {"type": "medals", "tier": 2, "n": 12}},
 }
 
 const TRAILS: Dictionary = {
@@ -95,6 +127,12 @@ const TRAILS: Dictionary = {
 	"sprinkles": {"name": "Sprinkles", "rule": {"type": "level", "id": "candy"}},
 	"contrail": {"name": "Jet Contrail", "rule": {"type": "level", "id": "carrier"}},
 	"rainbow": {"name": "Rainbow", "rule": {"type": "all"}},
+	"hearts": {"name": "Hearts", "rule": {"type": "medals", "tier": 2, "n": 8}},
+	"pixels": {"name": "Pixels", "rule": {"type": "level", "id": "arcade"}},
+	"notes": {"name": "Music Notes", "rule": {"type": "level", "id": "carnival"}},
+	"ink": {"name": "Ink Bubbles", "rule": {"type": "medal", "level": "abyss", "tier": 2}},
+	"leaves": {"name": "Leaves", "rule": {"type": "level", "id": "sakura"}},
+	"stars": {"name": "Stars and Moons", "rule": {"type": "runs", "n": 50}},
 }
 
 const FINISHES: Dictionary = {
@@ -104,7 +142,42 @@ const FINISHES: Dictionary = {
 	"lightning": {"name": "Lightning Bolt", "rule": {"type": "level", "id": "armada"}},
 	"ghost": {"name": "Ghost Spin", "rule": {"type": "flawless"}},
 	"jet": {"name": "Jet Flyover", "rule": {"type": "levels", "n": 10}},
+	"balloons": {"name": "Balloon Party", "rule": {"type": "medal", "level": "carnival", "tier": 2}},
+	"disco": {"name": "Disco", "rule": {"type": "level", "id": "neon"}},
+	"meteor": {"name": "Meteor Strike", "rule": {"type": "levels", "n": 20}},
+	"pixelburst": {"name": "Pixel Burst", "rule": {"type": "medal", "level": "arcade", "tier": 3}},
 }
+
+## Emotes: the D-pad (up, right, down, left) and keys 1-4 play the four you slot in the
+## Locker. The first four are free.
+const EMOTES: Dictionary = {
+	"wave": {"name": "Wave", "rule": {"type": "default"}},
+	"thumbsup": {"name": "Thumbs Up", "rule": {"type": "default"}},
+	"dance": {"name": "Dance", "rule": {"type": "default"}},
+	"bow": {"name": "Bow", "rule": {"type": "default"}},
+	"laugh": {"name": "Laugh", "rule": {"type": "runs", "n": 10}},
+	"flex": {"name": "Flex", "rule": {"type": "medals", "tier": 1, "n": 5}},
+	"spin": {"name": "Spin", "rule": {"type": "levels", "n": 5}},
+	"facepalm": {"name": "Facepalm", "rule": {"type": "runs", "n": 40}},
+	"taunt": {"name": "Taunt", "rule": {"type": "medals", "tier": 2, "n": 5}},
+	"sit": {"name": "Sit Down", "rule": {"type": "levels", "n": 10}},
+}
+
+## Victory poses: played at the finish (and on the party podium).
+const POSES: Dictionary = {
+	"cheer": {"name": "Cheer", "rule": {"type": "default"}},
+	"strongman": {"name": "Strongman", "rule": {"type": "medals", "tier": 1, "n": 3}},
+	"salute": {"name": "Salute", "rule": {"type": "runs", "n": 25}},
+	"hero": {"name": "Hero", "rule": {"type": "levels", "n": 8}},
+	"dab": {"name": "Dab", "rule": {"type": "medals", "tier": 2, "n": 6}},
+	"rockstar": {"name": "Rock Star", "rule": {"type": "medals", "tier": 3, "n": 4}},
+}
+
+## Settings property of each emote slot (D-pad up, right, down, left / keys 1-4) and what the
+## slot holds on a fresh install. Slot 1 is the "emote" kind's setting (KINDS).
+const EMOTE_SLOT_KEYS: Array[String] = ["emote_id", "emote_id2", "emote_id3", "emote_id4"]
+const EMOTE_SLOT_DEFAULTS: Array[String] = ["wave", "thumbsup", "dance", "bow"]
+const EMOTE_SLOT_NAMES: Array[String] = ["Up", "Right", "Down", "Left"]
 
 ## Shown beside your name on the roster, the race board and your name tag.
 const TITLES: Dictionary = {
@@ -115,6 +188,9 @@ const TITLES: Dictionary = {
 	"flawless": {"name": "Flawless", "rule": {"type": "flawless"}},
 	"lap_king": {"name": "Lap King", "rule": {"type": "stat", "key": "laps_dealt", "n": 10}},
 	"marathoner": {"name": "Marathoner", "rule": {"type": "runs", "n": 100}},
+	"challenger": {"name": "Challenger", "rule": {"type": "challenges", "n": 25}},
+	"challenge_master": {"name": "Challenge Master", "rule": {"type": "challenges", "n": 60}},
+	"completionist": {"name": "Completionist", "rule": {"type": "all_challenges"}},
 }
 
 ## kind -> catalogue, default id, Locker tab label, Settings property, display-name suffix.
@@ -126,6 +202,8 @@ const KINDS: Dictionary = {
 	"trail": {"items": TRAILS, "default": DEFAULT_TRAIL, "label": "Trail", "setting": "trail_id", "suffix": " trail"},
 	"finish": {"items": FINISHES, "default": DEFAULT_FINISH, "label": "Finish", "setting": "finish_id", "suffix": " finish"},
 	"title": {"items": TITLES, "default": "rookie", "label": "Title", "setting": "title_id", "suffix": " title"},
+	"emote": {"items": EMOTES, "default": "wave", "label": "Emote", "setting": "emote_id", "suffix": " emote"},
+	"pose": {"items": POSES, "default": "cheer", "label": "Pose", "setting": "pose_id", "suffix": " pose"},
 }
 
 const MEDAL_NAMES: Array[String] = ["", "Bronze", "Silver", "Gold"]
@@ -272,6 +350,10 @@ static func rule_met(rule: Dictionary, levels: Dictionary, stats: Variant = null
 			return medal_count(levels, int(rule.get("tier", 3))) >= Game.LEVELS.size()
 		"stat":
 			return stat_value(str(rule.get("key", "")), levels, _stats_or_save(stats)) >= int(rule.get("n", 1))
+		"challenges":
+			return Challenges.count(levels) >= int(rule.get("n", 1))
+		"all_challenges":
+			return Challenges.count(levels) >= Challenges.total()
 	return false
 
 
@@ -332,6 +414,10 @@ static func hint(kind: String, id: String) -> String:
 			return "%s on %d courses" % [_tier_name(int(rule.get("tier", 3))), int(rule.get("n", 1))]
 		"all_medals":
 			return "%s on every course" % _tier_name(int(rule.get("tier", 3)))
+		"challenges":
+			return "Complete %d course challenges (see Challenges)" % int(rule.get("n", 1))
+		"all_challenges":
+			return "Complete every course challenge (%d)" % Challenges.total()
 		"stat":
 			var n: int = int(rule.get("n", 1))
 			match str(rule.get("key", "")):
@@ -371,6 +457,10 @@ static func progress(kind: String, id: String, levels: Variant = null, stats: Va
 		"medal":
 			var have: int = medal_of(lv, str(rule.get("level", "")))
 			return "best: %s" % (MEDAL_NAMES[have] if have > 0 else "no medal")
+		"challenges":
+			return "%d/%d" % [mini(Challenges.count(lv), int(rule["n"])), int(rule["n"])]
+		"all_challenges":
+			return "%d/%d" % [Challenges.count(lv), Challenges.total()]
 		"stat":
 			var n: int = int(rule.get("n", 1))
 			return "%d/%d" % [mini(stat_value(str(rule.get("key", "")), lv, _stats_or_save(stats)), n), n]
@@ -384,6 +474,42 @@ static func equipped(kind: String) -> String:
 	var key: String = setting_key(kind)
 	var id: String = clean(kind, Settings.get(key) if key != "" else null)
 	return id if is_unlocked(kind, id) else default_id(kind)
+
+
+# ---- emote slots ---------------------------------------------------------------------------------
+
+## The emote on slot `i` (0 up, 1 right, 2 down, 3 left): the Settings pick when it is known and
+## unlocked, else that slot's default.
+static func emote_slot(i: int) -> String:
+	i = clampi(i, 0, EMOTE_SLOT_KEYS.size() - 1)
+	var id: String = clean("emote", Settings.get(EMOTE_SLOT_KEYS[i]))
+	return id if is_unlocked("emote", id) else EMOTE_SLOT_DEFAULTS[i]
+
+
+## All four slots, in D-pad order.
+static func emote_slots() -> Array[String]:
+	var out: Array[String] = []
+	for i: int in EMOTE_SLOT_KEYS.size():
+		out.append(emote_slot(i))
+	return out
+
+
+## Which slot holds `id` (-1 if none).
+static func emote_slot_of(id: String) -> int:
+	return emote_slots().find(id)
+
+
+## Puts `id` on slot `i`. An emote already on another slot swaps places (an emote never sits
+## on two slots). Locked or unknown ids are refused.
+static func set_emote_slot(i: int, id: String) -> bool:
+	if i < 0 or i >= EMOTE_SLOT_KEYS.size() or not is_unlocked("emote", id):
+		return false
+	var slots: Array[String] = emote_slots()
+	var other: int = slots.find(id)
+	if other >= 0 and other != i:
+		Settings.set(EMOTE_SLOT_KEYS[other], slots[i])
+	Settings.set(EMOTE_SLOT_KEYS[i], id)
+	return true
 
 
 static func equipped_trail() -> String:

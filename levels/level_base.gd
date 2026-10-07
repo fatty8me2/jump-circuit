@@ -46,6 +46,8 @@ var _started: bool = false
 var _pose_tick: int = 0
 var _ghosts: Dictionary = {}
 var _pause: PauseMenu
+## Solo ghost replay + recorder (null in Party Mode and races).
+var ghost_run: GhostRun
 
 
 func _ready() -> void:
@@ -74,10 +76,19 @@ func _ready() -> void:
 		_setup_race()
 	else:
 		_begin_run()
+		_setup_ghost()
 	if Game.party != null:
 		party = PartyLayer.new()
 		add_child(party)
 		party.setup(self)
+
+
+func _setup_ghost() -> void:
+	if not GhostRun.allowed():
+		return
+	ghost_run = GhostRun.new()
+	add_child(ghost_run)
+	ghost_run.setup(self)
 
 
 ## Override: set level_id/theme_id/kill_y etc.
@@ -117,6 +128,8 @@ func _spawn_player() -> void:
 	player.visual.set_character(Cosmetics.equipped("character"))
 	player.visual.set_hat(Cosmetics.equipped("hat"))
 	player.visual.set_paint(Cosmetics.equipped("paint"))
+	player.visual.pose_id = Cosmetics.equipped("pose")
+	player.emote_sent.connect(Net.send_emote)
 	camera = OrbitCamera.new()
 	add_child(camera)
 	camera.target = player
@@ -191,6 +204,9 @@ func _setup_race() -> void:
 			if id == spectating_id:
 				_spectate_moved_on())
 	Net.racer_lapped.connect(_on_racer_lapped)
+	Net.racer_emote.connect(func(id: int, kind: String, emote_id: String) -> void:
+		if _ghosts.has(id) and is_inside_tree():
+			(_ghosts[id] as RemoteRacer).play_emote(kind, emote_id))
 	# a dropped relay link reconnects on its own; the race carries on meanwhile
 	Net.connection_interrupted.connect(func(_detail: String) -> void:
 		if is_inside_tree():
@@ -323,6 +339,7 @@ func _physics_process(dt: float) -> void:
 		if _pose_tick % 4 == 0:
 			Net.send_pose(player.global_position, player.velocity, player.grounded)
 	if _started and not finished:
+		SaveData.tick_play(dt)
 		run_time = Game.course_time
 		_check_failure()
 
@@ -383,6 +400,7 @@ func fail(cause: String = "fall") -> void:
 	if finished or Engine.get_physics_frames() - _respawn_tick <= 1:
 		return
 	deaths += 1
+	SaveData.count_fall()
 	player_failed.emit(cause)
 	respawn(cause)
 
@@ -499,11 +517,13 @@ func _on_finish() -> void:
 		return
 	# medals are derived from the records, so read the tier before and after recording
 	var prev_medal: int = SaveData.medal(level_id)
+	var prev_ch: Array[String] = Challenges.done_keys()
 	if Game.race_mode:
 		laps_done = 1
 		Net.send_checkpoint(checkpoints.size() + 1)
 		Net.send_finished(time)
 		SaveData.record_finish(level_id, time, deaths, splits)
+		announce_challenges(Challenges.sync(prev_ch))
 		hud.show_race_results(time)
 		announce_unlocks(0.4, _new_medal(prev_medal))
 		return
@@ -512,11 +532,32 @@ func _on_finish() -> void:
 	var is_best: bool = false
 	if Game.level_index >= 0:
 		is_best = SaveData.record_finish(level_id, time, deaths, splits)
+	if is_best and ghost_run != null:
+		ghost_run.save_best(time)
+	var new_ch: Array[String] = Challenges.sync(prev_ch)
 	await _finish_sequence()
 	hud.show_results(time, prev_best, is_best, deaths, prev_ff, prev_medal)
+	announce_challenges(new_ch)
 	if is_best and prev_best >= 0.0 and _new_medal(prev_medal) == 0:
 		Sfx.play("new_best")   # (a new medal plays its own sting on the results panel)
 	announce_unlocks(0.4, _new_medal(prev_medal))
+
+
+## "Challenge complete!" notes for the challenges this finish completed. They follow the
+## cosmetic unlock toasts, so call this ahead of announce_unlocks (it counts the unlocks still pending).
+func announce_challenges(keys: Array[String]) -> void:
+	var pending: int = Cosmetics.check_unlocks(false).size()
+	# inside the results panel the notes stack up, so they all appear at once; as toasts they queue
+	var in_panel: bool = hud._results != null and is_instance_valid(hud._results) and hud._results.visible
+	for i: int in keys.size():
+		var t: PackedStringArray = Challenges.note_text(keys[i])
+		get_tree().create_timer(0.4 + (0.5 * i if in_panel else 2.0 * (pending + i))).timeout.connect(func() -> void:
+			if is_inside_tree():
+				hud.unlock_note(t[0], t[1]))
+
+
+func _exit_tree() -> void:
+	SaveData.flush_play_stats()
 
 
 ## The tier this finish newly earned (0 when the level's medal did not go up).
@@ -613,6 +654,17 @@ func r_until(test: Callable) -> void:
 
 func r_checkpoint() -> void:
 	route.append({"kind": "checkpoint"})
+
+
+## Kit launch barrel: walk in, wait out its tell, get fired, steer to `to` (docs/KIT_OBSTACLES.md).
+func r_barrel(barrel: LaunchBarrel, to: Vector3) -> void:
+	route.append({"kind": "k_barrel", "barrel": barrel, "to": to})
+
+
+## Kit zipline: get picked up at its start, let go when the trolley is within `radius` of `point`
+## (a world point on the cable), steer to `to`.
+func r_zipline(zip: Zipline, point: Vector3, radius: float, to: Vector3) -> void:
+	route.append({"kind": "k_zip", "zip": zip, "point": point, "radius": radius, "to": to})
 
 
 # ---- run it again (race laps) ---------------------------------------------------------

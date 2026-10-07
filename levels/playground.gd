@@ -68,3 +68,71 @@ func _build() -> void:
 	kit.checkpoint(Vector3(0, 0, -60), 0.0)
 	kit.finish(Vector3(0, 0, -80), 0.0)
 	kit.cloud_field(Vector3(0, -20, -30), Vector3(120, 5, 120), 14)
+	_build_kit_gallery()
+
+
+# ---- Kit Gallery -------------------------------------------------------------------------------
+# East of the main floor (walk through the gap past the spawn, +X): one of each generic kit
+# obstacle (docs/KIT_OBSTACLES.md) on a safe floor, labelled. Decks are raised 1-1.4 m so falling
+# off just means landing on the floor.
+
+func _build_kit_gallery() -> void:
+	kit.plat(Vector3(47.5, 0, -8), Vector3(5, 2, 12), "main", 0.0)
+	kit.plat(Vector3(115, 0, -35), Vector3(130, 2, 100), "main", 3.0)
+	_gallery_label(Vector3(54, 3.2, -2), "KIT GALLERY")
+	# row 1 ---------------------------------------------------------------------------------
+	# 1 launch barrel: walk in, wait out the tell, get fired onto the deck
+	var landing := Vector3(62, 1.0, -28)
+	kit.plat(landing, Vector3(8, 1, 8), "accent", 0.0)
+	kit.barrel(Vector3(62, 0, -8), landing, 3.0, 3.0, 0.0)
+	_gallery_label(Vector3(62, 4.5, -4), "1  Launch barrel")
+	# 2 zipline
+	kit.zipline(Vector3(80, 0, -6), Vector3(80, 0, -38), 11.0, 1.4)
+	_gallery_label(Vector3(80, 4.5, -4), "2  Zipline  (jump to let go)")
+	# 3 cannonball battery firing across a walkway
+	kit.battery(Vector3(110, 0, -20), 90.0, 20.0, 9.0, 3.2, 0.0, 0.0)
+	_gallery_label(Vector3(104, 4.5, -10), "3  Cannonball battery")
+	# 4 rolling log between two decks
+	kit.plat(Vector3(124, 1.4, -8), Vector3(8, 1.4, 6), "accent", 0.0)
+	kit.log_roller(Vector3(124, 1.4, -21), 16.0, 2.6, 90.0, 3.0, 6.0, 0.0)
+	kit.plat(Vector3(124, 1.4, -34), Vector3(8, 1.4, 6), "accent", 0.0)
+	_gallery_label(Vector3(124, 5.0, -6), "4  Rolling log")
+	# 5 seesaw between two decks
+	kit.plat(Vector3(142, 1.0, -10), Vector3(8, 1, 8), "accent", 0.0)
+	kit.seesaw(Vector3(142, 1.0, -19), 9.0, 2.6, false, 0.0)
+	kit.plat(Vector3(142, 1.0, -28), Vector3(8, 1, 8), "accent", 0.0)
+	_gallery_label(Vector3(142, 4.5, -6), "5  Seesaw")
+	# row 2 ---------------------------------------------------------------------------------
+	# 6 flipper: stand near its tip and get swatted across the gap
+	kit.plat(Vector3(62, 1.0, -48.5), Vector3(14, 1, 9), "accent", 0.0)
+	kit.flipper(Vector3(62, 1.0, -51), 5.0, 0.0, 80.0, 4.0, 0.0)
+	kit.plat(Vector3(62, 1.0, -61), Vector3(14, 1, 10), "accent", 0.0)
+	_gallery_label(Vector3(62, 5.0, -45), "6  Flipper paddle")
+	# 7 drawbridge
+	kit.plat(Vector3(86, 1.0, -46), Vector3(10, 1, 8), "accent", 0.0)
+	kit.drawbridge(Vector3(86, 1.0, -50), 8.0, 3.4, 0.0, 9.0, 0.0)
+	kit.plat(Vector3(86, 1.0, -62), Vector3(10, 1, 8), "accent", 0.0)
+	_gallery_label(Vector3(86, 5.5, -43), "7  Drawbridge")
+	# 8 gap wall
+	kit.gap_wall(Vector3(106, 0, -52), 0.0, 3.4, 8.0, 0.0)
+	_gallery_label(Vector3(106, 6.5, -46), "8  Gap wall")
+	# 9 falling blocks: one on the clock, one that waits for you
+	kit.falling_block(Vector3(126, 0, -50), Vector3(3, 1.6, 3), 7.0, 5.0, 0.0)
+	kit.falling_block(Vector3(126, 0, -62), Vector3(3, 1.6, 3), 7.0, 5.0, 0.0, true)
+	_gallery_label(Vector3(126, 9.0, -44), "9  Falling block")
+	# 10 spinning hammer
+	kit.hammer(Vector3(146, 0, -54), 5.0, 4.8, 0.0, 180.0)
+	_gallery_label(Vector3(146, 5.0, -46), "10  Spinning hammer")
+
+
+func _gallery_label(pos: Vector3, text: String) -> void:
+	var l := Label3D.new()
+	l.text = text
+	l.font_size = 64
+	l.pixel_size = 0.012
+	l.outline_size = 14
+	l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	l.no_depth_test = true
+	l.modulate = Color(1, 1, 1)
+	l.position = pos
+	add_child(l)

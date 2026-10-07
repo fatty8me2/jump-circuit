@@ -28,6 +28,9 @@ signal connection_restored
 signal relay_notice(text: String)
 ## Race laps (run it again): `lapper` is now `count` full courses ahead of `victim`.
 signal racer_lapped(lapper: int, victim: int, count: int)
+## Another racer played an emote or victory pose (kind "emote" / "pose" with a catalogue id) or
+## cut one short (kind "stop", id ""). See send_emote.
+signal racer_emote(id: int, kind: String, emote_id: String)
 
 const PORT: int = 24565
 const MAX_PLAYERS: int = 8
@@ -569,6 +572,11 @@ func _handle_relay_event(from_id: int, event: String, raw_data: Variant) -> void
 				if typeof(data["lap"]) == TYPE_DICTIONARY:
 					_apply_lap_msg(from_id, data["lap"])
 				return
+			if data.has("emote"):
+				# an emote / victory pose riding the pose event (see send_emote)
+				if typeof(data["emote"]) == TYPE_DICTIONARY:
+					_apply_emote_msg(from_id, data["emote"])
+				return
 			if data.has("party"):
 				# a Party Mode packet riding the pose event (see send_party)
 				var to: int = int(data.get("to", 0))
@@ -1061,6 +1069,62 @@ func host_local() -> void:
 func try_upnp() -> void:
 	upnp_text = "Room-code relay is used; no router setup is needed."
 	upnp_result.emit(upnp_text)
+
+
+# ---- emotes and victory poses ------------------------------------------------------
+# A reliable one-off message, like a lap packet: {"k": "emote" | "pose" | "stop", "id": <id>}.
+# It rides the relay's "pose" event as {"emote": msg} (no relay redeploy) and a reliable RPC on
+# a direct connection. The receiver validates it (a racer on the roster, a known catalogue id,
+# at most ~5 a second per sender) and the level plays it on that racer's RemoteRacer.
+
+const EMOTE_KINDS: Array[String] = ["emote", "pose", "stop"]
+const EMOTE_MIN_GAP_MSEC: int = 200
+var _emote_sent_at: int = -100000
+var _emote_seen_at: Dictionary = {}   # sender id -> last accepted message time (msec)
+
+
+## Tells the others the local racer plays emote / pose `id` ("emote" / "pose"), or stopped
+## ("stop", ""). Safe to call anywhere: nothing happens outside a session.
+func send_emote(kind: String, id: String = "") -> void:
+	if not active or not roster.has(my_id()) or not _valid_emote(kind, id):
+		return
+	var now_ms: int = Time.get_ticks_msec()
+	if kind != "stop" and now_ms - _emote_sent_at < EMOTE_MIN_GAP_MSEC:
+		return
+	_emote_sent_at = now_ms
+	var msg: Dictionary = {"k": kind, "id": id}
+	if _relay_mode:
+		if _relay_ready and roster.size() > 1:
+			_relay_send_event("pose", {"emote": msg})
+		return
+	if multiplayer.multiplayer_peer == null or multiplayer.get_peers().is_empty():
+		return
+	_emote.rpc(msg)
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _emote(msg: Dictionary) -> void:
+	_apply_emote_msg(multiplayer.get_remote_sender_id(), msg)
+
+
+static func _valid_emote(kind: String, id: String) -> bool:
+	if kind == "stop":
+		return true
+	return kind in EMOTE_KINDS and Cosmetics.has_item(kind, id)
+
+
+func _apply_emote_msg(from_id: int, msg: Dictionary) -> void:
+	if from_id == my_id() or not roster.has(from_id):
+		return
+	var kind: Variant = msg.get("k", "")
+	var id: Variant = msg.get("id", "")
+	if typeof(kind) != TYPE_STRING or typeof(id) != TYPE_STRING or not _valid_emote(kind, id):
+		return
+	var now_ms: int = Time.get_ticks_msec()
+	if kind != "stop" and now_ms - int(_emote_seen_at.get(from_id, -100000)) < EMOTE_MIN_GAP_MSEC:
+		return
+	_emote_seen_at[from_id] = now_ms
+	racer_emote.emit(from_id, kind, "" if kind == "stop" else id)
 
 
 # ---- race laps (run it again) ----------------------------------------------------

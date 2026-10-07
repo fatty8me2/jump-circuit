@@ -4,7 +4,7 @@ extends RefCounted
 ## (the victim applies the effect to its own Player and broadcasts it; ghosts get the look).
 ##   stun    - dizzy stars, input ignored
 ##   slow    - storm static, speed x0.6
-##   freeze  - encased in an ice block, held in place
+##   freeze  - encased in an ice block: cannot run or jump, but still falls
 ##   float   - trapped in a gravity bubble, drifting up helplessly
 ##   shrink  - tiny: slower, weak jumps, knocked further
 ##   spin    - spun out (slick puddle): stars + a spin
@@ -12,7 +12,7 @@ extends RefCounted
 ## effect -> (speed, jump, gravity) multipliers on the victim's Player.
 const MODS: Dictionary = {
 	"slow": Vector3(0.6, 0.85, 1.0),
-	"freeze": Vector3(0.0, 0.0, 0.0),
+	"freeze": Vector3(0.0, 0.0, 1.0),   # no running or jumping, but gravity keeps pulling
 	"float": Vector3(0.3, 0.0, 0.06),
 	"shrink": Vector3(0.75, 0.75, 1.0),
 }

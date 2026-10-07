@@ -139,6 +139,7 @@ func _setup_input() -> void:
 		"jump": [KEY_SPACE], "restart": [KEY_R], "pause": [KEY_ESCAPE],
 		"debug_overlay": [KEY_F3], "dev_next_checkpoint": [KEY_F6], "show_board": [KEY_TAB],
 		"spectate_prev": [KEY_Q], "spectate_next": [KEY_E],
+		"emote_1": [KEY_1], "emote_2": [KEY_2], "emote_3": [KEY_3], "emote_4": [KEY_4],
 	}
 	for action: String in keys:
 		if not InputMap.has_action(action):
@@ -150,8 +151,9 @@ func _setup_input() -> void:
 	# Pad events use device -1 (any pad): new() defaults to device 0, which misses a
 	# controller that enumerates on another slot (second pad, wheel, virtual pad).
 	var pad: Dictionary = {"jump": JOY_BUTTON_A, "restart": JOY_BUTTON_Y, "pause": JOY_BUTTON_START,
-		"move_forward": JOY_BUTTON_DPAD_UP, "move_back": JOY_BUTTON_DPAD_DOWN,
-		"move_left": JOY_BUTTON_DPAD_LEFT, "move_right": JOY_BUTTON_DPAD_RIGHT,
+		# the D-pad plays emotes in game (up, right, down, left = slots 1-4); the left stick moves
+		"emote_1": JOY_BUTTON_DPAD_UP, "emote_2": JOY_BUTTON_DPAD_RIGHT,
+		"emote_3": JOY_BUTTON_DPAD_DOWN, "emote_4": JOY_BUTTON_DPAD_LEFT,
 		"spectate_prev": JOY_BUTTON_LEFT_SHOULDER, "spectate_next": JOY_BUTTON_RIGHT_SHOULDER}
 	for action: String in pad:
 		var jb := InputEventJoypadButton.new()
@@ -286,7 +288,7 @@ static func mouse_button_name(button: int) -> String:
 ## Which fixed game action already uses this input (a rebind onto it is refused), or "".
 func fixed_action_for(event: InputEvent) -> String:
 	for action: String in ["jump", "restart", "pause", "move_forward", "move_back", "move_left", "move_right",
-			"debug_overlay", "show_board", "ui_accept", "ui_cancel"]:
+			"emote_1", "emote_2", "emote_3", "emote_4", "debug_overlay", "show_board", "ui_accept", "ui_cancel"]:
 		if InputMap.has_action(action) and InputMap.event_is_action(event, action, true):
 			# pad B / A are menu back / confirm too, but only while a menu is open
 			if action in ["ui_accept", "ui_cancel"] and event is InputEventJoypadButton:

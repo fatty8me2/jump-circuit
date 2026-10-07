@@ -121,6 +121,15 @@ func _show_menu(focus_settings: bool = false) -> void:
 			level.restart_run()))
 	_settings_btn = UiKit.button("Settings", func() -> void: _show_settings())
 	box.add_child(_settings_btn)
+	if GhostRun.allowed() and level.ghost_run != null:
+		var ghost_btn: Button = UiKit.button("", func() -> void: pass)
+		ghost_btn.text = _ghost_text()
+		ghost_btn.pressed.connect(func() -> void:
+			Settings.ghost_mode = (Settings.ghost_mode + 1) % Settings.GHOST_NAMES.size()
+			Settings.save_settings()
+			ghost_btn.text = _ghost_text()
+			level.ghost_run.apply_setting())
+		box.add_child(ghost_btn)
 	if Game.race_mode:
 		if Net.is_host():
 			# the host can end the race for everyone without finishing it first
@@ -152,6 +161,10 @@ func _risky(text: String, verb: String, action: Callable) -> Button:
 	if level.current_checkpoint <= 0:
 		return UiKit.button(text, action)
 	return UiKit.confirm_button(text, "Press again to %s" % verb, action)
+
+
+func _ghost_text() -> String:
+	return "Ghost: %s" % Settings.GHOST_NAMES[Settings.ghost_mode]
 
 
 func _show_settings() -> void:

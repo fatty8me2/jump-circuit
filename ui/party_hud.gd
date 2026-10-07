@@ -1,9 +1,14 @@
 class_name PartyHud
 extends CanvasLayer
-## Party Mode overlay, on top of the level HUD: the item slot (icon, name, button prompt),
-## the active power-up's timer / charge meter, Shove readiness, round banner and the
-## end-of-round countdown, this round's KO / bonus tally (team totals in Team Party), a
-## kill feed, big announcements, and a host for the results panels.
+## Party Mode overlay, on top of the level HUD: the item slot (icon, name, button prompt) with its
+## roulette, the active power-up's timer / charge meter, Shove readiness, the round banner and
+## end-of-round countdown, a live standings strip with a big "your place" readout (team totals in
+## Team Party), "Targeted!" warnings and off-screen rival arrows, an event feed (KOs, bonuses,
+## item hits, passes), big announcements, the waiting bar after you finish (countdown, spectate),
+## and a host for the results panels.
+
+const AUTO_SPECTATE_AFTER: float = 4.0
+const FEED_MAX: int = 6
 
 var party: PartyLayer
 
@@ -29,10 +34,40 @@ var _panel_host: Control
 var _hint: Label
 var _last_count: int = -1
 var _finish_bar: PanelContainer
-## Item roulette: seconds of icon-flicking left before the slot lands on the real item
-## (cosmetic - the item is usable at once).
-var _roll_left: float = 0.0
-var _roll_tick: float = 0.0
+var _finish_count: Label
+var _finish_fill: ColorRect
+var _finish_cb: Callable
+var _auto_spec_in: float = -1.0
+
+## The standings strip and the rival arrows.
+var standings: PartyStandings
+var radar: PartyRadar
+var _board_t: float = 0.0
+var _prev_order: Array[int] = []
+
+## The item slot's roulette (a fresh pickup spins ~0.8 s, ticking, then lands).
+var roulette := PartyRoulette.new()
+var roulette_ticks_total: int = 0
+var _held: String = ""
+
+## "Targeted!" warnings.
+var _target_box: VBoxContainer
+var _target_title: Label
+var _target_sub: Label
+var _target_tw: Tween
+var _edge: TextureRect
+var _edge_tw: Tween
+var _now: float = 0.0
+var _scan_t: float = 0.0
+var _last_warn: Dictionary = {}
+## Rival id -> seconds (HUD clock) until which they count as a threat.
+var _threat_until: Dictionary = {}
+## Every warning shown: [{id, what}] (tests read this).
+var warn_log: Array[Dictionary] = []
+
+## The event feed's history: [{text, kind, icon}] (kind: ko, bonus, hit, use, pass, info).
+var feed_log: Array[Dictionary] = []
+var _hit_merge: Dictionary = {}
 
 
 func _ready() -> void:
@@ -42,6 +77,31 @@ func _ready() -> void:
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.theme = UiKit.theme()
 	add_child(_root)
+
+	# red vignette that pulses when somebody is after you
+	var grad := Gradient.new()
+	grad.offsets = PackedFloat32Array([0.0, 0.62, 1.0])
+	grad.colors = PackedColorArray([Color(1, 0.1, 0.05, 0.0), Color(1, 0.1, 0.05, 0.0), Color(1, 0.1, 0.05, 0.55)])
+	var gt := GradientTexture2D.new()
+	gt.gradient = grad
+	gt.fill = GradientTexture2D.FILL_RADIAL
+	gt.fill_from = Vector2(0.5, 0.5)
+	gt.fill_to = Vector2(1.0, 0.5)
+	gt.width = 128
+	gt.height = 128
+	_edge = TextureRect.new()
+	_edge.texture = gt
+	_edge.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_edge.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_edge.stretch_mode = TextureRect.STRETCH_SCALE
+	_edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_edge.modulate.a = 0.0
+	_root.add_child(_edge)
+
+	radar = PartyRadar.new()
+	radar.party = party
+	radar.visible = party != null and not party.practice
+	_root.add_child(radar)
 
 	# item slot, top left under the stage / falls line (the bottom left belongs to the level intro)
 	var slot: PanelContainer = UiKit.panel()
@@ -97,11 +157,21 @@ func _ready() -> void:
 	_score.position = Vector2(24, 50)
 	_root.add_child(_score)
 
-	_feed = UiKit.vbox(2)
+	# live standings: big place + the racers in order, top right (replaces the level's race board)
+	standings = PartyStandings.new()
+	standings.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	standings.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	standings.position = Vector2(-20, 10)
+	standings.visible = false
+	_root.add_child(standings)
+	standings.place_changed.connect(_on_place_changed)
+
+	_feed = UiKit.vbox(3)
 	_feed.set_anchors_preset(Control.PRESET_CENTER_RIGHT)
 	_feed.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	_feed.position = Vector2(-24, 0)
-	_feed.custom_minimum_size = Vector2(380, 0)
+	_feed.position = Vector2(-20, 70)
+	_feed.custom_minimum_size = Vector2(400, 0)
+	_feed.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_root.add_child(_feed)
 
 	_announce = UiKit.shadowed(UiKit.label("", 46, UiKit.GOLD, HORIZONTAL_ALIGNMENT_CENTER), 10)
@@ -110,6 +180,19 @@ func _ready() -> void:
 	_announce.custom_minimum_size = Vector2(800, 0)
 	_announce.modulate.a = 0.0
 	_root.add_child(_announce)
+
+	# "TARGETED!" banner under the round line
+	_target_box = UiKit.vbox(0)
+	_target_box.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_target_box.position = Vector2(-300, 104)
+	_target_box.custom_minimum_size = Vector2(600, 0)
+	_target_box.modulate.a = 0.0
+	_target_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_root.add_child(_target_box)
+	_target_title = UiKit.shadowed(UiKit.label("TARGETED!", 46, Color(1.0, 0.3, 0.25), HORIZONTAL_ALIGNMENT_CENTER), 11)
+	_target_box.add_child(_target_title)
+	_target_sub = UiKit.shadowed(UiKit.label("", 22, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER), 6)
+	_target_box.add_child(_target_sub)
 
 	_hint = UiKit.shadowed(UiKit.label("", 17, Color(1, 1, 1, 0.8), HORIZONTAL_ALIGNMENT_CENTER), 5)
 	_hint.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
@@ -131,6 +214,9 @@ func _ready() -> void:
 		else:
 			_round.text = "ROUND %d  -  %s  -  %s" % [party.rules.round_no, mode_name.to_upper(), PartyNames.CUP.to_upper()]
 		_fade_later(_round, 6.0, 0.55)
+		party.hit_landed.connect(_on_hit_landed)
+		party.hit_taken.connect(_on_hit_taken)
+		party.item_changed.connect(_on_item_changed)
 
 
 func _bar(bg: Color, fg: Color, h: float) -> Array:
@@ -152,32 +238,67 @@ func _fade_later(c: CanvasItem, after: float, to_alpha: float = 0.0) -> void:
 	tw.tween_property(c, "modulate:a", to_alpha, 1.0)
 
 
+func _sfx(clip: String, volume: float = 1.0, pitch: float = 1.0) -> void:
+	if party != null and party.sfx != null:
+		party.sfx.play(clip, volume, pitch)
+
+
 func _process(dt: float) -> void:
 	if party == null:
 		return
-	var pad: bool = Game.using_pad
-	# item slot (flicking through items for a moment after a pickup)
-	if _roll_left > 0.0 and party.item != "":
-		_roll_left -= dt
-		_roll_tick -= dt
-		if _roll_left <= 0.0:
-			_land_roll()
-		elif _roll_tick <= 0.0:
-			_roll_tick = 0.05 + (0.6 - _roll_left) * 0.12
-			var ids: Array[String] = PartyItems.ids()
-			var pick: String = ids[randi() % ids.size()]
-			if pick == _slot_icon.item_id:
-				pick = ids[(ids.find(pick) + 1) % ids.size()]
-			_slot_icon.item_id = pick
-			_slot_icon.pivot_offset = _slot_icon.size * 0.5
-			_slot_icon.scale = Vector2.ONE * 1.12
-			create_tween().tween_property(_slot_icon, "scale", Vector2.ONE, 0.05)
+	_now += dt
+	_hide_level_board()
+	_process_slot(dt)
+	_process_power()
+	if not party.practice:
+		_process_round()
+		_board_t -= dt
+		if _board_t <= 0.0:
+			_board_t = 0.2
+			update_standings()
+		_scan_t -= dt
+		if _scan_t <= 0.0:
+			_scan_t = 0.1
+			_scan_threats()
+		_sync_danger()
+		_process_finish_bar(dt)
 	else:
-		_roll_left = 0.0
+		_score.text = ""
+		_count.visible = false
+
+
+## The standings strip replaces the level's own race board in Party races.
+func _hide_level_board() -> void:
+	if party.practice or party.level == null or party.level.hud == null:
+		return
+	var b: Control = party.level.hud._board
+	if b != null and b.visible:
+		b.visible = false
+
+
+func _process_slot(dt: float) -> void:
+	# item slot (flicking through items for a moment after a pickup)
+	if roulette.active and party.item != "":
+		var r: Dictionary = roulette.step(dt)
+		if bool(r["tick"]):
+			roulette_ticks_total += 1
+			_slot_icon.item_id = roulette.current
+			_slot_icon.pivot_offset = _slot_icon.size * 0.5
+			_slot_icon.scale = Vector2.ONE * 1.14
+			create_tween().tween_property(_slot_icon, "scale", Vector2.ONE, 0.06)
+			if not bool(r["landed"]):
+				_sfx("tick", 0.55, 0.85 + 0.5 * roulette.elapsed / PartyRoulette.DURATION)
+		if bool(r["landed"]):
+			_land_roll()
+	elif roulette.active:
+		roulette.active = false   # used / lost mid-spin
 		_slot_icon.item_id = party.item
-	if _roll_left > 0.0:
+	else:
+		_slot_icon.item_id = party.item
+	if roulette.active:
 		_slot_name.text = "? ? ?"
 		_slot_name.add_theme_color_override("font_color", UiKit.GOLD)
+		_slot_hint.text = "..."
 	elif party.item != "":
 		_slot_name.text = PartyNames.item_name(party.item)
 		_slot_name.add_theme_color_override("font_color", PartyNames.item_color(party.item).lightened(0.3))
@@ -192,57 +313,59 @@ func _process(dt: float) -> void:
 		shove_key += " / " + Game.prompt("attack")
 	_shove.text = ("%s  %s" % [shove_key, PartyNames.move_name("shove")]) if party.shove_cd <= 0.0 else "%s  ..." % PartyNames.move_name("shove")
 	_shove.modulate.a = 1.0 if party.shove_cd <= 0.0 else 0.45
+
+
+func _process_power() -> void:
 	# active power-up (the transformation first, else the latest gadget)
-	var show: PowerUp = pw
+	var show: PowerUp = party.transformation()
 	if show == null:
 		for a: PowerUp in party.actives:
 			if not a.ended:
 				show = a
 	_power_box.visible = show != null
-	if show != null:
-		_power_name.text = PartyNames.item_name(show.item_id).to_upper()
-		_power_name.add_theme_color_override("font_color", PartyNames.item_color(show.item_id).lightened(0.25))
-		var frac: float = clampf(show.time_left / maxf(show.duration, 0.01), 0.0, 1.0)
-		# running out: the timer blinks faster and faster over its last two seconds
-		var left: float = show.time_left - (0.0 if show.local else 1.0)
-		_power_box.modulate.a = 1.0 if PartyFx.blink_on(left, 2.0) else 0.5
-		_power_fill.size.x = 400.0 * frac
-		_power_fill.color = PartyNames.item_color(show.item_id).lerp(Color(1, 0.3, 0.3), 1.0 - frac if frac < 0.3 else 0.0)
-		var status: String = show.hud_status()
-		if show.takes_attack and status == "":
-			status = "%s attack" % Game.prompt("attack")
-		_power_status.text = status
-		var ch: float = show.charge_frac()
-		_charge_bar.visible = ch >= 0.0
-		_charge_fill.size.x = 400.0 * maxf(ch, 0.0)
-		_charge_fill.color = Color(0.7, 0.4, 1.0).lerp(Color(1.0, 0.95, 0.6), ch)
-	# score line
-	if not party.practice:
-		var me: int = Net.my_id()
-		var line: String = "KOs %d    Bonus %d" % [int(party.kos.get(me, 0)), int(party.bonus.get(me, 0))]
-		if party.rules.is_team():
-			var tot: Array[int] = PartyRules.team_totals(party.rules.cup, _cup_teams())
-			line = "%s  -  %s %d  :  %d %s" % [line, PartyNames.team_name(0), tot[0], tot[1], PartyNames.team_name(1)]
-		elif party.rules.cup.has(me):
-			line += "    Cup %d" % int(party.rules.cup[me])
-		_score.text = line
-		# end-of-round countdown
-		var left: float = PartyRules.time_left(party.finish_times(), Game.course_time)
-		if left >= 0.0 and not party.round_over:
-			var n: int = int(ceil(left))
-			_count.text = "Round ends in %d" % n
-			_count.visible = true
-			_round.visible = false   # the countdown takes the round banner's place
-			if n != _last_count and n <= 10:
-				Sfx.play("tick", 0.0, 0.6)
-			_last_count = n
-		else:
-			_count.visible = false
+	if show == null:
+		return
+	_power_name.text = PartyNames.item_name(show.item_id).to_upper()
+	_power_name.add_theme_color_override("font_color", PartyNames.item_color(show.item_id).lightened(0.25))
+	var frac: float = clampf(show.time_left / maxf(show.duration, 0.01), 0.0, 1.0)
+	# running out: the timer blinks faster and faster over its last two seconds
+	var left: float = show.time_left - (0.0 if show.local else 1.0)
+	_power_box.modulate.a = 1.0 if PartyFx.blink_on(left, 2.0) else 0.5
+	_power_fill.size.x = 400.0 * frac
+	_power_fill.color = PartyNames.item_color(show.item_id).lerp(Color(1, 0.3, 0.3), 1.0 - frac if frac < 0.3 else 0.0)
+	var status: String = show.hud_status()
+	if show.takes_attack and status == "":
+		status = "%s attack" % Game.prompt("attack")
+	_power_status.text = status
+	var ch: float = show.charge_frac()
+	_charge_bar.visible = ch >= 0.0
+	_charge_fill.size.x = 400.0 * maxf(ch, 0.0)
+	_charge_fill.color = Color(0.7, 0.4, 1.0).lerp(Color(1.0, 0.95, 0.6), ch)
+
+
+func _process_round() -> void:
+	# score line (team totals live in the standings strip)
+	var me: int = Net.my_id()
+	var line: String = "KOs %d    Bonus %d" % [int(party.kos.get(me, 0)), int(party.bonus.get(me, 0))]
+	if not party.rules.is_team() and party.rules.cup.has(me):
+		line += "    Cup %d" % int(party.rules.cup[me])
+	_score.text = line
+	# end-of-round countdown
+	var left: float = PartyRules.time_left(party.finish_times(), Game.course_time)
+	if left >= 0.0 and not party.round_over:
+		var n: int = int(ceil(left))
+		_count.text = "Round ends in %d" % n
+		_count.visible = true
+		_round.visible = false   # the countdown takes the round banner's place
+		if n != _last_count and n <= 10:
+			Sfx.play("tick", 0.0, 0.6)
+			_count.pivot_offset = _count.size * 0.5
+			_count.scale = Vector2.ONE * 1.3
+			create_tween().tween_property(_count, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		_count.add_theme_color_override("font_color", Color(1.0, 0.3, 0.25) if n <= 10 else Color(1.0, 0.55, 0.45))
+		_last_count = n
 	else:
-		_score.text = ""
 		_count.visible = false
-	if pad != Game.using_pad:
-		pass
 
 
 func _cup_teams() -> Dictionary:
@@ -251,6 +374,246 @@ func _cup_teams() -> Dictionary:
 		t[int(id)] = int(Net.teams[id])
 	return t
 
+
+# ---- standings -----------------------------------------------------------------------------------
+
+## Rebuilds the strip from the live race order (a few times a second; tests call it directly).
+func update_standings() -> void:
+	if party == null or party.practice:
+		return
+	var teams: Dictionary = _cup_teams()
+	var order: Array[int] = Net.standings()
+	var list: Array[Dictionary] = PartyBoard.entries(order, Net.roster, party.kos, party.bonus, party.rules.cup, teams, Net.my_id())
+	standings.visible = not list.is_empty()
+	var total: int = party.level.checkpoints.size() + 1 if party.level != null else 1
+	var team: bool = party.rules.is_team()
+	standings.update(list, total, team, PartyBoard.team_live(list), PartyBoard.team_cup(list))
+	_note_passes(order)
+
+
+## Feed lines for racers who swapped places with us since the last look.
+func _note_passes(order: Array[int]) -> void:
+	var me: int = Net.my_id()
+	if not _prev_order.is_empty() and _prev_order.has(me) and order.has(me) and not party.level.finished:
+		var was_me: int = _prev_order.find(me)
+		var now_me: int = order.find(me)
+		for id: int in order:
+			if id == me or not _prev_order.has(id):
+				continue
+			var was_ahead: bool = _prev_order.find(id) < was_me
+			var now_ahead: bool = order.find(id) < now_me
+			if was_ahead and not now_ahead:
+				feed("You passed %s!" % party.racer_name(id), Color(0.5, 1.0, 0.6), "pass")
+			elif now_ahead and not was_ahead:
+				feed("%s passed you!" % party.racer_name(id), Color(1.0, 0.55, 0.5), "pass")
+	_prev_order = order.duplicate()
+
+
+func _on_place_changed(old: int, now: int) -> void:
+	if now < old:
+		_sfx("chime", 0.5, 1.1)
+	else:
+		_sfx("clank", 0.3, 0.8)
+
+
+# ---- threats -------------------------------------------------------------------------------------
+
+## Rival projectiles closing in on us (their flight is deterministic, so the arc is known).
+func _scan_threats() -> void:
+	if party.player == null or party.level.finished or party.round_over:
+		return
+	var me: Vector3 = party.player.global_position + Vector3(0, 0.8, 0)
+	for key: Variant in party.projectiles.keys():
+		var pr: PartyProjectile = party.projectiles[key] as PartyProjectile
+		if pr == null or not is_instance_valid(pr) or pr.done or pr.local or not party.is_rival(pr.owner_id):
+			continue
+		var to_me: Vector3 = me - pr.global_position
+		var dist: float = to_me.length()
+		if dist > 30.0:
+			continue
+		var vel: Vector3 = (pr.pos_at(pr.t + 0.1) - pr.pos_at(pr.t)) / 0.1
+		if vel.length() < 1.0:
+			continue
+		if dist < 5.0 or vel.normalized().dot(to_me.normalized()) > 0.8:
+			_threat_until[pr.owner_id] = _now + 0.7
+			warn(pr.owner_id, "incoming!")
+
+
+## A rival's item action reached us (fx message): a charging attack is a threat while it lasts.
+func on_remote_fx(from_id: int, _item: String, action: String, d: Dictionary) -> void:
+	if party == null or party.practice or action != "charge" or not party.is_rival(from_id):
+		return
+	if bool(d.get("on", true)):
+		_threat_until[from_id] = _now + 6.0
+		var g: RemoteRacer = party.ghost(from_id)
+		if g != null and party.player != null and g.global_position.distance_to(party.player.global_position) < 50.0:
+			warn(from_id, "charging an attack")
+	else:
+		_threat_until.erase(from_id)
+
+
+## A rival used an item (use message): the feed says so, and Thunder / Swap warn when they reach us.
+func on_item_used(from_id: int, item: String) -> void:
+	if party == null or from_id == Net.my_id():
+		return
+	var line: String = PartyFeedText.use_line(party.racer_name(from_id), item)
+	if line != "":
+		feed(line, party.team_color_of(from_id), "use", item)
+	if party.practice or party.level.finished or party.round_over or not party.is_rival(from_id):
+		return
+	var order: Array[int] = Net.standings()
+	var mine: int = order.find(Net.my_id())
+	var theirs: int = order.find(from_id)
+	if mine < 0 or theirs < 0:
+		return
+	if (item == "thunder" and mine < theirs) or (item == "swap" and mine == theirs - 1):
+		warn(from_id, PartyNames.item_name(item))
+
+
+## The big "TARGETED!" banner (with the red edge pulse, a sting and the culprit's arrow).
+func warn(from_id: int, what: String) -> void:
+	var key: String = "%d:%s" % [from_id, what]
+	if _now - float(_last_warn.get(key, -9.0)) < 1.5:
+		return
+	_last_warn[key] = _now
+	_threat_until[from_id] = maxf(float(_threat_until.get(from_id, 0.0)), _now + 2.5)
+	warn_log.append({"id": from_id, "what": what})
+	_target_sub.text = "%s  -  %s" % [party.racer_name(from_id), what]
+	_target_sub.add_theme_color_override("font_color", party.team_color_of(from_id).lerp(Color.WHITE, 0.5))
+	_target_box.pivot_offset = Vector2(300, 30)
+	_target_box.scale = Vector2.ONE * 1.5
+	_target_box.modulate.a = 1.0
+	if _target_tw != null and _target_tw.is_valid():
+		_target_tw.kill()
+	_target_tw = create_tween()
+	_target_tw.tween_property(_target_box, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_target_tw.tween_interval(1.3)
+	_target_tw.tween_property(_target_box, "modulate:a", 0.0, 0.4)
+	_pulse_edge(0.8)
+	_sfx("warn", 0.8)
+
+
+func _pulse_edge(strength: float) -> void:
+	_edge.modulate.a = strength
+	if _edge_tw != null and _edge_tw.is_valid():
+		_edge_tw.kill()
+	_edge_tw = create_tween()
+	_edge_tw.tween_property(_edge, "modulate:a", 0.0, 0.9)
+
+
+func _sync_danger() -> void:
+	var d: Dictionary = {}
+	for id: Variant in _threat_until.keys():
+		if float(_threat_until[id]) > _now:
+			d[int(id)] = true
+		else:
+			_threat_until.erase(id)
+	radar.danger = d
+
+
+## Rivals currently flagged as a threat (arrows pulse red for them).
+func threats() -> Array[int]:
+	var out: Array[int] = []
+	for id: Variant in _threat_until:
+		if float(_threat_until[id]) > _now:
+			out.append(int(id))
+	return out
+
+
+func _on_hit_taken(from_id: int, _src: String) -> void:
+	_pulse_edge(0.5)
+	if from_id > 0:
+		_threat_until[from_id] = maxf(float(_threat_until.get(from_id, 0.0)), _now + 2.0)
+
+
+# ---- the event feed -----------------------------------------------------------------------------
+
+func _racer_word(id: int, victim: bool) -> String:
+	if id == Net.my_id():
+		return "you" if victim else "You"
+	return party.racer_name(id)
+
+
+## Our attack connected: a feed line here, and everyone else hears of it (hf message).
+func _on_hit_landed(target_id: int, src: String) -> void:
+	on_hit_event(Net.my_id(), target_id, src)
+	if target_id > 0 and Net.active:
+		Net.send_party({"k": "hf", "v": target_id, "s": src})
+
+
+## Somebody's item / move hit somebody: "Ana iced Bo!" (several victims of one blast share a line).
+func on_hit_event(attacker: int, victim: int, src: String) -> void:
+	if party == null:
+		return
+	var who: String = _racer_word(attacker, false)
+	var vic: String = "Dummy" if victim < 0 else _racer_word(victim, true)
+	var key: String = "%d|%s" % [attacker, src]
+	if not _hit_merge.is_empty() and str(_hit_merge["key"]) == key and _now - float(_hit_merge["t"]) < 0.9 \
+			and is_instance_valid(_hit_merge["label"]) and not (_hit_merge["victims"] as Array).has(vic):
+		(_hit_merge["victims"] as Array).append(vic)
+		var text: String = PartyFeedText.hit_line(who, _hit_merge["victims"], src)
+		(_hit_merge["label"] as Label).text = text
+		feed_log[feed_log.size() - 1]["text"] = text
+		return
+	var l: Label = feed_line(PartyFeedText.hit_line(who, [vic], src), party.team_color_of(attacker), "hit", PartyFeedText.item_for(src))
+	_hit_merge = {"key": key, "t": _now, "label": l, "victims": [vic]}
+
+
+## A hit reported by another screen (hf message): show it unless it is ours already.
+func on_remote_hit(from_id: int, victim: int, src: String) -> void:
+	if from_id == Net.my_id():
+		return
+	on_hit_event(from_id, victim, src)
+
+
+func _on_item_changed(id: String) -> void:
+	if id != "":
+		_held = id
+	elif _held != "":
+		# the slot emptied: that item was used (everyone else is told, for their feed and warnings)
+		if Net.active and not party.practice:
+			Net.send_party({"k": "use", "p": _held})
+		_held = ""
+
+
+## Kill-feed line (fades after a few seconds; newest at the bottom, FEED_MAX kept).
+func feed(text: String, color: Color = UiKit.SOFT, kind: String = "", icon: String = "") -> void:
+	if kind == "":
+		kind = "ko" if text.contains("KO'd") else ("bonus" if text.contains("first through") or text.contains("First through") else "info")
+	feed_line(text, color, kind, icon)
+
+
+func feed_line(text: String, color: Color, kind: String, icon: String = "") -> Label:
+	_hit_merge = {}
+	var row: HBoxContainer = UiKit.hbox(6)
+	row.alignment = BoxContainer.ALIGNMENT_END
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if icon != "":
+		var ic := PartyIcon.new()
+		ic.custom_minimum_size = Vector2(30, 30)
+		ic.item_id = icon
+		row.add_child(ic)
+	var l: Label = UiKit.shadowed(UiKit.label(text, 20, color.lerp(Color.WHITE, 0.25), HORIZONTAL_ALIGNMENT_RIGHT), 5)
+	row.add_child(l)
+	_feed.add_child(row)
+	feed_log.append({"text": text, "kind": kind, "icon": icon})
+	while feed_log.size() > 60:
+		feed_log.remove_at(0)
+	while _feed.get_child_count() > FEED_MAX:
+		var old: Node = _feed.get_child(0)
+		_feed.remove_child(old)
+		old.queue_free()
+	# slide in from the right, then fade
+	row.modulate.a = 0.0
+	var tw: Tween = row.create_tween()
+	tw.tween_property(row, "modulate:a", 1.0, 0.12)
+	tw.tween_interval(5.0)
+	tw.tween_property(row, "modulate:a", 0.0, 0.8)
+	tw.tween_callback(row.queue_free)
+	return l
+
+
+# ---- announcements & the item roulette -------------------------------------------------------------
 
 ## Big centre call-out ("NINE-TAILED FOX!", "KO! +3").
 func announce(text: String, color: Color = UiKit.GOLD) -> void:
@@ -268,41 +631,29 @@ func announce(text: String, color: Color = UiKit.GOLD) -> void:
 	_announce_tw.tween_property(_announce, "modulate:a", 0.0, 0.4)
 
 
-## The slot filled: a quick roulette of icons, then it lands on the item with a pop.
+## The slot filled: the roulette spins ~0.8 s (ticking), then lands on the rolled item with a pop.
 func item_rolled(id: String) -> void:
-	_roll_left = 0.6
-	_roll_tick = 0.0
+	roulette.start(id)
 	if party != null and party.practice:
 		_hint.text = "%s  -  %s" % [PartyNames.item_name(id), PartyNames.item_desc(id)]
 		_hint.modulate.a = 1.0
 		_fade_later(_hint, 5.0)
 
 
-## The roulette stops on the real item: the icon slams in with a white flash.
+## The roulette stops on the real item: the icon slams in with a white flash and a ding.
 func _land_roll() -> void:
-	_roll_left = 0.0
-	_slot_icon.item_id = party.item if party != null else ""
+	roulette.active = false
+	_slot_icon.item_id = roulette.final_id
 	_slot_icon.pivot_offset = _slot_icon.size * 0.5
 	_slot_icon.scale = Vector2.ONE * 1.6
 	_slot_icon.modulate = Color(2.2, 2.2, 2.2)
 	var tw: Tween = create_tween().set_parallel(true)
 	tw.tween_property(_slot_icon, "scale", Vector2.ONE, 0.35).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 	tw.tween_property(_slot_icon, "modulate", Color.WHITE, 0.3)
+	_sfx("land", 0.8)
 
 
-## Kill feed line (fades after a few seconds; newest at the bottom, 5 kept).
-func feed(text: String, color: Color = UiKit.SOFT) -> void:
-	var l: Label = UiKit.shadowed(UiKit.label(text, 19, color.lerp(Color.WHITE, 0.25), HORIZONTAL_ALIGNMENT_RIGHT), 5)
-	_feed.add_child(l)
-	while _feed.get_child_count() > 5:
-		var old: Node = _feed.get_child(0)
-		_feed.remove_child(old)
-		old.queue_free()
-	var tw: Tween = l.create_tween()
-	tw.tween_interval(5.0)
-	tw.tween_property(l, "modulate:a", 0.0, 0.8)
-	tw.tween_callback(l.queue_free)
-
+# ---- round end, finishing, results -----------------------------------------------------------------
 
 func show_round_over() -> void:
 	_count.visible = false
@@ -311,25 +662,58 @@ func show_round_over() -> void:
 
 
 ## We finished but the round runs on: a small bottom bar ("Finished 2nd - waiting for the
-## others") with a Spectate button (focused, for the pad) when the level can follow a rival.
+## others"), the round's countdown, and a Spectate button (focused, for the pad) when the level
+## can follow a rival. A few seconds later the camera moves to a rival by itself.
 func show_finished(place: int, can_spectate: bool, on_spectate: Callable) -> void:
 	hide_finished()
+	_finish_cb = on_spectate
 	_finish_bar = UiKit.panel()
 	_finish_bar.name = "FinishBar"
 	_finish_bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 	_finish_bar.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_finish_bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_finish_bar.position.y -= 190.0
-	var row: HBoxContainer = UiKit.hbox(16)
-	_finish_bar.add_child(row)
+	var col: VBoxContainer = UiKit.vbox(8)
+	_finish_bar.add_child(col)
 	var what: String = "Finished %d%s" % [place, Hud._ordinal(place)] if place > 0 else "Finished"
-	row.add_child(UiKit.label("%s - waiting for the others" % what, 20, UiKit.GOLD))
+	col.add_child(UiKit.label("%s - waiting for the others" % what, 22, UiKit.GOLD, HORIZONTAL_ALIGNMENT_CENTER))
+	_finish_count = UiKit.label("", 20, Color(1.0, 0.6, 0.5), HORIZONTAL_ALIGNMENT_CENTER)
+	_finish_count.name = "FinishCount"
+	col.add_child(_finish_count)
+	var bars: Array = _bar(Color(1, 1, 1, 0.15), Color(1.0, 0.55, 0.4), 8)
+	(bars[0] as ColorRect).custom_minimum_size = Vector2(440, 8)
+	_finish_fill = bars[1]
+	col.add_child(bars[0])
 	if can_spectate:
-		var b: Button = UiKit.button("Spectate", func() -> void: on_spectate.call(), 180)
+		var b: Button = UiKit.button("Spectate", func() -> void: on_spectate.call(), 240)
 		b.name = "Spectate"
-		row.add_child(b)
+		var hrow: HBoxContainer = UiKit.hbox(14)
+		hrow.alignment = BoxContainer.ALIGNMENT_CENTER
+		hrow.add_child(b)
+		hrow.add_child(UiKit.label("%s / %s  switch racer" % [Game.prompt("spectate_prev"), Game.prompt("spectate_next")], 17, UiKit.SOFT))
+		col.add_child(hrow)
 		b.grab_focus.call_deferred()
+		_auto_spec_in = AUTO_SPECTATE_AFTER
+	else:
+		_auto_spec_in = -1.0
 	_root.add_child(_finish_bar)
+	_process_finish_bar(0.0)
+
+
+func _process_finish_bar(dt: float) -> void:
+	if _finish_bar == null or not is_instance_valid(_finish_bar):
+		return
+	var left: float = PartyRules.time_left(party.finish_times(), Game.course_time)
+	if left >= 0.0:
+		_finish_count.text = "Round ends in %d s" % int(ceil(left))
+		_finish_fill.size.x = 440.0 * clampf(left / PartyRules.ROUND_GRACE, 0.0, 1.0)
+	else:
+		_finish_count.text = "Waiting for the others..."
+		_finish_fill.size.x = 440.0
+	if _auto_spec_in > 0.0 and _finish_bar.visible and not has_panel():
+		_auto_spec_in -= dt
+		if _auto_spec_in <= 0.0 and _finish_cb.is_valid():
+			_finish_cb.call()
 
 
 ## While spectating the waiting bar steps aside (the spectate bar shows the controls);
@@ -337,6 +721,7 @@ func show_finished(place: int, can_spectate: bool, on_spectate: Callable) -> voi
 func on_spectating(on: bool) -> void:
 	if _finish_bar == null or not is_instance_valid(_finish_bar):
 		return
+	_auto_spec_in = -1.0
 	_finish_bar.visible = not on
 	if not on:
 		UiKit.focus_first(_finish_bar)
@@ -346,6 +731,7 @@ func hide_finished() -> void:
 	if _finish_bar != null and is_instance_valid(_finish_bar):
 		_finish_bar.queue_free()
 	_finish_bar = null
+	_auto_spec_in = -1.0
 
 
 ## A results panel (centred, dimmed background, takes mouse + pad input).
@@ -361,6 +747,9 @@ func add_panel(panel: Control) -> void:
 	_panel_host.add_child(centre)
 	_panel_host.modulate.a = 0.0
 	create_tween().tween_property(_panel_host, "modulate:a", 1.0, 0.3)
+	# the strip, arrows and warnings make way for the scoreboard
+	standings.visible = false
+	radar.visible = false
 
 
 func has_panel() -> bool:

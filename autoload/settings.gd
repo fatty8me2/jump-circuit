@@ -37,7 +37,20 @@ var character_id: String = "volt"
 var hat_id: String = "none"
 var paint_id: String = "white"
 var title_id: String = "rookie"
+## Emote slots (D-pad up, right, down, left / keys 1-4; emote_id is slot 1) and the victory pose.
+var emote_id: String = "wave"
+var emote_id2: String = "thumbsup"
+var emote_id3: String = "dance"
+var emote_id4: String = "bow"
+var pose_id: String = "cheer"
 var last_room_code: String = ""
+## Solo ghost replay (GhostRun): 0 off, 1 your personal best.
+const GHOST_OFF: int = 0
+const GHOST_PB: int = 1
+const GHOST_NAMES: Array[String] = ["Off", "Personal best"]
+var ghost_mode: int = GHOST_PB
+## Tests point settings saves somewhere else so they never touch the real settings.cfg.
+var save_path_override: String = ""
 ## Party Mode rebinds: action -> {"key": physical keycode, "mouse": button, "pad": button}
 ## (only what differs from Game.PARTY_BIND_DEFAULTS is needed; 0 / -1 = unbound).
 var party_binds: Dictionary = {}
@@ -92,12 +105,18 @@ func _sanitize() -> void:
 	ambience_volume = _finite_clamp(ambience_volume, 0.0, 1.0, 0.7)
 	quality = clampi(quality, 0, QUALITY_NAMES.size() - 1)
 	particles = _finite_clamp(particles, 0.2, 2.0, 1.0)
+	ghost_mode = clampi(ghost_mode, 0, GHOST_NAMES.size() - 1)
 	color_index = posmod(color_index, RACER_COLORS.size())
 	# every cosmetic pick (trail_id, finish_id, character_id, hat_id, paint_id, title_id):
 	# a known id, else that kind's default
 	for kind: String in Cosmetics.kinds():
 		var key: String = Cosmetics.setting_key(kind)
 		set(key, Cosmetics.clean(kind, get(key)))
+	# the other three emote slots (emote_id is slot 1): a known emote, else that slot's default
+	for i: int in range(1, Cosmetics.EMOTE_SLOT_KEYS.size()):
+		var slot_key: String = Cosmetics.EMOTE_SLOT_KEYS[i]
+		var slot_val: Variant = get(slot_key)
+		set(slot_key, str(slot_val) if Cosmetics.has_item("emote", str(slot_val)) else Cosmetics.EMOTE_SLOT_DEFAULTS[i])
 	if timer_mode not in ["auto", "on", "off"]:
 		timer_mode = "auto"
 	player_name = player_name.strip_edges().substr(0, 14)
@@ -131,7 +150,7 @@ func save_settings() -> void:
 	if Net.preferred_color >= 0:
 		# wearing a colour a race host assigned: keep the player's own pick on disk
 		cf.set_value("s", "color_index", Net.preferred_color)
-	cf.save(PATH)
+	cf.save(PATH if save_path_override == "" else save_path_override)
 
 
 ## F11 / Alt+Enter toggle fullscreen anywhere: menus, paused, even while typing in a
@@ -154,7 +173,8 @@ func toggle_fullscreen() -> void:
 func _props() -> Array[String]:
 	return ["mouse_sensitivity", "invert_y", "fov", "master_volume", "sfx_volume", "music_volume", "ambience_volume",
 		"quality", "particles", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_room_code", "party_binds",
-		"trail_id", "finish_id", "character_id", "hat_id", "paint_id", "title_id"]
+		"trail_id", "finish_id", "character_id", "hat_id", "paint_id", "title_id", "ghost_mode",
+		"emote_id", "emote_id2", "emote_id3", "emote_id4", "pose_id"]
 
 
 ## How many particles every emitter builds relative to the High baseline: Low 0.45,

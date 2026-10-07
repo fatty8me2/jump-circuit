@@ -15,6 +15,8 @@ signal wall_run_started(normal: Vector3)
 signal wall_jumped
 ## Caught a ledge and started climbing onto it.
 signal mantled
+## An emote started ("emote", id) or was cut short ("stop", ""): the race level mirrors it to the others.
+signal emote_sent(kind: String, id: String)
 
 @export var tuning: MovementTuning
 
@@ -42,6 +44,7 @@ var facing_dir: Vector3 = Vector3.FORWARD
 ## Stick / key magnitude this tick (0 while control is off). Read only by feedback
 ## (footsteps), never by movement.
 var move_input: float = 0.0
+var _emote_live: bool = false   # our own emote is playing (see try_emote)
 ## The pad that launched us last (feedback picks its sound); never read by movement.
 var last_pad: Object = null
 ## Party-mode power-ups scale movement through these; the main mode never touches them
@@ -100,6 +103,35 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if use_device_input and event.is_action_pressed("jump") and not event.is_echo():
 		_jump_press_queued = true
+	if use_device_input and not event.is_echo():
+		for slot: int in 4:
+			if event.is_action_pressed("emote_%d" % (slot + 1)):
+				try_emote(slot)
+
+
+## Plays the emote on slot `slot` (0-3: D-pad up / right / down / left, keys 1-4) when standing
+## still on the ground. Purely visual: no physics, so it is fine during the countdown too.
+func try_emote(slot: int) -> bool:
+	if visual == null or not grounded or party_stun > 0.0 or is_wall_running() or _mantle_t >= 0.0:
+		return false
+	if move_input > 0.1 or Vector2(velocity.x, velocity.z).length() > 1.0:
+		return false
+	var id: String = Cosmetics.emote_slot(slot)
+	if not visual.play_emote(id):
+		return false
+	_emote_live = true
+	emote_sent.emit("emote", id)
+	return true
+
+
+## Any movement input, a jump press or leaving the ground cuts the emote short.
+func _cancel_emote_on_input() -> void:
+	if _emote_live and visual.emote_kind() != "emote":
+		_emote_live = false   # it ran its course
+	if _emote_live and (move_input > 0.1 or _jump_press_queued or not grounded):
+		_emote_live = false
+		visual.cancel_emote()
+		emote_sent.emit("stop", "")
 
 
 ## Bots/tests call this for a jump press edge.
@@ -694,6 +726,7 @@ func _enter_tree() -> void:
 
 func _process(dt: float) -> void:
 	if visual != null:
+		_cancel_emote_on_input()
 		visual.wall_roll = wall_side()
 		visual.animate(dt, velocity, grounded or is_wall_running(), facing_dir)
 	if _shadow != null and is_inside_tree():

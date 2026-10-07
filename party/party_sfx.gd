@@ -5,7 +5,8 @@ extends Node
 ## pitched main-game Sfx clip, so the mode never goes silent.
 
 const CLIPS: Array[String] = ["pickup", "roll", "whoosh", "hit", "ko", "boom", "zap", "charge",
-	"beam", "slash", "powerup", "pop", "spring", "freeze", "warp", "chime", "wind", "clank"]
+	"beam", "slash", "powerup", "pop", "spring", "freeze", "warp", "chime", "wind", "clank",
+	"tick", "land", "warn", "tally", "fanfare"]
 ## Fallback main-game clip and pitch per party clip.
 const FALLBACK: Dictionary = {
 	"pickup": ["checkpoint", 1.5], "roll": ["tick", 1.3], "whoosh": ["jump", 0.7], "hit": ["whack", 1.0],
@@ -13,6 +14,7 @@ const FALLBACK: Dictionary = {
 	"beam": ["bounce", 0.5], "slash": ["jump", 1.6], "powerup": ["finish", 1.3], "pop": ["bounce", 1.8],
 	"spring": ["bounce", 1.2], "freeze": ["crumble", 1.6], "warp": ["respawn", 1.4], "chime": ["checkpoint", 1.0],
 	"wind": ["creak", 0.5], "clank": ["whack", 1.5],
+	"tick": ["tick", 1.6], "land": ["checkpoint", 1.3], "warn": ["tick", 0.5], "tally": ["tick", 2.0], "fanfare": ["finish", 1.2],
 }
 
 static var _streams: Dictionary = {}

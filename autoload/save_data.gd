@@ -11,7 +11,7 @@ const LAYOUT_REV: Dictionary = {"gardens": 3, "foundry": 3, "balance": 3, "clock
 ## Counters kept in data["stats"] (unlock rules read them, see Cosmetics "stat"):
 ##   laps_dealt      times you lapped another racer (Run It Again)
 ##   flawless_golds  Gold-medal runs finished without a single fall
-const STAT_KEYS: Array[String] = ["laps_dealt", "flawless_golds"]
+const STAT_KEYS: Array[String] = ["laps_dealt", "flawless_golds", "falls_total", "play_secs"]
 
 var data: Dictionary = {"levels": {}, "game_completed": false}
 ## Tests point this somewhere else so they never touch a real save.
@@ -75,6 +75,7 @@ func _sanitize(v: Dictionary) -> Dictionary:
 			if _is_num(n) and is_finite(float(n)) and float(n) >= 0.0:
 				stats[k] = int(n)
 		out["stats"] = stats
+	out["challenges"] = Challenges.sanitize(v.get("challenges"))
 	var levels: Variant = v.get("levels")
 	if not (levels is Dictionary):
 		return out
@@ -253,6 +254,8 @@ func delete_files() -> void:
 		var p: String = _path() + suffix
 		if FileAccess.file_exists(p):
 			DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+	if path_override != "":
+		GhostData.delete_all()   # (a test save's private ghost folder; never the real one)
 
 
 ## Whole hundredths of a second, as shown. The epsilon absorbs the float error that
@@ -268,3 +271,31 @@ static func format_time(t: float) -> String:
 		return "--:--.--"
 	var cs: int = centiseconds(t)
 	return "%d:%02d.%02d" % [cs / 6000, (cs / 100) % 60, cs % 100]
+
+
+# ---- play statistics (Stats screen) ---------------------------------------------------------
+## Falls and play time pile up in memory and are written with the next save (a finish, or
+## flush_play_stats when a course is left), so a fall never costs a disk write.
+var _play_acc: float = 0.0
+var _stats_dirty: bool = false
+
+
+func count_fall() -> void:
+	_bump_stat("falls_total", 1)
+	_stats_dirty = true
+
+
+## Adds `dt` seconds of play time (whole seconds are banked into stats["play_secs"]).
+func tick_play(dt: float) -> void:
+	_play_acc += dt
+	if _play_acc >= 1.0:
+		var whole: int = int(_play_acc)
+		_play_acc -= float(whole)
+		_bump_stat("play_secs", whole)
+		_stats_dirty = true
+
+
+func flush_play_stats() -> void:
+	if _stats_dirty:
+		_stats_dirty = false
+		save_data()
