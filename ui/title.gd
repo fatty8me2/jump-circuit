@@ -162,6 +162,14 @@ func show_screen(id: String) -> void:
 			_screen = _locker_screen()
 		"victory":
 			_screen = _victory_screen()
+		"challenges":
+			var ch: Dictionary = ExtraScreens.challenges_screen(func() -> void: show_screen("main"), func(i: int) -> void: Game.play_level(i))
+			_screen = _left_column(ch["root"], 780)
+			_focus_pref = ch["focus"]
+		"stats":
+			var st: Dictionary = ExtraScreens.stats_screen(func() -> void: show_screen("main"))
+			_screen = _left_column(st["root"], 780)
+			_focus_pref = st["focus"]
 		"update":
 			_screen = _update_screen()
 		_:
@@ -199,7 +207,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
 	match Game.title_screen:
-		"levels", "victory", "update", "practice", "locker":
+		"levels", "victory", "update", "practice", "locker", "challenges", "stats":
 			show_screen("main")
 		"settings":
 			Settings.save_settings()  # same as the panel's Done
@@ -277,6 +285,13 @@ func _main_screen() -> Control:
 	box.add_child(play)
 	var levels_btn: Button = UiKit.button("Level Select", func() -> void: show_screen("levels"), 380)
 	box.add_child(levels_btn)
+	# Challenges and Stats share a row so the column keeps its height
+	var extras: HBoxContainer = UiKit.hbox(8)
+	var challenges_btn: Button = UiKit.button("Challenges", func() -> void: show_screen("challenges"), 186)
+	var stats_btn: Button = UiKit.button("Stats", func() -> void: show_screen("stats"), 186)
+	extras.add_child(challenges_btn)
+	extras.add_child(stats_btn)
+	box.add_child(extras)
 	var race_btn: Button = UiKit.button("Race Friends", func() -> void: show_screen("race"), 380)
 	box.add_child(race_btn)
 	var practice_btn: Button = UiKit.button(PartyNames.mode_name("practice"), func() -> void: show_screen("practice"), 380)
@@ -319,7 +334,7 @@ func _main_screen() -> Control:
 		box.add_child(note)
 		box.move_child(note, 1)
 		spacer.queue_free()
-	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn, "practice": practice_btn, "locker": locker_btn}
+	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn, "practice": practice_btn, "locker": locker_btn, "challenges": challenges_btn, "stats": stats_btn}
 	_focus_pref = openers.get(_prev_screen, play)
 	return _left_column(box)
 
@@ -410,7 +425,7 @@ func _levels_screen() -> Control:
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
 	var rows_h: float = float(Game.LEVELS.size()) * 58.0
-	scroll.custom_minimum_size = Vector2(712, clampf(rows_h, 180.0, get_viewport().get_visible_rect().size.y - 250.0))
+	scroll.custom_minimum_size = Vector2(772, clampf(rows_h, 180.0, get_viewport().get_visible_rect().size.y - 250.0))
 	box.add_child(scroll)
 	for i: int in Game.LEVELS.size():
 		var info: Dictionary = Game.LEVELS[i]
@@ -427,13 +442,14 @@ func _levels_screen() -> Control:
 				if ff >= 0:
 					text += "   falls %d" % ff
 			text += level_medal_text(info["id"], medal, best >= 0.0 or SaveData.is_completed(info["id"]))
-		var b: Button = UiKit.button(text, func() -> void: Game.play_level(i), 700)
+		var b: Button = UiKit.button(text, func() -> void: Game.play_level(i), 760)
 		b.set_meta("medal", medal)
 		if medal > 0:
 			b.add_theme_color_override("font_color", Hud.medal_color(medal).lerp(Color.WHITE, 0.35))
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		b.disabled = not unlocked
 		b.tooltip_text = info["blurb"]
+		_add_challenge_pips(b, info["id"])
 		list.add_child(b)
 		if unlocked:
 			last_unlocked = b
@@ -441,8 +457,25 @@ func _levels_screen() -> Control:
 				first_open = b
 	# start on the first level still to clear (else the last unlocked one)
 	_focus_pref = first_open if first_open != null else last_unlocked
-	box.add_child(UiKit.button("Back", func() -> void: show_screen("main"), 700))
-	return _left_column(box, 720)
+	box.add_child(UiKit.button("Back", func() -> void: show_screen("main"), 760))
+	return _left_column(box, 780)
+
+
+## Three pips at a level row's right edge: one lit per course challenge done.
+func _add_challenge_pips(b: Button, level_id: String) -> void:
+	var n: int = Challenges.level_count(level_id)
+	b.set_meta("challenges", n)
+	var row: HBoxContainer = UiKit.hbox(5)
+	row.name = "Pips"
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT, Control.PRESET_MODE_MINSIZE, 16)
+	for k: int in Challenges.KINDS.size():
+		var pip := ColorRect.new()
+		pip.custom_minimum_size = Vector2(14, 14)
+		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pip.color = UiKit.GOLD if k < n else Color(1, 1, 1, 0.2)
+		row.add_child(pip)
+	b.add_child(row)
 
 
 ## Level select's medal part of a row: "   SILVER  -  next Gold 2:40" (the medal is held

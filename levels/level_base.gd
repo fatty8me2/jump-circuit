@@ -334,6 +334,7 @@ func _physics_process(dt: float) -> void:
 		if _pose_tick % 4 == 0:
 			Net.send_pose(player.global_position, player.velocity, player.grounded)
 	if _started and not finished:
+		SaveData.tick_play(dt)
 		run_time = Game.course_time
 		_check_failure()
 
@@ -394,6 +395,7 @@ func fail(cause: String = "fall") -> void:
 	if finished or Engine.get_physics_frames() - _respawn_tick <= 1:
 		return
 	deaths += 1
+	SaveData.count_fall()
 	player_failed.emit(cause)
 	respawn(cause)
 
@@ -510,11 +512,13 @@ func _on_finish() -> void:
 		return
 	# medals are derived from the records, so read the tier before and after recording
 	var prev_medal: int = SaveData.medal(level_id)
+	var prev_ch: Array[String] = Challenges.done_keys()
 	if Game.race_mode:
 		laps_done = 1
 		Net.send_checkpoint(checkpoints.size() + 1)
 		Net.send_finished(time)
 		SaveData.record_finish(level_id, time, deaths, splits)
+		announce_challenges(Challenges.sync(prev_ch))
 		hud.show_race_results(time)
 		announce_unlocks(0.4, _new_medal(prev_medal))
 		return
@@ -525,11 +529,30 @@ func _on_finish() -> void:
 		is_best = SaveData.record_finish(level_id, time, deaths, splits)
 	if is_best and ghost_run != null:
 		ghost_run.save_best(time)
+	var new_ch: Array[String] = Challenges.sync(prev_ch)
 	await _finish_sequence()
 	hud.show_results(time, prev_best, is_best, deaths, prev_ff, prev_medal)
+	announce_challenges(new_ch)
 	if is_best and prev_best >= 0.0 and _new_medal(prev_medal) == 0:
 		Sfx.play("new_best")   # (a new medal plays its own sting on the results panel)
 	announce_unlocks(0.4, _new_medal(prev_medal))
+
+
+## "Challenge complete!" notes for the challenges this finish completed. They follow the
+## cosmetic unlock toasts, so call this ahead of announce_unlocks (it counts the unlocks still pending).
+func announce_challenges(keys: Array[String]) -> void:
+	var pending: int = Cosmetics.check_unlocks(false).size()
+	# inside the results panel the notes stack up, so they all appear at once; as toasts they queue
+	var in_panel: bool = hud._results != null and is_instance_valid(hud._results) and hud._results.visible
+	for i: int in keys.size():
+		var t: PackedStringArray = Challenges.note_text(keys[i])
+		get_tree().create_timer(0.4 + (0.5 * i if in_panel else 2.0 * (pending + i))).timeout.connect(func() -> void:
+			if is_inside_tree():
+				hud.unlock_note(t[0], t[1]))
+
+
+func _exit_tree() -> void:
+	SaveData.flush_play_stats()
 
 
 ## The tier this finish newly earned (0 when the level's medal did not go up).

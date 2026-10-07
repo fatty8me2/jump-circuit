@@ -22,6 +22,8 @@ extends RefCounted
 ##   {"type": "medals", "tier": T, "n": N}  tier T or better on N different courses
 ##   {"type": "all_medals", "tier": T}      tier T or better on every course
 ##   {"type": "stat", "key": <k>, "n": N}   SaveData stats[k] >= N ("runs" is the total run count)
+##   {"type": "challenges", "n": N}        N course challenges done (see Challenges)
+##   {"type": "all_challenges"}             every course challenge done
 ## Medals are derived from min(best, legacy_best) (Game.medal_for), so a layout rebuild never
 ## takes one away and old saves earn them retroactively.
 
@@ -155,6 +157,9 @@ const TITLES: Dictionary = {
 	"flawless": {"name": "Flawless", "rule": {"type": "flawless"}},
 	"lap_king": {"name": "Lap King", "rule": {"type": "stat", "key": "laps_dealt", "n": 10}},
 	"marathoner": {"name": "Marathoner", "rule": {"type": "runs", "n": 100}},
+	"challenger": {"name": "Challenger", "rule": {"type": "challenges", "n": 25}},
+	"challenge_master": {"name": "Challenge Master", "rule": {"type": "challenges", "n": 60}},
+	"completionist": {"name": "Completionist", "rule": {"type": "all_challenges"}},
 }
 
 ## kind -> catalogue, default id, Locker tab label, Settings property, display-name suffix.
@@ -312,6 +317,10 @@ static func rule_met(rule: Dictionary, levels: Dictionary, stats: Variant = null
 			return medal_count(levels, int(rule.get("tier", 3))) >= Game.LEVELS.size()
 		"stat":
 			return stat_value(str(rule.get("key", "")), levels, _stats_or_save(stats)) >= int(rule.get("n", 1))
+		"challenges":
+			return Challenges.count(levels) >= int(rule.get("n", 1))
+		"all_challenges":
+			return Challenges.count(levels) >= Challenges.total()
 	return false
 
 
@@ -372,6 +381,10 @@ static func hint(kind: String, id: String) -> String:
 			return "%s on %d courses" % [_tier_name(int(rule.get("tier", 3))), int(rule.get("n", 1))]
 		"all_medals":
 			return "%s on every course" % _tier_name(int(rule.get("tier", 3)))
+		"challenges":
+			return "Complete %d course challenges (see Challenges)" % int(rule.get("n", 1))
+		"all_challenges":
+			return "Complete every course challenge (%d)" % Challenges.total()
 		"stat":
 			var n: int = int(rule.get("n", 1))
 			match str(rule.get("key", "")):
@@ -411,6 +424,10 @@ static func progress(kind: String, id: String, levels: Variant = null, stats: Va
 		"medal":
 			var have: int = medal_of(lv, str(rule.get("level", "")))
 			return "best: %s" % (MEDAL_NAMES[have] if have > 0 else "no medal")
+		"challenges":
+			return "%d/%d" % [mini(Challenges.count(lv), int(rule["n"])), int(rule["n"])]
+		"all_challenges":
+			return "%d/%d" % [Challenges.count(lv), Challenges.total()]
 		"stat":
 			var n: int = int(rule.get("n", 1))
 			return "%d/%d" % [mini(stat_value(str(rule.get("key", "")), lv, _stats_or_save(stats)), n), n]
