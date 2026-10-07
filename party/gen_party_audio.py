@@ -244,8 +244,103 @@ def p_fanfare():
 
 
 
+# ---- the second item wave (homing shell, leader strike, fake box, turbo, ghost, decoy, shockwave) ----
+
+def p_shell():
+    # a toy-rocket launch: a pop, then a rising whistle with a wobbling zing
+    t = tvec(0.55)
+    pop = osc(sweep(900.0, 200.0, t, 0.04)) * ad_env(t, 0.001, 0.025)
+    f = sweep(500.0, 2200.0, t, 0.45) * (1.0 + 0.04 * np.sin(TAU * 24.0 * t))
+    zing = (osc(f) + 0.35 * osc(f * 2.0)) * np.minimum(t / 0.02, 1.0) * np.exp(-t / 0.3)
+    hiss = fft_band(noise("shell", len(t)), SR, 2500.0, 9000.0, 2) * ad_env(t, 0.02, 0.2)
+    save("shell", pop + 0.5 * zing + 0.25 * hiss / np.max(np.abs(hiss)), fout=0.06)
+
+
+def p_siren():
+    # the Leader Strike tell: a rising, worrying two-tone siren swell
+    t = tvec(1.6)
+    f = 440.0 * (1.0 + 0.5 * (t / 1.6)) * (1.0 + 0.25 * np.sign(np.sin(TAU * 3.0 * t)))
+    y = (osc(f) + 0.4 * osc(f * 2.0) + 0.2 * osc(f * 3.0)) * (0.35 + 0.65 * t / 1.6)
+    y *= np.minimum(t / 0.05, 1.0) * np.minimum((1.6 - t) / 0.08, 1.0)
+    sub = osc(sweep(60.0, 120.0, t, 1.5)) * (t / 1.6) ** 2
+    save("siren", y + 0.5 * sub, fout=0.05)
+
+
+def p_strike():
+    # an orbital hit: a razor crack, a huge boom and a falling debris rattle
+    t = tvec(1.6)
+    n = noise("strike", len(t))
+    crack = fft_band(n, SR, 1500.0, 12000.0, 2) * np.exp(-t / 0.03)
+    boom = fft_band(n, SR, None, 260.0, 3) * ad_env(t, 0.003, 0.5)
+    sub = osc(sweep(120.0, 28.0, t, 0.7)) * ad_env(t, 0.004, 0.5)
+    rattle = fft_band(noise("strike2", len(t)), SR, 800.0, 5000.0, 2) * (np.abs(noise("strike3", len(t))) > 1.6) * ad_env(t, 0.2, 0.4)
+    y = 0.9 * crack / np.max(np.abs(crack)) + boom / np.max(np.abs(boom)) + 0.9 * sub + 0.4 * rattle
+    save("strike", y, fout=0.12)
+
+
+def p_fake():
+    # the fake box goes off: a cheerful box ding that collapses into a "wah-wah" and a thump
+    x = np.zeros(int(1.0 * SR))
+    place(x, 0.0, ga.bell(mtof(84), 0.18, SR, 0.06) * 0.7)
+    t = tvec(0.7)
+    f = sweep(420.0, 150.0, t, 0.6) * (1.0 + 0.06 * np.sin(TAU * 7.0 * t))
+    wah = (osc(f) + 0.5 * osc(f * 2.0) + 0.3 * osc(f * 3.0)) * np.minimum(t / 0.02, 1.0) * np.exp(-t / 0.35)
+    place(x, 0.12, wah * 0.7)
+    thump = osc(sweep(180.0, 45.0, tvec(0.3), 0.12)) * ad_env(tvec(0.3), 0.002, 0.1)
+    place(x, 0.1, thump * 0.9)
+    save("fake", x, fout=0.08)
+
+
+def p_turbo():
+    # a rocket-boost ignition: a gas whoosh with a pitch climb and a bright afterburn
+    t = tvec(0.9)
+    n = noise("turbo", len(t))
+    roar = ga.svf_bandpass(n, sweep(300.0, 1800.0, t, 0.5), 1.2, SR) * ad_env(t, 0.03, 0.4)
+    tone = (osc(sweep(120.0, 520.0, t, 0.45)) + 0.4 * osc(sweep(240.0, 1040.0, t, 0.45))) * ad_env(t, 0.02, 0.3)
+    punch = osc(sweep(200.0, 60.0, t, 0.08)) * ad_env(t, 0.001, 0.05)
+    save("turbo", 0.9 * roar / np.max(np.abs(roar)) + 0.45 * tone + 0.8 * punch, fout=0.1)
+
+
+def p_ghost():
+    # a spooky "ooOOoo": two detuned glides under a shimmering vibrato, plus a breath of air
+    t = tvec(1.2)
+    f = 330.0 * (1.0 + 0.5 * np.sin(np.pi * np.clip(t / 1.2, 0, 1))) * (1.0 + 0.03 * np.sin(TAU * 6.0 * t))
+    y = (osc(f) + 0.6 * osc(f * 1.007) + 0.25 * osc(f * 2.0)) * np.sin(np.pi * np.clip(t / 1.2, 0, 1)) ** 1.3
+    air = ga.svf_bandpass(noise("ghost", len(t)), 1800.0 + 900.0 * np.sin(TAU * 2.0 * t), 2.0, SR) * np.sin(np.pi * np.clip(t / 1.2, 0, 1))
+    save("ghost", 0.7 * y + 0.35 * air / np.max(np.abs(air)), fout=0.1)
+
+
+def p_steal():
+    # the ghost's grab: a cold swipe up, then two quick sparkling notes (it got something)
+    x = np.zeros(int(0.7 * SR))
+    t = tvec(0.25)
+    swipe = ga.svf_bandpass(noise("steal", len(t)), sweep(600.0, 4500.0, t, 0.2), 2.0, SR) * np.sin(np.pi * np.clip(t / 0.25, 0, 1))
+    place(x, 0.0, 0.8 * swipe / np.max(np.abs(swipe)))
+    place(x, 0.2, ga.bell(mtof(88), 0.4, SR, 0.12) * 0.7)
+    place(x, 0.29, ga.bell(mtof(95), 0.4, SR, 0.16) * 0.8)
+    save("steal", x, fout=0.06)
+
+
+def p_decoy():
+    # a puff of smoke and a rubbery "boing-pop" as the double appears (or is burst)
+    t = tvec(0.5)
+    puff = fft_band(noise("decoy", len(t)), SR, 300.0, 3000.0, 2) * ad_env(t, 0.004, 0.09)
+    boing = osc(sweep(260.0, 900.0, t, 0.1) * (1.0 + 0.1 * np.sin(TAU * 20.0 * t) * np.exp(-t / 0.15))) * ad_env(t, 0.002, 0.12)
+    save("decoy", 0.7 * puff / np.max(np.abs(puff)) + 0.6 * boing, fout=0.05)
+
+
+def p_shock():
+    # a ground-pounding shockwave: a deep thump, a ringing ring-out and a spray of grit
+    t = tvec(0.9)
+    thump = osc(sweep(150.0, 38.0, t, 0.25)) * ad_env(t, 0.002, 0.2)
+    ring = ga.bell(mtof(55), 0.9, SR, 0.3) * 0.5
+    grit = fft_band(noise("shock", len(t)), SR, 600.0, 6000.0, 2) * ad_env(t, 0.003, 0.15)
+    save("shock", thump + ring + 0.5 * grit / np.max(np.abs(grit)), fout=0.1)
+
+
 ALL = [p_pickup, p_roll, p_whoosh, p_hit, p_ko, p_boom, p_zap, p_charge, p_beam, p_slash, p_powerup,
-       p_pop, p_spring, p_freeze, p_warp, p_chime, p_wind, p_clank, p_tick, p_land, p_warn, p_tally, p_fanfare]
+       p_pop, p_spring, p_freeze, p_warp, p_chime, p_wind, p_clank, p_tick, p_land, p_warn, p_tally, p_fanfare,
+       p_shell, p_siren, p_strike, p_fake, p_turbo, p_ghost, p_steal, p_decoy, p_shock]
 
 if __name__ == "__main__":
     print("Party Mode effects -> audio/party_*.wav")

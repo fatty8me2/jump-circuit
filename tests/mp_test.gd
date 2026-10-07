@@ -301,6 +301,25 @@ func _party_round() -> void:
 	check(await wait_for(func() -> bool: return int(p.kos.get(1, 0)) == 1, 6.0), "the KO is credited to the host once the clawed guest falls (this end) (kos %s)" % str(p.kos))
 	if role == "client":
 		check(lvl.deaths >= 1, "the KO sent the guest back to its checkpoint")
+	# -- the second item wave crosses the wire: a timed Turbo Boost is mirrored on the host's ghost, a Fake Box
+	#    drop appears on the other screen, and the Ghost's steal request is answered by the victim's own slot
+	if role == "host":
+		await get_tree().create_timer(0.4).timeout
+		p.give_item("turbo")
+		var tb: PowerUp = p.activate_item()
+		p.give_item("fakebox")
+		p.activate_item()
+		await get_tree().create_timer(1.0).timeout
+		if tb != null and is_instance_valid(tb):
+			tb.finish()
+	else:
+		check(await wait_for(func() -> bool: return (p.remote_powers.get(1, {}) as Dictionary).has("turbo"), 6.0), "the host's Turbo Boost appears on its ghost here")
+		var fake_here := func() -> bool:
+			for h: Variant in p.hazards.values():
+				if is_instance_valid(h) and h is FakeBox and (h as FakeBox).owner_id == 1:
+					return true
+			return false
+		check(await wait_for(fake_here, 6.0), "the host's Fake Box drop appears here too")
 	# -- finish: host first, guest second; the host scores the round and everyone shows it
 	var gates: Array[Node] = lvl.find_children("*", "FinishGate", true, false)
 	var gate: FinishGate = gates[0] as FinishGate
