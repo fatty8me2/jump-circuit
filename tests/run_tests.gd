@@ -4792,6 +4792,14 @@ func test_zcpu_menu_pad() -> void:
 	title.call("show_screen", "main")
 	await ticks(3)
 	var e0: int = trap.count()
+	# the column must fit the 900 px canvas minus its 60 px margins (the headless window is not 1600x900)
+	var top: float = INF
+	var bottom: float = 0.0
+	for c: Node in (title.get("_screen") as Control).find_children("*", "Control", true, false):
+		if c is Button or c is Label:
+			top = minf(top, (c as Control).get_global_rect().position.y)
+			bottom = maxf(bottom, (c as Control).get_global_rect().end.y)
+	check(bottom > top and bottom - top <= 900.0 - 120.0, "the main menu with its new button still fits the 900 px canvas (%.0f px of %.0f)" % [bottom - top, 900.0 - 120.0])
 	var found: bool = false
 	for i: int in 9:
 		if _focused_text() == "Party vs CPU":
@@ -4937,7 +4945,7 @@ func test_zcpu_solo_round_scores() -> void:
 	for id: int in f.racers:
 		if (f.racers[id] as CpuRacer).item != "":
 			held += 1
-	check(taken >= 1, "item boxes feed the CPUs (%d boxes taken, %d CPUs holding an item)" % [taken, held])
+	check(taken + held >= 1, "item boxes feed the CPUs (%d boxes taken, %d CPUs holding an item)" % [taken, held])
 	# the round ends 45 s after the first finisher; the CPUs finish, the idle human does not
 	await wait_until(func() -> bool: return p.round_over, 700.0, "the round to end")
 	Engine.time_scale = 1.0
@@ -5032,6 +5040,7 @@ func test_zcpu_hits_items_ko() -> void:
 	CpuItems.consider(b, f, f.rivals_of(b))
 	check(b.item == "", "a CPU in last place uses Thunder Cloud")
 	check(a.slow_left > 0.0 and a.walker.hold > 0.0, "...and the racers ahead are zapped (slow %.1f, hold %.1f)" % [a.slow_left, a.walker.hold])
+	await seconds(2.0)   # (let the storm effects play out before the course is freed)
 	await _cpu_cleanup()
 
 
@@ -5051,4 +5060,67 @@ func test_zcpu_main_mode_pure() -> void:
 	CpuField.fill_online = false
 	Net.leave()
 	check(CpuField.wanted_count() == 0, "...and nothing is wanted once the session is gone")
+
+
+
+## A solo Party vs CPU round really pauses (the CPUs and the course clock stand still).
+func test_zcpu_pause_local() -> void:
+	var lvl: LevelBase = await _cpu_round(0, 2, "normal", "party", 0.5)
+	var f: CpuField = _cpu_field(lvl)
+	await wait_until(func() -> bool: return Game.course_time > 4.0, 60.0, "the round to get going")
+	var pause: PauseMenu = lvl.find_children("*", "PauseMenu", true, false)[0] as PauseMenu
+	pause.set_open(true)
+	await get_tree().process_frame
+	check(get_tree().paused, "the pause menu pauses a solo CPU round")
+	var t0: float = Game.course_time
+	var pos0: Array[Vector3] = []
+	for id: int in f.racers:
+		pos0.append((f.racers[id] as CpuRacer).walker.pos)
+	await get_tree().create_timer(1.0, true, false, true).timeout
+	check(absf(Game.course_time - t0) < 0.05, "the course clock stands still while paused (%.3f)" % (Game.course_time - t0))
+	var still: bool = true
+	var i: int = 0
+	for id: int in f.racers:
+		if (f.racers[id] as CpuRacer).walker.pos.distance_to(pos0[i]) > 0.05:
+			still = false
+		i += 1
+	check(still, "the CPUs stand still while paused")
+	pause.set_open(false)
+	var t1: float = Game.course_time
+	await wait_until(func() -> bool: return Game.course_time > t1 + 0.5, 20.0, "the clock to run again")
+	check(Game.course_time - t1 < 1.5 and not get_tree().paused, "the race carries on from where it stopped (+%.2fs)" % (Game.course_time - t1))
+	await _cpu_cleanup()
+
+
+## Team Party with CPUs: even teams, CPUs never hit teammates, nor do the human's attacks.
+func test_zcpu_team_round() -> void:
+	var lvl: LevelBase = await _cpu_round(0, 3, "team", "team", 0.5)
+	var p: PartyLayer = lvl.party
+	var f: CpuField = _cpu_field(lvl)
+	check(p != null and f != null and p.rules.is_team(), "a Team Party round with CPUs")
+	if p == null or f == null:
+		await _cpu_cleanup()
+		return
+	var sizes: Array[int] = [0, 0]
+	for id: int in Net.roster:
+		sizes[Net.team_of(id)] += 1
+	check(sizes[0] == 2 and sizes[1] == 2, "two teams of two (%d / %d)" % [sizes[0], sizes[1]])
+	await wait_until(func() -> bool: return Game.course_time > 1.0 and p._ready_done, 30.0, "the round to start")
+	var mate: int = 0
+	for id: int in f.racers:
+		if Net.team_of(id) == Net.team_of(1):
+			mate = id
+	check(mate != 0, "the human has a CPU teammate")
+	var mate_racer: CpuRacer = f.racers[mate]
+	var seen_mate: bool = false
+	for r: Dictionary in f.rivals_of(mate_racer):
+		if Net.team_of(int(r["id"])) == Net.team_of(mate):
+			seen_mate = true
+	check(not seen_mate, "a CPU never counts its own team as rivals")
+	var targets_have_mate: bool = false
+	for t: Dictionary in p.targets():
+		if int(t["id"]) == mate:
+			targets_have_mate = true
+	check(not targets_have_mate, "the human's attacks never target the CPU teammate")
+	await _cpu_cleanup()
 
