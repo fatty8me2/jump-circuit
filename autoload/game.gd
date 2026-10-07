@@ -348,6 +348,16 @@ func play_party_practice(index: int) -> void:
 	_load_level()
 
 
+## Party vs CPU: a solo party cup against `count` CPU racers (`mode` "party" or "team", `diff` a
+## CpuSkill level). Runs the normal party race flow on a one-person local session.
+func play_party_cpu(index: int, mode: String, count: int, diff: String) -> void:
+	Net.host_local()
+	CpuField.configure_local(count, diff)
+	CpuField.sync_roster()
+	Net.host_set_mode(mode if mode in ["party", "team"] else "party")   # (team: balances the CPUs too)
+	Net.host_start_race(clampi(index, 0, LEVELS.size() - 1), 3.0)
+
+
 func _on_race_starting(index: int, start_time: float) -> void:
 	race_mode = true
 	# a party race is the next round of the cup; a plain race switches every party system off
