@@ -262,7 +262,7 @@ var spectating_id: int = -1
 func spectate_candidates() -> Array[int]:
 	var ids: Array[int] = []
 	for id: int in Net.roster.keys():
-		if id != Net.my_id() and _ghosts.has(id) and float(Net.roster[id]["finished"]) < 0.0:
+		if id != Net.my_id() and _ghosts.has(id) and float(Net.roster[id]["finished"]) < 0.0 and not (party != null and party.is_out(id)):
 			ids.append(id)
 	ids.sort()
 	return ids

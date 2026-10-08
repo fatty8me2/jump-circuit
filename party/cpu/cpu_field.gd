@@ -29,6 +29,8 @@ const MAX_RACERS: int = 8
 
 ## Lobby choices (kept for the session).
 static var fill_online: bool = false
+## Online fill target (racers the roster is topped up to) - the host's "CPU fill" rule.
+static var fill_to: int = 8
 static var difficulty: String = CpuSkill.NORMAL
 static var local_count: int = 3
 static var current: CpuField = null
@@ -73,8 +75,15 @@ static func wanted_count() -> int:
 	if Net.local_session:
 		return clampi(local_count, 0, room)
 	if fill_online:
-		return clampi(room, 0, MAX_RACERS)
+		return clampi(mini(fill_to, MAX_RACERS) - human_count(), 0, room)
 	return 0
+
+
+## The host's CPU-fill rule (PartyRuleset "cpu": 0 off, else fill to N racers) switches the online fill.
+static func apply_ruleset() -> void:
+	var n: int = int(PartyRuleset.cur()["cpu"])
+	fill_online = n > 0
+	fill_to = n if n > 0 else 8
 
 
 ## Host: make the roster hold exactly the CPUs wanted (no-op when it already does).
@@ -351,7 +360,7 @@ func new_key(id: int) -> String:
 func rivals_of(r: CpuRacer) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	for id: int in Net.roster:
-		if id == r.id or float(Net.roster[id].get("finished", -1.0)) >= 0.0 or not is_rival(r.id, id):
+		if id == r.id or float(Net.roster[id].get("finished", -1.0)) >= 0.0 or not is_rival(r.id, id) or layer.is_out(id):
 			continue
 		var d: Dictionary = {"id": id, "cpu": null, "local": false}
 		if racers.has(id):
@@ -392,8 +401,8 @@ func cpu_take_box(r: CpuRacer, b: ItemBox) -> void:
 	if layer.round_over or not b.available:
 		return
 	var it: String = layer.roll_for(r.id)
-	layer._take_box(b.index, r.id, it, PartyLayer.BOX_RESPAWN)
-	Net.send_party({"k": "box", "b": b.index, "id": r.id, "it": it, "r": PartyLayer.BOX_RESPAWN})
+	layer._take_box(b.index, r.id, it, layer.box_respawn_time())
+	Net.send_party({"k": "box", "b": b.index, "id": r.id, "it": it, "r": layer.box_respawn_time()})
 	r.give(it)
 
 
@@ -450,6 +459,8 @@ func hit_rival(r: CpuRacer, rival: Dictionary, kb: Vector3, o: Dictionary = {}) 
 	else:
 		Net.send_party({"k": "chit", "by": r.id, "m": m}, rid)
 	cpu_hit_feed(r.id, rid, str(o.get("s", "")))
+	if layer.mode != null:
+		layer.mode.on_hit(r.id, rid, str(o.get("s", "")))
 	if not bool(o.get("quiet", false)):
 		layer.hit_fx(rival["center"] as Vector3, kb)
 

@@ -76,6 +76,26 @@ static func build_screen(title: Node) -> Dictionary:
 	for i: int in courses:
 		course_names.append("%d  %s" % [i + 1, Game.LEVELS[i]["name"]])
 	course_i = clampi(course_i, 0, maxi(courses.size() - 1, 0))
+	# the Party Cup rules that matter most sit above the rest: game type, cup length, and the rest on their own screen
+	var variants: Array = []
+	for v: String in PartyRuleset.VARIANTS:
+		variants.append(PartyNames.variant_name(v))
+	var cups: Array = []
+	for n: int in PartyRuleset.CUPS:
+		cups.append(PartyRuleset.cup_label(n))
+	var type_row: Button = cycler("Game type", variants, maxi(PartyRuleset.VARIANTS.find(PartyRuleset.variant()), 0), func(i: int) -> void:
+		PartyRuleset.set_value("variant", PartyRuleset.VARIANTS[i]))
+	type_row.name = "GameType"
+	box.add_child(type_row)
+	var cup_row: Button = cycler("Cup length", cups, PartyRuleset.index_of_int(PartyRuleset.CUPS, PartyRuleset.cup_rounds()), func(i: int) -> void:
+		PartyRuleset.set_value("cup", PartyRuleset.CUPS[i]))
+	cup_row.name = "CupLength"
+	box.add_child(cup_row)
+	var rules_btn: Button = UiKit.button("More rules  ...", func() -> void:
+		PartyRulesMenu.back_to = "partycpu"
+		title.call("show_screen", "partyrules"), 440)
+	rules_btn.name = "MoreRules"
+	box.add_child(rules_btn)
 	var mode_row: Button = cycler("Mode", mode_names, mode_i, func(i: int) -> void: mode_i = i)
 	box.add_child(mode_row)
 	box.add_child(cycler("CPU racers", counts, count_n - 1, func(i: int) -> void: count_n = i + 1))
@@ -109,8 +129,13 @@ static func add_lobby_controls(box: VBoxContainer) -> void:
 			CpuField.configure_local(CpuField.local_count, CpuSkill.LEVELS[i])
 			CpuField.sync_roster()))
 		return
-	var fill: Button = cycler("Fill with CPUs", ["Off", "On"], 1 if CpuField.fill_online else 0, func(i: int) -> void:
-		CpuField.fill_online = i == 1)
+	CpuField.apply_ruleset()   # the saved CPU-fill rule is what the row shows
+	var fills: Array = []
+	for n: int in PartyRuleset.FILLS:
+		fills.append(PartyRuleset.fill_label(n))
+	var fill: Button = cycler("Fill with CPUs", fills, PartyRuleset.index_of_int(PartyRuleset.FILLS, int(PartyRuleset.cur()["cpu"])), func(i: int) -> void:
+		PartyRuleset.set_value("cpu", PartyRuleset.FILLS[i])
+		CpuField.apply_ruleset())
 	fill.name = "FillCpus"
 	box.add_child(fill)
 	box.add_child(cycler("CPU level", difficulty_names(), CpuSkill.LEVELS.find(CpuField.difficulty), func(i: int) -> void:

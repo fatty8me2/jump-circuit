@@ -793,6 +793,8 @@ func update_identity() -> void:
 
 func host_start_race(level_index: int, countdown: float = 4.0) -> void:
 	# every party race is the next round of the Party Cup (the round travels with the start)
+	if cup_complete():
+		party_round = 0   # a finished cup always starts over
 	var round_no: int = party_round + 1 if game_mode != "race" else 0
 	CpuField.sync_roster()   # Party vs CPU / "Fill with CPUs": the CPUs racing this round
 	if local_session:

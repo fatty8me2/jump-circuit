@@ -6,7 +6,7 @@ extends Node
 
 const CLIPS: Array[String] = ["pickup", "roll", "whoosh", "hit", "ko", "boom", "zap", "charge",
 	"beam", "slash", "powerup", "pop", "spring", "freeze", "warp", "chime", "wind", "clank",
-	"tick", "land", "warn", "tally", "fanfare"]
+	"tick", "land", "warn", "tally", "fanfare", "coin", "zone", "fuse", "blast", "elim", "pass", "drum", "champion"]
 ## Fallback main-game clip and pitch per party clip.
 const FALLBACK: Dictionary = {
 	"pickup": ["checkpoint", 1.5], "roll": ["tick", 1.3], "whoosh": ["jump", 0.7], "hit": ["whack", 1.0],
@@ -15,6 +15,8 @@ const FALLBACK: Dictionary = {
 	"spring": ["bounce", 1.2], "freeze": ["crumble", 1.6], "warp": ["respawn", 1.4], "chime": ["checkpoint", 1.0],
 	"wind": ["creak", 0.5], "clank": ["whack", 1.5],
 	"tick": ["tick", 1.6], "land": ["checkpoint", 1.3], "warn": ["tick", 0.5], "tally": ["tick", 2.0], "fanfare": ["finish", 1.2],
+	"coin": ["checkpoint", 2.0], "zone": ["checkpoint", 0.8], "fuse": ["tick", 1.2], "blast": ["collapse", 0.9], "elim": ["whack", 0.5],
+	"pass": ["jump", 1.8], "drum": ["creak", 1.0], "champion": ["finish", 1.0],
 }
 
 static var _streams: Dictionary = {}

@@ -160,6 +160,10 @@ func show_screen(id: String) -> void:
 			_screen = _practice_screen()
 		"partycpu":
 			_screen = _partycpu_screen()
+		"partyrules":
+			_screen = _partyrules_screen()
+		"partyitems":
+			_screen = _partyitems_screen()
 		"locker":
 			_screen = _locker_screen()
 		"victory":
@@ -185,7 +189,7 @@ func show_screen(id: String) -> void:
 ## getting a race or party together, the grand reprise once every course is beaten.
 static func screen_music(id: String) -> String:
 	match id:
-		"race", "lobby", "practice", "partycpu":
+		"race", "lobby", "practice", "partycpu", "partyrules", "partyitems":
 			return "lobby"
 		"victory":
 			return "victory"
@@ -211,6 +215,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	match Game.title_screen:
 		"levels", "victory", "update", "practice", "locker", "challenges", "stats", "partycpu":
 			show_screen("main")
+		"partyrules":
+			show_screen(PartyRulesMenu.back_to)
+		"partyitems":
+			show_screen("partyrules")
 		"settings":
 			Settings.save_settings()  # same as the panel's Done
 			show_screen("main")
@@ -506,6 +514,19 @@ static func level_medal_text(level_id: String, medal: int, played: bool) -> Stri
 
 
 ## Party vs CPU: the solo party-cup setup (mode, CPU count, difficulty, course) - see party/cpu/cpu_menu.gd.
+## The host's Party Cup rules (cup length, game type, items, KO value, time limit) and the per-power-up toggles.
+func _partyrules_screen() -> Control:
+	var built: Dictionary = PartyRulesMenu.build_screen(self)
+	_focus_pref = built["focus"]
+	return _left_column(built["content"], 560)
+
+
+func _partyitems_screen() -> Control:
+	var built: Dictionary = PartyRulesMenu.build_items_screen(self)
+	_focus_pref = built["focus"]
+	return _left_column(built["content"], 680)
+
+
 func _partycpu_screen() -> Control:
 	var built: Dictionary = CpuMenu.build_screen(self)
 	_focus_pref = built["focus"]
@@ -1063,6 +1084,7 @@ func _lobby_screen() -> Control:
 		mode_pick.item_selected.connect(func(i: int) -> void: Net.host_set_mode(modes[i]))
 		box.add_child(mode_pick)
 		CpuMenu.add_lobby_controls(box)
+		PartyRulesMenu.add_lobby_button(box, self)
 	_mode_label = UiKit.label("", 15, UiKit.SOFT)
 	_mode_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_mode_label.custom_minimum_size = Vector2(520, 0)
@@ -1108,10 +1130,14 @@ func _refresh_lobby() -> void:
 		var t: String = "%s:  %s" % [PartyNames.mode_name(mode), PartyNames.MODE_BLURBS.get(mode, "")]
 		if mode != "race" and Net.party_round > 0:
 			t += "\n%s: %d round%s played - the next race is round %d." % [PartyNames.CUP, Net.party_round, "" if Net.party_round == 1 else "s", Net.party_round + 1]
+		if mode != "race":
+			t += "\nRules:  " + PartyRuleset.summary()
 		_mode_label.text = t
 		_mode_label.add_theme_color_override("font_color", UiKit.GOLD if mode != "race" else UiKit.SOFT)
 	if _start_button != null and is_instance_valid(_start_button):
-		_start_button.text = "Start Race" if mode == "race" else "Start Round %d" % (Net.party_round + 1)
+		var cup_n: int = PartyRuleset.cup_rounds()
+		var next_round: int = 1 if Net.cup_complete() else Net.party_round + 1
+		_start_button.text = "Start Race" if mode == "race" else ("Start Round %d" % next_round if cup_n <= 0 else "Start Round %d of %d" % [next_round, cup_n])
 	_roster_box.add_child(UiKit.label("RACERS  (%d/%d)" % [Net.roster.size(), Net.MAX_PLAYERS], 15, UiKit.SOFT))
 	var ids: Array = Net.roster.keys()
 	ids.sort()

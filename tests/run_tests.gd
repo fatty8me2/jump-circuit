@@ -7698,3 +7698,602 @@ func test_zcpu_swap_and_hud() -> void:
 	check(p.hud.feed_log.size() > lines, "the party feed shows a CPU's hit / item (%d new lines)" % (p.hud.feed_log.size() - lines))
 	await seconds(1.0)
 	await _cpu_cleanup()
+
+
+
+# ---- Party modes and cups (branch party-modes) ------------------------------------------------------------------
+# Rules (PartyRuleset), game types (party/modes/), the cup structure and the champion podium.
+
+func _pm_reset() -> void:
+	PartyRuleset.persist = false   # (tests never rewrite the real settings file)
+	Settings.party_ruleset = {}
+	CpuField.fill_online = false
+	CpuField.fill_to = 8
+	Net.synced_ruleset = {}
+
+
+## A solo party round of game type `variant` with `count` CPUs; `extra` overrides other rules.
+func _pm_round(variant: String, count: int, diff: String = "normal", index: int = 0, extra: Dictionary = {}) -> LevelBase:
+	var rs: Dictionary = {"variant": variant}
+	rs.merge(extra, true)
+	PartyRuleset.persist = false
+	Settings.party_ruleset = PartyRuleset.sanitize(rs)
+	return await _cpu_round(index, count, diff, "party", 1.5)
+
+
+func _pm_freeze_cpus(lvl: LevelBase) -> void:
+	var f: CpuField = _cpu_field(lvl)
+	if f != null:
+		for r: CpuRacer in f.racers.values():
+			r.finished = true   # (stops its simulation; the roster entry is untouched)
+
+
+func _any_button_named(root: Node, n: String) -> bool:
+	for b: Node in root.find_children("*", "Button", true, false):
+		if str((b as Button).name) == n:
+			return true
+	return false
+
+
+func test_zpm_ruleset_sanitize_and_sync() -> void:
+	_pm_reset()
+	check(PartyRuleset.sanitize(null) == PartyRuleset.defaults() and PartyRuleset.defaults()["time"] == 240 and PartyRuleset.defaults()["ko"] == 3, "a missing ruleset is the defaults (endless, normal items, KO 3, 4 minutes)")
+	var junk: Dictionary = PartyRuleset.sanitize({"variant": "zzz", "cup": 7, "freq": 3, "ko": -1, "time": 1e30, "cpu": "x", "off": "no"})
+	check(junk == PartyRuleset.defaults(), "a junk ruleset falls back to the defaults field by field")
+	check(PartyRuleset.sanitize({"cup": NAN})["cup"] == 0 and PartyRuleset.sanitize({"ko": INF})["ko"] == 3, "NaN / infinity never get through")
+	var want: Dictionary = {"variant": "hill", "cup": 5.0, "freq": "chaos", "ko": 5.0, "time": 180.0, "cpu": 6.0, "off": ["ice", "gravity", "ice"]}
+	var d: Dictionary = PartyRuleset.sanitize(want)
+	check(d["variant"] == "hill" and d["cup"] == 5 and typeof(d["cup"]) == TYPE_INT and d["ko"] == 5 and d["time"] == 180 and d["cpu"] == 6, "JSON floats become the allowed ints")
+	check(d["off"] == ["gravity", "ice"], "the item toggles are de-duplicated and sorted (%s)" % str(d["off"]))
+	# saved in Settings
+	PartyRuleset.set_value("cup", 8)
+	PartyRuleset.set_value("freq", "low")
+	check(Settings.party_ruleset["cup"] == 8 and PartyRuleset.cup_rounds() == 8 and PartyRuleset.freq() == "low", "the host's choices land in Settings.party_ruleset")
+	Settings.party_ruleset = {"cup": 2, "freq": "weird", "ko": 4}
+	Settings._sanitize()
+	check(Settings.party_ruleset == PartyRuleset.sanitize({"ko": 4}), "Settings sanitises a hand-edited ruleset on load")
+	check("party_ruleset" in Settings._props(), "...and writes it with the other settings")
+	# message-level sync: the roster snapshot carries the rules, directly (the RPC body) and over the relay (JSON)
+	Settings.party_ruleset = PartyRuleset.sanitize(want)
+	var cfg: Dictionary = Net._party_cfg()
+	check(cfg.has("rs") and cfg["rs"] == d, "the host's party config carries the ruleset")
+	var wire: Variant = JSON.parse_string(JSON.stringify(cfg))
+	Settings.party_ruleset = {}
+	Net.synced_ruleset = {}
+	Net._sync_roster({}, cfg)
+	check(Net.synced_ruleset == d, "direct path: _sync_roster applies the host's rules")
+	Net.synced_ruleset = {}
+	Net._handle_relay_event(1, "roster", {"players": [], "party": wire})
+	check(Net.synced_ruleset == d, "relay path: the roster event's JSON round trip lands on the same rules")
+	# a guest reads the host's copy, the host (or a solo session) its own
+	Net.active = true
+	var was_relay: bool = Net._relay_mode
+	Net._relay_mode = true
+	Net._relay_host = false
+	check(PartyRuleset.cur() == d and PartyRuleset.ko() == 5 and not PartyRuleset.item_enabled("gravity") and PartyRules.ko_value() == 5, "a guest's PartyRuleset.cur() is the host's synced copy")
+	Net._relay_host = true
+	check(PartyRuleset.cur() == PartyRuleset.defaults(), "the host reads its own settings")
+	Net._relay_mode = was_relay
+	Net._relay_host = false
+	Net.active = false
+	Net.synced_ruleset = {}
+	# a bad packet cannot break anything
+	Net._apply_party_cfg({"mode": "party", "rs": {"variant": 5, "off": [1, 2]}})
+	check(Net.synced_ruleset["variant"] == "classic" and typeof(Net.synced_ruleset["off"]) == TYPE_ARRAY, "a malformed ruleset in a packet is sanitised")
+	Net.game_mode = "race"
+	_pm_reset()
+
+
+func test_zpm_rules_take_effect() -> void:
+	_pm_reset()
+	check(PartyRules.score_round([1], [1, 2], {1: 2}, {})[0]["ko_pts"] == 6, "default: 2 KOs are 6 points")
+	Settings.party_ruleset = PartyRuleset.sanitize({"ko": 5})
+	check(PartyRules.score_round([1], [1, 2], {1: 2}, {})[0]["ko_pts"] == 10, "KO value 5: 2 KOs are 10 points")
+	var rows: Array[Dictionary] = PartyRules.score_round([1], [1, 2], {}, {}, {2: -9, 1: 4})
+	var by_id: Dictionary = {}
+	for r: Dictionary in rows:
+		by_id[int(r["id"])] = r
+	check(int(by_id[1]["mode_pts"]) == 4 and int(by_id[1]["total"]) == 14 and int(by_id[2]["total"]) == 0, "mode points add to a round (and a round never goes below 0)")
+	check(PartyRules.rows_from_wire(rows)[0].has("mode_pts"), "mode points survive the wire format")
+	# item frequency: off = no boxes, low = fewer, chaos = quick respawn
+	var normal: LevelBase = await _pm_round("classic", 0)
+	var n_normal: int = normal.party.boxes.size()
+	check(n_normal >= 6 and normal.party.box_respawn_time() == PartyLayer.BOX_RESPAWN, "normal item boxes (%d boxes)" % n_normal)
+	await _cpu_cleanup()
+	var off: LevelBase = await _pm_round("classic", 0, "normal", 0, {"freq": "off"})
+	check(off.party.boxes.is_empty(), "item frequency Off places no item boxes")
+	await _cpu_cleanup()
+	var low: LevelBase = await _pm_round("classic", 0, "normal", 0, {"freq": "low"})
+	check(low.party.boxes.size() > 0 and low.party.boxes.size() < n_normal and low.party.box_respawn_time() > PartyLayer.BOX_RESPAWN, "Low thins the boxes out (%d of %d) and slows their respawn" % [low.party.boxes.size(), n_normal])
+	await _cpu_cleanup()
+	var chaos: LevelBase = await _pm_round("classic", 0, "normal", 0, {"freq": "chaos"})
+	check(chaos.party.boxes.size() == n_normal and chaos.party.box_respawn_time() < PartyLayer.BOX_RESPAWN, "Chaos keeps every box and respawns them fast")
+	# per-item toggles: only the enabled ones roll (the list is the PartyItems catalogue, so new items appear by themselves)
+	var all_ids: Array[String] = PartyItems.ids()
+	var keep: String = "ice" if "ice" in all_ids else all_ids[0]
+	var off_list: Array = []
+	for id: String in all_ids:
+		if id != keep:
+			off_list.append(id)
+	PartyRuleset.set_value("off", off_list)
+	var seen: Dictionary = {}
+	for i: int in 120:
+		seen[chaos.party.roll_for(1)] = true
+	check(seen.keys() == [keep], "with every other power-up toggled off only %s rolls (%s)" % [keep, str(seen.keys())])
+	PartyRuleset.set_value("off", all_ids)
+	check(not PartyRuleset.boxes_on(), "all power-ups off means no boxes")
+	PartyRuleset.set_value("off", [])
+	check(PartyRuleset.enabled_items().size() == all_ids.size() and PartyRuleset.boxes_on(), "toggling back restores them")
+	await _cpu_cleanup()
+	# round time limit
+	var timed: LevelBase = await _pm_round("classic", 0, "normal", 0, {"time": 90})
+	check(timed.party.round_limit() == 90.0, "the round limit is the host's 90 s")
+	await wait_until(func() -> bool: return Game.course_time > 0.2, 20.0, "GO")
+	Game.course_time = 92.0
+	await wait_until(func() -> bool: return timed.party.round_over, 10.0, "the time limit to end the round")
+	check(timed.party.round_over, "a 90 s limit ends a round nobody finished at 92 s")
+	await _cpu_cleanup()
+	_pm_reset()
+
+
+func test_zpm_hill() -> void:
+	_pm_reset()
+	var lvl: LevelBase = await _pm_round("hill", 0)
+	var p: PartyLayer = lvl.party
+	var z: PartyModeHill = p.mode as PartyModeHill
+	check(z != null and z.zone_i == clampi(1, 0, lvl.checkpoints.size()), "a King of the Hill round starts with the zone on lawn 1")
+	if z == null:
+		await _cpu_cleanup()
+		return
+	check(z.contains(z.zone_pos) and not z.contains(z.zone_pos + Vector3(20, 0, 0)) and not z.contains(z.zone_pos + Vector3(0, 8, 0)), "the zone is a disc around the lawn")
+	check(z.score([1], 5.0) == 1 and z.pts[1] == 4, "alone in the zone for 5 s earns 4 points")
+	var before: int = int(z.pts[1])
+	check(z.score([1, 900], 5.0) == -1 and int(z.pts[1]) == before, "two racers inside: contested, nobody scores")
+	check(z.score([], 5.0) == 0 and int(z.pts[1]) == before, "an empty zone scores nothing")
+	check(z.mode_points()[1] == before, "mode_points() are the hill points")
+	var row: Dictionary = PartyRules.score_round([], [1], {}, {}, z.mode_points())[0]
+	check(int(row["mode_pts"]) == before and int(row["total"]) == before, "they count in the round scoreboard")
+	# the zone moves to the lawn just ahead of the pack
+	Net.roster[1]["cp"] = 1
+	check(z.pick_next() == clampi(2, 1, lvl.checkpoints.size()), "the next lawn is one ahead of the pack's median checkpoint")
+	await wait_until(func() -> bool: return Game.course_time > 0.3, 20.0, "GO")
+	var old_pos: Vector3 = z.zone_pos
+	z.next_move = Game.course_time - 0.1
+	await ticks(3)
+	check(z.zone_i == z.pick_next() and (z.zone_pos != old_pos or lvl.checkpoints.size() < 2), "when its time is up the zone moves on (lawn %d)" % z.zone_i)
+	# really standing in it
+	z.pts.clear()
+	z._seconds.clear()
+	lvl.player.teleport(Transform3D(Basis(), z.zone_pos + Vector3(0, 0.3, 0)))
+	await seconds(2.5)
+	check(z.holder == 1 and int(z.pts.get(1, 0)) >= 1, "standing in the zone alone makes you the holder and scores (%d pts)" % int(z.pts.get(1, 0)))
+	check(not z.hud_lines().is_empty() and p.hud._mode_box.visible, "the mode's HUD widget shows")
+	check(not z.round_over(Game.course_time), "King of the Hill adds no end condition of its own")
+	await _cpu_cleanup()
+	_pm_reset()
+
+
+func test_zpm_elimination() -> void:
+	_pm_reset()
+	var lvl: LevelBase = await _pm_round("elim", 3)
+	var p: PartyLayer = lvl.party
+	var e: PartyModeElim = p.mode as PartyModeElim
+	check(e != null and Net.roster.size() == 4, "an Elimination round with three CPUs")
+	if e == null:
+		await _cpu_cleanup()
+		return
+	_pm_freeze_cpus(lvl)
+	for id: int in Net.roster:
+		Net.roster[id]["cp"] = 0
+	for id: int in [1, 900, 901]:
+		Net.roster[id]["cp"] = 1
+	e.on_checkpoint(901, 1)
+	check(e.is_out(902) and e.out[902] == 1 and e.alive().size() == 3, "the last racer through checkpoint 1 is out")
+	check(not lvl._ghosts[902].visible and not (902 in lvl.spectate_candidates()), "an eliminated racer vanishes from the course and can't be spectated")
+	check(p.targets().filter(func(t: Dictionary) -> bool: return int(t["id"]) == 902).is_empty(), "...and can't be hit")
+	e.on_checkpoint(900, 1)
+	check(e.alive().size() == 3, "a gate only drops one racer")
+	Net.roster[1]["cp"] = 2
+	Net.roster[900]["cp"] = 2
+	e.on_checkpoint(900, 2)
+	check(e.is_out(901) and e.alive().size() == 2 and not e.round_over(0.0), "checkpoint 2 drops the next one; two left, the round goes on")
+	Net.roster[1]["cp"] = 3
+	e.on_checkpoint(1, 3)
+	check(e.is_out(900) and e.alive() == [1] and e.round_over(0.0), "the last one standing ends the round")
+	var order: Array = e.finish_order([])
+	check(order == [1, 900, 901, 902], "placement follows the elimination order %s" % str(order))
+	var rows: Array[Dictionary] = PartyRules.score_round(order, Net.roster.keys(), {}, {})
+	var place_pts: Dictionary = {}
+	for r: Dictionary in rows:
+		place_pts[int(r["id"])] = int(r["place_pts"])
+	check(place_pts[1] == 10 and place_pts[900] == 8 and place_pts[901] == 6 and place_pts[902] == 5, "the survivor wins the round's 10 points, the first out gets the least (%s)" % str(place_pts))
+	check(e.hud_lines().size() >= 2, "the HUD widget lists the racers left")
+	await _cpu_cleanup()
+	# our own elimination: control off, spectating the rest
+	var lvl2: LevelBase = await _pm_round("elim", 2)
+	var e2: PartyModeElim = lvl2.party.mode as PartyModeElim
+	await wait_until(func() -> bool: return Game.course_time > 0.3, 20.0, "GO")
+	e2._apply_out(1, 1, "test")
+	await ticks(3)
+	check(not lvl2.party.can_act() and not lvl2.player.control_enabled and lvl2.finished, "when we are out we can't act any more")
+	check(lvl2.spectating_id in [900, 901], "...and we watch a racer who is still in (%d)" % lvl2.spectating_id)
+	check(e2.hud_lines().any(func(l: String) -> bool: return l.contains("out")), "the widget says we are out")
+	await _cpu_cleanup()
+	_pm_reset()
+
+
+func test_zpm_coin_rush() -> void:
+	_pm_reset()
+	for li: int in [0, 5, 12]:
+		if li >= Game.LEVELS.size():
+			continue
+		var l0: LevelBase = await load_level(li)
+		await ticks(3)
+		var pts: Array[Vector3] = PartyModeCoins.route_coin_points(l0)
+		var spaced: bool = true
+		for i: int in pts.size():
+			for j: int in range(i + 1, pts.size()):
+				if pts[i].distance_to(pts[j]) < PartyModeCoins.MIN_GAP - 0.01:
+					spaced = false
+		check(pts.size() >= 8 and pts.size() <= PartyModeCoins.MAX_COINS and spaced, "course %d: %d coin spots on the route, spaced out" % [li + 1, pts.size()])
+	var lvl: LevelBase = await _pm_round("coins", 2)
+	var p: PartyLayer = lvl.party
+	var c: PartyModeCoins = p.mode as PartyModeCoins
+	check(c != null, "a Coin Rush round")
+	if c == null:
+		await _cpu_cleanup()
+		return
+	await ticks(3)
+	_pm_freeze_cpus(lvl)
+	var n0: int = c.coins.size()
+	check(n0 >= 8 and c._nodes.size() == n0, "%d coins are on the course, each with a visual" % n0)
+	c.on_request(1, {"m": "pick", "c": 0})
+	check(int(c.count.get(1, 0)) == 1 and c.taken.has(0), "a pickup request scores a coin")
+	c.on_request(1, {"m": "pick", "c": 0})
+	check(int(c.count[1]) == 1, "a coin can only be taken once")
+	c.on_request(555, {"m": "pick", "c": 1})
+	check(not c.taken.has(1), "a request from somebody not in the race is ignored")
+	c.count[900] = 5
+	c.on_ko(1, 900)
+	check(int(c.count[900]) == 2 and c.coins.size() == n0 + 3, "a KO makes the victim drop 3 coins (%d left, %d on the course)" % [int(c.count[900]), c.coins.size()])
+	var drop_id: int = PartyModeCoins.FIRST_DROP_ID + 1
+	check(c.coins.has(drop_id) and c._nodes.has(drop_id), "the dropped coins are real coins")
+	c.on_request(1, {"m": "pick", "c": drop_id})
+	check(int(c.count[1]) == 2, "anybody can pick up a dropped coin")
+	c.count[901] = 0
+	var m: int = c.coins.size()
+	c.on_ko(1, 901)
+	check(c.coins.size() == m, "a victim without coins drops nothing")
+	c.on_message(1, {"m": "take", "c": 3, "id": 902, "n": 4})
+	check(c.taken.has(3) and int(c.count[902]) == 4, "the host's 'take' message updates a guest's coins")
+	check(c.leader() == 902 and c.mode_points()[902] == 4, "the leader and the mode points follow the counts")
+	var row: Dictionary = PartyRules.score_round([], [1, 902], {}, {}, c.mode_points())[0]
+	check(int(row["id"]) == 902 and int(row["mode_pts"]) == 4 and int(row["total"]) == 4, "coins are points in the round scoreboard")
+	var target: int = 5
+	lvl.player.teleport(Transform3D(Basis(), (c.coins[target] as Vector3) + Vector3(0, 0.1, 0)))
+	await wait_until(func() -> bool: return Game.course_time > 0.3, 20.0, "GO")
+	await ticks(8)
+	check(c.taken.has(target) and int(c.taken[target]) == 1, "walking through a coin collects it")
+	check(c.hud_lines().size() >= 2, "the HUD widget shows the count")
+	await _cpu_cleanup()
+	_pm_reset()
+
+
+func test_zpm_hot_potato() -> void:
+	_pm_reset()
+	var lvl: LevelBase = await _pm_round("potato", 3)
+	var p: PartyLayer = lvl.party
+	var h: PartyModePotato = p.mode as PartyModePotato
+	check(h != null, "a Hot Potato round")
+	if h == null:
+		await _cpu_cleanup()
+		return
+	_pm_freeze_cpus(lvl)
+	await wait_until(func() -> bool: return Game.course_time > 0.3, 20.0, "GO")
+	var ids: Array[int] = h.active_ids()
+	h._new_holder(ids, 0)
+	check(h.holder in ids and h.fuse == PartyModePotato.FUSE, "the bomb goes to a racer with a full fuse")
+	check(h._node_of(h.holder).get_node_or_null("PotatoBomb") != null, "the holder carries a visible bomb")
+	h.holder = 1
+	h._last_pass_at = -9.0
+	h.on_request(900, {"m": "pass", "to": 901})
+	check(h.holder == 1, "only the holder can pass the bomb")
+	h.on_request(1, {"m": "pass", "to": 555})
+	check(h.holder == 1, "...and only to a racer who is in the round")
+	h.on_request(1, {"m": "pass", "to": 900})
+	check(h.holder == 900 and h._node_of(900).get_node_or_null("PotatoBomb") != null, "a pass moves the bomb to the target")
+	h.on_request(900, {"m": "pass", "to": 1})
+	check(h.holder == 900, "it can't be passed straight back at once")
+	h._last_pass_at = -9.0
+	h.holder = 1
+	h.on_hit(1, 901, "shove")
+	check(h.holder == 901, "landing a Shove on a rival passes the bomb (on_hit)")
+	h._last_pass_at = -9.0
+	h.holder = 901
+	h.on_hit(1, 900, "shove")
+	check(h.holder == 901, "a hit by somebody who isn't holding it passes nothing")
+	h.holder = 900
+	h.fuse = 5.0
+	h._boom(h.active_ids())
+	check(int(h.pts[900]) == -PartyModePotato.BLAST_PENALTY and int(h.pts[1]) == PartyModePotato.SURVIVE_PTS and int(h.blasts[900]) == 1, "a blast costs the holder %d, everyone else racing gets +%d" % [PartyModePotato.BLAST_PENALTY, PartyModePotato.SURVIVE_PTS])
+	check(h.holder != 900 and h.holder != 0 and h.fuse == PartyModePotato.FUSE, "the bomb goes to someone new and the fuse restarts")
+	var rows: Array[Dictionary] = PartyRules.score_round([], h.active_ids(), {}, {}, h.mode_points())
+	var r900: Dictionary = {}
+	for r: Dictionary in rows:
+		if int(r["id"]) == 900:
+			r900 = r
+	check(int(r900["mode_pts"]) == -3 and int(r900["total"]) == 0, "the penalty shows in the round scoreboard and never drops a round below 0")
+	h._apply_boom(1)
+	check(p.last_hit_by == 0, "the blast is nobody's KO")
+	check(h.round_note().contains("blew up"), "the results headline names who blew up")
+	await _cpu_cleanup()
+	_pm_reset()
+
+
+## The CPU heuristics, read straight off the mode objects.
+func test_zpm_cpu_heuristics() -> void:
+	_pm_reset()
+	var lvl: LevelBase = await _pm_round("hill", 3, "hard")
+	var f: CpuField = _cpu_field(lvl)
+	var z: PartyModeHill = lvl.party.mode as PartyModeHill
+	check(f != null and z != null and f.racers.size() == 3, "a Hill round with three CPUs")
+	if f == null or z == null:
+		await _cpu_cleanup()
+		return
+	var a: CpuRacer = f.racers[900]
+	var b: CpuRacer = f.racers[901]
+	await wait_until(func() -> bool: return Game.course_time > 0.3, 20.0, "GO")
+	a.walker.cp = 0
+	z._left = 10.0
+	a.walker.pos = z.zone_pos + Vector3(30, 0, 0)
+	check(CpuModes.pace_mult(a, f, 0.1) > 1.0, "a CPU short of the zone's lawn runs faster")
+	a.walker.pos = z.zone_pos
+	a.mode_state.clear()
+	check(CpuModes.pace_mult(a, f, 0.1) == CpuModes.IDLE_PACE, "a CPU standing in the zone holds it")
+	a.mode_state["linger"] = 99.0
+	check(CpuModes.pace_mult(a, f, 0.1) == 1.0, "...but moves on after a while")
+	a.mode_state.clear()
+	z._left = 0.5
+	check(CpuModes.pace_mult(a, f, 0.1) == 1.0, "...and doesn't wait for a zone about to move")
+	z._left = 10.0
+	b.walker.pos = z.zone_pos + Vector3(1, 0, 0)
+	var rival: Dictionary = {"id": 901, "pos": b.walker.pos}
+	check(CpuModes.melee_chance(a, f, 0.2, rival) >= 0.8, "two CPUs fighting over the zone shove each other")
+	await _cpu_cleanup()
+	var lvl2: LevelBase = await _pm_round("potato", 3, "hard")
+	var f2: CpuField = _cpu_field(lvl2)
+	var h: PartyModePotato = lvl2.party.mode as PartyModePotato
+	var c1: CpuRacer = f2.racers[900]
+	var c2: CpuRacer = f2.racers[901]
+	await wait_until(func() -> bool: return Game.course_time > 0.3, 20.0, "GO")
+	h.holder = 900
+	var rv: Dictionary = {"id": 901, "pos": c2.walker.pos}
+	check(CpuModes.melee_chance(c1, f2, 0.1, rv) == 1.0 and CpuModes.eager(c1, f2) and CpuModes.pace_mult(c1, f2, 0.1) < 1.0, "the CPU holding the bomb shoves anyone in reach, at once, and waits for company")
+	check(not CpuModes.eager(c2, f2) and CpuModes.melee_chance(c2, f2, 0.5, {"id": 900, "pos": c1.walker.pos}) < 0.5, "the others don't go after the holder")
+	c2.walker.pos = c1.walker.pos + Vector3(2, 0, 0)
+	check(CpuModes.pace_mult(c2, f2, 0.1) > 1.0, "a CPU near the holder runs away from it")
+	c1.shove_cd = 0.0
+	h._last_pass_at = -9.0
+	f2.hit_rival(c1, {"id": 901, "cpu": c2, "pos": c2.walker.pos, "center": c2.walker.pos + Vector3(0, 0.8, 0), "vel": Vector3.ZERO, "grounded": true}, Vector3(5, 3, 0), {"s": "shove"})
+	check(h.holder == 901, "a CPU's Shove passes the bomb")
+	await _cpu_cleanup()
+	var lvl3: LevelBase = await _pm_round("elim", 3, "hard")
+	var f3: CpuField = _cpu_field(lvl3)
+	var e: PartyModeElim = lvl3.party.mode as PartyModeElim
+	for id: int in Net.roster:
+		Net.roster[id]["cp"] = 1
+	Net.roster[902]["cp"] = 0
+	Net.roster[902]["cp_at"] = 99.0
+	check(e.is_last(902) and CpuModes.pace_mult(f3.racers[902], f3, 0.1) > 1.1, "the last CPU still in speeds up to avoid elimination")
+	check(not e.is_last(900) and CpuModes.pace_mult(f3.racers[900], f3, 0.1) == 1.0, "the others keep their normal pace")
+	await _cpu_cleanup()
+	_pm_reset()
+
+
+## CPUs in a real solo round of each game type: they take part and the mode runs on their play.
+func test_zcpu_modes_solo_rounds() -> void:
+	_pm_reset()
+	var lvl: LevelBase = await _pm_round("hill", 3, "hard")
+	var z: PartyModeHill = lvl.party.mode as PartyModeHill
+	Engine.time_scale = 5.0
+	await wait_until(func() -> bool: return Game.course_time > 20.0 and (z.pts.size() > 0 or Game.course_time > 150.0), 400.0, "a CPU to score on the hill")
+	var cpu_pts: int = 0
+	for id: Variant in z.pts:
+		if CpuField.is_cpu_id(int(id)):
+			cpu_pts += int(z.pts[id])
+	check(cpu_pts >= 1, "CPUs reached the hill and scored (%d points)" % cpu_pts)
+	check(z.zone_i >= 1, "the zone sits on a real lawn (%d)" % z.zone_i)
+	await _cpu_cleanup()
+	var lvl2: LevelBase = await _pm_round("elim", 3, "hard")
+	var p2: PartyLayer = lvl2.party
+	var e: PartyModeElim = p2.mode as PartyModeElim
+	Engine.time_scale = 5.0
+	await wait_until(func() -> bool: return p2.round_over, 500.0, "the Elimination round to end")
+	Engine.time_scale = 1.0
+	check(e.is_out(1), "the idle human was last through a gate and is out")
+	check(e.alive().size() <= 1 or e.alive().size() == 2, "the field was cut down (%d left)" % e.alive().size())
+	check(p2.last_rows.size() == 4 and CpuField.is_cpu_id(int(p2.last_rows[0]["id"])), "the round scored all four and a CPU won it")
+	await _cpu_cleanup()
+	var lvl3: LevelBase = await _pm_round("coins", 3, "hard")
+	var c: PartyModeCoins = lvl3.party.mode as PartyModeCoins
+	Engine.time_scale = 5.0
+	await wait_until(func() -> bool: return Game.course_time > 15.0 and c.taken.size() >= 4, 300.0, "CPUs to collect coins")
+	var cpu_coins: int = 0
+	for id: Variant in c.count:
+		if CpuField.is_cpu_id(int(id)):
+			cpu_coins += int(c.count[id])
+	check(cpu_coins >= 3, "CPUs picked up coins on their way (%d)" % cpu_coins)
+	await _cpu_cleanup()
+	var lvl4: LevelBase = await _pm_round("potato", 3, "hard")
+	var h: PartyModePotato = lvl4.party.mode as PartyModePotato
+	Engine.time_scale = 5.0
+	await wait_until(func() -> bool: return h.blasts.size() > 0, 300.0, "the first bomb to go off")
+	check(not h.blasts.is_empty() and h.holder != 0, "a bomb exploded and the next one is lit (holder %d)" % h.holder)
+	var negative: bool = false
+	for id: Variant in h.pts:
+		if int(h.pts[id]) < 0:
+			negative = true
+	check(negative, "the blast cost its holder points (%s)" % str(h.pts))
+	await _cpu_cleanup()
+	_pm_reset()
+
+
+func test_zpm_cup_length_and_podium() -> void:
+	_pm_reset()
+	check(PartyRuleset.CUPS == [3, 5, 8, 0], "cups are 3, 5 or 8 rounds, or endless")
+	PartyRuleset.set_value("cup", 3)
+	check(PartyRuleset.cup_done(3) and PartyRuleset.cup_done(4) and not PartyRuleset.cup_done(2), "a 3-round cup is done after round 3")
+	PartyRuleset.set_value("cup", 0)
+	check(not PartyRuleset.cup_done(99), "Endless never finishes")
+	var pr := PartyRules.new("party")
+	pr.cup = {1: 25, 900: 30, 901: 12, 902: 8}
+	pr.names = {1: "Me", 900: "Bolt", 901: "Pixel", 902: "Zippy"}
+	var ent: Array[Dictionary] = PartyPodium.entries(pr, {})
+	check(ent.size() == 3 and ent[0]["ids"] == [900] and ent[1]["ids"] == [1] and ent[2]["ids"] == [901] and ent[0]["pts"] == 30, "the podium takes the top 3 by cup points")
+	var tr := PartyRules.new("team")
+	tr.cup = {1: 10, 2: 5, 3: 8, 4: 9}
+	tr.teams = {1: 0, 2: 0, 3: 1, 4: 1}
+	tr.names = {1: "A", 2: "B", 3: "C", 4: "D"}
+	var tent: Array[Dictionary] = PartyPodium.entries(tr, {})
+	check(tent.size() == 2 and str(tent[0]["label"]).contains(PartyNames.team_name(1)) and tent[0]["ids"] == [4, 3] and tent[0]["pts"] == 17, "in Team Party the podium is the two teams, best members on them")
+	var lvl: LevelBase = await _pm_round("classic", 3, "normal", 0, {"cup": 3})
+	var p: PartyLayer = lvl.party
+	p.rules.round_no = 2
+	p.rules.cup = {1: 20, 900: 30, 901: 12, 902: 8}
+	for id: int in [1, 900, 901, 902]:
+		p.rules.names[id] = str(Net.roster[id]["name"])
+	p.last_rows = PartyRules.score_round([900, 1, 901, 902], Net.roster.keys(), {}, {})
+	p.show_results()
+	await seconds(1.0)
+	var buttons: String = ""
+	for b: Node in p.results.find_children("*", "Button", true, false):
+		buttons += (b as Button).text + "|"
+	check(buttons.contains("Next Round  (Round 3 of 3)") and not buttons.contains("Champion") and not p.results.final_round, "round 2 of a 3-round cup offers Next Round (round 3 of 3)")
+	p.rules.round_no = 3
+	p.show_results()
+	await seconds(1.2)
+	buttons = ""
+	for b: Node in p.results.find_children("*", "Button", true, false):
+		buttons += (b as Button).text + "|"
+	check(p.results.final_round and buttons.contains("See the Champion!") and not buttons.contains("Next Round"), "the last round offers the champion screen instead of another round (%s)" % buttons)
+	check(_focused_text() == "See the Champion!", "...focused for the pad (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	await ticks(4)
+	var pod: PartyPodium = p.podium
+	check(pod != null and is_instance_valid(pod) and pod.shown.size() == 3, "A opens the podium with three pedestals")
+	if pod == null:
+		await _cpu_cleanup()
+		return
+	check(pod.racers.size() == 3 and pod.champion_id == 900, "the top three stand on it, the cup leader is the champion")
+	check(pod.racers[900].visual() != null and pod.racers.has(1) and pod.racers.has(901), "...each wearing their own cosmetics")
+	pod.skip()
+	await ticks(4)
+	var champ: RemoteRacer = pod.racers[900]
+	check(pod.done and champ.visual().is_emoting() and champ.visual().emote_kind() == "pose" and champ.visual().emote_id() == pod.winner_pose, "the champion plays their victory pose (%s)" % pod.winner_pose)
+	check(not pod.find_children("*", "GPUParticles3D", true, false).is_empty(), "there is confetti")
+	check(_focused_text() == "Back to the Lobby", "the podium's main button is focused (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(_focused_text() == "Close Session", "the D-pad reaches the other button (%s)" % _focused_text())
+	await _cpu_cleanup()
+	_pm_reset()
+
+
+func test_zpm_menus_pad() -> void:
+	_pm_reset()
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	title.set("persist_settings", false)
+	add_child(title)
+	check(Net.host(24598) == OK, "hosting opens the lobby")
+	await ticks(3)
+	Net.host_set_mode("party")
+	await ticks(3)
+	var rules_btn: Button = null
+	for b: Node in title.find_children("*", "Button", true, false):
+		if (b as Button).name == "RulesButton":
+			rules_btn = b as Button
+	check(rules_btn != null, "the host's lobby has a Cup & Rules button")
+	var e0: int = trap.count()
+	rules_btn.grab_focus()
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	await ticks(3)
+	check(Game.title_screen == "partyrules" and _focused_text().begins_with("Game type:"), "A opens the rules, on the first row (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_RIGHT))
+	check(PartyRuleset.variant() == "hill" and _focused_text().contains("King of the Hill"), "D-pad right changes the game type (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_LEFT))
+	check(PartyRuleset.variant() == "classic", "D-pad left steps back")
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(_focused_text().begins_with("Cup length:") and _focused_text().contains("Endless"), "down: the cup length (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	check(PartyRuleset.cup_rounds() == 3 and _focused_text().contains("3 rounds"), "A cycles it to 3 rounds (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	check(PartyRuleset.cup_rounds() == 5, "...then 5")
+	var seen: Array[String] = []
+	for i: int in 8:
+		await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+		seen.append(_focused_text())
+		if _focused_text().begins_with("Power-ups:"):
+			break
+	var joined: String = "|".join(seen)
+	check(joined.contains("Item boxes:") and joined.contains("KO value:") and joined.contains("Round time limit:") and joined.contains("Fill with CPUs:"), "the D-pad reaches every rule: items, KO value, time limit, CPU fill (%s)" % joined)
+	check(_focused_text().begins_with("Power-ups:"), "...and the power-up toggles")
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	await ticks(3)
+	var first_id: String = PartyItems.ids()[0]
+	check(Game.title_screen == "partyitems" and _focused_text() == PartyRulesMenu.toggle_text(first_id), "A opens the toggles, on the first power-up (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	check(not PartyRuleset.item_enabled(first_id) and _focused_text().begins_with("[  ]"), "A switches it off (%s)" % _focused_text())
+	var count: int = 0
+	for b: Node in title.find_children("*", "Button", true, false):
+		if str((b as Button).name).begins_with("Item_"):
+			count += 1
+	check(count == PartyItems.ids().size(), "there is one toggle per catalogue item (%d)" % count)
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	check(PartyRuleset.item_enabled(first_id), "...and back on")
+	await _zp_press(_zp_pad(JOY_BUTTON_B))
+	await ticks(3)
+	check(Game.title_screen == "partyrules", "B goes back to the rules")
+	await _zp_press(_zp_pad(JOY_BUTTON_B))
+	await ticks(3)
+	check(Game.title_screen == "lobby", "B again returns to the lobby")
+	var summary: String = ""
+	for l: Node in title.find_children("*", "Label", true, false):
+		summary += (l as Label).text + "|"
+	check(summary.contains("cup: 5 rounds"), "the lobby shows the rules in force")
+	Net.leave()
+	title.call("show_screen", "partycpu")
+	await ticks(3)
+	check(_any_button_named(title, "GameType") and _any_button_named(title, "CupLength") and _any_button_named(title, "MoreRules"), "Party vs CPU has game type, cup length and more rules")
+	for b: Node in title.find_children("*", "Button", true, false):
+		if (b as Button).name == "MoreRules":
+			(b as Button).grab_focus()
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	await ticks(3)
+	check(Game.title_screen == "partyrules" and not _any_button_named(title, "Rule_cpu"), "More rules opens the same screen (no online-only CPU row)")
+	await _zp_press(_zp_pad(JOY_BUTTON_B))
+	await ticks(3)
+	check(Game.title_screen == "partycpu", "B returns to Party vs CPU")
+	check(trap.count() == e0, ("the rules screens build without errors %s" % trap.since(e0)).strip_edges())
+	title.queue_free()
+	await ticks(2)
+	Game.title_screen = "main"
+	_pm_reset()
+
+
+func test_zpm_main_mode_stays_pure() -> void:
+	_pm_reset()
+	Settings.party_ruleset = PartyRuleset.sanitize({"variant": "hill", "cup": 3, "freq": "chaos", "ko": 8})
+	Game.party = null
+	var lvl: LevelBase = await load_level(0)
+	await ticks(6)
+	check(lvl.party == null and lvl.find_children("*", "PartyMode", true, false).is_empty() and lvl.find_children("*", "PartyLayer", true, false).is_empty(), "the main mode builds no party layer and no game type, whatever the party rules say")
+	check(lvl.find_children("*", "ItemBox", true, false).is_empty(), "no item boxes in the main mode")
+	Net.host_local()
+	Net.host_set_mode("race")
+	check(CpuField.wanted_count() == 0 and not Net.cup_complete(), "Race mode has no CPUs and no cup")
+	Net.leave()
+	check(PartyModes.create("classic") == null and PartyModes.create("nonsense") == null, "classic (and unknown ids) have no game type object")
+	_pm_reset()

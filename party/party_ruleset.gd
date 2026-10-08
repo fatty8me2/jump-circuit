@@ -19,6 +19,9 @@ const TIMES: Array[int] = [90, 120, 180, 240, 300, 480]
 ## CPU fill (online): 0 off, else the racer count the roster is topped up to.
 const FILLS: Array[int] = [0, 8, 6, 4]
 
+## Tests switch this off so editing a rule never rewrites the real settings file.
+static var persist: bool = true
+
 const DEFAULTS: Dictionary = {"variant": "classic", "cup": 0, "freq": "normal", "off": [], "ko": 3, "time": 240, "cpu": 0}
 
 
@@ -128,7 +131,8 @@ static func set_value(key: String, value: Variant) -> void:
 	var rs: Dictionary = sanitize(Settings.party_ruleset)
 	rs[key] = value
 	Settings.party_ruleset = sanitize(rs)
-	Settings.save_settings()
+	if persist:
+		Settings.save_settings()
 	if Net.active and Net.is_host():
 		Net.publish_ruleset()
 

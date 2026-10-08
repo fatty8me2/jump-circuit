@@ -85,12 +85,17 @@ func inside() -> Array[int]:
 
 # ---- host rules ----------------------------------------------------------------------------------------
 
+## The scoring rule: only a racer alone in the zone earns; returns who holds it (-1 contested, 0 empty).
+func score(in_zone: Array[int], dt: float) -> int:
+	var h: int = in_zone[0] if in_zone.size() == 1 else (-1 if in_zone.size() > 1 else 0)
+	if h > 0:
+		_seconds[h] = float(_seconds.get(h, 0.0)) + dt * PTS_PER_SEC
+		pts[h] = int(_seconds[h])
+	return h
+
+
 func host_tick(dt: float) -> void:
-	var in_zone: Array[int] = inside()
-	holder = in_zone[0] if in_zone.size() == 1 else (-1 if in_zone.size() > 1 else 0)
-	if holder > 0:
-		_seconds[holder] = float(_seconds.get(holder, 0.0)) + dt * PTS_PER_SEC
-		pts[holder] = int(_seconds[holder])
+	holder = score(inside(), dt)
 	var moved: bool = false
 	if Game.course_time >= next_move:
 		next_move = Game.course_time + STAY
