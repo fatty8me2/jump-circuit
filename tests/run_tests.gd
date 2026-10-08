@@ -536,6 +536,7 @@ func test_m_levels_load_and_validate() -> void:
 				var reach: float = max_jump_reach(need.y, float(step.get("speed", -1.0)))
 				worst = maxf(worst, need.x / reach)
 				jumps += 1
+				print("OLYJUMP %d %.1f%% land=%.2f" % [jumps, need.x / reach * 100.0, 0.0])
 		check(jumps > 0 and worst <= 0.95, "%s: %d required jumps, hardest uses %.0f%% of max reach" % [label, jumps, worst * 100.0])
 		metrics["%s hardest jump %%" % Game.LEVELS[i]["id"]] = int(worst * 100.0)
 

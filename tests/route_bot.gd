@@ -39,6 +39,9 @@ func attach(lvl: LevelBase) -> void:
 
 func _on_respawn() -> void:
 	retries += 1
+	if OS.get_environment("OLY_TRACE") != "":
+		print("TRACE respawn lastpos=", _lastp, " vel=", _lastv)
+	_hold_left = 0.0
 	log_lines.append("respawn during step %d (%s)" % [step_index, str(level.route[mini(step_index, level.route.size() - 1)]["kind"])])
 	_sync_checkpoint_step()
 	step_index = _checkpoint_step
@@ -68,6 +71,8 @@ func _sync_checkpoint_step() -> void:
 
 
 func _begin_step() -> void:
+	if step_index < level.route.size() and OS.get_environment("OLY_TRACE") != "":
+		print("TRACE step %d %s t=%.2f pos=%s" % [step_index, str(level.route[step_index]["kind"]), Game.course_time, str(player.global_position.snapped(Vector3.ONE * 0.01))])
 	_phase = 0
 	_step_time = 0.0
 	_bounced = false
@@ -79,6 +84,10 @@ func _begin_step() -> void:
 func _physics_process(dt: float) -> void:
 	if level == null or done or stuck:
 		return
+	_lastp = player.global_position.snapped(Vector3.ONE * 0.01)
+	_lastv = player.velocity.snapped(Vector3.ONE * 0.01)
+	if OS.get_environment("OLY_TRACE2") != "" and step_index == int(OS.get_environment("OLY_TRACE2")) and Engine.get_physics_frames() % 6 == 0:
+		print("T2 ", _lastp, " v=", _lastv, " g=", player.grounded)
 	if not keep_camera:
 		player.camera_yaw = 0.0
 	if level.finished:
@@ -96,6 +105,11 @@ func _physics_process(dt: float) -> void:
 		if _step_time > 8.0:
 			log_lines.append("route exhausted at %s without reaching the finish" % str(player.global_position.snapped(Vector3.ONE * 0.01)))
 			stuck = true
+		return
+	if _hold_left > 0.0:
+		_hold_left -= dt
+		player.cmd_move = Vector2.ZERO
+		player.cmd_jump = false
 		return
 	var step: Dictionary = level.route[step_index]
 	var first_tick: bool = _step_time == 0.0
@@ -147,7 +161,15 @@ func _physics_process(dt: float) -> void:
 		_pending_bounce = false
 
 
+var _hold_left: float = 0.0
+var _lastp: Vector3
+var _lastv: Vector3
+var _pause_s: float = float(OS.get_environment("BOT_PAUSE"))
+
+
 func _next() -> void:
+	if _pause_s > 0.0 and step_index < level.route.size() and ["checkpoint", "b_wait", "wait", "x_wait", "c_wait"].has(str(level.route[step_index]["kind"])):
+		_hold_left = _pause_s
 	step_index += 1
 	_begin_step()
 

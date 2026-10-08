@@ -669,10 +669,33 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 			]
 		"olympus":
 			return [
-				# PLACEHOLDER - the Sky Citadel level agent replaces this case (near / mid / far layers)
-				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
-					"color": Color(1.00, 0.78, 0.25), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+				# near: warm dust motes lit by the low sun, white feathers tumbling past
+				{"depth": "near", "amount": 190, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.11,
+					"pick": PackedColorArray([Color(2.0, 1.55, 0.7), Color(2.1, 1.8, 1.2), Color(1.8, 1.4, 0.8)]),
+					"speed": Vector2(0.05, 0.3), "spread": 180.0, "gravity": Vector3(0.25, 0.12, 0.05),
+					"turbulence": 1.0, "turbulence_scale": 6.0, "scale": Vector2(0.5, 1.2),
 					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 70, "lifetime": 3.2, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.2,
+					"color": Color(1.0, 0.99, 0.95, 0.95), "speed": Vector2(0.1, 0.4), "spread": 180.0,
+					"gravity": Vector3(0.4, -0.3, 0.15), "turbulence": 1.3, "turbulence_scale": 5.0,
+					"angle": Vector2(0, 360), "spin": Vector2(-150, 150), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0]),
+					"scale": Vector2(0.6, 1.1)},
+				# mid: sun glints drifting up the marble, soft wisps of cloud sliding by
+				{"depth": "mid", "amount": 90, "lifetime": 6.0, "tex": Fx.Tex.STAR, "size": 0.45,
+					"pick": PackedColorArray([Color(2.2, 1.7, 0.8), Color(2.0, 1.9, 1.5)]), "speed": Vector2(0.2, 0.6),
+					"dir": Vector3.UP, "spread": 40.0, "gravity": Vector3(0.3, 0.1, 0.0), "turbulence": 0.8, "curve": "pop"},
+				{"depth": "mid", "amount": 26, "lifetime": 9.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 7.0,
+					"radius": 30.0, "pick": PackedColorArray([Color(1.0, 0.92, 0.8, 0.28), Color(1.0, 0.84, 0.7, 0.24)]),
+					"speed": Vector2(0.3, 0.9), "dir": Vector3(1, 0, 0.2), "spread": 30.0, "angle": Vector2(0, 360),
+					"spin": Vector2(-4, 4), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				# far: big soft gold bokeh and slow cloud banks round the skyline
+				{"depth": "far", "amount": 40, "lifetime": 8.0, "tex": Fx.Tex.DOT, "size": 3.2, "radius": 70.0,
+					"color": Color(1.5, 1.1, 0.6, 0.35), "dir": Vector3.UP, "spread": 25.0, "speed": Vector2(0.6, 1.8),
+					"curve": "pop", "fade": PackedFloat32Array([0.0, 0.6, 0.6, 0.0])},
+				{"depth": "far", "amount": 30, "lifetime": 12.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 22.0,
+					"radius": 85.0, "pick": PackedColorArray([Color(1.0, 0.9, 0.78, 0.3), Color(0.95, 0.82, 0.8, 0.26)]),
+					"speed": Vector2(0.5, 1.4), "dir": Vector3(1, 0, 0.1), "spread": 30.0, "angle": Vector2(0, 360),
+					"spin": Vector2(-3, 3), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
 			]
 		"arcade":
 			return [
