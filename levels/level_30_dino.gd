@@ -147,7 +147,7 @@ func _reach(dy: float) -> float:
 func _ahead(a: Dictionary, pct: float, dy: float, sz: float, dx: float = 0.0) -> Vector3:
 	var ac: Vector3 = a["c"]
 	var front: float = ac.z - float(a["hz"])
-	var m: float = pct * _reach(dy)
+	var m: float = (pct - 0.02) * _reach(dy)
 	var k: int = ceili((m - 0.4) / 0.2 - 0.001)
 	var e: float = float(k) * 0.2 - 0.03
 	return Vector3(ac.x + dx, ac.y + dy, front + 0.35 - e - sz * 0.5)
@@ -241,7 +241,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -431,7 +431,6 @@ func _stage_4() -> Vector3:
 	var lc: Vector3 = ledge["c"]
 	var far: Dictionary = _blk(Vector3(0, 0.6, -37.0), 6.0, 8.0)
 	var fc: Vector3 = far["c"]
-	print("DINO s4 lc=", lc, " far=", fc)
 	var z: Zipline = _vine(lc, Vector3(lc.x, lc.y + 0.6, fc.z + 1.0))
 	var f1: Dictionary = _post(_ahead(far, 0.88, 0.0, 1.4, 0.4), 1.4, 1.4)
 	var f2: Dictionary = _post(_ahead(f1, 0.89, 0.5, 1.3, -0.5))
@@ -494,7 +493,6 @@ func _stage_5() -> Vector3:
 	var pc_probe: Vector3 = _ahead(_area(Vector3.ZERO, 1.7, 1.2), 0.87, 0.0, 1.5)
 	var s2z: float = (mz + 0.75) - pc_probe.z
 	var t2_len: float = (pac.z - 0.75) - (s2z + 1.2)
-	print("DINO s5 t2_len=", t2_len, " mz=", mz - f0, " s2z=", s2z - f0, " pac=", pac.z - f0)
 	var t2: DinoTar = _tar(Vector3(lx, 0, pac.z - 0.75 - t2_len * 0.5), 3.6, t2_len)
 	var s2: Dictionary = _blk(Vector3(lx, 0, s2z), 3.4, 2.4, "alt")
 	var pc: Dictionary = _post(_ahead(s2, 0.87, 0.0, 1.5), 1.5, 1.5)
@@ -537,6 +535,254 @@ func _stage_5() -> Vector3:
 	return cp["c"]
 
 
+# ---- shared pieces for the stages below -----------------------------------------------------------------
+
+## A wall run off the right of platform `a` (any size): the panel along its right and a 1.8 x 2.4 landing
+## post straight on. `_wall_geo` builds them and returns the landing; `_wall_steps` is the bot's run.
+func _wall_geo(a: Dictionary, panel_len: float = 16.0) -> Dictionary:
+	var wc: Vector3 = a["c"]
+	var f: float = wc.z - float(a["hz"])
+	kit.wallrun(_w(Vector3(wc.x + 2.3, wc.y + 1.2, f - 9.5)), Vector3(panel_len, 6.5, 0.6), _yaw + 90.0)
+	return _post(Vector3(wc.x - 0.6, wc.y, f - 22.5), 1.8, 2.4)
+
+
+func _wall_steps(a: Dictionary) -> void:
+	var wc: Vector3 = a["c"]
+	var f: float = wc.z - float(a["hz"])
+	r_wallrun(_w(Vector3(wc.x + 0.3, wc.y, f + 0.35)), _w(Vector3(wc.x + 1.8, wc.y + 1.4, f - 3.6)),
+		_w(Vector3(wc.x + 1.8, wc.y + 1.4, f - 14.5)), _w(Vector3(wc.x - 0.6, wc.y, f - 22.2)))
+
+
+## Safe-to-be-in-the-lane for the whole of [now + a, now + b] (a stampede lane).
+func _lane_wait(s: DinoStampede, x: float, b: float, hold: Vector3) -> void:
+	_wait(func() -> bool: return s.clear_for(x, 0.0, b), hold)
+
+
+func _stampede(center: Vector3, width: float, per: float, ph: float, dir: float) -> DinoStampede:
+	var s := DinoStampede.new()
+	s.width = width
+	s.period = per
+	s.phase = ph
+	s.direction = dir
+	s.rotation.y = deg_to_rad(_yaw)
+	s.position = _w(center)
+	add_child(s)
+	return s
+
+
+## A flame vent: a kit laser dressed with fumarole cones, the tell stretched to 0.9 s.
+func _flame(center: Vector3, width: float, per: float, on_fraction: float, ph: float) -> LaserGate:
+	var g: LaserGate = kit.laser(_w(center), Vector3(width, 2.4, 0.3), per, on_fraction, ph, _yaw)
+	g.warn = 0.9
+	DinoDress.vent_posts(g)
+	return g
+
+
+# ---- stage 6: Stampede Flats - two herds thunder across the deck, then a flame vent ----------------------
+
+func _stage_6() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var deck: Dictionary = _blk(_ahead(cp0, 0.87, 0.0, 24.0), 12.0, 24.0)
+	var dc: Vector3 = deck["c"]
+	var ne: float = dc.z + 12.0
+	var s1: DinoStampede = _stampede(Vector3(0, dc.y, ne - 8.0), 5.0, 7.0, 0.0, 1.0)
+	var s2: DinoStampede = _stampede(Vector3(0, dc.y, ne - 17.0), 5.0, 7.4, 0.45, -1.0)
+	var neck: Dictionary = _blk(Vector3(0, dc.y, dc.z - 16.0), 3.6, 8.0, "alt")
+	var flame: LaserGate = _flame(Vector3(0, dc.y + 1.2, dc.z - 16.0), 3.6, 5.4, 0.42, 0.0)
+	var post: Dictionary = _post(_ahead(neck, 0.88, 0.0, 1.4))
+	var cp: Dictionary = _cp(_ahead(post, 0.86, 0.0, 5.0, -(post["c"] as Vector3).x))
+	_hop(cp0, deck, Vector3(0, 0, 10.5))
+	var stand1: Vector3 = _w(Vector3(0, dc.y, ne - 3.0))
+	r_walk(stand1)
+	_lane_wait(s1, 0.0, 2.9, stand1)
+	var isl: Vector3 = _w(Vector3(0, dc.y, ne - 12.5))
+	r_walk(isl)
+	_lane_wait(s2, 0.0, 2.9, isl)
+	r_walk(_w(Vector3(0, dc.y, ne - 21.5)))
+	var at: Vector3 = _w(Vector3(0, dc.y, dc.z - 12.0 - 1.0))
+	r_walk(at)
+	_wait(func() -> bool: return _dark(flame, 0.0, 0.6 + 0.4 + 1.5), at)
+	r_walk(_w(Vector3(0, dc.y, dc.z - 16.0 - 3.2)))
+	_hop(neck, post)
+	_hop(post, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 7: Pterodactyl Pass - ride a pterodactyl over the canyon, run the far cliff --------------------
+
+## A pterodactyl carrying a stone saddle along `travel` (local) and back: a kit mover in a skin.
+func _ptero(home_top: Vector3, travel: Vector3, per: float, ph: float) -> MovingPlatform:
+	var pts: Array[Vector3] = [Vector3.ZERO, _d(travel)]
+	var m: MovingPlatform = kit.mover(_w(home_top), _sz(Vector3(2.8, 0.5, 3.6)), pts, per, ph)
+	m.dwell = 0.2
+	DinoDress.ptero_mount(m)
+	return m
+
+
+## Bot: hop onto a ridden platform `m` from `from` (world), and off at its far end onto `to` (world).
+func _ride(from: Vector3, m: MovingPlatform, travel: Vector3, to: Vector3) -> void:
+	_board(from, m, Vector3(0, 0.25, 0.6), func() -> bool: return _mover_at(m, Vector3.ZERO, 0.3, 0.0, 1.0))
+	r_jump_from_ride(m, _home(m) + _d(travel), 0.3, to, true, Vector3(0, 0.25, 0) + _d(Vector3(0, 0, -1.2)))
+
+
+func _stage_7() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 3.0, 3.0)
+	var travel := Vector3(0, 2.0, -17.5)
+	var r1: MovingPlatform = _ptero(Vector3(0, 0, -8.2), travel, 12.0, 0.0)
+	var b: Dictionary = _blk(Vector3(0, 2.0, -31.6), 3.4, 3.4, "alt")
+	var w2: Dictionary = _post(_ahead(b, 0.88, 0.0, 1.4, 0.4), 1.4, 1.4)
+	var land: Dictionary = _wall_geo(w2)
+	var cp: Dictionary = _cp(_ahead(land, 0.86, 0.0, 5.0, -(land["c"] as Vector3).x))
+	_ride(_w(Vector3(0, 0, -2.65)), r1, travel, _w(Vector3(0, 2.0, -31.2)))
+	_hop(b, w2)
+	_wall_steps(w2)
+	_hop(land, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 8: Horn Ledge - triceratops charging out of the cliff along a narrow ledge, mantle out --------
+
+## A triceratops head punching out of the cliff across a ledge: a kit piston in a skin, with a ground tell.
+## `dir` 1 = the head sits on the left and charges right.
+func _trike(ledge_c: Vector3, dir: float, z: float, per: float, ph: float) -> Piston:
+	var size := Vector3(1.6, 1.3, 1.2)
+	var x: float = ledge_c.x - dir * (0.8 + 0.6 + 0.15)
+	var p: Piston = kit.piston(_w(Vector3(x, ledge_c.y + 1.35, z)), size, _yaw - 90.0 * dir, 2.6, per, ph, 10.0)
+	DinoDress.trike_ram(p)
+	DinoTell.make(self, _w(Vector3(ledge_c.x, ledge_c.y, z)), Vector2(1.7, 1.9), per, ph, 0.45, "dino_trike_paw", 0.95, _yaw)
+	return p
+
+
+static func _rams_clear(rams: Array[Piston], ts: Array[float]) -> bool:
+	for i: int in rams.size():
+		if not _ram_clear(rams[i], ts[i] - 0.35, ts[i] + 0.35 + 1.5):
+			return false
+	return true
+
+
+func _stage_8() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var beam: Dictionary = _blk(_ahead(cp0, 0.86, 0.0, 22.0), 1.6, 22.0, "alt", 0.6)
+	var bc: Vector3 = beam["c"]
+	var period: float = 6.0
+	var zs: Array[float] = [bc.z + 6.0, bc.z, bc.z - 6.0]
+	var ts: Array[float] = [0.65, 1.35, 2.05]
+	var rams: Array[Piston] = []
+	for i: int in 3:
+		var ph: float = fposmod(0.02 - (ts[i] - 0.35) / period, 1.0)
+		rams.append(_trike(bc, 1.0 if i % 2 == 0 else -1.0, zs[i], period, ph))
+	var front: float = bc.z - 11.0
+	var rock_top := Vector3(bc.x, bc.y + 3.3, front - 1.6 - 0.8)
+	var rock: Dictionary = _ledge(rock_top, Vector3(3.0, 9.0, 1.6))
+	var cp: Dictionary = _cp(_ahead(rock, 0.85, 0.0, 5.0, -bc.x))
+	_hop(cp0, beam, Vector3(0, 0, 9.5))
+	var spot: Vector3 = _w(Vector3(bc.x, bc.y, bc.z + 9.4))
+	r_walk(spot)
+	_wait(func() -> bool: return _rams_clear(rams, ts), spot)
+	r_walk(_w(Vector3(bc.x, bc.y, front + 0.9)))
+	r_mantle(_w(Vector3(bc.x, bc.y, front + 0.35)), _w(rock_top + Vector3(0, 0, 0.2)))
+	_hop(rock, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 9: Bronto Crossing (BRANCH) - ride the brontosaurus's neck | the ribs and the skull -----------
+# [shortcut: the hollow log (portal) from the fork's middle]
+
+func _stage_9() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.80, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	# RIGHT: the wall run along a fossil rib cage, a stake, mantle the great skull, drop to the merge
+	kit.wallrun(_w(Vector3(5.7, 1.2, f0 - 9.0)), Vector3(15.0, 6.5, 0.6), _yaw + 90.0)
+	var pb: Dictionary = _post(Vector3(3.6, 0.0, f0 - 19.6), 2.0, 2.0)
+	var skull_top := Vector3(3.6, 3.3, f0 - 19.6 - 1.0 - 1.6 - 0.8)
+	var skull: Dictionary = _ledge(skull_top, Vector3(2.6, 9.0, 1.6))
+	var merge: Dictionary = _blk(_ahead(skull, 0.85, -3.3, 8.0, -3.6), 11.0, 8.0)
+	var mc: Vector3 = merge["c"]
+	# LEFT: the brontosaurus lowers its head to the ledge; ride it up to the high rock
+	var head_travel := Vector3(0, 7.0, -14.0)
+	var hpts: Array[Vector3] = [Vector3.ZERO, _d(head_travel)]
+	var head: MovingPlatform = kit.mover(_w(Vector3(-3.5, 0, f0 - 2.6)), _sz(Vector3(3.0, 0.5, 3.2)), hpts, 12.0, 0.0)
+	head.dwell = 0.2
+	DinoNeckDress.mount_head(head)
+	var hi: Dictionary = _blk(Vector3(-3.5, 7.0, f0 - 21.4), 4.0, 4.0, "alt")
+	# the great body stands beside the course, its neck reaching to the head
+	var body: DinoCreature = DinoCreature.make("bronto", 1.7)
+	body.position = _w(Vector3(-17.0, -4.0, f0 - 8.0))
+	body.rotation_degrees.y = _yaw - 90.0
+	body.amount = 0.0
+	add_child(body)
+	var shoulder: Vector3 = body.global_transform * Vector3(0, 4.8, -3.3)
+	DinoNeckDress.make(self, shoulder, head, 10)
+	# SHORTCUT: a hollow log in the middle of the fork leads straight to the merge
+	var sp: Dictionary = _post(_ahead(_area(fc, 5.5, 1.5), 0.92, 0.0, 1.6, 0.6), 1.6, 1.6, "accent")
+	var spc: Vector3 = sp["c"]
+	var portal: WarpPortal = kit.portal(_w(spc + Vector3(0, 0, -0.1)), _yaw, _w(Vector3(0.5, 0, mc.z + 2.0)), _yaw, 7.0)
+	DinoDress.hollow_log(self, _w(spc + Vector3(0, 0, -0.1)), _yaw)
+	DinoDress.hollow_log(self, _w(Vector3(0.5, 0, mc.z + 2.0)), _yaw)
+	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 2:
+		r_walk(_w(Vector3(0.6, 0, fc.z)))
+		_hop(_area(fc, 5.5, 1.5), sp, Vector3(0, 0, 0.3))
+		r_portal(_w(spc + Vector3(0, 0, -0.6)), portal.exit_point())
+	elif route_variant == 1:
+		r_walk(_w(Vector3(3.6, 0, fc.z + 0.6)))
+		r_wallrun(_w(Vector3(4.0, 0, f0 + 0.35)), _w(Vector3(5.2, 1.4, f0 - 3.4)), _w(Vector3(5.2, 1.4, f0 - 12.6)), _w(Vector3(3.6, 0, f0 - 19.4)))
+		r_mantle(_w(Vector3(3.6, 0, f0 - 19.6 - 0.65)), _w(skull_top + Vector3(0, 0, 0.2)))
+		_hop(skull, merge, Vector3(3.6, 0, 0.8))
+	else:
+		_board(_w(Vector3(-3.5, 0, f0 + 0.35)), head, Vector3(0, 0.25, 0.6), func() -> bool: return _mover_at(head, Vector3.ZERO, 0.3, 0.0, 1.0))
+		r_jump_from_ride(head, _home(head) + _d(head_travel), 0.3, _w(Vector3(-3.5, 7.0, f0 - 21.4)), true, Vector3(0, 0.25, 0) + _d(Vector3(0, 0, -1.2)))
+		_hop(hi, merge, Vector3(-3.5, 0, 0.8))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	pb.clear()
+	return cp["c"]
+
+
+# ---- stage 10: Stomp Hall - the giant foot stamping the canyon floor, a log seesaw, a wall run -----------
+
+func _foot(floor_top: Vector3, per: float, ph: float) -> Crusher:
+	var c: Crusher = kit.crusher(_w(floor_top), Vector3(2.4, 1.4, 2.6), 3.4, per, ph, _yaw)
+	DinoDress.foot(c)
+	DinoTell.make(self, _w(floor_top), Vector2(2.6, 2.8), per, ph, Crusher.SLAM, "dino_foot_rumble", 0.95, _yaw)
+	return c
+
+
+func _stage_10() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var hall: Dictionary = _blk(_ahead(cp0, 0.87, 0.0, 22.0), 3.4, 22.0, "alt")
+	var hc: Vector3 = hall["c"]
+	var f1: Crusher = _foot(Vector3(hc.x, hc.y, hc.z + 4.0), 6.0, 0.0)
+	var f2: Crusher = _foot(Vector3(hc.x, hc.y, hc.z - 4.5), 6.0, 0.37)
+	var bz: float = hc.z - 11.0
+	var deck: Dictionary = _blk(Vector3(hc.x, hc.y, bz - 2.0), 5.0, 4.0)
+	var saw_c := Vector3(hc.x, hc.y, bz - 4.0 - 4.5)
+	var saw: Seesaw = kit.seesaw(_w(saw_c), 9.0, 2.6, false, 0.0)
+	var land: Dictionary = _blk(Vector3(hc.x, hc.y, bz - 4.0 - 9.0 - 1.0 - 2.0), 3.6, 4.0, "alt")
+	var lnd: Dictionary = _wall_geo(land)
+	var cp: Dictionary = _cp(_ahead(lnd, 0.86, 0.0, 5.0, -(lnd["c"] as Vector3).x))
+	_hop(cp0, hall, Vector3(0, 0, 9.5))
+	var a1: Vector3 = _w(Vector3(hc.x, hc.y, hc.z + 8.5))
+	r_walk(a1)
+	_wait(func() -> bool: return _press_ok(f1, 0.0, 1.0 + 0.4 + 1.5), a1)
+	var a2: Vector3 = _w(Vector3(hc.x, hc.y, hc.z + 0.9))
+	r_walk(a2)
+	_wait(func() -> bool: return _press_ok(f2, 0.0, 1.2 + 0.4 + 1.5), a2)
+	r_walk(_w(Vector3(hc.x, hc.y, bz - 1.0)))
+	r_walk(_w(saw_c))
+	r_walk(_w(saw_c + Vector3(0, 0, -3.9)))
+	r_jump(_w(saw_c + Vector3(0, 0, -4.1)), _w(Vector3(hc.x, hc.y, (land["c"] as Vector3).z)))
+	_wall_steps(land)
+	_hop(lnd, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	saw.set_meta("n", 1)
+	return cp["c"]
 # ---- environment ----------------------------------------------------------------------------------
 
 func _restyle_environment() -> void:

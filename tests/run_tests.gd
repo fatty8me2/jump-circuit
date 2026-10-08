@@ -6717,3 +6717,53 @@ func test_zk_gallery() -> void:
 	await seconds(2.6)
 	lvl.player.cmd_move = Vector2.ZERO
 	check(lvl.player.global_position.x < 40.0 and lvl.player.grounded and lvl.deaths == 0, "and you can walk back over the join to the playground (x %.1f)" % lvl.player.global_position.x)
+
+
+# ---- Dino Valley (world-dino) ----------------------------------------------------------------------
+
+func _dino_index() -> int:
+	for i: int in Game.LEVELS.size():
+		if str(Game.LEVELS[i]["id"]) == "dino":
+			return i
+	return -1
+
+
+## The shape of the course the brief asks for, measured on the main route (variant 0).
+func test_zd_dino_course_stats() -> void:
+	var idx: int = _dino_index()
+	if only_level >= 0 and only_level != idx:
+		return
+	var keep: int = LevelBase.route_variant
+	LevelBase.route_variant = 0
+	var lvl: LevelBase = await load_level(idx)
+	await seconds(0.3)
+	var worst: float = 0.0
+	var hi: int = 0
+	var jumps: int = 0
+	var walls: int = 0
+	var mantles: int = 0
+	for i: int in lvl.route.size():
+		var step: Dictionary = lvl.route[i]
+		var kind: String = str(step["kind"])
+		if kind == "w_run" and not bool(step.get("chain", false)):
+			walls += 1
+		elif kind == "m_climb":
+			mantles += 1
+		elif kind == "jump" and not step.has("to_node"):
+			var need: Vector2 = required_jump(lvl, step["from"], step["to"])
+			var pct: float = need.x / max_jump_reach(need.y, float(step.get("speed", -1.0)))
+			worst = maxf(worst, pct)
+			jumps += 1
+			if pct >= 0.85:
+				hi += 1
+			if pct >= 0.9:
+				print("        jump step %d: %.0f%% from %s to %s" % [i, pct * 100.0, str(step["from"].snapped(Vector3.ONE * 0.1)), str(step["to"].snapped(Vector3.ONE * 0.1))])
+	for cpn: Checkpoint in lvl.checkpoints:
+		print("        cp %d at %s" % [cpn.index, str(cpn.global_position.snapped(Vector3.ONE * 0.1))])
+	print("        dino main route: %d jumps, %d at 85%%+, hardest %.0f%%, %d wall runs, %d mantles" % [jumps, hi, worst * 100.0, walls, mantles])
+	check(lvl.checkpoints.size() == 16, "Dino Valley has 16 checkpoints (%d)" % lvl.checkpoints.size())
+	check(worst >= 0.87 and worst <= 0.91, "hardest main-path jump is 87-91%% (%.0f%%)" % (worst * 100.0))
+	check(hi >= 8, "8 or more main-path jumps at 85%% or above (%d)" % hi)
+	check(walls >= 3 and mantles >= 3, "at least 3 wall runs (%d) and 3 mantles (%d) on the main route" % [walls, mantles])
+	check(lvl.route_variants == 3, "three route variants (main, branches, shortcuts)")
+	LevelBase.route_variant = keep
