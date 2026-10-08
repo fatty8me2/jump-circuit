@@ -39,7 +39,7 @@ const TEAL := Color(0.2, 0.75, 0.8)
 const PINK := Color(1.0, 0.42, 0.62)
 
 ## Testing aid: build every stage but start the player (and the bot's route) at stage N. 0 = off.
-const DEV_START: int = 0
+const DEV_START: int = 4
 ## Testing aid: stop building after stage N (a finish gate goes at its end). 0 = build them all.
 const DEV_LAST: int = 0
 
@@ -235,7 +235,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -400,7 +400,7 @@ func _stage_3() -> Vector3:
 	var p1: Dictionary = _post(_ahead(cp0, 0.70, 0.0, 2.0), 2.0, 2.0)
 	var p1c: Vector3 = p1["c"]
 	var radius: float = 4.6
-	var hub := Vector3(p1c.x, 0, p1c.z - 1.0 - 2.4 - radius)
+	var hub := Vector3(p1c.x, 0, p1c.z - 1.0 - 2.0 - radius)
 	var car := CarnivalCarousel.new()
 	car.radius = radius
 	car.period = 15.0
@@ -415,10 +415,10 @@ func _stage_3() -> Vector3:
 	var locals: Array = []
 	for i: int in 12:
 		var a: float = TAU * float(i) / 12.0
-		locals.append(Vector3(cos(a) * (radius - 1.0), 0.25, sin(a) * (radius - 1.0)))
+		locals.append(Vector3(cos(a) * (radius - 0.9), 0.25, sin(a) * (radius - 0.9)))
 	var stand: Vector3 = _w(_edge(p1, hub))
 	r_walk(stand)
-	route.append({"kind": "x_jump", "from": stand, "to_node": car, "to_locals": locals, "reach": 3.4, "lead": 0.55})
+	route.append({"kind": "x_jump", "from": stand, "to_node": car, "to_locals": locals, "reach": 3.8, "lead": 0.55})
 	var hw: Vector3 = _w(hub)
 	var ex: Vector3 = _w(m["c"]) - hw
 	ex = Vector3(ex.x, 0, ex.z).normalized()
@@ -434,6 +434,162 @@ func _stage_3() -> Vector3:
 	deco.tent(_w(Vector3(hub.x - 14.0, -6.0, hub.z)), 5.5, 4.0, 4.5, 0.4)
 	deco.tent(_w(Vector3(hub.x + 13.0, -5.0, hub.z - 6.0)), 4.5, 3.5, 4.0, -0.3, TEAL, CREAM)
 	deco.balloons(_w(Vector3(hub.x + 6.0, -2.0, hub.z + 2.0)), 5, 5.0)
+	return cp["c"]
+
+
+# ---- stage 4: Strongman - the spinning hammer on a round deck, then the striped tent wall -----------------
+
+## The wall-run set used by several stages, split in two so the geometry can be built before the
+## checkpoint slab exists. From post `w` run a panel on its right (local +x) 16 m and kick onto a post.
+## `_wall_geometry` builds the panel, a canvas sheet behind it and the landing post (returned);
+## `_wall_route` adds the bot's run.
+func _wall_geometry(w: Dictionary, land_size: Vector2 = Vector2(1.8, 2.4)) -> Dictionary:
+	var wc: Vector3 = w["c"]
+	var f: float = wc.z - float(w["hz"])
+	kit.wallrun(_w(Vector3(wc.x + 2.3, wc.y + 1.2, f - 9.5)), Vector3(16.0, 6.5, 0.6), _yaw + 90.0)
+	var sheet := Look.box(_sz(Vector3(0.4, 8.0, 17.0)), CarnivalDecor.stripe_mat(RED, CREAM, 18.0), _w(Vector3(wc.x + 2.9, wc.y + 1.4, f - 9.5)))
+	add_child(sheet)
+	return _post(Vector3(wc.x - 0.6, wc.y, f - 22.5), land_size.x, land_size.y)
+
+
+func _wall_route(w: Dictionary) -> void:
+	var wc: Vector3 = w["c"]
+	var f: float = wc.z - float(w["hz"])
+	r_wallrun(_w(Vector3(wc.x + 0.3, wc.y, f + 0.35)), _w(Vector3(wc.x + 1.8, wc.y + 1.4, f - 3.6)),
+		_w(Vector3(wc.x + 1.8, wc.y + 1.4, f - 14.5)), _w(Vector3(wc.x - 0.6, wc.y, f - 22.2)))
+
+
+func _stage_4() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _post(_ahead(cp0, 0.74, 0.0, 2.0), 2.0, 2.0)
+	var p1c: Vector3 = p1["c"]
+	var radius: float = 7.5
+	var dc := Vector3(0.0, 0.0, p1c.z - 1.0 - 2.0 - radius)
+	kit.disc(_w(dc), radius, 0.8, "main", 0.0)
+	_floors.append({"top": _w(dc), "size": Vector3(radius * 2.0, 0, radius * 2.0), "drop": 0.8, "stage": _stage_no})
+	# the hammer: parked toward local -x; the path hugs local +x
+	var ham: SpinHammer = kit.hammer(_w(dc), 5.0, 7.0, 0.0, _yaw + 180.0)
+	var px: float = 2.2
+	var half: float = sqrt(radius * radius - px * px)
+	var enter := Vector3(px, 0, dc.z + half - 0.9)
+	var leave := Vector3(px, 0, dc.z - half + 0.9)
+	var exit_area: Dictionary = _area(Vector3(px, 0, dc.z - half), 1.0, 0.0)
+	var w2: Dictionary = _post(_ahead(exit_area, 0.76, 0.0, 1.8), 1.8, 1.8)
+	var land: Dictionary = _wall_geometry(w2)
+	var cp: Dictionary = _cp(_ahead(land, 0.76, 0.0, 5.0, -(land["c"] as Vector3).x))
+	_hop(cp0, p1)
+	_hop(p1, _area(Vector3(px, 0, dc.z + half - 1.5), 3.0, 1.5))
+	r_walk(_w(enter))
+	_wait(func() -> bool: return ham.is_parked_for(Game.course_time, 3.4), _w(enter))
+	r_walk(_w(leave))
+	_hop(exit_area, w2)
+	_wall_route(w2)
+	_hop(land, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	# a strongman's tent: the bell tower of the High Striker beside the disc, flags and bunting
+	_high_striker(Vector3(-11.5, -6.0, dc.z))
+	deco.tent(_w(Vector3(14.0, -8.0, dc.z - 4.0)), 5.0, 3.5, 4.0, 0.2, TEAL, CREAM)
+	deco.bunting(_w(Vector3(-4.0, 6.0, dc.z + 8.0)), _w(Vector3(8.0, 6.0, dc.z + 8.0)), 1.2, 10)
+	return cp["c"]
+
+
+## The High Striker: a tall scale with a bell on top, scenery (local ground point).
+func _high_striker(at: Vector3) -> void:
+	var n := Node3D.new()
+	n.transform = Transform3D(_b, _w(at))
+	add_child(n)
+	var gold: StandardMaterial3D = Look.flat(GOLD, 0.3, 0.8, 0.2)
+	n.add_child(Look.box(Vector3(0.8, 16.0, 0.8), CarnivalDecor.stripe_mat(RED, CREAM, 6.0), Vector3(0, 8.0, 0)))
+	n.add_child(Look.sphere(1.0, gold, Vector3(0, 16.6, 0)))
+	n.add_child(Look.box(Vector3(2.0, 0.6, 2.0), Look.flat(RED, 0.5), Vector3(0, 0.3, 0)))
+	n.add_child(Look.cylinder(0.9, 0.4, Look.flat(CREAM, 0.5), Vector3(0, 0.9, 0), -1.0, 12))
+
+
+# ---- stage 5: Pinball Pier - BRANCH: the flipper swats you across | a plain leap ------------------------------
+
+func _stage_5() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var deck_a: Dictionary = _blk(_ahead(cp0, 0.72, 0.0, 7.0), 10.0, 7.0)
+	var ac: Vector3 = deck_a["c"]
+	var zp: float = ac.z - 3.5 + 1.2
+	var fl: Flipper = kit.flipper(_w(Vector3(0.5, ac.y, zp)), 5.0, _yaw, 80.0, 5.0, 0.0)
+	var deck_b: Dictionary = _blk(Vector3(2.5, ac.y, zp - 9.0), 10.0, 8.0)
+	var cp: Dictionary = _cp(_ahead(deck_b, 0.74, 0.0, 5.0, -2.5))
+	_hop(cp0, deck_a, Vector3(0, 0, 1.0))
+	if route_variant == 1:
+		# the plain leap: a normal running jump across the gap
+		r_walk(_w(Vector3(0.5, ac.y, zp - 0.2)))
+		_hop(deck_a, deck_b, Vector3(0, 0, 3.0))
+	else:
+		var stand: Vector3 = _w(Vector3(4.6, ac.y, zp))
+		r_walk(stand)
+		route.append({"kind": "kick", "from": stand, "to": _w(Vector3(2.5, ac.y, zp - 9.0))})
+	_hop(deck_b, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	fl.add_child(Look.sphere(0.45, Look.flat(RED, 0.4, 0.0, 0.6), Vector3(4.7, 0.1, 0.0)))
+	# pinball bumpers: glowing mushroom caps round the pier
+	for k: int in 4:
+		var bx: float = [-7.5, 7.5, -8.5, 8.0][k]
+		var bz: float = zp - 2.0 - 3.5 * float(k)
+		add_child(Look.cylinder(1.2, 1.0, Look.flat(PINK, 0.3, 0.0, 0.8), _w(Vector3(bx, ac.y - 3.0, bz)), 0.9, 16))
+		add_child(Look.cylinder(1.25, 0.18, Look.flat(GOLD, 0.3, 0.0, 2.2), _w(Vector3(bx, ac.y - 2.4, bz)), -1.0, 16))
+	deco.string_lights(_w(Vector3(-6.0, ac.y + 5.0, ac.z)), _w(Vector3(6.0, ac.y + 5.0, ac.z - 12.0)), 1.4, 0.8)
+	return cp["c"]
+
+
+# ---- stage 6: Coaster Station - BRANCH: ride the coaster car | the seesaw planks ----------------------------------
+
+func _stage_6() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.76, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	var y: float = fc.y
+	var merge: Dictionary = _blk(Vector3(0, y, f0 - 25.9), 11.0, 3.0)
+	# LEFT: the coaster, docked at A beside the fork, running 18.6 m to B beside the merge
+	var za: float = f0 - 0.9 - 2.0
+	var car := CarnivalCoaster.new()
+	car.size = Vector3(3.0, 0.5, 4.0)
+	car.points = [Vector3.ZERO, Vector3(0, 1.5, -5.0), Vector3(0, 3.5, -10.0), Vector3(0, 1.5, -14.5), Vector3(0, 0, -18.6)]
+	car.dock = 4.0
+	car.travel = 5.0
+	car.dock_b = 2.5
+	car.back = 2.0
+	car.position = _w(Vector3(-3.5, y, za)) - Vector3(0, 0.25, 0)
+	car.rotation.y = deg_to_rad(_yaw)
+	add_child(car)
+	# RIGHT: two seesaws and an island
+	kit.seesaw(_w(Vector3(3.5, y, f0 - 0.6 - 4.5)), 9.0, 2.6, false, 0.0)
+	_blk(Vector3(3.5, y, f0 - 0.6 - 9.0 - 0.6 - 2.0), 4.0, 4.0, "alt", 0.8)
+	var s2z: float = f0 - 0.6 - 9.0 - 0.6 - 4.0 - 0.6 - 4.5
+	kit.seesaw(_w(Vector3(3.5, y, s2z)), 9.0, 2.6, false, 0.0)
+	var cp: Dictionary = _cp(_ahead(merge, 0.76, 0.0, 5.0))
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 1:
+		r_walk(_w(Vector3(3.5, y, f0 + 0.6)))
+		r_walk(_w(Vector3(3.5, y, f0 - 1.2)))
+		r_walk(_w(Vector3(3.5, y, f0 - 5.1)))
+		r_walk(_w(Vector3(3.5, y, f0 - 8.8)))
+		r_walk(_w(Vector3(3.5, y, f0 - 11.4)))
+		r_walk(_w(Vector3(3.5, y, f0 - 14.0)))
+		r_walk(_w(Vector3(3.5, y, s2z + 3.3)))
+		r_walk(_w(Vector3(3.5, y, s2z)))
+		r_walk(_w(Vector3(3.5, y, s2z - 3.6)))
+		r_walk(_w(Vector3(3.5, y, f0 - 25.2)))
+		_hop(merge, cp, Vector3(0, 0, 1.2))
+	else:
+		var stand: Vector3 = _w(Vector3(-3.5, y, f0 + 0.6))
+		r_walk(stand)
+		_wait(func() -> bool: return car.docked_for(Game.course_time, 0, 3.0), stand)
+		route.append({"kind": "x_jump", "from": _w(Vector3(-3.5, y, f0 - 0.1)), "to_node": car, "to_local": Vector3(0, 0.3, 0.2), "hold": true})
+		route.append({"kind": "candy_ride", "stand": Vector3(0, 0.3, 0.2), "to": _w(Vector3(0, y, f0 - 25.9 + 0.2)),
+			"until": func() -> bool: return car.dock_at(Game.course_time) == 1})
+		_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	# the station: a ticket kiosk and arrow signs for the two ways
+	deco.kiosk(_w(Vector3(-8.5, y - 4.0, f0 - 3.0)), deg_to_rad(_yaw) + 1.2, TEAL)
+	deco.arrow_sign(_w(Vector3(-4.2, y, fc.z + 0.2)), deg_to_rad(_yaw), -1.0, RED)
+	deco.arrow_sign(_w(Vector3(4.2, y, fc.z + 0.2)), deg_to_rad(_yaw), 1.0, TEAL)
 	return cp["c"]
 
 

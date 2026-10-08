@@ -13,8 +13,11 @@ extends MovingPlatform
 ## `points` (offsets from the car's start, at A) are the rail's control points; the rail is a smooth
 ## Catmull-Rom curve through them. Rails, ties and supports are built as a separate static node.
 
-@export var dock: float = 5.0
-@export var travel: float = 6.0
+@export var dock: float = 4.0
+@export var travel: float = 5.0
+## Dwell at B and the return trip (shorter, so the car is back at A quickly).
+@export var dock_b: float = 2.5
+@export var back: float = 2.0
 @export var tell: float = 1.1
 ## Depth (m) the rail's supports reach below its lowest point.
 @export var support_depth: float = 16.0
@@ -108,7 +111,7 @@ func point_at(s: float) -> Vector3:
 # ---- the clock -----------------------------------------------------------------------------
 
 func cycle() -> float:
-	return 2.0 * (dock + travel)
+	return dock + travel + dock_b + back
 
 
 ## Seconds into the cycle at `time`.
@@ -125,10 +128,10 @@ func progress_at(time: float) -> float:
 	if s < travel:
 		return KitUtil.smoother(s / travel)
 	s -= travel
-	if s < dock:
+	if s < dock_b:
 		return 1.0
-	s -= dock
-	return 1.0 - KitUtil.smoother(s / travel)
+	s -= dock_b
+	return 1.0 - KitUtil.smoother(s / back)
 
 
 func offset_at(time: float) -> Vector3:
@@ -140,7 +143,7 @@ func dock_at(time: float) -> int:
 	var s: float = cycle_s(time)
 	if s < dock:
 		return 0
-	if s >= dock + travel and s < 2.0 * dock + travel:
+	if s >= dock + travel and s < dock + travel + dock_b:
 		return 1
 	return -1
 
@@ -155,10 +158,10 @@ func docked_for(time: float, which: int, window: float) -> bool:
 	return true
 
 
-## Seconds until the car next pulls out of station `which` (0 when it is running away already: next dock end).
+## Seconds until the car next pulls out of station `which`.
 func departs_in(time: float, which: int) -> float:
 	var s: float = cycle_s(time)
-	var end: float = dock if which == 0 else 2.0 * dock + travel
+	var end: float = dock if which == 0 else dock + travel + dock_b
 	var d: float = end - s
 	return d if d >= 0.0 else d + cycle()
 
@@ -176,7 +179,7 @@ func _build_car() -> void:
 	add_child(Look.box(size, body, Vector3.ZERO))
 	add_child(Look.box(Vector3(size.x - 0.5, 0.04, size.z - 0.5), cream, Vector3(0, size.y * 0.5 + 0.012, 0)))
 	for z: float in [-hz * 0.55, 0.0, hz * 0.55]:
-		var chev := Look.box(Vector3(size.x - 0.9, 0.05, 0.16), tint.lightened(0.15), Vector3(0, size.y * 0.5 + 0.03, z))
+		var chev := Look.box(Vector3(size.x - 0.9, 0.05, 0.16), Look.flat(tint.lightened(0.15), 0.5), Vector3(0, size.y * 0.5 + 0.03, z))
 		add_child(chev)
 	# side walls, low enough to step over, with gold rail caps (visual only)
 	for sx: float in [-1.0, 1.0]:
@@ -215,8 +218,8 @@ func _build_track() -> void:
 		return
 	_track = Node3D.new()
 	_track.top_level = true
-	_track.global_position = _origin_world()
 	add_child(_track)
+	_track.global_position = _origin_world()
 	var rail: StandardMaterial3D = Look.flat(Color(0.95, 0.78, 0.25), 0.3, 0.8)
 	var tie_mat: StandardMaterial3D = Look.flat(Color(0.35, 0.2, 0.15), 0.8)
 	var post_mat: StandardMaterial3D = Look.flat(Color(0.9, 0.9, 0.95), 0.6)
