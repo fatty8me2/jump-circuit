@@ -54,6 +54,8 @@ var save_path_override: String = ""
 ## Party Mode rebinds: action -> {"key": physical keycode, "mouse": button, "pad": button}
 ## (only what differs from Game.PARTY_BIND_DEFAULTS is needed; 0 / -1 = unbound).
 var party_binds: Dictionary = {}
+## Party Cup rules the host picks (PartyRuleset: game type, cup length, item frequency / toggles, KO value, time limit, CPU fill).
+var party_ruleset: Dictionary = {}
 
 var _env: Environment
 var _sun: DirectionalLight3D
@@ -137,6 +139,7 @@ func _sanitize() -> void:
 				b[k] = clampi(int(v), -1, 1 << 30)
 		clean[action] = b
 	party_binds = clean
+	party_ruleset = PartyRuleset.sanitize(party_ruleset)
 
 
 static func _finite_clamp(x: float, lo: float, hi: float, fallback: float) -> float:
@@ -174,7 +177,7 @@ func _props() -> Array[String]:
 	return ["mouse_sensitivity", "invert_y", "fov", "master_volume", "sfx_volume", "music_volume", "ambience_volume",
 		"quality", "particles", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_room_code", "party_binds",
 		"trail_id", "finish_id", "character_id", "hat_id", "paint_id", "title_id", "ghost_mode",
-		"emote_id", "emote_id2", "emote_id3", "emote_id4", "pose_id"]
+		"emote_id", "emote_id2", "emote_id3", "emote_id4", "pose_id", "party_ruleset"]
 
 
 ## How many particles every emitter builds relative to the High baseline: Low 0.45,

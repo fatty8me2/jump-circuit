@@ -655,10 +655,23 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 			]
 		"toybox":
 			return [
-				# PLACEHOLDER - the Toybox Tumble level agent replaces this case (near / mid / far layers)
-				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
-					"color": Color(1.00, 0.85, 0.15), "speed": Vector2(0.05, 0.3), "spread": 180.0,
-					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# near: golden dust turning slowly in the sun, and tiny paper confetti drifting down
+				{"depth": "near", "amount": 110, "lifetime": 3.4, "tex": Fx.Tex.DOT, "size": 0.09, "additive": false,
+					"color": Color(1.0, 0.92, 0.7, 0.75), "speed": Vector2(0.05, 0.25), "spread": 180.0,
+					"turbulence": 0.6, "turbulence_scale": 5.0, "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 36, "lifetime": 5.0, "facing": "mesh", "mesh": Fx.chunk_mesh(0.12),
+					"pick": PackedColorArray([Color(1.0, 0.3, 0.3), Color(1.0, 0.85, 0.2), Color(0.3, 0.6, 1.0), Color(0.35, 0.85, 0.45), Color(1.0, 0.5, 0.8)]),
+					"dir": Vector3.DOWN, "spread": 30.0, "speed": Vector2(0.3, 0.8), "angle": Vector2(0, 360), "spin": Vector2(-100, 100),
+					"turbulence": 0.5, "curve": "pop"},
+				# mid: bigger soft motes and slow paper-plane glints across the room
+				{"depth": "mid", "amount": 50, "lifetime": 8.0, "tex": Fx.Tex.STAR, "size": 0.3,
+					"color": Color(1.9, 1.6, 0.9, 0.8), "speed": Vector2(0.1, 0.4), "dir": Vector3.UP, "spread": 80.0,
+					"turbulence": 0.4, "curve": "pop", "fade": PackedFloat32Array([0.0, 0.9, 0.9, 0.0])},
+				# far: huge warm veils of afternoon haze drifting between the furniture, lit gold
+				{"depth": "far", "amount": 30, "lifetime": 11.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 30.0,
+					"radius": 90.0, "pick": PackedColorArray([Color(1.0, 0.9, 0.66, 0.16), Color(1.0, 0.8, 0.55, 0.13)]),
+					"speed": Vector2(0.4, 1.2), "dir": Vector3(0.3, 0.1, 0.1), "spread": 40.0, "angle": Vector2(0, 360),
+					"spin": Vector2(-5, 5), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
 			]
 		"fungal":
 			return [

@@ -71,6 +71,11 @@ static func round_over(finish_times: Array, course_time: float, limit: float = R
 	return true
 
 
+## Points per KO this cup (the host's rule; 3 unless changed in the lobby).
+static func ko_value() -> int:
+	return PartyRuleset.ko()
+
+
 static func first_finish(finish_times: Array) -> float:
 	var first: float = -1.0
 	for t: Variant in finish_times:
@@ -120,7 +125,10 @@ static func smaller_team(teams_now: Dictionary) -> int:
 ## One round's scoreboard rows, best total first.
 ## finish_order: ids that finished, in finishing order. all_ids: everyone in the round.
 ## kos / bonus: id -> count (KOs scored, checkpoints taken first).
-static func score_round(finish_order: Array, all_ids: Array, kos: Dictionary, bonus: Dictionary) -> Array[Dictionary]:
+## mode_pts: id -> points a game type (party/modes/) awarded on top (Hill time, coins, Potato blasts ...); a
+## row's total never goes below 0. The KO value is the host's rule (PartyRuleset), 3 by default.
+static func score_round(finish_order: Array, all_ids: Array, kos: Dictionary, bonus: Dictionary, mode_pts: Dictionary = {}) -> Array[Dictionary]:
+	var kv: int = ko_value()
 	var rows: Array[Dictionary] = []
 	for id: Variant in all_ids:
 		var pid: int = int(id)
@@ -128,8 +136,9 @@ static func score_round(finish_order: Array, all_ids: Array, kos: Dictionary, bo
 		var k: int = int(kos.get(pid, 0))
 		var b: int = int(bonus.get(pid, 0))
 		var pp: int = placement_points(place)
-		rows.append({"id": pid, "place": place, "place_pts": pp, "kos": k, "ko_pts": k * KO_POINTS,
-			"bonus": b, "bonus_pts": b * BONUS_POINTS, "total": pp + k * KO_POINTS + b * BONUS_POINTS})
+		var mp: int = int(mode_pts.get(pid, 0))
+		rows.append({"id": pid, "place": place, "place_pts": pp, "kos": k, "ko_pts": k * kv,
+			"bonus": b, "bonus_pts": b * BONUS_POINTS, "mode_pts": mp, "total": maxi(pp + k * kv + b * BONUS_POINTS + mp, 0)})
 	rows.sort_custom(func(a: Dictionary, c: Dictionary) -> bool:
 		if int(a["total"]) != int(c["total"]):
 			return int(a["total"]) > int(c["total"])
@@ -217,7 +226,7 @@ static func rows_from_wire(raw: Variant) -> Array[Dictionary]:
 			continue
 		var d: Dictionary = e
 		var row: Dictionary = {}
-		for k: String in ["id", "place", "place_pts", "kos", "ko_pts", "bonus", "bonus_pts", "total"]:
+		for k: String in ["id", "place", "place_pts", "kos", "ko_pts", "bonus", "bonus_pts", "mode_pts", "total"]:
 			row[k] = int(d.get(k, 0))
 		out.append(row)
 	return out

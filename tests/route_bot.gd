@@ -142,6 +142,7 @@ func _physics_process(dt: float) -> void:
 		"desert_fly": _do_desert_fly(step)
 		"candy_board", "candy_ride": _do_candy(step)
 		"k_barrel", "k_zip": _do_kit(step)
+		"toybox_pick": _do_toybox(step)
 	# a bounce handed over by the previous step (_air_phase) is for the step that follows it: pad /
 	# x_pad / kick read it on their first tick. Left set, it made some LATER pad or kick skip its run-up.
 	if first_tick and step_index == index_before:
@@ -848,3 +849,27 @@ func _do_kit(step: Dictionary) -> void:
 					z.release_rider()
 			else:
 				_air_phase(step["to"])
+
+
+# ---- toybox (additive) -----------------------------------------------------------------------------------
+#   toybox_pick {cars, window, froms, exits, poses, jump, ride}   stand still until one of the shuttle cars sits at its
+#       near end and stays parked for `window` more seconds, then aim the two steps that follow at THAT car: `jump`
+#       (a jump onto the car) gets its takeoff `from`, `ride` (ride_jump) its far-end `point` and landing `to`.
+
+func _do_toybox(step: Dictionary) -> void:
+	player.cmd_move = Vector2.ZERO
+	if not player.grounded:
+		return
+	var cars: Array = step["cars"]
+	for i: int in cars.size():
+		var car: ToyboxCar = cars[i]
+		if car.offset_at(Game.course_time).length() < 0.05 and car.parked_over(Game.course_time, 0.0, float(step["window"])):
+			var j: Dictionary = step["jump"]
+			var r: Dictionary = step["ride"]
+			j["from"] = (step["froms"] as Array)[i]
+			j["to_node"] = car
+			r["node"] = car
+			r["point"] = (step["poses"] as Array)[i]
+			r["to"] = (step["exits"] as Array)[i]
+			_next()
+			return

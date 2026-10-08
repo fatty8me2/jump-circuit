@@ -210,6 +210,7 @@ func _party_round() -> void:
 	if role == "host":
 		Net.host_set_mode("party")
 	check(await wait_for(func() -> bool: return Net.game_mode == "party", 5.0), "the host's Party mode reaches this peer")
+	await _ruleset_sync()
 	if role == "host":
 		await get_tree().create_timer(0.5).timeout
 		Net.host_start_race(0, 2.0)
@@ -367,3 +368,22 @@ func _party_round() -> void:
 	check(await wait_for(func() -> bool: return not Game.race_mode and Game.title_screen == "lobby", 8.0), "back to the lobby after the cup")
 	check(Game.party != null and int(Game.party.cup.get(1, -1)) == 23 and Net.party_round == 2, "the Party Cup carries on in the lobby (round %d played)" % Net.party_round)
 	await get_tree().create_timer(0.5).timeout
+
+
+## The host's Party Cup rules reach the guest over the real connection with the roster snapshot, then go back
+## to the defaults so the scored rounds below play the classic rules.
+func _ruleset_sync() -> void:
+	PartyRuleset.persist = false   # (never rewrite the real settings file from a test)
+	var want: Dictionary = {"variant": "hill", "cup": 5, "freq": "chaos", "off": ["gravity", "tornado"], "ko": 5, "time": 180, "cpu": 6}
+	if role == "host":
+		for k: String in want:
+			PartyRuleset.set_value(k, want[k])
+	check(await wait_for(func() -> bool: return PartyRuleset.cur() == PartyRuleset.sanitize(want), 5.0), "the host's cup rules (hill, 5 rounds, chaos items, 2 items off, KO 5, 180 s, CPUs) reach both peers (%s)" % str(PartyRuleset.cur()))
+	check(PartyRuleset.ko() == 5 and not PartyRuleset.item_enabled("gravity") and PartyRuleset.item_enabled("fox"), "...and read back through PartyRuleset on this peer")
+	check(PartyRules.ko_value() == 5, "the KO value in force is the host's")
+	await get_tree().create_timer(0.4).timeout
+	if role == "host":
+		Settings.party_ruleset = {}
+		Net.publish_ruleset()
+	check(await wait_for(func() -> bool: return PartyRuleset.cur() == PartyRuleset.defaults(), 5.0), "resetting the rules reaches both peers too")
+	CpuField.fill_online = false

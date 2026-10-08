@@ -6,7 +6,7 @@ extends Node
 
 const CLIPS: Array[String] = ["pickup", "roll", "whoosh", "hit", "ko", "boom", "zap", "charge",
 	"beam", "slash", "powerup", "pop", "spring", "freeze", "warp", "chime", "wind", "clank",
-	"tick", "land", "warn", "tally", "fanfare",
+	"tick", "land", "warn", "tally", "fanfare", "coin", "zone", "fuse", "blast", "elim", "pass", "drum", "champion",
 	"shell", "siren", "strike", "fake", "turbo", "ghost", "steal", "decoy", "shock"]
 ## Fallback main-game clip and pitch per party clip.
 const FALLBACK: Dictionary = {
@@ -18,6 +18,8 @@ const FALLBACK: Dictionary = {
 	"tick": ["tick", 1.6], "land": ["checkpoint", 1.3], "warn": ["tick", 0.5], "tally": ["tick", 2.0], "fanfare": ["finish", 1.2],
 	"shell": ["jump", 1.8], "siren": ["tick", 0.4], "strike": ["collapse", 0.7], "fake": ["whack", 0.7], "turbo": ["jump", 0.6],
 	"ghost": ["creak", 1.3], "steal": ["checkpoint", 1.7], "decoy": ["bounce", 1.5], "shock": ["whack", 0.5],
+	"coin": ["checkpoint", 2.0], "zone": ["checkpoint", 0.8], "fuse": ["tick", 1.2], "blast": ["collapse", 0.9], "elim": ["whack", 0.5],
+	"pass": ["jump", 1.8], "drum": ["creak", 1.0], "champion": ["finish", 1.0],
 }
 
 static var _streams: Dictionary = {}
