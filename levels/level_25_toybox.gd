@@ -54,6 +54,7 @@ var _b: Basis = Basis.IDENTITY
 var _yaw: float = 0.0
 var _next_yaw: float = 0.0
 var _tuning: MovementTuning
+var deco: ToyboxDecor
 var _env: Environment
 var _sun: DirectionalLight3D
 var _fill: DirectionalLight3D
@@ -167,7 +168,11 @@ func _cp(c: Vector3, size: float = 5.0) -> Dictionary:
 	var d: Dictionary = _blk(c, size, size, "goal", 1.0)
 	var cp: Checkpoint = kit.checkpoint(_w(c), _next_yaw)
 	_cp_world.append(_w(c))
-	_cp_bursts[cp] = []
+	var fx: Array[GPUParticles3D] = ToyboxFx.cp_burst(palette_col(_cp_world.size()))
+	for p: GPUParticles3D in fx:
+		p.position = _w(c) + Vector3(0, 0.6, 0)
+		add_child(p)
+	_cp_bursts[cp] = fx
 	cp.reached.connect(func(which: Checkpoint) -> void:
 		if which.index > current_checkpoint:
 			# SOUND: toybox_checkpoint - a music-box flourish: a short run of bright bell notes
@@ -240,10 +245,11 @@ static func _resting(j: ToyboxJack, a: float, b: float) -> bool:
 func _build() -> void:
 	_tuning = load("res://resources/default_tuning.tres") as MovementTuning
 	add_child(Ambience.make(theme_id))
+	deco = ToyboxDecor.new(self, kit.rng)
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16, _stage_17]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -266,6 +272,7 @@ func _build() -> void:
 		_finish_pos = _w(Vector3(0, 0, -9.5))
 		_hop(cp0, fin)
 		r_walk(_w(Vector3(0, 0, -9.8)))
+	_surroundings()
 	_toy_materials()
 	if DEV_START > 1:
 		set_spawn(origins[DEV_START - 1] + Vector3(0, 0.1, 0), yaws[DEV_START - 1])
@@ -726,12 +733,12 @@ func _stage_11() -> Vector3:
 	# RIGHT (yellow): three keys climbing, the last flight lands on the terrace
 	var right: Dictionary = _area(Vector3(3.5, 0, fc.z), 1.5, 1.6)
 	var k: Vector3 = _ahead(right, 0.78, 0.0, 2.2)
-	var cols: Array[Color] = [ORANGE, GREEN, PURPLE]
+	var cols: Array[Color] = [ORANGE, GREEN, PURPLE, RED]
 	var keys: Array[Vector3] = []
-	for i: int in 3:
+	for i: int in 4:
 		_key(k, i + 1, cols[i])
 		keys.append(k)
-		var ny: float = k.y + 1.6 if i < 2 else top_y
+		var ny: float = k.y + 1.2 if i < 3 else top_y
 		var land: Vector3 = _key_landing(k, ny)
 		k = Vector3(k.x, ny, land.z)
 	var mz: float = k.z
@@ -754,8 +761,8 @@ func _stage_11() -> Vector3:
 	else:
 		r_walk(_w(Vector3(3.5, 0, fc.z + 0.6)))
 		_hop(right, _area(keys[0], 1.7, 1.1))
-		for i: int in 3:
-			r_pad(_w(keys[i]), _w(keys[i + 1] if i < 2 else k))
+		for i: int in 4:
+			r_pad(_w(keys[i]), _w(keys[i + 1] if i < 3 else k))
 	var mg: Dictionary = _area(Vector3(0, top_y, mz), 5.5, 3.5)
 	_hop(mg, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
@@ -813,7 +820,268 @@ func _stage_13() -> Vector3:
 	return cp["c"]
 
 
+# ---- stage 14: Bedpost Chimney - a jack throws you up, three wall runs up the bed post ---------------
+
+func _chimney_panel(x: float, y: float, z0: float, z1: float, height: float = 7.0) -> void:
+	kit.wallrun(_w(Vector3(x, y, (z0 + z1) * 0.5)), Vector3(absf(z0 - z1), height, 0.5), _yaw + 90.0)
+
+
+func _stage_14() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var jc: Vector3 = _ahead(cp0, 0.78, 0.0, 2.6)
+	var jack: ToyboxJack = _jack(jc, 4.5, 0.0, Vector3(0, 22.0, -4.5), RED)
+	_blk(Vector3(0, 6.0, -15.2), 2.4, 2.4, "main", 0.8)
+	_chimney_panel(2.3, 7.2, -19.5, -26.0)
+	_chimney_panel(-2.3, 12.0, -24.5, -32.5)
+	_chimney_panel(2.3, 15.0, -30.5, -38.5)
+	var top: Dictionary = _ledge(Vector3(-0.75, 17.9, -42.0), Vector3(4.5, 14.0, 4.0), "alt")
+	var cp: Dictionary = _cp(_ahead(top, 0.80, 0.0, 5.0, 0.75))
+	_wait(func() -> bool: return _resting(jack, 0.0, 2.0))
+	_hop(cp0, _area(jc, 1.3, 1.3))
+	_kick(jc, Vector3(0, 6.0, -14.8))
+	r_walk(_w(Vector3(0, 6.0, -14.4)))
+	r_wallrun(_w(Vector3(0.5, 6.0, -15.95)), _w(Vector3(1.7, 7.4, -20.6)), _w(Vector3(1.7, 7.4, -23.5)), _w(Vector3(-1.7, 11.5, -27.4)))
+	r_wallrun(Vector3.ZERO, _w(Vector3(-1.7, 11.5, -27.4)), _w(Vector3(-1.7, 11.5, -30.4)), _w(Vector3(1.7, 14.5, -34.0)), true, true)
+	r_wallrun(Vector3.ZERO, _w(Vector3(1.7, 14.5, -34.0)), _w(Vector3(1.7, 14.5, -35.4)), _w(Vector3(-0.75, 17.9, -40.6)), true, true)
+	_hop(top, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 15: Top Spin - three tops in a row, each turning the other way -------------------------------
+
+func _stage_15() -> Vector3:
+	var rad: float = 2.4
+	var step: float = rad * 2.0 + 3.2
+	var cs: Array[Vector3] = []
+	for i: int in 3:
+		cs.append(Vector3(0, 0.4 * float(i), -2.5 - 3.2 - rad - step * float(i)))
+		_top(cs[i], rad, 7.0 if i % 2 == 0 else -7.0, 0.3 * float(i))
+	var cp: Dictionary = _cp(Vector3(0, 0.8, cs[2].z - rad - 3.2 - 2.5))
+	r_jump(_w(Vector3(0, 0, -2.15)), _w(cs[0] + Vector3(0, 0, 1.8)))
+	for i: int in 3:
+		r_walk(_w(cs[i] + Vector3(0, 0, -1.9)))
+		var to: Vector3 = (cs[i + 1] + Vector3(0, 0, 1.8)) if i < 2 else ((cp["c"] as Vector3) + Vector3(0, 0, 1.5))
+		r_jump(_w(cs[i] + Vector3(0, 0, -1.9)), _w(to))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 16: Toy Parade (BRANCH) - the tin cars shuttle you across | the block bridge ------------------
+
+func _stage_16() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.78, 0.0, 3.2), 11.0, 3.2)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.6
+	# RIGHT (yellow): two blocks over the gap
+	var right: Dictionary = _area(Vector3(3.5, 0, fc.z), 1.5, 1.6)
+	var b1: Dictionary = _post(_ahead(right, 0.80, 0.0, 2.0), 2.0, 2.0)
+	var b2: Dictionary = _post(_ahead(b1, 0.82, 0.0, 2.0), 2.0, 2.0)
+	var mn: float = (b2["c"] as Vector3).z - 1.0 + 0.35 - _e(0.82, 0.0)
+	var merge: Dictionary = _blk(Vector3(0, 0, mn - 1.6), 11.0, 3.2)
+	# LEFT (red): two tin cars shuttle between the fork and the merge
+	var clen: float = 5.0
+	var ride: float = f0 - 1.6 - clen - mn
+	var near_z: float = f0 - 0.8 - clen * 0.5
+	var lanes: Array[float] = [-4.2, -1.0]
+	var cars: Array[ToyboxCar] = []
+	cars.append(_car(Vector3(lanes[0], 0, near_z), Vector3(0, 0, -ride), 16.0, 0.0, PURPLE))
+	cars.append(_car(Vector3(lanes[1], 0, near_z), Vector3(0, 0, -ride), 16.0, 0.5, ORANGE))
+	var cp: Dictionary = _cp(_ahead(merge, 0.80, 0.0, 5.0))
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant != 1:
+		var froms: Array[Vector3] = [_w(Vector3(lanes[0], 0, f0 + 0.35)), _w(Vector3(lanes[1], 0, f0 + 0.35))]
+		var exits: Array[Vector3] = [_w(Vector3(lanes[0], 0, mn - 1.2)), _w(Vector3(lanes[1], 0, mn - 1.2))]
+		var poses: Array[Vector3] = [_w(Vector3(lanes[0], -0.25, near_z - ride)), _w(Vector3(lanes[1], -0.25, near_z - ride))]
+		_ferry(cars, froms, exits, poses)
+	else:
+		r_walk(_w(Vector3(3.5, 0, fc.z + 0.6)))
+		_hop(right, b1)
+		_hop(b1, b2)
+		_hop(b2, merge, Vector3(3.5, 0, 0.4))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 17: Shelf Foot - a toy laser, then a jack-in-the-box up onto the bookshelf's first board -------
+# [shortcut: a side path of blocks to the jack]
+
+func _stage_17() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _post(_ahead(cp0, 0.78, 0.0, 2.0), 2.0, 2.0)
+	var blen: float = 12.0
+	var beam: Dictionary = _blk(_ahead(p1, 0.80, 0.0, blen), 1.6, blen, "alt", 0.6)
+	var bc: Vector3 = beam["c"]
+	var near: float = bc.z + blen * 0.5
+	var far: float = bc.z - blen * 0.5
+	var laser: LaserGate = _laser(Vector3(bc.x, bc.y + 1.2, near - 6.0), 6.0, 0.25, 0.0)
+	var jc: Vector3 = _ahead(beam, 0.80, 0.0, 2.6)
+	var jack: ToyboxJack = _jack(jc, 4.5, 0.0, Vector3(0, 20.5, -3.0), YELLOW)
+	var ja: Dictionary = _area(jc, 1.3, 1.3)
+	var cp: Dictionary = _cp(Vector3(jc.x, 5.0, jc.z - 1.3 - 2.0 - 2.5))
+	var sc: Array[Dictionary] = _side_chain(p1, 3, 3.6, 0.84)
+	_hop(cp0, p1)
+	if route_variant == 2:
+		_hop(p1, sc[0])
+		_hop(sc[0], sc[1])
+		_hop(sc[1], sc[2])
+		_hop(sc[2], ja)
+	else:
+		_hop(p1, beam, Vector3(0, 0, blen * 0.5 - 0.8))
+		var hold: Vector3 = _w(Vector3(bc.x, bc.y, near - 2.4))
+		r_walk(hold)
+		_wait(func() -> bool: return _dark(laser, 0.1, 0.9 + 1.5), hold)
+		r_walk(_w(Vector3(bc.x, bc.y, far + 0.9)))
+		_wait(func() -> bool: return _resting(jack, 0.0, 2.0))
+		_hop(beam, ja)
+	_kick(jc, Vector3(jc.x, 5.0, (cp["c"] as Vector3).z + 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 18: THE BOOKSHELF - climb the books to the toy rocket on top -----------------------------------
+
+var _rocket: Node3D
+var _rocket_flame: GPUParticles3D
+var _finish_light: OmniLight3D
+
+
+func _stage_18() -> void:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	# A: three book spines, then MANTLE the bookend
+	var pa: Dictionary = _post(_ahead(cp0, 0.78, 0.0, 2.0), 2.0, 2.0)
+	var pb: Dictionary = _post(_ahead(pa, 0.80, 0.6, 2.0, -0.4), 2.0, 2.0)
+	var pc: Dictionary = _post(_ahead(pb, 0.80, 0.6, 2.0, 0.4), 2.0, 2.0)
+	var pcc: Vector3 = pc["c"]
+	var be_top := Vector3(pcc.x, pcc.y + 3.3, pcc.z - 1.0 - 1.6 - 0.8)
+	var bookend: Dictionary = _ledge(be_top, Vector3(3.0, 9.0, 1.6))
+	# B: the second board, a tumbling stack of books across a gap
+	var s2: Dictionary = _blk(_ahead(bookend, 0.78, 0.0, 6.0, -pcc.x), 6.0, 6.0, "main", 1.0)
+	var s2c: Vector3 = s2["c"]
+	var tfront: float = s2c.z - 3.0
+	var tlen: float = 9.0
+	var tower: ToyboxTower = _tower(Vector3(0, s2c.y, tfront), tlen, 1.5)
+	var dock: Dictionary = _blk(Vector3(0, s2c.y, tfront - tlen - 1.5), 3.0, 3.0, "main", 0.8)
+	# C: a jack throws you up to the third board
+	var jc: Vector3 = _ahead(dock, 0.78, 0.0, 2.6)
+	var jack: ToyboxJack = _jack(jc, 4.5, 0.0, Vector3(0, 20.5, -3.0), PURPLE)
+	var y3: float = s2c.y + 5.0
+	var s3: Dictionary = _blk(Vector3(jc.x, y3, jc.z - 1.3 - 2.0 - 2.5), 5.0, 5.0, "main", 1.0)
+	var s3c: Vector3 = s3["c"]
+	# D: wall run a tall book spine, then MANTLE the top board's lip
+	var f: float = s3c.z - 2.5
+	kit.wallrun(_w(Vector3(s3c.x + 2.3, y3 + 1.2, f - 9.5)), Vector3(16.0, 6.5, 0.6), _yaw + 90.0)
+	var post: Dictionary = _post(Vector3(s3c.x - 0.6, y3, f - 22.5), 2.4, 2.8)
+	var lip_top := Vector3(s3c.x - 0.6, y3 + 3.3, f - 22.5 - 1.4 - 1.6 - 0.8)
+	var lip: Dictionary = _ledge(lip_top, Vector3(3.0, 9.0, 1.6))
+	var top: Dictionary = _blk(_ahead(lip, 0.78, 0.0, 6.0, -(s3c.x - 0.6)), 6.0, 6.0, "main", 1.0)
+	var topc: Vector3 = top["c"]
+	# E: the last crossing, a plank under a giant dice, to the rocket's launch pad
+	var plen: float = 12.0
+	var plank: Dictionary = _blk(_ahead(top, 0.80, 0.0, plen), 1.6, plen, "alt", 0.6)
+	var pc2: Vector3 = plank["c"]
+	var pnear: float = pc2.z + plen * 0.5
+	var pfar: float = pc2.z - plen * 0.5
+	var die: Crusher = _die(Vector3(pc2.x, pc2.y, pnear - 5.0), Vector3(2.2, 1.2, 2.0), 3.2, 7.0, 0.0)
+	var pad: Dictionary = _blk(_ahead(plank, 0.80, 0.0, 10.0), 10.0, 10.0, "goal", 1.2)
+	var padc: Vector3 = pad["c"]
+	var fin_at: Vector3 = padc + Vector3(0, 0, -1.0)
+	kit.finish(_w(fin_at), _yaw)
+	_finish_pos = _w(fin_at)
+	_build_rocket(padc)
+	# the route
+	_hop(cp0, pa)
+	_hop(pa, pb)
+	_hop(pb, pc)
+	r_walk(_w(Vector3(pcc.x, pcc.y, pcc.z - 0.6)))
+	r_mantle(_w(Vector3(pcc.x, pcc.y, pcc.z - 1.0 + 0.35)), _w(be_top + Vector3(0, 0, 0.2)))
+	_hop(bookend, s2, Vector3(0, 0, 1.2))
+	var hold_a: Vector3 = _w(Vector3(0, s2c.y, tfront + 0.4))
+	r_walk(hold_a)
+	_wait(func() -> bool: return _bridge_ok(tower, 0.0, 3.6), hold_a)
+	r_walk(_w(Vector3(0, s2c.y, tfront - tlen - 0.9)))
+	_wait(func() -> bool: return _resting(jack, 0.0, 2.0))
+	_hop(dock, _area(jc, 1.3, 1.3))
+	_kick(jc, Vector3(s3c.x, y3, s3c.z + 1.2))
+	r_walk(_w(Vector3(s3c.x + 0.3, y3, f + 1.0)))
+	r_wallrun(_w(Vector3(s3c.x + 0.3, y3, f + 0.35)), _w(Vector3(s3c.x + 1.8, y3 + 1.4, f - 3.6)), _w(Vector3(s3c.x + 1.8, y3 + 1.4, f - 14.5)), _w(Vector3(s3c.x - 0.6, y3, f - 22.2)))
+	r_walk(_w(Vector3(s3c.x - 0.6, y3, f - 22.5 - 0.6)))
+	r_mantle(_w(Vector3(s3c.x - 0.6, y3, f - 22.5 - 1.4 + 0.35)), _w(lip_top + Vector3(0, 0, 0.2)))
+	_hop(lip, top, Vector3(0, 0, 1.2))
+	_hop(top, plank, Vector3(0, 0, plen * 0.5 - 0.8))
+	var hold_b: Vector3 = _w(Vector3(pc2.x, pc2.y, pnear - 1.8))
+	r_walk(hold_b)
+	_wait(func() -> bool: return _press_ok(die, 0.0, 0.9 + 1.5), hold_b)
+	r_walk(_w(Vector3(pc2.x, pc2.y, pfar + 0.9)))
+	_hop(plank, pad, Vector3(0, 0, 3.0))
+	r_walk(_w(fin_at + Vector3(0, 0, -0.3)))
+	# the bookshelf itself: a towering wall of books down the left of the whole climb, its great
+	# boards jutting out at the level of each tier, and a back panel behind the rocket
+	var base_y: float = -26.0
+	var wall_len: float = absf(padc.z) + 30.0
+	deco.book_wall(_w(Vector3(-13.0, base_y, -wall_len * 0.5 + 12.0)), deg_to_rad(_yaw), wall_len, padc.y - base_y + 30.0, Vector2(3.0, 6.0))
+	var wood: StandardMaterial3D = Look.flat(Color(0.62, 0.42, 0.25), 0.75)
+	for ty: float in [0.0, s2c.y, y3, lip_top.y]:
+		add_child(Look.box(_sz(Vector3(7.0, 1.4, wall_len)), wood, _w(Vector3(-10.5, ty - 2.0, -wall_len * 0.5 + 12.0))))
+	add_child(Look.box(_sz(Vector3(40.0, padc.y - base_y + 40.0, 1.6)), wood, _w(Vector3(0, (padc.y + base_y) * 0.5 + 10.0, padc.z - 14.0))))
+
+
+## The toy rocket standing on its launch pad behind the finish gate (local pad centre): a red-and-white
+## body, a nose cone, a porthole, three fins, and a flame that roars up when you finish.
+func _build_rocket(padc: Vector3) -> void:
+	_rocket = Node3D.new()
+	_rocket.transform = Transform3D(_b, _w(padc + Vector3(0, 0.0, -3.0)))
+	add_child(_rocket)
+	var white: StandardMaterial3D = Look.flat(CREAM, 0.4)
+	var red: StandardMaterial3D = Look.flat(RED, 0.35)
+	var blue: StandardMaterial3D = Look.flat(BLUE, 0.4)
+	var h: float = 22.0
+	_rocket.add_child(Look.cylinder(2.6, h, white, Vector3(0, h * 0.5 + 1.5, -2.0), 2.6, 28))
+	_rocket.add_child(Look.cylinder(2.64, 1.6, red, Vector3(0, 5.0, -2.0), -1.0, 28))
+	_rocket.add_child(Look.cylinder(2.64, 1.6, red, Vector3(0, 14.0, -2.0), -1.0, 28))
+	_rocket.add_child(Look.cylinder(0.05, 7.0, red, Vector3(0, h + 1.5 + 3.5, -2.0), 2.6, 28))
+	for i: int in 3:
+		var a: float = TAU * float(i) / 3.0
+		var fin := Look.box(Vector3(0.5, 6.0, 3.6), blue, Vector3(sin(a) * 3.2, 4.0, -2.0 + cos(a) * 3.2))
+		fin.rotation.y = a
+		_rocket.add_child(fin)
+	var win := Look.sphere(1.0, Look.flat(Color(0.5, 0.85, 1.0), 0.2, 0.0, 1.4), Vector3(0, 17.0, -2.0 + 2.2))
+	win.scale = Vector3(1.0, 1.0, 0.4)
+	_rocket.add_child(win)
+	_rocket.add_child(Look.cylinder(1.5, 1.2, Look.flat(Color(0.3, 0.3, 0.36), 0.4, 0.7), Vector3(0, 1.0, -2.0), 2.0, 16))
+	_rocket_flame = Fx.emitter({"amount": 90, "lifetime": 1.0, "shape": "sphere", "radius": 0.9, "dir": Vector3.DOWN,
+		"spread": 18.0, "speed": Vector2(8.0, 16.0), "gravity": Vector3(0, -2.0, 0), "tex": Fx.Tex.SMOKE, "size": 2.0,
+		"colors": PackedColorArray([Color(3.0, 2.2, 0.8, 0.9), Color(2.4, 0.8, 0.2, 0.7), Color(0.5, 0.3, 0.2, 0.0)]),
+		"curve": "puff", "emitting": false, "aabb": AABB(Vector3(-20, -40, -20), Vector3(40, 60, 40))})
+	_rocket_flame.position = Vector3(0, 0.6, -2.0)
+	_rocket.add_child(_rocket_flame)
+	_finish_light = OmniLight3D.new()
+	_finish_light.light_color = Color(1.0, 0.7, 0.35)
+	_finish_light.light_energy = 0.0
+	_finish_light.omni_range = 30.0
+	_finish_light.position = Vector3(0, 2.0, -2.0)
+	_rocket.add_child(_finish_light)
+
+
+## The rocket fires: flame and smoke roar out of its engine, the pad glows, the toybox cheers.
+func _finish_sequence() -> void:
+	if _rocket_flame != null:
+		_rocket_flame.emitting = true
+		_finish_light.light_energy = 6.0
+		# SOUND: toybox_finish - the toy rocket's engine roars up under a music-box fanfare
+		WorldAudio.at(self, "toybox_finish", _finish_pos + Vector3(0, 6.0, 0), 1.0, 120.0)
+		var tw: Tween = create_tween()
+		tw.tween_property(_rocket, "position:y", _rocket.position.y + 3.5, 1.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	await get_tree().create_timer(1.1).timeout
+
+
 # ---- environment ----------------------------------------------------------------------------------
+
+func palette_col(i: int) -> Color:
+	return deco.palette(i)
+
 
 func _restyle_environment() -> void:
 	for n: Node in get_children():
@@ -824,14 +1092,228 @@ func _restyle_environment() -> void:
 				_sun = n as DirectionalLight3D
 			else:
 				_fill = n as DirectionalLight3D
+	_env.background_mode = Environment.BG_SKY
+	_env.sky = ToyboxSky.make()
+	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	_env.ambient_light_color = Color(1.0, 0.9, 0.78)
+	_env.ambient_light_energy = 0.62
+	_env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	_env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	_env.tonemap_exposure = 1.0
+	_env.tonemap_white = 6.0
+	_env.fog_enabled = true
+	_env.fog_light_color = Color(1.0, 0.88, 0.68)
+	_env.fog_density = 0.0021
+	_env.fog_aerial_perspective = 0.35
+	_env.fog_sky_affect = 0.3
+	_env.fog_sun_scatter = 0.25
+	_env.glow_enabled = true
+	_env.glow_intensity = 0.55
+	_env.glow_bloom = 0.04
+	_env.glow_hdr_threshold = 1.2
+	_env.adjustment_enabled = true
+	_env.adjustment_saturation = 1.15
+	_env.adjustment_contrast = 1.06
+	# the afternoon sun through the window: low, golden, long shadows; a cool fill from the room
+	_sun.light_color = Color(1.0, 0.88, 0.65)
+	_sun.light_energy = 1.7
+	_sun.rotation_degrees = Vector3(-30, 36, 0)
+	_fill.light_color = Color(0.72, 0.82, 1.0)
+	_fill.light_energy = 0.3
+	_fill.rotation_degrees = Vector3(-20, 216, 0)
 
 
+## Swap every walkable surface to the plastic-block shader: main blocks take a toy colour from a
+## six-colour palette by where they stand, everything else keeps its colours.
 func _toy_materials() -> void:
-	pass
+	var shader: Shader = preload("res://visual/toybox_block.gdshader")
+	for mi: Node in find_children("*", "MeshInstance3D", true, false):
+		var m: MeshInstance3D = mi as MeshInstance3D
+		var sm: ShaderMaterial = m.material_override as ShaderMaterial
+		if sm == null or sm.shader != Look.PLATFORM_SHADER:
+			continue
+		var r := ShaderMaterial.new()
+		r.shader = shader
+		var top: Color = sm.get_shader_parameter("top_color")
+		var side: Color = sm.get_shader_parameter("side_color")
+		var trim: Color = sm.get_shader_parameter("trim_color")
+		if top.is_equal_approx(Look.c("top")):
+			var gp: Vector3 = m.global_position
+			var idx: int = int(floor(gp.x / 3.0)) * 3 + int(floor(gp.z / 3.0)) * 5 + int(floor(gp.y / 1.5)) * 7
+			top = deco.palette(idx)
+			side = top.darkened(0.35)
+		r.set_shader_parameter("top_color", top)
+		r.set_shader_parameter("side_color", side)
+		r.set_shader_parameter("trim_color", trim)
+		for key: String in ["half_size", "is_round", "trim_glow"]:
+			r.set_shader_parameter(key, sm.get_shader_parameter(key))
+		m.material_override = r
 
 
-func _stage_18() -> void:
-	pass
+# ---- the room ---------------------------------------------------------------------------------------
+
+func _route_points() -> Array[Vector3]:
+	var pts: Array[Vector3] = []
+	for st: Dictionary in route:
+		for key: String in ["from", "to", "entry", "exit", "top", "jump_from"]:
+			if st.has(key) and st[key] is Vector3 and (st[key] as Vector3) != Vector3.ZERO:
+				pts.append(st[key])
+	for p: Vector3 in _cp_world:
+		pts.append(p)
+	for f: Dictionary in _floors:
+		pts.append(f["top"])
+	return pts
+
+
+func _clear_of(p: Vector3, pts: Array[Vector3], dist: float) -> bool:
+	for q: Vector3 in pts:
+		if Vector2(p.x - q.x, p.z - q.z).length() < dist and absf(p.y - q.y) < dist + 30.0:
+			return false
+	return true
+
+
+## True when nothing walkable sits inside the box (world centre, half extents).
+func _box_free(c: Vector3, h: Vector3, skip: Dictionary = {}) -> bool:
+	for f: Dictionary in _floors:
+		if f == skip:
+			continue
+		var t: Vector3 = f["top"]
+		var s: Vector3 = f["size"]
+		if absf(t.x - c.x) < h.x + s.x * 0.5 and absf(t.z - c.z) < h.z + s.z * 0.5 and t.y > c.y - h.y - 0.5 and t.y - float(f["drop"]) < c.y + h.y:
+			return false
+	return true
+
+
+## A window in a wall: frame, cross and a glowing pane (world centre, yaw so its front faces the room).
+func _window(c: Vector3, yaw: float, w: float, h: float) -> void:
+	var n := Node3D.new()
+	n.position = c
+	n.rotation.y = yaw
+	add_child(n)
+	var pane: StandardMaterial3D = Look.flat(Color(1.0, 0.95, 0.75), 0.3, 0.0, 1.5)
+	n.add_child(Look.box(Vector3(w, h, 0.4), pane, Vector3.ZERO))
+	var white: StandardMaterial3D = Look.flat(CREAM, 0.6)
+	n.add_child(Look.box(Vector3(w + 3.0, 1.6, 1.4), white, Vector3(0, h * 0.5 + 0.8, 0.5)))
+	n.add_child(Look.box(Vector3(w + 3.0, 1.6, 1.4), white, Vector3(0, -h * 0.5 - 0.8, 0.5)))
+	for sx: float in [-1.0, 1.0]:
+		n.add_child(Look.box(Vector3(1.6, h + 3.2, 1.4), white, Vector3(sx * (w * 0.5 + 0.8), 0, 0.5)))
+	n.add_child(Look.box(Vector3(w, 1.0, 1.0), white, Vector3(0, 0, 0.4)))
+	n.add_child(Look.box(Vector3(1.0, h, 1.0), white, Vector3(0, 0, 0.4)))
+
+
+func _surroundings() -> void:
+	var rng: RandomNumberGenerator = kit.rng
+	var pts: Array[Vector3] = _route_points()
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for p: Vector3 in pts:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	var mid: Vector3 = (lo + hi) * 0.5
+	var span: Vector3 = hi - lo
+	var floor_y: float = lo.y - 18.0
+	# crayon and pencil pillars from the floor up under every block that floats high enough
+	var crayon_cols: Array[Color] = [ToyboxDecor.RED, ToyboxDecor.BLUE, ToyboxDecor.YELLOW, ToyboxDecor.GREEN, ToyboxDecor.ORANGE, ToyboxDecor.PURPLE]
+	var n_pillars: int = 0
+	for f: Dictionary in _floors:
+		if f.has("key") or f.has("tower"):
+			continue
+		var t: Vector3 = f["top"]
+		var s: Vector3 = f["size"]
+		var under: float = t.y - float(f["drop"])
+		if under - floor_y < 5.0 or n_pillars > 150:
+			continue
+		var h: float = under - floor_y
+		var rad: float = clampf(minf(s.x, s.z) * 0.14, 0.35, 1.1)
+		if _box_free(Vector3(t.x, floor_y + h * 0.5, t.z), Vector3(rad, h * 0.5, rad), f):
+			deco.crayon_pillar(Vector3(t.x, floor_y, t.z), h - 0.05, rad, crayon_cols[n_pillars % crayon_cols.size()])
+			n_pillars += 1
+	# the floor: planks and the play rug, far below
+	var board := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(1500, 1500)
+	board.mesh = pm
+	var bmat := ShaderMaterial.new()
+	bmat.shader = preload("res://visual/toybox_floor.gdshader")
+	bmat.set_shader_parameter("rug_center", Vector2(mid.x, mid.z))
+	bmat.set_shader_parameter("rug_half", Vector2(span.x * 0.5 + 150.0, span.z * 0.5 + 150.0))
+	board.material_override = bmat
+	board.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	board.position = Vector3(mid.x, floor_y, mid.z)
+	add_child(board)
+	# four wallpapered walls round the room, windows on the two the sun comes through
+	var wall_shader: Shader = preload("res://visual/toybox_wall.gdshader")
+	var wmat := ShaderMaterial.new()
+	wmat.shader = wall_shader
+	wmat.set_shader_parameter("floor_y", floor_y)
+	var half: float = maxf(span.x, span.z) * 0.5 + 330.0
+	var wh: float = 320.0
+	var walls: Array[Dictionary] = [
+		{"c": Vector3(mid.x, floor_y + wh * 0.5, mid.z - half), "s": Vector3(half * 2.0, wh, 2.0)},
+		{"c": Vector3(mid.x, floor_y + wh * 0.5, mid.z + half), "s": Vector3(half * 2.0, wh, 2.0)},
+		{"c": Vector3(mid.x - half, floor_y + wh * 0.5, mid.z), "s": Vector3(2.0, wh, half * 2.0)},
+		{"c": Vector3(mid.x + half, floor_y + wh * 0.5, mid.z), "s": Vector3(2.0, wh, half * 2.0)},
+	]
+	for w: Dictionary in walls:
+		var wm := Look.box(w["s"], wmat, w["c"])
+		wm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(wm)
+	_window(Vector3(mid.x + half - 2.0, floor_y + 150.0, mid.z - half * 0.35), -PI * 0.5, 90.0, 110.0)
+	_window(Vector3(mid.x + half - 2.0, floor_y + 150.0, mid.z + half * 0.45), -PI * 0.5, 90.0, 110.0)
+	_window(Vector3(mid.x - half * 0.4, floor_y + 150.0, mid.z + half - 2.0), PI, 90.0, 110.0)
+	# big furniture and toys round the edges of the room, clear of the route
+	deco.bed(Vector3(mid.x - half + 60.0, floor_y, mid.z - half * 0.4), PI * 0.5)
+	deco.dollhouse(Vector3(mid.x + half - 90.0, floor_y, mid.z + half * 0.5), -PI * 0.5, 4.0)
+	deco.nightlight(Vector3(mid.x - half + 25.0, floor_y, mid.z + half * 0.3), 8.0)
+	deco.track(Vector3(mid.x + span.x * 0.5 + 90.0, floor_y + 0.2, mid.z), 0.0, 400.0)
+	deco.track(Vector3(mid.x + span.x * 0.5 + 96.0, floor_y + 0.2, mid.z), 0.0, 400.0)
+	var placed: int = 0
+	var tries: int = 0
+	while placed < 70 and tries < 900:
+		tries += 1
+		var p := Vector3(rng.randf_range(lo.x - 200.0, hi.x + 200.0), floor_y, rng.randf_range(lo.z - 200.0, hi.z + 200.0))
+		if not _clear_of(Vector3(p.x, lo.y, p.z), pts, 26.0):
+			continue
+		var roll: float = rng.randf()
+		var yaw: float = rng.randf() * TAU
+		if roll < 0.34:
+			var sz: float = rng.randf_range(6.0, 16.0)
+			deco.abc_block(p + Vector3(0, sz * 0.5, 0), sz, deco.palette(rng.randi()), yaw, rng.randf_range(-0.08, 0.08))
+		elif roll < 0.5:
+			deco.brick(p, rng.randi_range(2, 4), rng.randi_range(2, 3), deco.palette(rng.randi()), yaw, rng.randf_range(3.0, 5.0))
+		elif roll < 0.62:
+			deco.ball(p + Vector3(0, 6.0, 0), rng.randf_range(4.0, 8.0), deco.palette(rng.randi()))
+		elif roll < 0.72:
+			deco.teddy(p, yaw, rng.randf_range(2.5, 5.0))
+		elif roll < 0.8:
+			deco.duck(p, yaw, rng.randf_range(2.0, 4.0))
+		elif roll < 0.9:
+			deco.crayon(p + Vector3(0, 1.4, 0), rng.randf_range(18.0, 36.0), 1.4, deco.palette(rng.randi()), yaw)
+		else:
+			deco.balloon(p, rng.randf_range(20.0, 70.0), deco.palette(rng.randi()))
+		placed += 1
+	# the air: golden dust in the sun beams and paper confetti, along the whole course
+	for i: int in _cp_world.size():
+		var here: Vector3 = _cp_world[i]
+		var prev: Vector3 = _cp_world[i - 1] if i > 0 else Vector3.ZERO
+		var c3: Vector3 = (here + prev) * 0.5 + Vector3(0, 4.0, 0)
+		var ext := Vector3(absf(here.x - prev.x) * 0.5 + 14.0, 9.0, absf(here.z - prev.z) * 0.5 + 14.0)
+		ToyboxFx.dust(self, c3, ext, 60)
+		if i % 2 == 0:
+			ToyboxFx.flutter(self, c3 + Vector3(0, 6.0, 0), ext, 24)
+		# toys hanging on strings and balloons rising past the course, kept well clear of every floor
+		var made: int = 0
+		var tr: int = 0
+		while made < 7 and tr < 60:
+			tr += 1
+			var q := Vector3(c3.x + rng.randf_range(-ext.x - 6.0, ext.x + 6.0), c3.y + rng.randf_range(-6.0, 12.0), c3.z + rng.randf_range(-ext.z - 6.0, ext.z + 6.0))
+			if not _clear_of(q, pts, 8.0):
+				continue
+			if rng.randf() < 0.55:
+				deco.hanging(q, rng.randi(), rng.randf_range(1.0, 1.8), 70.0)
+			else:
+				deco.balloon(q - Vector3(0, 14.0, 0), 14.0, deco.palette(rng.randi()))
+			made += 1
 
 
 # ---- machine dressing ---------------------------------------------------------------------------

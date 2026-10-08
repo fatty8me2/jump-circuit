@@ -244,14 +244,16 @@ const THEMES: Dictionary = {
 		"decor": Color(0.16, 0.12, 0.26), "decor2": Color(0.32, 0.90, 1.0), "metal": Color(0.86, 0.85, 0.93),
 		"cloud_light": Color(0.62, 0.46, 0.82), "cloud_shade": Color(0.10, 0.05, 0.18),
 	},
-	"toybox": {  # PLACEHOLDER palette - the level agent owns and retunes this entry
-		"sky_top": Color(0.55, 0.72, 0.95), "sky_horizon": Color(1.00, 0.86, 0.66), "sky_bottom": Color(0.62, 0.48, 0.40),
-		"sun": Color(1.00, 0.92, 0.75), "sun_energy": 1.0, "sun_rot": Vector3(-45, 150, 0),
-		"ambient": Color(0.60, 0.60, 0.65), "ambient_energy": 0.8, "fog": Color(0.95, 0.85, 0.72), "fog_density": 0.002,
-		"top": Color(0.95, 0.30, 0.30), "side": Color(0.25, 0.45, 0.85), "trim": Color(1.00, 0.85, 0.15),
-		"alt_top": Color(0.35, 0.80, 0.40), "accent": Color(1.00, 0.85, 0.15), "accent2": Color(0.30, 0.70, 1.00),
-		"decor": Color(0.55, 0.38, 0.25), "decor2": Color(0.95, 0.55, 0.75), "metal": Color(0.55, 0.55, 0.60),
-		"cloud_light": Color(1.00, 0.94, 0.81), "cloud_shade": Color(0.38, 0.34, 0.29),
+	# Toybox Tumble: a giant bedroom in the afternoon sun - warm cream light, honey-gold haze, bright
+	# plastic toys. (levels/level_25_toybox.gd swaps in its own ceiling sky, floor, walls and block shader.)
+	"toybox": {
+		"sky_top": Color(0.98, 0.93, 0.84), "sky_horizon": Color(1.00, 0.80, 0.55), "sky_bottom": Color(0.62, 0.46, 0.34),
+		"sun": Color(1.00, 0.88, 0.65), "sun_energy": 1.5, "sun_rot": Vector3(-30, 36, 0),
+		"ambient": Color(1.00, 0.90, 0.78), "ambient_energy": 0.85, "fog": Color(1.00, 0.88, 0.68), "fog_density": 0.0021,
+		"top": Color(0.93, 0.27, 0.25), "side": Color(0.2, 0.42, 0.85), "trim": Color(1.00, 0.85, 0.20),
+		"alt_top": Color(0.95, 0.80, 0.55), "accent": Color(1.00, 0.80, 0.15), "accent2": Color(0.30, 0.70, 1.00),
+		"decor": Color(0.72, 0.50, 0.30), "decor2": Color(1.00, 0.55, 0.75), "metal": Color(0.78, 0.80, 0.86),
+		"cloud_light": Color(1.00, 0.97, 0.88), "cloud_shade": Color(0.85, 0.7, 0.55),
 	},
 	"fungal": {  # PLACEHOLDER palette - the level agent owns and retunes this entry
 		"sky_top": Color(0.45, 0.70, 0.55), "sky_horizon": Color(0.95, 0.90, 0.60), "sky_bottom": Color(0.30, 0.36, 0.20),
