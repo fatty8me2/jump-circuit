@@ -30,9 +30,9 @@ const SLIDE_SPEED: float = 14.0
 const GROUND_Y: float = -13.0
 
 ## Testing aid: build every stage but start the player (and the bot's route) at stage N. 0 = off.
-const DEV_START: int = 10
+const DEV_START: int = 16
 ## Testing aid: stop building after stage N (a finish gate goes at its end). 0 = build them all.
-const DEV_LAST: int = 10
+const DEV_LAST: int = 16
 
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
@@ -283,7 +283,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -984,7 +984,7 @@ func _stage_10() -> Vector3:
 	_chimney_panel(o.x + 2.3, o.y + 7.2, o.z - 19.5, o.z - 26.0)
 	_chimney_panel(o.x - 2.3, o.y + 12.0, o.z - 24.5, o.z - 32.5)
 	_chimney_panel(o.x + 2.3, o.y + 15.0, o.z - 30.5, o.z - 38.5)
-	var top: Dictionary = _ledge(Vector3(o.x - 0.75, o.y + 17.9, o.z - 42.0), Vector3(4.5, 14.0, 4.0), "alt")
+	var top: Dictionary = _ledge(Vector3(o.x - 0.75, o.y + 16.4, o.z - 42.0), Vector3(4.5, 14.0, 4.0), "alt")
 	var cp: Dictionary = _cp(_ahead(top, 0.78, 0.0, 5.0, 0.75))
 	_hop(cp0, plank, Vector3(0, 0, 5.0))
 	var pre: Vector3 = _w(Vector3(pc.x, pc.y, bz + 1.6))
@@ -995,7 +995,7 @@ func _stage_10() -> Vector3:
 	r_walk(_w(o + Vector3(0, 6.0, -14.4)))
 	r_wallrun(_w(o + Vector3(0.5, 6.0, -15.95)), _w(o + Vector3(1.7, 7.4, -20.6)), _w(o + Vector3(1.7, 7.4, -23.5)), _w(o + Vector3(-1.7, 11.5, -27.4)))
 	r_wallrun(Vector3.ZERO, _w(o + Vector3(-1.7, 11.5, -27.4)), _w(o + Vector3(-1.7, 11.5, -30.4)), _w(o + Vector3(1.7, 14.5, -34.0)), true, true)
-	r_wallrun(Vector3.ZERO, _w(o + Vector3(1.7, 14.5, -34.0)), _w(o + Vector3(1.7, 14.5, -35.4)), _w(o + Vector3(-0.75, 17.9, -40.6)), true, true)
+	r_wallrun(Vector3.ZERO, _w(o + Vector3(1.7, 14.5, -34.0)), _w(o + Vector3(1.7, 14.5, -35.4)), _w(o + Vector3(-0.75, 16.4, -40.6)), true, true)
 	_hop(top, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	# the hollow trunk: dark bark walls behind the panels, knotholes with the sun pouring through
@@ -1024,8 +1024,8 @@ func _stage_11() -> Vector3:
 	lb.size = Vector3(3.0, 0.4, 3.0)
 	var pts: Array[Vector3] = [Vector3.ZERO, _d(Vector3(0, 0, -travel))]
 	lb.points = pts
-	lb.period = 12.0
-	lb.dwell = 0.1
+	lb.period = 14.0
+	lb.dwell = 0.25
 	var start := Vector3(-3.5, 0.0, f0 - 1.2 - 1.5)
 	lb.position = _w(start) - Vector3(0, 0.2, 0)
 	add_child(lb)
@@ -1066,7 +1066,7 @@ func _stage_11() -> Vector3:
 		r_pad(_w(b_c), _w(m_t))
 	else:
 		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.4)))
-		route.append({"kind": "candy_board", "from": _w(Vector3(-3.5, 0, f0 - 0.3)), "cars": [lb], "reach": 3.8, "lead": 0.45, "local": Vector3(0, 0.1, 0)})
+		route.append({"kind": "candy_board", "from": _w(Vector3(-3.5, 0, f0 + 1.0)), "cars": [lb], "reach": 4.8, "lead": 0.45, "local": Vector3(0, 0.1, 0)})
 		var end_w: Vector3 = _w(start + Vector3(0, 0, -travel))
 		route.append({"kind": "candy_ride", "stand": Vector3(0, 0.1, 0), "to": _w(Vector3(-3.5, 0, mz + 0.6)), "until": func() -> bool:
 			return Vector2(lb.global_position.x - end_w.x, lb.global_position.z - end_w.z).length() < 0.4})
@@ -1104,6 +1104,150 @@ func _stage_12() -> Vector3:
 		_hop(prev, a)
 		prev = a
 	_hop(prev, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 13: Ant Highway - stepping stones under two dewdrops | [shortcut: run the bark wall] ----------------------
+
+func _stage_13() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var prev: Dictionary = cp0
+	var plats: Array[Dictionary] = []
+	var dxs: Array[float] = [0.4, -0.4]
+	for i: int in 2:
+		var c: Vector3 = _ahead(prev, 0.78, 0.0, 2.4, dxs[i])
+		plats.append(_cap_plat(c, 1.2, YELLOW) if i % 2 == 0 else _leaf_plat(c, 1.2))
+		prev = plats[i]
+	var cp: Dictionary = _cp(_ahead(prev, 0.78, 0.0, 5.0, -(prev["c"] as Vector3).x))
+	var arrive: Array[float] = [1.0, 1.9]
+	var d1: FungalDrip = _drip((plats[0]["c"] as Vector3), 7.0, 5.5, arrive[0] + 2.7)
+	var d2: FungalDrip = _drip((plats[1]["c"] as Vector3), 7.0, 5.5, arrive[1] + 2.7)
+	# SHORTCUT: a bark wall down the left side, kicked off onto the checkpoint
+	var cpc: Vector3 = cp["c"]
+	var wz0: float = -4.0
+	var wz1: float = cpc.z + 6.0
+	kit.wallrun(_w(Vector3(-3.4, 1.2, (wz0 + wz1) * 0.5)), Vector3(wz0 - wz1, 6.5, 0.6), _yaw + 90.0)
+	if route_variant == 2:
+		r_walk(_w(Vector3(-0.6, 0, -1.4)))
+		r_wallrun(_w(Vector3(-0.6, 0, -2.15)), _w(Vector3(-2.9, 1.4, -7.0)), _w(Vector3(-2.9, 1.4, cpc.z + 8.0)), _w(cpc + Vector3(-0.5, 0, 0.2)))
+	else:
+		_wait(func() -> bool: return d1.clear_over(Game.course_time, arrive[0] - 0.5, arrive[0] + 0.7 + 1.5) 			and d2.clear_over(Game.course_time, arrive[1] - 0.5, arrive[1] + 0.7 + 1.5))
+		prev = cp0
+		for st: Dictionary in plats:
+			_hop(prev, st)
+			prev = st
+		_hop(prev, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	_bark_slab(Vector3(-3.4, 1.2, (wz0 + wz1) * 0.5), Vector3(wz0 - wz1, 6.5, 0.6), -1.0)
+	return cp["c"]
+
+
+# ---- stage 14: Dew Garden - a spore lift, then leaves under a dewdrop ----------------------------------------------
+
+func _stage_14() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var pr: float = 3.0
+	var pf_c: Vector3 = _ahead(cp0, 0.74, 0.0, pr * 2.0)
+	var pf: FungalPuff = _puff(pf_c, 9.0, 8.0, 0.25)
+	var ledge: Dictionary = _blk(Vector3(pf_c.x, pf_c.y + 7.0, pf_c.z - pr - 1.2 - 2.5), 5.0, 5.0, "alt", 0.8)
+	var lc: Vector3 = ledge["c"]
+	var prev: Dictionary = ledge
+	var plats: Array[Dictionary] = []
+	var dxs: Array[float] = [0.4, -0.4, 0.4]
+	for i: int in 3:
+		var c: Vector3 = _ahead(prev, 0.78, 0.0, 2.6, dxs[i])
+		plats.append(_leaf_plat(c, 1.3) if i != 1 else _cap_plat(c, 1.3, VIOLET))
+		prev = plats[i]
+	var cp: Dictionary = _cp(_ahead(prev, 0.78, 0.0, 5.0, -(prev["c"] as Vector3).x))
+	var arrive: float = 2.0
+	var drip: FungalDrip = _drip((plats[1]["c"] as Vector3), 7.0, 5.5, arrive + 2.7)
+	_hop(cp0, _area(pf_c, pr, pr))
+	_lift(pf, pf_c, pr, lc, 7.4)
+	r_walk(_w(Vector3(lc.x, lc.y, lc.z - 0.5)))
+	_wait(func() -> bool: return drip.clear_over(Game.course_time, arrive - 0.5, arrive + 0.7 + 1.5))
+	prev = ledge
+	for st: Dictionary in plats:
+		_hop(prev, st)
+		prev = st
+	_hop(prev, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 15: Ladybird Lane - two ladybirds ferry you over the gaps ---------------------------------------------------
+
+func _ladybird(start_top: Vector3, travel: float, period: float) -> FungalSnail:
+	var lb := FungalSnail.new()
+	lb.kind = "ladybird"
+	lb.size = Vector3(3.0, 0.4, 3.0)
+	var pts: Array[Vector3] = [Vector3.ZERO, _d(Vector3(0, 0, -travel))]
+	lb.points = pts
+	lb.period = period
+	lb.dwell = 0.25
+	lb.position = _w(start_top) - Vector3(0, 0.2, 0)
+	add_child(lb)
+	return lb
+
+
+## Bot: board `lb` from `from` (local), ride until it is at its far end, then step off to `to` (local).
+func _ride(lb: FungalSnail, from: Vector3, start_top: Vector3, travel: float, to: Vector3) -> void:
+	route.append({"kind": "candy_board", "from": _w(from), "cars": [lb], "reach": 4.8, "lead": 0.45, "local": Vector3(0, 0.1, 0)})
+	var end_w: Vector3 = _w(start_top + Vector3(0, 0, -travel))
+	route.append({"kind": "candy_ride", "stand": Vector3(0, 0.1, 0), "to": _w(to), "until": func() -> bool:
+		return Vector2(lb.global_position.x - end_w.x, lb.global_position.z - end_w.z).length() < 0.4})
+
+
+func _stage_15() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var d1: Dictionary = _blk(_ahead(cp0, 0.76, 0.0, 4.0), 4.0, 4.0, "alt", 0.8)
+	var dc: Vector3 = d1["c"]
+	var travel: float = 16.0
+	var s1 := Vector3(dc.x, dc.y, dc.z - 2.0 - 1.2 - 1.5)
+	var lb1: FungalSnail = _ladybird(s1, travel, 10.0)
+	var isl_c := Vector3(dc.x, dc.y, s1.z - travel - 1.5 - 1.2 - 2.0)
+	var isl: Dictionary = _blk(isl_c, 4.0, 4.0, "alt", 0.8)
+	var s2 := Vector3(dc.x, dc.y, isl_c.z - 2.0 - 1.2 - 1.5)
+	var lb2: FungalSnail = _ladybird(s2, travel, 10.0)
+	lb2.phase = 0.5
+	var d2c := Vector3(dc.x, dc.y, s2.z - travel - 1.5 - 1.2 - 2.0)
+	var d2: Dictionary = _blk(d2c, 4.0, 4.0, "alt", 0.8)
+	var cp: Dictionary = _cp(_ahead(d2, 0.76, 0.0, 5.0))
+	_hop(cp0, d1)
+	r_walk(_w(Vector3(dc.x, dc.y, dc.z + 0.0)))
+	_ride(lb1, Vector3(dc.x, dc.y, dc.z - 0.6), s1, travel, isl_c)
+	r_walk(_w(Vector3(isl_c.x, isl_c.y, isl_c.z + 0.6)))
+	_ride(lb2, Vector3(isl_c.x, isl_c.y, isl_c.z - 0.6), s2, travel, d2c)
+	r_walk(_w(Vector3(d2c.x, d2c.y, d2c.z - 1.0)))
+	_hop(d2, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 16: Root Flare - two mantles up the roots at the foot of the great toadstool ----------------------------------
+
+func _stage_16() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _cap_plat(_ahead(cp0, 0.76, 0.0, 2.4), 1.2, ORANGE)
+	var b1: Dictionary = _blk(_ahead(p1, 0.78, 0.0, 3.4, 0.0), 2.4, 3.4, "alt", 0.8)
+	var b1c: Vector3 = b1["c"]
+	var front1: float = b1c.z - 1.7
+	var l1_top := Vector3(b1c.x, b1c.y + 3.3, front1 - 1.6 - 1.2)
+	var l1: Dictionary = _ledge(l1_top, Vector3(3.0, 9.0, 2.4))
+	var b2: Dictionary = _blk(_ahead(l1, 0.78, 0.0, 3.4, 0.0), 2.4, 3.4, "alt", 0.8)
+	var b2c: Vector3 = b2["c"]
+	var front2: float = b2c.z - 1.7
+	var l2_top := Vector3(b2c.x, b2c.y + 3.3, front2 - 1.6 - 1.2)
+	var l2: Dictionary = _ledge(l2_top, Vector3(3.0, 9.0, 2.4))
+	var cp: Dictionary = _cp(_ahead(l2, 0.78, 0.0, 5.0))
+	_hop(cp0, p1)
+	_hop(p1, b1)
+	r_walk(_w(Vector3(b1c.x, b1c.y, front1 + 0.9)))
+	r_mantle(_w(Vector3(b1c.x, b1c.y, front1 + 0.35)), _w(l1_top + Vector3(0, 0, 0.3)))
+	_hop(l1, b2)
+	r_walk(_w(Vector3(b2c.x, b2c.y, front2 + 0.9)))
+	r_mantle(_w(Vector3(b2c.x, b2c.y, front2 + 0.35)), _w(l2_top + Vector3(0, 0, 0.3)))
+	_hop(l2, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	return cp["c"]
 
@@ -1326,6 +1470,6 @@ var _dbg_acc: float = 0.0
 func _physics_process(dt: float) -> void:
 	super._physics_process(dt)
 	_dbg_acc += dt
-	if DEBUG_JUMPS and player != null and _dbg_acc > 0.1 and Game.course_time > 3.0 and Game.course_time < 7.0:
+	if DEBUG_JUMPS and player != null and _dbg_acc > 0.1 and Game.course_time > 0.0 and Game.course_time < 3.0:
 		_dbg_acc = 0.0
-		print("TR t=", snappedf(Game.course_time, 0.1), " ", player.global_position.snapped(Vector3.ONE * 0.01), " v ", player.velocity.snapped(Vector3.ONE * 0.1), " wall ", player.is_wall_running(), " gr ", player.grounded)
+		var lbn: Array = find_children("*", "FungalSnail", true, false); print("LB ", (lbn[lbn.size() - 1] as Node3D).global_position.snapped(Vector3.ONE * 0.01) if lbn.size() > 0 else "-"); print("TR t=", snappedf(Game.course_time, 0.1), " ", player.global_position.snapped(Vector3.ONE * 0.01), " v ", player.velocity.snapped(Vector3.ONE * 0.1), " wall ", player.is_wall_running(), " gr ", player.grounded)
