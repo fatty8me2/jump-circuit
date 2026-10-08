@@ -27,6 +27,9 @@ var _charge_fill: ColorRect
 var _round: Label
 var _count: Label
 var _score: Label
+## The game type's widget (King of the Hill zone, coin count, bomb fuse ...), left side under the item slot.
+var _mode_box: PanelContainer
+var _mode_text: Label
 var _feed: VBoxContainer
 var _announce: Label
 var _announce_tw: Tween
@@ -157,6 +160,15 @@ func _ready() -> void:
 	_score.position = Vector2(24, 50)
 	_root.add_child(_score)
 
+	_mode_box = UiKit.panel()
+	_mode_box.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_mode_box.position = Vector2(24, 190)
+	_mode_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_mode_box.visible = false
+	_mode_text = UiKit.label("", 17, UiKit.GOLD)
+	_mode_box.add_child(_mode_text)
+	_root.add_child(_mode_box)
+
 	# live standings: big place + the racers in order, top right (replaces the level's race board)
 	standings = PartyStandings.new()
 	standings.set_anchors_preset(Control.PRESET_TOP_RIGHT)
@@ -213,6 +225,11 @@ func _ready() -> void:
 			_fade_later(_hint, 9.0)
 		else:
 			_round.text = "ROUND %d  -  %s  -  %s" % [party.rules.round_no, mode_name.to_upper(), PartyNames.CUP.to_upper()]
+			var cup_n: int = PartyRuleset.cup_rounds()
+			if cup_n > 0:
+				_round.text = "ROUND %d OF %d  -  %s" % [party.rules.round_no, cup_n, mode_name.to_upper()]
+			if PartyRuleset.variant() != "classic":
+				_round.text += "  -  " + PartyNames.variant_name(PartyRuleset.variant()).to_upper()
 		_fade_later(_round, 6.0, 0.55)
 		party.hit_landed.connect(_on_hit_landed)
 		party.hit_taken.connect(_on_hit_taken)
@@ -351,7 +368,8 @@ func _process_round() -> void:
 		line += "    Cup %d" % int(party.rules.cup[me])
 	_score.text = line
 	# end-of-round countdown
-	var left: float = PartyRules.time_left(party.finish_times(), Game.course_time)
+	_process_mode_box()
+	var left: float = PartyRules.time_left(party.finish_times(), Game.course_time, party.round_limit())
 	if left >= 0.0 and not party.round_over:
 		var n: int = int(ceil(left))
 		_count.text = "Round ends in %d" % n
@@ -366,6 +384,18 @@ func _process_round() -> void:
 		_last_count = n
 	else:
 		_count.visible = false
+
+
+## The game type's widget: its few lines of text, tinted by its mood (red when the bomb is yours ...).
+func _process_mode_box() -> void:
+	var lines: Array[String] = []
+	if party.mode != null and not party.round_over:
+		lines = party.mode.hud_lines()
+	_mode_box.visible = not lines.is_empty()
+	if lines.is_empty():
+		return
+	_mode_text.text = "\n".join(lines)
+	_mode_text.add_theme_color_override("font_color", party.mode.hud_color())
 
 
 func _cup_teams() -> Dictionary:
@@ -703,7 +733,7 @@ func show_finished(place: int, can_spectate: bool, on_spectate: Callable) -> voi
 func _process_finish_bar(dt: float) -> void:
 	if _finish_bar == null or not is_instance_valid(_finish_bar):
 		return
-	var left: float = PartyRules.time_left(party.finish_times(), Game.course_time)
+	var left: float = PartyRules.time_left(party.finish_times(), Game.course_time, party.round_limit())
 	if left >= 0.0:
 		_finish_count.text = "Round ends in %d s" % int(ceil(left))
 		_finish_fill.size.x = 440.0 * clampf(left / PartyRules.ROUND_GRACE, 0.0, 1.0)
@@ -750,6 +780,17 @@ func add_panel(panel: Control) -> void:
 	# the strip, arrows and warnings make way for the scoreboard
 	standings.visible = false
 	radar.visible = false
+
+
+## A full-screen scene (the champion podium) in place of the scoreboard.
+func add_screen(screen: Control) -> void:
+	for c: Node in _panel_host.get_children():
+		c.queue_free()
+	_panel_host.add_child(screen)
+	_panel_host.modulate.a = 1.0
+	standings.visible = false
+	radar.visible = false
+	_mode_box.visible = false
 
 
 func has_panel() -> bool:

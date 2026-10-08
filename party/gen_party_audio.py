@@ -244,8 +244,106 @@ def p_fanfare():
 
 
 
+# ---- game types and the cup podium (party/modes/, ui/party_podium.gd) -----------------------------
+
+def p_coin():
+    # Coin Rush pickup: a two-note "ka-ching" blip
+    x = np.zeros(int(0.32 * SR))
+    place(x, 0.0, ga.bell(mtof(83), 0.3, SR, 0.07) * 0.8)
+    place(x, 0.06, ga.bell(mtof(88), 0.26, SR, 0.1))
+    save("coin", x, fout=0.04)
+
+
+def p_zone():
+    # King of the Hill: the zone moves - a rising shimmer swell into a soft gong
+    t = tvec(0.9)
+    f = sweep(300.0, 900.0, t, 0.5)
+    y = (osc(f) + 0.4 * osc(f * 2.0)) * np.sin(np.pi * np.clip(t / 0.5, 0, 1)) ** 2 * (t < 0.5)
+    x = 0.5 * y
+    place(x, 0.42, ga.bell(mtof(67), 0.45, SR, 0.2))
+    sp = fft_band(noise("zone", len(t)), SR, 4000.0, 10000.0, 2) * ad_env(t, 0.3, 0.2)
+    save("zone", x + 0.12 * sp / np.max(np.abs(sp)), fout=0.1)
+
+
+def p_fuse():
+    # Hot Potato: one fuse tick - a dry click with a fizz
+    t = tvec(0.12)
+    y = osc(1300.0) * np.exp(-t / 0.01) + 0.4 * osc(2600.0) * np.exp(-t / 0.006)
+    fz = fft_band(noise("fuse", len(t)), SR, 3500.0, 9000.0, 2) * ad_env(t, 0.002, 0.03)
+    save("fuse", y + 0.3 * fz / np.max(np.abs(fz)), fout=0.02)
+
+
+def p_blast():
+    # Hot Potato: the bomb goes off - a boom with a fizzling tail
+    t = tvec(1.1)
+    n = noise("blast", len(t))
+    rumble = fft_band(n, SR, None, 220.0, 3) * ad_env(t, 0.002, 0.3)
+    crack = fft_band(n, SR, 400.0, 6000.0, 2) * ad_env(t, 0.001, 0.07)
+    sub = osc(sweep(120.0, 38.0, t, 0.35)) * ad_env(t, 0.002, 0.25)
+    save("blast", rumble / np.max(np.abs(rumble)) + 0.7 * crack / np.max(np.abs(crack)) + 0.8 * sub, fout=0.12)
+
+
+def p_elim():
+    # Elimination: a descending three-note sting
+    x = np.zeros(int(0.9 * SR))
+    for i, m in enumerate((67, 62, 55)):
+        t = tvec(0.4)
+        f = mtof(m)
+        y = (osc(f) + 0.5 * osc(f * 2.0) + 0.3 * osc(f * 3.0)) * np.minimum(t / 0.01, 1.0) * np.exp(-t / 0.14)
+        place(x, 0.16 * i, y * 0.6)
+    place(x, 0.32, osc(sweep(140.0, 45.0, tvec(0.5), 0.4)) * ad_env(tvec(0.5), 0.003, 0.2) * 0.7)
+    save("elim", x, fout=0.1)
+
+
+def p_pass():
+    # Hot Potato: the bomb changes hands - a quick upward whip and a pop
+    t = tvec(0.28)
+    n = noise("pass", len(t))
+    w = ga.svf_bandpass(n, sweep(700.0, 3800.0, t, 0.2), 2.0, SR) * np.sin(np.pi * np.clip(t / 0.2, 0, 1))
+    x = 0.8 * w
+    place(x, 0.19, ga.bell(mtof(86), 0.09, SR, 0.03) * 0.8)
+    save("pass", x, fout=0.04)
+
+
+def p_drum():
+    # podium: a rolling snare-style drum roll that builds, ending on a hit
+    dur = 2.2
+    x = np.zeros(int(dur * SR))
+    tt = 0.0
+    k = 0
+    while tt < dur - 0.25:
+        t = tvec(0.09)
+        hit = fft_band(noise("drum%d" % k, len(t)), SR, 1500.0, 7000.0, 2) * np.exp(-t / 0.02)
+        hit += 0.6 * osc(sweep(260.0, 180.0, t, 0.05)) * np.exp(-t / 0.03)
+        place(x, tt, hit * (0.3 + 0.7 * tt / dur))
+        tt += 0.075 - 0.05 * (tt / dur)
+        k += 1
+    t = tvec(0.5)
+    big = osc(sweep(150.0, 60.0, t, 0.15)) * ad_env(t, 0.002, 0.15) + 0.7 * fft_band(noise("drumhit", len(t)), SR, 800.0, 8000.0, 2) * np.exp(-t / 0.08)
+    place(x, dur - 0.25, big)
+    save("drum", x, fout=0.15)
+
+
+def p_champion():
+    # podium: a longer, grander fanfare than the MVP one
+    x = np.zeros(int(3.0 * SR))
+    seq = ((60, 0.0, 0.2), (64, 0.2, 0.2), (67, 0.4, 0.2), (72, 0.6, 0.35), (67, 0.95, 0.2), (72, 1.15, 0.2), (76, 1.35, 1.4))
+    for m, tt, d in seq:
+        t = tvec(d + 0.2)
+        f = mtof(m)
+        y = (osc(f) + 0.5 * osc(f * 2.0) + 0.3 * osc(f * 3.0) + 0.15 * osc(f * 4.0)) * np.minimum(t / 0.012, 1.0) * np.exp(-t / (0.5 if d > 1 else 0.16))
+        place(x, tt, y * 0.5)
+        place(x, tt, ga.bell(f * 2.0, d + 0.2, SR, 0.35) * 0.2)
+    for m in (64, 67, 72):
+        t = tvec(1.5)
+        place(x, 1.35, osc(np.full(len(t), mtof(m - 12))) * ad_env(t, 0.02, 0.6) * 0.25)
+    sp = fft_band(noise("champion", len(x)), SR, 6000.0, 12000.0, 2) * np.concatenate([np.zeros(int(1.35 * SR)), ad_env(tvec(1.65), 0.1, 0.5)])
+    save("champion", x + 0.1 * sp / np.max(np.abs(sp)), fout=0.3)
+
+
 ALL = [p_pickup, p_roll, p_whoosh, p_hit, p_ko, p_boom, p_zap, p_charge, p_beam, p_slash, p_powerup,
-       p_pop, p_spring, p_freeze, p_warp, p_chime, p_wind, p_clank, p_tick, p_land, p_warn, p_tally, p_fanfare]
+       p_pop, p_spring, p_freeze, p_warp, p_chime, p_wind, p_clank, p_tick, p_land, p_warn, p_tally, p_fanfare,
+       p_coin, p_zone, p_fuse, p_blast, p_elim, p_pass, p_drum, p_champion]
 
 if __name__ == "__main__":
     print("Party Mode effects -> audio/party_*.wav")

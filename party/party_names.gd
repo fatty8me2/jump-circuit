@@ -18,6 +18,23 @@ const MODE_BLURBS: Dictionary = {
 	"practice": "Solo. Every item box gives the next power-up, and practice dummies take the hits.",
 }
 
+## Game types inside Party / Team Party (the host's "Game type" rule). "classic" is the plain race.
+const VARIANTS: Dictionary = {
+	"classic": "Classic Race",
+	"hill": "King of the Hill",
+	"elim": "Elimination",
+	"coins": "Coin Rush",
+	"potato": "Hot Potato",
+}
+
+const VARIANT_BLURBS: Dictionary = {
+	"classic": "Race to the finish: placement points, KOs and checkpoint bonuses.",
+	"hill": "A glowing zone moves between checkpoint lawns. Stand in it alone to score.",
+	"elim": "The last racer through every checkpoint is out. The last one standing wins.",
+	"coins": "Coins line the route. Grab them; a KO makes the victim drop some. Most coins wins.",
+	"potato": "Shove someone to pass the bomb. Whoever holds it when the fuse ends blows up.",
+}
+
 const CUP: String = "Party Cup"
 
 const TEAMS: Array[String] = ["Blaze", "Tide"]
@@ -86,3 +103,11 @@ static func team_name(team: int) -> String:
 
 static func team_color(team: int) -> Color:
 	return TEAM_COLORS[clampi(team, 0, TEAM_COLORS.size() - 1)]
+
+
+static func variant_name(id: String) -> String:
+	return str(VARIANTS.get(id, id))
+
+
+static func variant_blurb(id: String) -> String:
+	return str(VARIANT_BLURBS.get(id, ""))

@@ -40,6 +40,8 @@ var swap_wait: float = -1.0
 var _enc: Dictionary = {}
 var _skip_box: Dictionary = {}
 var _magnet_pulse: float = 0.0
+## Per-game-type bookkeeping for CpuModes (hill lingering ...).
+var mode_state: Dictionary = {}
 
 
 func setup(p_id: int, p_name: String, level: LevelBase, diff: String, at: Vector3, p_seed: int) -> void:
@@ -61,7 +63,7 @@ func tick(dt: float, f: CpuField) -> void:
 	slow_left = maxf(slow_left - dt, 0.0)
 	shrink_left = maxf(shrink_left - dt, 0.0)
 	_tick_buffs(dt, f)
-	walker.pace = _pace(f)
+	walker.pace = _pace(f) * CpuModes.pace_mult(self, f, dt)
 	walker.tick(dt)
 	_drain(f)
 	if finished or walker.done:
@@ -185,11 +187,11 @@ func _melee(f: CpuField, rivals: Array[Dictionary]) -> void:
 		if dir.dot(walker.facing) < -0.2:
 			continue
 		var rid: int = int(r["id"])
-		if float(_enc.get(rid, -1.0)) > f.clock:
+		if float(_enc.get(rid, -1.0)) > f.clock and not CpuModes.eager(self, f):
 			continue
 		_enc[rid] = f.clock + 3.0
 		var edge: bool = f.edge_near(r["pos"] as Vector3, dir)
-		var chance: float = float(p["shove"]) * (1.0 if form != "" else (2.0 if edge else 0.3))
+		var chance: float = CpuModes.melee_chance(self, f, float(p["shove"]) * (1.0 if form != "" else (2.0 if edge else 0.3)), r)
 		if rng.randf() < chance:
 			f.cpu_shove(self, r, dir)
 			return

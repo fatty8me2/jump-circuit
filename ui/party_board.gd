@@ -29,7 +29,7 @@ static func entries(order: Array, roster: Dictionary, kos: Dictionary, bonus: Di
 
 ## Points a racer has banked this round before the placement points (KOs + first-through).
 static func live_points(kos: int, bonus: int) -> int:
-	return kos * PartyRules.KO_POINTS + bonus * PartyRules.BONUS_POINTS
+	return kos * PartyRules.ko_value() + bonus * PartyRules.BONUS_POINTS
 
 
 ## [team 0, team 1] sums of the entries' round points (live).

@@ -23,6 +23,10 @@ var done: bool = false
 ## The callouts of the round: [{key, title, id, detail}].
 var callout_list: Array[Dictionary] = []
 var _level_pick: OptionButton
+## A game type adds its own column (Hill / Coins / Bomb / Out) to the round table.
+var _mode_col: bool = false
+## The last round of a finite cup: the buttons lead to the podium instead of another round.
+var final_round: bool = false
 var _t: float = 0.0
 var _tally: Array[Dictionary] = []
 var _cup: Array[Dictionary] = []
@@ -43,9 +47,17 @@ func setup_round(p: PartyLayer, rows: Array[Dictionary]) -> void:
 	custom_minimum_size = Vector2(1180 if n > 4 else 860, 0)
 	var box: VBoxContainer = UiKit.vbox(8)
 	add_child(box)
-	box.add_child(UiKit.label("%s  -  ROUND %d" % [PartyNames.CUP.to_upper(), rules.round_no], 20, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER))
-	box.add_child(UiKit.label("Round Results", 38, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER))
-	box.add_child(UiKit.label(str(Game.level_info()["name"]), 18, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER))
+	_mode_col = p.mode != null
+	final_round = PartyRuleset.cup_done(rules.round_no)
+	var cup_n: int = PartyRuleset.cup_rounds()
+	box.add_child(UiKit.label("%s  -  ROUND %d%s" % [PartyNames.CUP.to_upper(), rules.round_no, (" OF %d" % cup_n) if cup_n > 0 else ""], 20, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER))
+	box.add_child(UiKit.label("Final Round Results" if final_round else "Round Results", 38, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER))
+	var sub: String = str(Game.level_info()["name"])
+	if p.mode != null:
+		sub += "   -   " + PartyNames.variant_name(p.mode.id)
+	box.add_child(UiKit.label(sub, 18, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER))
+	if p.last_note != "":
+		box.add_child(UiKit.label(p.last_note, 20, UiKit.GOLD, HORIZONTAL_ALIGNMENT_CENTER))
 	var team_of: Dictionary = rules.teams.duplicate()
 	if rules.is_team():
 		var round_pts: Dictionary = rules.round_points(rows)
@@ -74,13 +86,25 @@ func setup_round(p: PartyLayer, rows: Array[Dictionary]) -> void:
 	_chips_at = _cup_at + 0.1 * float(_cup.size()) + COUNT_TIME
 	_end_at = _chips_at + 0.4 * float(_chips.size())
 	# controls
-	if Net.is_host():
+	if final_round:
+		var crown: Button = UiKit.button("See the Champion!", func() -> void: party.show_podium(), 420)
+		crown.name = "CrownChampion"
+		box.add_child(crown)
+		first = crown
+		if Net.is_host():
+			box.add_child(UiKit.button("End Cup - Back to Lobby", func() -> void:
+				Net.host_reset_cup()
+				Net.host_return_to_lobby(), 420))
+		box.add_child(UiKit.confirm_button("Close Session" if Net.is_host() else "Leave Party", "Press again to disconnect" if Net.is_host() else "Press again to leave", func() -> void:
+			Net.leave()
+			Game.goto_title("main"), 420))
+	elif Net.is_host():
 		_level_pick = OptionButton.new()
 		_level_pick.custom_minimum_size = Vector2(0, 46)
 		for info: Dictionary in Game.LEVELS:
 			_level_pick.add_item("Next course:  %s" % str(info["name"]))
 		_level_pick.selected = (Game.level_index + 1) % Game.LEVELS.size()
-		var next: Button = UiKit.button("Next Round  (Round %d)" % (rules.round_no + 1), func() -> void:
+		var next: Button = UiKit.button("Next Round  (Round %d%s)" % [rules.round_no + 1, (" of %d" % cup_n) if cup_n > 0 else ""], func() -> void:
 			Net.host_start_race(_level_pick.selected), 330)
 		# two rows of two, so a full lobby's results still fit on screen
 		var row1: HBoxContainer = UiKit.hbox(12)
@@ -133,10 +157,12 @@ func _round_table(rows: Array[Dictionary]) -> Control:
 	var col: VBoxContainer = UiKit.vbox(4)
 	col.add_child(UiKit.label("THIS ROUND", 17, UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER))
 	var grid := GridContainer.new()
-	grid.columns = 6
+	grid.columns = 7 if _mode_col else 6
 	grid.add_theme_constant_override("h_separation", 20)
 	grid.add_theme_constant_override("v_separation", 4)
 	var heads: Array = [["Place", 56.0], ["Racer", 170.0], ["Finish", 64.0], ["KOs", 92.0], ["Bonus", 92.0], ["Round", 64.0]]
+	if _mode_col:
+		heads.insert(5, [party.mode.points_label(), 70.0])
 	for h: Array in heads:
 		grid.add_child(_cell(str(h[0]), 17, UiKit.SOFT, HORIZONTAL_ALIGNMENT_LEFT, float(h[1])))
 	var fs: int = 21 if rows.size() <= 4 else 19
@@ -151,11 +177,14 @@ func _round_table(rows: Array[Dictionary]) -> Control:
 		cells.append(_cell("", fs))
 		cells.append(_cell("", fs))
 		cells.append(_cell("", fs))
+		if _mode_col:
+			cells.append(_cell("", fs))
 		cells.append(_cell("", fs + 2, UiKit.GOLD))
 		for cl: Label in cells:
 			grid.add_child(cl)
 		_tally.append({"cells": cells, "start": 0.3 + ROW_STEP * float(i), "place_pts": int(r["place_pts"]), "kos": int(r["kos"]),
-			"ko_pts": int(r["ko_pts"]), "bonus": int(r["bonus"]), "bonus_pts": int(r["bonus_pts"]), "total": int(r["total"])})
+			"ko_pts": int(r["ko_pts"]), "bonus": int(r["bonus"]), "bonus_pts": int(r["bonus_pts"]), "mode_pts": int(r.get("mode_pts", 0)),
+			"total": int(r["total"])})
 		i += 1
 	col.add_child(grid)
 	return col
@@ -279,11 +308,16 @@ func _update_anim(_dt: float) -> void:
 		var pp: int = roundi(float(r["place_pts"]) * f)
 		var kp: int = roundi(float(r["ko_pts"]) * f)
 		var bp: int = roundi(float(r["bonus_pts"]) * f)
+		var mp: int = roundi(float(r["mode_pts"]) * f)
 		cells[2].text = "+%d" % pp
 		cells[3].text = "%d  (+%d)" % [int(r["kos"]), kp]
 		cells[4].text = "%d  (+%d)" % [int(r["bonus"]), bp]
-		cells[5].text = "%d" % (pp + kp + bp)
-		sum += pp + kp + bp
+		if _mode_col:
+			cells[5].text = "%+d" % mp
+			cells[6].text = "%d" % maxi(pp + kp + bp + mp, 0)
+		else:
+			cells[5].text = "%d" % (pp + kp + bp)
+		sum += pp + kp + bp + mp
 	for r: Dictionary in _cup:
 		var f: float = _ease((_t - float(r["start"])) / COUNT_TIME)
 		var cells: Array[Label] = r["cells"]

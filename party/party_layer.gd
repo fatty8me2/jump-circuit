@@ -25,6 +25,8 @@ extends Node3D
 ##   round_end {r, rows, cup}      (host)  the round is over: its scoreboard and the cup totals
 ##   hf        {v, s}                      sender's attack s connected with racer v (feed line, from the HUD)
 ##   use       {p}                         sender used item p (feed line + Thunder / Swap "Targeted!", from the HUD)
+##   md        {v, m, ...}         (host)  a game type's decision (party/modes/): v = type id, m = its message
+##   mq        {v, m, ...}         -> host: a game type's request (coin pickup, passing the bomb)
 
 signal item_changed(id: String)
 ## Our attack connected (target id: peer id, or a dummy's negative id).
@@ -36,7 +38,7 @@ signal ko_scored(by: int, victim: int)
 
 const SHOVE_COOLDOWN: float = 0.85
 const BOX_RESPAWN: float = 4.0
-const HOST_KINDS: Array[String] = ["box", "bonus", "round_end"]
+const HOST_KINDS: Array[String] = ["box", "bonus", "round_end", "md"]
 ## Seconds a status visual stays on a ghost if its end never arrives.
 const MAX_STATUS: float = 8.0
 ## A client waits this long for the host to answer a box touch before it may ask again.
@@ -57,6 +59,10 @@ const SHAPE_HEIGHT: float = 1.3
 
 var level: LevelBase
 var rules: PartyRules
+## The game type of this round (King of the Hill, Elimination ...), null for the classic race and Party Practice.
+var mode: PartyMode
+## The mode's one-line verdict for the results screen (host-written, travels with round_end).
+var last_note: String = ""
 var player: Player
 var sfx: PartySfx
 var hud: PartyHud
@@ -98,6 +104,7 @@ var round_over: bool = false
 ## The last round_end message applied (rows + cup), for the results screen and tests.
 var last_rows: Array[Dictionary] = []
 var results: PartyResults
+var podium: PartyPodium
 var _rng := RandomNumberGenerator.new()
 var _practice_next: int = 0
 ## One in-flight box touch per client: the box asked about and when.
@@ -171,6 +178,11 @@ func _place_when_ready() -> void:
 	if practice:
 		place_dummies()
 	_ready_done = true
+	if not practice:
+		mode = PartyModes.create(PartyRuleset.variant())
+		if mode != null:
+			add_child(mode)
+			mode.setup(self)
 
 
 # ---- placement -----------------------------------------------------------------------------
@@ -235,7 +247,14 @@ func place_boxes() -> void:
 			if tight.size() > spots.size():
 				spots = tight
 		box_counts.append(spots.size())
+		if not practice and not PartyRuleset.boxes_on():
+			continue   # the host switched the item boxes off
+		var thin: bool = not practice and PartyRuleset.box_share() < 1.0
+		var nth: int = 0
 		for s: Vector3 in spots:
+			nth += 1
+			if thin and nth % 2 == 0:
+				continue   # Low item frequency: every second box
 			var box := ItemBox.new()
 			box.index = boxes.size()
 			add_child(box)
@@ -278,6 +297,10 @@ func _physics_process(dt: float) -> void:
 	_track_safe_spots(dt)
 	_read_input(dt)
 	_check_boxes()
+	if mode != null and Game.race_mode and Game.course_time >= 0.0:
+		mode.tick(dt)
+		if Net.is_host():
+			mode.host_tick(dt)
 	if not practice and Game.race_mode:
 		if Net.is_host():
 			_host_check_round_end()
@@ -287,7 +310,7 @@ func _physics_process(dt: float) -> void:
 
 func can_act() -> bool:
 	return player.control_enabled and not level.finished and not round_over and player.party_stun <= 0.0 \
-		and not statuses.has("freeze")
+		and not statuses.has("freeze") and not is_out(Net.my_id())
 
 
 func _read_input(dt: float) -> void:
@@ -399,7 +422,7 @@ func _check_boxes() -> void:
 		if not b.touches(c):
 			continue
 		if practice or not Net.active:
-			_take_box(b.index, Net.my_id(), _practice_item(), BOX_RESPAWN)
+			_take_box(b.index, Net.my_id(), _practice_item(), box_respawn_time())
 		elif Net.is_host():
 			_host_pick(b.index, Net.my_id())
 		else:
@@ -432,8 +455,8 @@ func _host_pick(b: int, id: int) -> void:
 	if id != Net.my_id() and clock - float(_grants.get(id, -9.0)) < GRANT_GAP:
 		return
 	_grants[id] = clock
-	var msg: Dictionary = {"k": "box", "b": b, "id": id, "it": roll_for(id), "r": BOX_RESPAWN}
-	_take_box(b, id, str(msg["it"]), BOX_RESPAWN)
+	var msg: Dictionary = {"k": "box", "b": b, "id": id, "it": roll_for(id), "r": box_respawn_time()}
+	_take_box(b, id, str(msg["it"]), box_respawn_time())
 	Net.send_party(msg)
 
 
@@ -447,7 +470,51 @@ func roll_for(id: int) -> String:
 	var it: String = PartyItems.roll(frac, _rng.randf())
 	if place <= 1 and (it == "swap" or it == "thunder" or it == "jetpack"):
 		it = "balloon"
-	return it
+	return filter_item(it)
+
+
+## The host's per-item toggles: a rolled item that is switched off is re-rolled from the enabled ones
+## (the catalogue's own weights stay untouched; this only filters around the roll).
+func filter_item(it: String) -> String:
+	if practice or PartyRuleset.item_enabled(it):
+		return it
+	var pool: Array[String] = PartyRuleset.enabled_items()
+	if pool.is_empty():
+		return it
+	return pool[_rng.randi() % pool.size()]
+
+
+## Seconds a box stays empty (the host's item frequency; Party Practice keeps the default).
+func box_respawn_time() -> float:
+	return BOX_RESPAWN if practice else PartyRuleset.box_respawn()
+
+
+## The round's hard time limit (the host's rule; the default is 4 minutes).
+func round_limit() -> float:
+	return PartyRules.ROUND_LIMIT if practice else PartyRuleset.time_limit()
+
+
+func is_out(rid: int) -> bool:
+	return mode != null and mode.is_out(rid)
+
+
+## Where racer `rid` is right now (our body, or their ghost); Vector3.INF if unknown.
+func racer_pos(rid: int) -> Vector3:
+	if rid == Net.my_id():
+		return player.global_position
+	var g: RemoteRacer = ghost(rid)
+	return g.global_position if g != null and is_instance_valid(g) else Vector3.INF
+
+
+## We are out of the round (Elimination): no more control, watch the others.
+func go_spectator() -> void:
+	player.control_enabled = false
+	end_all_powers()
+	clear_statuses()
+	level.finished = true
+	hud.announce("Spectating - LB / RB switch racers", UiKit.SOFT)
+	if not level.spectate(1):
+		hud.announce("Everyone else is out of reach", UiKit.SOFT)
 
 
 func _take_box(b: int, id: int, it: String, respawn: float) -> void:
@@ -548,7 +615,7 @@ func targets() -> Array[Dictionary]:
 				"grounded": d.grounded, "dummy": true})
 	for id: Variant in level._ghosts:
 		var pid: int = int(id)
-		if not Net.roster.has(pid) or float(Net.roster[pid].get("finished", -1.0)) >= 0.0:
+		if not Net.roster.has(pid) or float(Net.roster[pid].get("finished", -1.0)) >= 0.0 or is_out(pid):
 			continue
 		if rules.is_team() and Net.team_of(pid) == Net.team_of(Net.my_id()):
 			continue
@@ -651,6 +718,8 @@ func hit(t: Dictionary, kb: Vector3, o: Dictionary = {}) -> void:
 		if not per.has("balloon"):
 			_show_ghost_status(int(t["id"]), "stun", stun)
 	hit_landed.emit(int(t["id"]), src)
+	if mode != null:
+		mode.on_hit(Net.my_id(), int(t["id"]), src)
 
 
 ## The shared "that connected" pop: a white impact flash, a burst, sparks along the blow
@@ -1046,9 +1115,11 @@ func _apply_ko(by: int, victim: int) -> void:
 		var g: RemoteRacer = ghost(victim)
 		if g != null and is_instance_valid(g) and g.global_position.y > level.kill_y + 3.0:
 			PartyFx.ko_burst(self, g.global_position + Vector3(0, 0.8, 0))
-	hud.feed("%s KO'd %s   +%d" % [racer_name(by), racer_name(victim), PartyRules.KO_POINTS], team_color_of(by))
+	if mode != null:
+		mode.on_ko(by, victim)
+	hud.feed("%s KO'd %s   +%d" % [racer_name(by), racer_name(victim), PartyRules.ko_value()], team_color_of(by))
 	if by == Net.my_id():
-		hud.announce("KO!  +%d" % PartyRules.KO_POINTS, Color(1.0, 0.45, 0.3))
+		hud.announce("KO!  +%d" % PartyRules.ko_value(), Color(1.0, 0.45, 0.3))
 		sfx.play("ko", 0.9, 1.3)
 
 
@@ -1114,6 +1185,12 @@ func _on_message(from_id: int, m: Dictionary) -> void:
 			hud.on_remote_hit(from_id, int(m.get("v", 0)), str(m.get("s", "")))
 		"use":
 			hud.on_item_used(from_id, str(m.get("p", "")))
+		"md":
+			if mode != null and str(m.get("v", "")) == mode.id:
+				mode.on_message(from_id, m)
+		"mq":
+			if mode != null and Net.is_host() and str(m.get("v", "")) == mode.id:
+				mode.on_request(from_id, m)
 
 
 func _remote_power(from_id: int, p: String, on: bool, dur: float) -> void:
@@ -1253,6 +1330,8 @@ func _on_roster_changed() -> void:
 func _on_racer_checkpoint(id: int, index: int, _at: float) -> void:
 	if practice or not Net.is_host() or round_over:
 		return
+	if mode != null:
+		mode.on_checkpoint(id, index)
 	if index < 1 or index > level.checkpoints.size() or first_through.has(index):
 		return
 	var msg: Dictionary = {"k": "bonus", "id": id, "cp": index}
@@ -1281,7 +1360,7 @@ func finish_times() -> Array:
 func _host_check_round_end() -> void:
 	if round_over or not Game.race_mode or Game.course_time < 0.0:
 		return
-	if PartyRules.round_over(finish_times(), Game.course_time):
+	if PartyRules.round_over(finish_times(), Game.course_time, round_limit()) or (mode != null and mode.round_over(Game.course_time)):
 		host_end_round()
 
 
@@ -1290,7 +1369,7 @@ func _host_check_round_end() -> void:
 func _client_watchdog(dt: float) -> void:
 	if _host_away >= 0.0:
 		_host_away += dt
-	var late: bool = Game.course_time >= PartyRules.ROUND_LIMIT + PartyRules.CLIENT_GRACE
+	var late: bool = Game.course_time >= round_limit() + PartyRules.CLIENT_GRACE
 	if late or _host_away >= PartyRules.HOST_AWAY_GRACE:
 		local_end_round()
 
@@ -1304,11 +1383,15 @@ func _on_relay_notice(text: String) -> void:
 
 ## The scoreboard message for the round as this peer knows it (host: authoritative).
 func build_round_end() -> Dictionary:
-	var finished: Array[int] = []
+	var finished: Array = []
 	for id: int in Net.standings():
 		if float(Net.roster[id].get("finished", -1.0)) >= 0.0:
 			finished.append(id)
-	var rows: Array[Dictionary] = PartyRules.score_round(finished, Net.roster.keys(), kos, bonus)
+	var mode_pts: Dictionary = {}
+	if mode != null:
+		finished = mode.finish_order(finished)
+		mode_pts = mode.mode_points()
+	var rows: Array[Dictionary] = PartyRules.score_round(finished, Net.roster.keys(), kos, bonus, mode_pts)
 	var next := PartyRules.new(rules.mode)
 	next.cup = rules.cup.duplicate()
 	next.names = rules.names.duplicate()
@@ -1317,7 +1400,7 @@ func build_round_end() -> Dictionary:
 		next.names[int(id)] = str(Net.roster[id]["name"])
 		next.teams[int(id)] = Net.team_of(int(id))
 	next.add_round(rows)
-	return {"k": "round_end", "r": rules.round_no, "rows": rows, "cup": next.cup_to_wire()}
+	return {"k": "round_end", "r": rules.round_no, "rows": rows, "cup": next.cup_to_wire(), "note": mode.round_note() if mode != null else ""}
 
 
 ## Host: score the round and tell everyone (they all show exactly these numbers).
@@ -1342,6 +1425,7 @@ func apply_round_end(m: Dictionary) -> void:
 		return
 	round_over = true
 	last_rows = PartyRules.rows_from_wire(m.get("rows", []))
+	last_note = str(m.get("note", "")).substr(0, 80)
 	rules.cup_from_wire(m.get("cup", []))
 	for id: Variant in Net.roster:
 		rules.names[int(id)] = str(Net.roster[id]["name"])
@@ -1364,6 +1448,22 @@ func show_results() -> void:
 	results = PartyResults.new()
 	results.setup_round(self, last_rows)
 	hud.add_panel(results)
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+## The champion screen after the last round of a finite cup (everyone opens it from their own results).
+func show_podium() -> void:
+	if podium != null and is_instance_valid(podium):
+		podium.queue_free()
+	podium = PartyPodium.new()
+	var host: bool = Net.is_host()
+	podium.setup(rules, Net.roster, sfx, host, func() -> void:
+			Net.host_reset_cup()
+			Net.host_return_to_lobby(),
+		func() -> void:
+			Net.leave()
+			Game.goto_title("main"))
+	hud.add_screen(podium)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
