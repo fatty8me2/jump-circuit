@@ -524,11 +524,18 @@ func _stage_5() -> Vector3:
 	var l2: LaserGate = _laser(Vector3(bc.x, bc.y + 1.2, near - 8.0), 6.0, 0.25, 0.0)
 	var p2: Dictionary = _post(_ahead(beam, 0.84, 0.6, 2.0), 2.0, 2.0)
 	var cp: Dictionary = _cp(_ahead(p2, 0.82, 0.0, 5.0))
+	# SHORTCUT: two little blocks beside the beam carry you past both lasers
+	var sc: Array[Dictionary] = _side_chain(p1, 2, 3.6, 0.84)
 	_hop(cp0, p1)
-	_hop(p1, beam, Vector3(0, 0, blen * 0.5 - 0.8))
-	var hold: Vector3 = _w(Vector3(bc.x, bc.y, near - 2.4))
-	r_walk(hold)
-	_wait(func() -> bool: return _dark(l1, 0.1, 0.9 + 1.5) and _dark(l2, 0.8, 1.5 + 1.5), hold)
+	if route_variant == 2:
+		_hop(p1, sc[0])
+		_hop(sc[0], sc[1])
+		r_jump(_w(_edge(sc[1], Vector3(bc.x, 0, near - 10.5))), _w(Vector3(bc.x, bc.y, near - 10.5)))
+	else:
+		_hop(p1, beam, Vector3(0, 0, blen * 0.5 - 0.8))
+		var hold: Vector3 = _w(Vector3(bc.x, bc.y, near - 2.4))
+		r_walk(hold)
+		_wait(func() -> bool: return _dark(l1, 0.1, 0.9 + 1.5) and _dark(l2, 0.8, 1.5 + 1.5), hold)
 	r_walk(_w(Vector3(bc.x, bc.y, bc.z - blen * 0.5 + 0.9)))
 	_hop(beam, p2)
 	_hop(p2, cp, Vector3(0, 0, 1.2))
