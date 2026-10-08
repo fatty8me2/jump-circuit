@@ -113,7 +113,6 @@ static func hurt(node: Node, body: Node3D) -> void:
 	while n != null and not n.has_method("fail"):
 		n = n.get_parent()
 	if n != null:
-		print("HURT by ", node.get_parent().name if node.get_parent() else "?", " ", node.get_parent().get_script().resource_path if node.get_parent() and node.get_parent().get_script() else "", " t=", Game.course_time)
 		n.call_deferred("fail", "hazard")
 
 

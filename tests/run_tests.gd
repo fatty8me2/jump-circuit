@@ -4668,6 +4668,8 @@ func test_zq_arcade_stats() -> void:
 			var pct: float = need.x / max_jump_reach(need.y, float(step.get("speed", -1.0)))
 			worst = maxf(worst, pct)
 			jumps += 1
+			if pct > 0.95:
+				print("        arcade: jump %d is %.1f%% (%s -> %s)" % [jumps, pct * 100.0, str(step["from"]), str(step["to"])])
 			if pct >= 0.85:
 				hard += 1
 	var widths: Array = lvl.get("landing_widths")

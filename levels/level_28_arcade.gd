@@ -4,7 +4,22 @@ extends LevelBase
 ## CRT scanlines over a pixel sky, a dot-matrix screen far below. It is hard through precision, pace and
 ## combinations (twelve-plus main-path jumps at 85-94% of max reach onto 1.0-1.4 m tiles), never blind timing.
 ##
-## (the stage list is filled in as the course is built)
+##  1 Insert Coin     four posts and a beam, MANTLE the coin slot
+##  2 Ghost Alley     two posts, the beam across a ghost's loop (chomper)
+##  3 Tetris Well     three falling tetrominoes stack into stairs, MANTLE the tower
+##  4 Pong Court      BRANCH: ride the pong paddle | WALL RUN the scoreboard [shortcut: posts down the middle]
+##  5 Warp Zone       the WARP PIPE (portal) up to a beam under an invader LASER, two posts out
+##  6 Glitch Bridge   three RGB glitch tiles that hop, WALL RUN the mirror
+##  7 Bat and Block   a PISTON (pong bat) and a falling O-block (CRUSHER) on a beam, MANTLE
+##  8 Pac Maze        BRANCH: two ghosts across the beam | two chained WALL RUNS [shortcut: 4.1 m MANTLE + cornice]
+##  9 Scroll Screen   the AUTO-SCROLL wall chases you over posts and a WALL RUN
+## 10 Stack Climb     three pieces stack a stair, MANTLE the tower, WALL RUN out
+## 11 Space Invaders  BRANCH: three marching LASERS | MANTLE the invader block [shortcut: the warp pipe]
+## 12 Pong Arena      two sideways paddles ferry you past a slow pong ball
+## 13 Crossfire       two hopping glitch tiles, a ghost over the gap, a bat [shortcut: the secret warp pipe]
+## 14 Level Up        two falling O-blocks, MANTLE, the longest jump (94%), WALL RUN
+## 15 THE PIXEL BOSS SET PIECE: the screen scrolls behind you while the boss's gaze slams telegraphed
+##                    columns on the platforms; run to the HIGH SCORE gate
 ##
 ## Arcade mechanics (own scripts): ArcadeBlock (falling tetrominoes), ArcadeChomper (chompers, ghosts and
 ## the pong ball on rails), ArcadePaddle (pong paddles you ride), ArcadeGlitch (RGB glitch tiles that hop),
@@ -15,7 +30,10 @@ extends LevelBase
 const DEV_START: int = 0
 const DEV_LAST: int = 0
 ## Testing aid: print when the bot starts each route step (to read off its passing times).
-const DEV_TRACE: bool = true
+const DEV_TRACE: bool = false
+## Every block / glitch tile is laid out CLOCK_SHIFT s ahead of the bot's release time, so the time-gated
+## platforms are already solid when the level loads (test_m measures jumps against live collision).
+const CLOCK_SHIFT: float = 2.0
 ## Testing aid: start the course clock here (a different alignment of every timed machine for the bot).
 const DEV_SKEW: float = 0.0
 
@@ -515,7 +533,7 @@ func _piece(near: Vector3, n: int, tint: Color, period: float, phase_s: float, e
 	blk.cells = cells
 	blk.tint = tint
 	blk.period = period
-	blk.phase = fposmod(phase_s / period, 1.0)
+	blk.phase = fposmod((phase_s + CLOCK_SHIFT) / period, 1.0)
 	blk.position = _w(near) - Vector3(0, blk.thick * 0.5, 0)
 	blk.rotation.y = deg_to_rad(_yaw)
 	add_child(blk)
@@ -692,7 +710,7 @@ func _glitch(spots_local: Array[Vector3], hold: float, start_s: float, tint: Col
 		_floors.append({"top": _w(s), "size": _sz(Vector3(1.3, 0, 1.3)), "drop": 0.4, "frag": true})
 	g.spots = ws
 	g.hold = hold
-	g.phase = fposmod(-start_s / (hold * float(spots_local.size())), 1.0)
+	g.phase = fposmod(-(start_s - CLOCK_SHIFT) / (hold * float(spots_local.size())), 1.0)
 	g.yaw = _yaw
 	g.tint = tint
 	add_child(g)
@@ -1012,7 +1030,7 @@ func _stage_12() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
 	var xa: float = -3.5
 	var xb: float = 3.5
-	var pa: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.4, xa), 1.4, 1.4)
+	var pa: Dictionary = _post(_ahead(cp0, 0.84, 0.0, 1.4, xa), 1.4, 1.4)
 	var pac: Vector3 = pa["c"]
 	var z1: float = pac.z - 0.7 - 2.6 - 0.9
 	var period: float = 6.0
@@ -1025,9 +1043,9 @@ func _stage_12() -> Vector3:
 	var p2: ArcadePaddle = _lane_paddle(xb, xa, pac.y, z2, period, -3.9)
 	var pb: Dictionary = _post(Vector3(xa, pac.y, z2 - 0.9 - 3.0 - 0.7), 1.4, 1.4)
 	var pbc: Vector3 = pb["c"]
-	var q1: Dictionary = _post(_ahead(pb, 0.90, 0.5, 1.2, 0.4))
-	var q2: Dictionary = _post(_ahead(q1, 0.91, 0.5, 1.0, -0.4), 1.0, 1.0)
-	var cp: Dictionary = _cp(_ahead(q2, 0.86, 0.0, 5.0, -(q2["c"] as Vector3).x))
+	var q1: Dictionary = _post(_ahead(pb, 0.84, 0.5, 1.2, 1.6))
+	var q2: Dictionary = _post(_ahead(q1, 0.86, 0.5, 1.0, 1.6), 1.0, 1.0)
+	var cp: Dictionary = _cp(_ahead(q2, 0.86, 0.0, 5.0, 1.0))
 	# the ball: a slow pong ball bouncing in the court between the lanes
 	var lo := Vector3(-8.0, pac.y, mc.z - 2.4)
 	var hi := Vector3(8.0, pac.y, mc.z + 2.4)
@@ -1081,16 +1099,17 @@ func _stage_13() -> Vector3:
 	var zg: float = (a2c.z - 0.6 + g2c.z + 0.65) * 0.5
 	var rail: float = 24.0
 	var spd: float = 4.0
-	var gh: ArcadeChomper = _chomper(2, [_w(Vector3(a2c.x - rail * 0.5, a2c.y, zg)), _w(Vector3(a2c.x + rail * 0.5, a2c.y, zg))], spd, rail * 0.5 - spd * (t_ghost + 2.8))
-	var bat: Piston = _bat(Vector3(a3c.x - 0.6 - 0.6 - 0.15, a3c.y + 1.35, a3c.z), 1.0, 2.6, period, _ph(0.0, t_bat - 0.5, period))
+	var gh: ArcadeChomper = _chomper(2, [_w(Vector3(a2c.x - rail * 0.5, a2c.y, zg)), _w(Vector3(a2c.x + rail * 0.5, a2c.y, zg))], spd, rail * 0.5 - spd * (t_ghost + 2.8 - CLOCK_SHIFT))
+	var bat: Piston = _bat(Vector3(a3c.x - 0.6 - 0.6 - 0.15, a3c.y + 1.35, a3c.z), 1.0, 2.6, period, _ph(0.0, t_bat - 0.5 - CLOCK_SHIFT, period))
 	# SHORTCUT: a small post beside the first post; the secret warp pipe on it opens onto the last beam
 	var sp: Dictionary = _post(_ahead(a1, 0.84, 0.0, 1.2, -2.8), 1.2, 1.2, "accent")
 	var spc: Vector3 = sp["c"]
 	var sdoor: WarpPortal = kit.portal(_w(spc + Vector3(0, 0, -0.3)), _yaw, _w(Vector3(a3c.x, a3c.y, a3c.z + 1.6)), _yaw, 6.0)
 	var spot_g: Vector3 = _w(Vector3(a2c.x, a2c.y, zg))
+	if route_variant == 2:
+		_wait(func() -> bool: return _ram_clear(bat, 2.1 - 0.3, 2.1 + 0.4 + 1.5))
 	_hop(cp0, a1)
 	if route_variant == 2:
-		_wait(func() -> bool: return _ram_clear(bat, 2.9 - 0.3, 2.9 + 0.4 + 1.5))
 		_hop(a1, sp)
 		r_portal(_w(spc + Vector3(0, 0, -0.6)), sdoor.exit_point())
 		r_walk(_w(Vector3(a3c.x, a3c.y, a3c.z - 1.6)))
@@ -1125,7 +1144,7 @@ func _stage_14() -> Vector3:
 	var ledge_top := Vector3(wc.x, wc.y + 3.3, w0 - 13.0 - 1.4 - 1.0)
 	var ld: Dictionary = _ledge(ledge_top, Vector3(3.2, 9.0, 2.0))
 	var runway: Dictionary = _blk(_ahead(ld, 0.88, 0.0, 5.0, 0.0), 1.2, 5.0, "alt", 0.6)
-	var far: Dictionary = _post(_ahead(runway, 0.94, 0.0, 1.2, 0.0))
+	var far: Dictionary = _post(_ahead(runway, 0.92, 0.0, 1.2, 0.0))
 	var farc: Vector3 = far["c"]
 	var f: float = farc.z - 0.6
 	kit.wallrun(_w(Vector3(farc.x + 2.4, farc.y + 1.2, f - 9.0)), Vector3(15.0, 6.5, 0.6), _yaw + 90.0)
