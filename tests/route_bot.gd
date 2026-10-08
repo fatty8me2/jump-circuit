@@ -24,6 +24,10 @@ var _was_air: bool = false
 var _node_prev: Vector3 = Vector3.ZERO
 var _node_vel: Vector3 = Vector3.ZERO
 var _cur_deaths: int = 0
+# --- TEMP human-pause / trace hook (never committed) ---
+var _hook_pause: bool = OS.get_environment("BOT_PAUSE") == "1"
+var _hook_trace: bool = OS.get_environment("BOT_TRACE") == "1"
+var _hook_hold: float = 0.0
 
 
 func attach(lvl: LevelBase) -> void:
@@ -84,6 +88,11 @@ func _physics_process(dt: float) -> void:
 	if level.finished:
 		done = true
 		player.cmd_move = Vector2.ZERO
+		return
+	if _hook_hold > 0.0:
+		_hook_hold -= dt
+		player.cmd_move = Vector2.ZERO
+		player.cmd_jump = false
 		return
 	if step_index >= level.route.size():
 		# route exhausted: keep heading for the last walk target; give up (stuck) if the finish never triggers
@@ -149,6 +158,10 @@ func _physics_process(dt: float) -> void:
 
 
 func _next() -> void:
+	if _hook_trace and step_index < level.route.size():
+		print("   [bot] t=%.2f step %d %s done at %s" % [Game.course_time, step_index, str(level.route[step_index]["kind"]), str(player.global_position.snapped(Vector3.ONE * 0.1))])
+	if _hook_pause and step_index < level.route.size() and str(level.route[step_index]["kind"]) in ["checkpoint", "b_wait", "wait", "x_wait", "c_wait"]:
+		_hook_hold = 1.0
 	step_index += 1
 	_begin_step()
 
