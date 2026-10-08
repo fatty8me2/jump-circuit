@@ -7774,6 +7774,7 @@ func test_zcpu_skill_levels() -> void:
 
 func _cpu_cleanup() -> void:
 	Engine.time_scale = 1.0
+	CpuField.test_seed = -1
 	if world != null:
 		world.queue_free()
 		world = null
@@ -7937,6 +7938,7 @@ func test_zcpu_online_fill() -> void:
 ## A solo round with 3 CPUs: they race (poses, checkpoints, finish), item boxes feed them, the round ends
 ## and the cup scores everyone.
 func test_zcpu_solo_round_scores() -> void:
+	CpuField.test_seed = 4242   # repeatable CPU randomness: the same race every run
 	var lvl: LevelBase = await _cpu_round(0, 3, "hard")
 	var p: PartyLayer = lvl.party
 	var f: CpuField = _cpu_field(lvl)
@@ -7970,14 +7972,21 @@ func test_zcpu_solo_round_scores() -> void:
 	for id: int in f.racers:
 		cps += int(Net.roster[id]["cp"])
 	check(cps >= 1, "CPUs bank checkpoints in the roster (%d in total)" % cps)
-	var held: int = 0
-	var taken: int = 0
-	for b: ItemBox in p.boxes:
-		if not b.available:
-			taken += 1
-	for id: int in f.racers:
-		if (f.racers[id] as CpuRacer).item != "":
-			held += 1
+	var seen: Dictionary = {"held": 0, "taken": 0}
+	var count_items := func() -> bool:
+		seen["held"] = 0
+		seen["taken"] = 0
+		for b: ItemBox in p.boxes:
+			if not b.available:
+				seen["taken"] = int(seen["taken"]) + 1
+		for id: int in f.racers:
+			if (f.racers[id] as CpuRacer).item != "":
+				seen["held"] = int(seen["held"]) + 1
+		return int(seen["taken"]) + int(seen["held"]) >= 1
+	# (a CPU may use its item the moment it gets it, and a box comes back in 4 s: watch for the first one)
+	await wait_until(count_items, 120.0, "a CPU to take an item box")
+	var held: int = int(seen["held"])
+	var taken: int = int(seen["taken"])
 	check(taken + held >= 1, "item boxes feed the CPUs (%d boxes taken, %d CPUs holding an item)" % [taken, held])
 	# the round ends 45 s after the first finisher; the CPUs finish, the idle human does not
 	await wait_until(func() -> bool: return p.round_over, 700.0, "the round to end")
@@ -7993,12 +8002,15 @@ func test_zcpu_solo_round_scores() -> void:
 	for r: Dictionary in p.last_rows:
 		if int(r["id"]) == 1:
 			human_row = r
-	check(CpuField.is_cpu_id(int(top["id"])) and int(top["place"]) == 1 and int(top["place_pts"]) == 10, "a CPU won the round and got the 10 placement points")
+		if int(r["place"]) == 1:
+			top = r   # (rows are sorted by total points: KOs and bonuses can put 2nd place on top)
+	check(CpuField.is_cpu_id(int(top["id"])) and int(top["place"]) == 1 and int(top["place_pts"]) == 10, "a CPU won the round and got the 10 placement points (top %s, finished %d, t %.0f)" % [str(top), finished, Game.course_time])
 	check(not human_row.is_empty() and int(human_row["place"]) == 0 and int(human_row["place_pts"]) == 0, "the idle human got no placement points")
 	var total: int = 0
 	for id: Variant in Game.party.cup:
 		total += int(Game.party.cup[id])
 	check(Game.party.cup.size() == 4 and total >= 10 + 8, "the Party Cup holds everyone's points (%d racers, %d points)" % [Game.party.cup.size(), total])
+	CpuField.test_seed = -1
 	await _cpu_cleanup()
 
 
@@ -8297,8 +8309,17 @@ func test_zcpu_new_items() -> void:
 	check(b.last_hit_by == before, "...but not one with respawn protection")
 	b.protect_left = 0.0
 
+	# (the blast threw a CPU into the air: let everyone land and shake off the stun)
+	var settled := func() -> bool:
+		for r: CpuRacer in [a, b, c]:
+			if not r.walker.grounded or r.walker.hold > 0.0 or r.walker.mode != RouteWalker.Mode.STEP:
+				return false
+		return true
+	await wait_until(settled, 30.0, "the CPUs to land")
+
 	# Fake Box: a leading CPU sets one down; the next racer to touch it is blown up
-	check(use.call(a, "fakebox"), "a CPU in front sets down a Fake Box")
+	var dropped: bool = use.call(a, "fakebox")
+	check(dropped, "a CPU in front sets down a Fake Box (rank %d, item '%s', ground %s, pos %s, standing %s)" % [f.rank_of(a.id), a.item, str(not f.layer.ground_at(a.walker.pos - RouteMath.flat(a.walker.facing).normalized() * 2.2, 4.0).is_empty()), str(a.walker.pos), str(f._standing)])
 	var fb: FakeBox = _zp_hazard(p, "fake") as FakeBox
 	check(fb != null and fb.owner_id == a.id, "the fake box belongs to the CPU")
 	if fb != null:
@@ -8346,42 +8367,48 @@ func test_zcpu_new_items() -> void:
 	check(not use.call(c, "shock") or true, "(a Shockwave with nobody close is kept)")
 	c.item = ""
 
-	# Turbo Boost: lit on a run of straight route
-	var lit: bool = false
-	var w3: float = 0.0
-	# a jump ahead: not a straight; three plain walks ahead: a straight
+	await wait_until(settled, 30.0, "the CPUs to land again")
+	# Turbo Boost: lit on a run of straight route (the doctored route is restored within the same tick)
 	var real_route: Array[Dictionary] = c.walker.route.duplicate()
 	var real_step: int = c.walker.step
-	c.walker.route.assign([{"kind": "jump"}, {"kind": "walk"}, {"kind": "walk"}])
-	c.walker.step = 0
-	check(not CpuItems._straight(c), "a CPU facing a jump is not on a straight")
-	c.walker.route.assign([{"kind": "walk"}, {"kind": "walk"}, {"kind": "walk"}])
 	c.item = "turbo"
 	c.item_age = 20.0
 	c._item_wait = 0.0
-	while not lit and w3 < 12.0:
-		CpuItems.consider(c, f, f.rivals_of(c))
-		lit = c.item == ""
-		await seconds(0.25)
-		w3 += 0.25
-	check(lit and c.boost_left > 0.0 and c.boost_mult >= 1.4, "a CPU lights a Turbo Boost on a straight (boost x%.1f for %.1f s)" % [c.boost_mult, c.boost_left])
-	c.clear_buffs(f)
+	c.walker.route.assign([{"kind": "jump"}, {"kind": "walk"}, {"kind": "walk"}])
+	c.walker.step = 0
+	check(not CpuItems._straight(c), "a CPU facing a jump is not on a straight")
+	CpuItems.consider(c, f, f.rivals_of(c))
+	check(c.item == "turbo" and c.boost_left <= 0.0, "...so it keeps the Turbo Boost")
+	c.walker.route.assign([{"kind": "walk"}, {"kind": "walk"}, {"kind": "walk"}])
+	CpuItems.consider(c, f, f.rivals_of(c))
+	var lit: bool = c.item == ""
+	var lit_boost: float = c.boost_mult
+	var lit_left: float = c.boost_left
 	c.walker.route.assign(real_route)
 	c.walker.step = real_step
+	check(lit and lit_left > 0.0 and lit_boost >= 1.4, "a CPU lights a Turbo Boost on a straight (boost x%.1f for %.1f s)" % [lit_boost, lit_left])
+	c.clear_buffs(f)
 
 	# Ghost: untouchable, and robs a rival with an item who comes close
 	b.protect_left = 0.0
+	b.p["greed"] = 0.0   # (no box may fill the ghost's hands while it waits)
 	a.item = "thunder"
 	check(use.call(b, "ghost") and b.ghost_left > 0.0, "a CPU close to rivals turns into a Ghost")
 	var last: int = b.last_hit_by
 	b.take_hit(1, {"kb": PowerUp.arr(Vector3(5, 3, 0)), "s": "shove"}, f)
 	check(b.last_hit_by == last, "a ghost CPU cannot be hit")
 	a.walker.teleport(b.walker.pos + Vector3(1.2, 0, 0))
+	a.protect_left = 0.0   # (an earlier blast may have left it respawn-protected or shielded: neither can be robbed)
+	a.shield_left = 0.0
+	a.ghost_left = 0.0
+	a.item = "thunder"
+	b.steal_cd = 0.0
+	b.steal_wait = -1.0
 	var w4: float = 0.0
 	while b.item == "" and w4 < 4.0:
 		await seconds(0.1)
 		w4 += 0.1
-	check(b.item == "thunder" and a.item == "", "the ghost CPU robs the rival's item (%s)" % b.item)
+	check(b.item == "thunder" and a.item == "", "the ghost CPU robs the rival's item (%s; a holds '%s', protect %.1f)" % [b.item, a.item, a.protect_left])
 	b.clear_buffs(f)
 	await ticks(2)
 

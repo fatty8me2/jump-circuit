@@ -32,6 +32,8 @@ static var fill_online: bool = false
 static var difficulty: String = CpuSkill.NORMAL
 static var local_count: int = 3
 static var current: CpuField = null
+## Tests set this to make a round's CPU randomness repeatable (-1 = random).
+static var test_seed: int = -1
 static var _order: Array[String] = []
 static var _ident: Dictionary = {}
 
@@ -198,7 +200,7 @@ func setup(p_layer: PartyLayer) -> void:
 	Net.party_message.connect(_on_message)
 	if not Net.is_host():
 		return
-	var seed_base: int = int(Time.get_ticks_usec())
+	var seed_base: int = test_seed if test_seed >= 0 else int(Time.get_ticks_usec())
 	for id: int in cpu_ids():
 		var ghost: RemoteRacer = level._ghosts.get(id) as RemoteRacer
 		var at: Vector3 = ghost.global_position if ghost != null else level._spawn.origin
