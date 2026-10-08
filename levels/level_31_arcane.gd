@@ -39,7 +39,7 @@ const PARCHMENT := Color(0.96, 0.9, 0.74)
 const OXBLOOD := Color(0.5, 0.1, 0.22)
 
 ## Testing aid: build every stage but start the player (and the bot's route) at stage N. 0 = off.
-const DEV_START: int = 0
+const DEV_START: int = 6
 ## Testing aid: stop building after stage N (a finish gate goes at its end). 0 = build them all.
 const DEV_LAST: int = 0
 
@@ -312,7 +312,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -495,6 +495,204 @@ func _stage_5() -> Vector3:
 	r_wallrun(_w(Vector3(4.0, land_c.y, f0 + 0.35)), _w(Vector3(5.2, land_c.y + 1.4, f0 - 3.4)),
 		_w(Vector3(5.2, land_c.y + 1.4, f0 - 12.6)), _w(Vector3(3.6, land_c.y, f0 - 19.4)))
 	_hop(pb, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 6: The Stacks (BRANCH) - the beam through two hourglass gates | wall run the case ---------------
+# [shortcut: four hidden posts down the middle at 93 / 91%]
+
+func _stage_6() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.80, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	# LEFT (main): a beam through two hourglass gates, then a post
+	var left: Dictionary = _area(Vector3(-3.5, 0, fc.z), 1.5, 1.5)
+	var beam: Dictionary = _blk(_ahead(left, 0.86, 0.0, 14.0), 1.2, 14.0, "alt", 0.6)
+	var bz: float = (beam["c"] as Vector3).z
+	var g1: ArcaneHourglass = _gate(Vector3(-3.5, 0, bz + 3.0), 8.0, 0.0, 4.4)
+	var g2: ArcaneHourglass = _gate(Vector3(-3.5, 0, bz - 2.0), 8.0, 0.0, 4.4)
+	var pa: Dictionary = _post(_ahead(beam, 0.88, 0.0, 1.2))
+	var merge: Dictionary = _blk(Vector3(0, 0, (pa["c"] as Vector3).z - 0.6 - 4.2 - 1.5), 11.0, 3.0)
+	var mc: Vector3 = merge["c"]
+	# RIGHT (alt): the case's wall run, a post, mantle the top, drop to the merge
+	kit.wallrun(_w(Vector3(5.7, 1.2, f0 - 9.0)), Vector3(15.0, 6.5, 0.6), _yaw + 90.0)
+	var pb: Dictionary = _post(Vector3(3.6, 0.0, f0 - 19.6), 2.0, 2.0)
+	var case_top := Vector3(3.6, 3.3, f0 - 19.6 - 1.0 - 1.6 - 0.8)
+	var case_: Dictionary = _ledge(case_top, Vector3(2.6, 9.0, 1.6))
+	# SHORTCUT: hidden posts down the middle
+	var hids: Array[Dictionary] = []
+	var hp: Dictionary = _area(fc, 5.5, 1.5)
+	for i: int in 4:
+		hp = _post(_ahead(hp, 0.93 if i == 0 else 0.91, 0.6 if i == 0 else 0.0, 1.2), 1.2, 1.2, "accent")
+		hids.append(hp)
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 2:
+		r_walk(_w(Vector3(0, 0, fc.z)))
+		var prev: Dictionary = _area(fc, 5.5, 1.5)
+		for h: Dictionary in hids:
+			_hop(prev, h)
+			prev = h
+		_hop(prev, merge, Vector3(0, 0, 0.4))
+	elif route_variant != 1:
+		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
+		_hop(left, beam, Vector3(0, 0, 0.6))
+		r_walk(_w(Vector3(-3.5, 0, bz + 6.0)))
+		_wait(func() -> bool: return _gates_ok([[g1, 0.0, 2.4], [g2, 0.55, 2.9]]), _w(Vector3(-3.5, 0, bz + 6.0)))
+		r_walk(_w(Vector3(-3.5, 0, bz - 6.0)))
+		_hop(beam, pa)
+		_hop(pa, merge, Vector3(-3.5, 0, 0.6))
+	else:
+		r_walk(_w(Vector3(3.6, 0, fc.z + 0.6)))
+		r_wallrun(_w(Vector3(4.0, 0, f0 + 0.35)), _w(Vector3(5.2, 1.4, f0 - 3.4)), _w(Vector3(5.2, 1.4, f0 - 12.6)), _w(Vector3(3.6, 0, f0 - 19.4)))
+		r_mantle(_w(Vector3(3.6, 0, f0 - 19.6 - 0.65)), _w(case_top + Vector3(0, 0, 0.2)))
+		_hop(case_, merge, Vector3(3.6, 0, 0.6))
+	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	pb.clear()
+	return cp["c"]
+
+
+# ---- stage 7: Falling Tomes - the beam under two falling books, mantle, two posts ------------------
+
+func _stage_7() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.2))
+	var walk: Dictionary = _blk(_ahead(p1, 0.86, 0.0, 18.0), 1.4, 18.0, "alt", 0.6)
+	var wc: Vector3 = walk["c"]
+	var back: float = wc.z + 9.0
+	var front: float = wc.z - 9.0
+	var t1: FallingBlock = kit.falling_block(_w(Vector3(wc.x, wc.y, back - 6.0)), Vector3(3.0, 1.6, 3.0), 7.0, 6.5, 0.0)
+	var t2: FallingBlock = kit.falling_block(_w(Vector3(wc.x, wc.y, back - 12.0)), Vector3(3.0, 1.6, 3.0), 7.0, 6.5, 0.0)
+	var ledge_top := Vector3(wc.x, wc.y + 3.3, front - 1.6 - 0.7)
+	var ld: Dictionary = _ledge(ledge_top, Vector3(3.0, 9.0, 1.4))
+	var p2: Dictionary = _post(_ahead(ld, 0.87, 0.0, 1.2, 0.4))
+	var p3: Dictionary = _post(_ahead(p2, 0.88, 0.6, 1.2, -0.4))
+	var cp: Dictionary = _cp(_ahead(p3, 0.86, 0.0, 5.0, -(p3["c"] as Vector3).x))
+	_hop(cp0, p1)
+	_hop(p1, walk, Vector3(0, 0, 0.6))
+	r_walk(_w(Vector3(wc.x, wc.y, back - 1.8)))
+	_wait(func() -> bool: return _blocks_ok([[t1, 0.15, 2.45], [t2, 0.8, 3.1]]), _w(Vector3(wc.x, wc.y, back - 1.8)))
+	r_walk(_w(Vector3(wc.x, wc.y, front + 0.9)))
+	r_mantle(_w(Vector3(wc.x, wc.y, front + 0.35)), _w(ledge_top + Vector3(0, 0, 0.3)))
+	_hop(ld, p2)
+	_hop(p2, p3)
+	_hop(p3, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 8: The Quill Line - ride the line over the hall, then a landing hop chain ----------------
+
+func _stage_8() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var dock: Dictionary = _blk(_ahead(cp0, 0.86, 0.0, 5.0), 6.0, 5.0)
+	var dc: Vector3 = dock["c"]
+	var start_top := Vector3(dc.x, dc.y, dc.z - 0.5)
+	var end_top: Vector3 = start_top + Vector3(0, 0, -26.0)
+	var land: Dictionary = _blk(Vector3(dc.x, dc.y, start_top.z - 29.0), 14.0, 14.0, "main", 1.0)
+	var zip: Zipline = kit.zipline(_w(start_top), _w(end_top), 11.0, 1.6, 0.0)
+	var p1: Dictionary = _post(_ahead(land, 0.87, 0.0, 1.3, 0.4))
+	var p2: Dictionary = _post(_ahead(p1, 0.88, 0.6, 1.2, -0.4))
+	var cp: Dictionary = _cp(_ahead(p2, 0.86, 0.0, 5.0, -(p2["c"] as Vector3).x))
+	_hop(cp0, dock)
+	r_zipline(zip, _w(start_top + Vector3(0, 2.2, -20.0)), 0.6, _w(Vector3(dc.x, dc.y, start_top.z - 28.0)))
+	r_walk(_w(Vector3(dc.x, dc.y, (land["c"] as Vector3).z - 2.0)))
+	_hop(land, p1)
+	_hop(p1, p2)
+	_hop(p2, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 9: Lectern Aisle - past two lectern rams, an hourglass gate, mantle -------------------------
+
+func _lectern(wc: Vector3, z: float, dir: float, phase: float) -> Piston:
+	var size := Vector3(1.6, 1.3, 1.2)
+	var x: float = wc.x - dir * (0.6 + 0.6 + 0.15)
+	return kit.piston(_w(Vector3(x, wc.y + 1.35, z)), size, _yaw - 90.0 * dir, 2.6, 6.5, phase, 10.0)
+
+
+func _stage_9() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _post(_ahead(cp0, 0.87, 0.0, 1.3))
+	var aisle: Dictionary = _blk(_ahead(p1, 0.86, 0.0, 20.0), 1.4, 20.0, "alt", 0.6)
+	var wc: Vector3 = aisle["c"]
+	var back: float = wc.z + 10.0
+	var front: float = wc.z - 10.0
+	var ra: Piston = _lectern(wc, back - 5.0, 1.0, 0.0)
+	var rb: Piston = _lectern(wc, back - 9.0, -1.0, fposmod(-0.55 / 6.5, 1.0))
+	var gate: ArcaneHourglass = _gate(Vector3(wc.x, wc.y, back - 14.0), 8.0, 0.25, 4.4)
+	var ledge_top := Vector3(wc.x, wc.y + 3.3, front - 1.6 - 0.7)
+	var ld: Dictionary = _ledge(ledge_top, Vector3(2.8, 9.0, 1.4))
+	var cp: Dictionary = _cp(_ahead(ld, 0.85, 0.0, 5.0, -wc.x))
+	_hop(cp0, p1)
+	_hop(p1, aisle, Vector3(0, 0, 0.6))
+	r_walk(_w(Vector3(wc.x, wc.y, back - 2.0)))
+	var tA: float = 0.65
+	var tB: float = 1.2
+	var tG: float = 1.75
+	_wait(func() -> bool: return _ram_clear(ra, tA - 0.3, tA + 0.4 + 1.5) and _ram_clear(rb, tB - 0.3, tB + 0.4 + 1.5) \
+		and _gates_ok([[gate, tG - 0.2, tG + 0.6 + 1.5]]), _w(Vector3(wc.x, wc.y, back - 2.0)))
+	r_walk(_w(Vector3(wc.x, wc.y, front + 0.9)))
+	r_mantle(_w(Vector3(wc.x, wc.y, front + 0.35)), _w(ledge_top + Vector3(0, 0, 0.3)))
+	_hop(ld, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 10: Inkwell Hall (BRANCH) - candle beam and an ink bridge | a flying book --------------------
+# [shortcut: the spell door on the hanging post]
+
+func _stage_10() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.80, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	# LEFT (main): a beam under a candle beam (laser), a plank over an ink river, the merge
+	var left: Dictionary = _area(Vector3(-3.5, 0, fc.z), 1.5, 1.5)
+	var beam: Dictionary = _blk(_ahead(left, 0.86, 0.0, 12.0), 1.2, 12.0, "alt", 0.6)
+	var bc: Vector3 = beam["c"]
+	var bfront: float = bc.z - 6.0
+	var lz: float = bc.z + 1.5
+	var gate: LaserGate = kit.laser(_w(Vector3(bc.x, bc.y + 1.2, lz)), Vector3(3.2, 2.4, 0.2), 5.0, 0.3, 0.0, _yaw)
+	var ink_gap: float = 4.0
+	var mz: float = bfront - ink_gap - 1.5
+	var merge: Dictionary = _blk(Vector3(0, 0, mz), 11.0, 3.0)
+	_blk(Vector3(bc.x, bc.y, bfront - ink_gap * 0.5), 1.6, ink_gap + 0.04, "alt", 0.3, 0.0)
+	var ink: ArcaneInk = _ink(Vector3(bc.x, bc.y, bfront - ink_gap * 0.5), ink_gap, 8.0, 0.0)
+	# RIGHT (alt): a flying book from the fork's right end to the merge
+	var bsz := Vector3(2.8, 0.35, 2.4)
+	var local := Vector3(0, bsz.y * 0.5 + 0.05, 0)
+	var rb_top := Vector3(3.6, 0.0, f0 - 1.2 - bsz.z * 0.5)
+	var far_z: float = (mz + 1.5) + 1.2 + bsz.z * 0.5
+	var book: ArcaneBook = _book(rb_top, bsz, Vector3(0, 0, far_z - rb_top.z), 11.0, 0.0, Color(0.1, 0.3, 0.25))
+	var book_far: Vector3 = rb_top + Vector3(0, 0, far_z - rb_top.z)
+	# SHORTCUT: a post hangs off the fork's front and the spell door on it opens onto the merge
+	var sp: Dictionary = _post(_ahead(_area(fc, 5.5, 1.5), 0.93, 0.0, 1.2), 1.2, 1.2, "accent")
+	var spc: Vector3 = sp["c"]
+	var sdoor: WarpPortal = kit.portal(_w(spc + Vector3(0, 0, -0.3)), _yaw, _w(Vector3(0.5, 0, mz + 0.8)), _yaw, 6.0)
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 2:
+		r_walk(_w(Vector3(0, 0, fc.z)))
+		_hop(_area(fc, 5.5, 1.5), sp, Vector3(0, 0, 0.35))
+		r_portal(_w(spc + Vector3(0, 0, -0.6)), sdoor.exit_point())
+	elif route_variant != 1:
+		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
+		_hop(left, beam, Vector3(0, 0, 0.6))
+		r_walk(_w(Vector3(bc.x, bc.y, bc.z + 5.0)))
+		_wait(func() -> bool: return _dark(gate, 0.1, 0.9 + 1.5) and _inks_ok([[ink, 0.9, 2.8 + 1.5]]), _w(Vector3(bc.x, bc.y, bc.z + 5.0)))
+		r_walk(_w(Vector3(bc.x, bc.y, mz + 0.8)))
+		r_walk(_w(Vector3(0, 0, mz + 0.6)))
+	else:
+		r_walk(_w(Vector3(3.6, 0, f0 + 1.6)))
+		var far_w: Vector3 = _w(book_far) - Vector3(0, bsz.y * 0.5, 0)
+		_ride(_w(Vector3(3.6, 0, f0 + 0.45)), book, local, _w(Vector3(3.6, 0, mz + 0.3)),
+			func() -> bool: return book.global_position.distance_to(far_w) < 0.8)
+	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	return cp["c"]
 
