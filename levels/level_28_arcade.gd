@@ -12,18 +12,19 @@ extends LevelBase
 ## Route variants for the bot: 0 = main line, 1 = every alternative branch, 2 = main line + every
 ## shortcut. Every wait the bot makes holds for 1.5 s more.
 
-const DEV_START: int = 15
+const DEV_START: int = 0
 const DEV_LAST: int = 0
 ## Testing aid: print when the bot starts each route step (to read off its passing times).
 const DEV_TRACE: bool = true
 ## Testing aid: start the course clock here (a different alignment of every timed machine for the bot).
-const DEV_SKEW: float = 3.3
+const DEV_SKEW: float = 0.0
 
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
 var _yaw: float = 0.0
 var _next_yaw: float = 0.0
 var _tuning: MovementTuning
+var deco: ArcadeDecor
 var _env: Environment
 var _sun: DirectionalLight3D
 var _fill: DirectionalLight3D
@@ -242,6 +243,7 @@ func _process(_dt: float) -> void:
 func _build() -> void:
 	_tuning = load("res://resources/default_tuning.tres") as MovementTuning
 	add_child(Ambience.make(theme_id))
+	deco = ArcadeDecor.new(self, kit.rng)
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0]
@@ -267,6 +269,8 @@ func _build() -> void:
 		_finish_pos = _w(Vector3(0, 0, -9.5))
 		_hop(cp0, fin)
 		r_walk(_w(Vector3(0, 0, -9.8)))
+	_surroundings()
+	_arcade_materials()
 	if DEV_START > 1:
 		set_spawn(origins[DEV_START - 1] + Vector3(0, 0.1, 0), yaws[DEV_START - 1])
 		route = route.slice(starts[DEV_START - 1])
@@ -283,6 +287,142 @@ func _restyle_environment() -> void:
 				_sun = n as DirectionalLight3D
 			else:
 				_fill = n as DirectionalLight3D
+	_env.background_mode = Environment.BG_SKY
+	_env.sky = ArcadeSky.make()
+	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	_env.ambient_light_color = Color(0.55, 0.5, 0.9)
+	_env.ambient_light_energy = 0.7
+	_env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	_env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	_env.tonemap_exposure = 1.1
+	_env.tonemap_white = 6.0
+	_env.fog_enabled = true
+	_env.fog_light_color = Color(0.06, 0.03, 0.16)
+	_env.fog_density = 0.003
+	_env.fog_aerial_perspective = 0.3
+	_env.fog_sky_affect = 0.1
+	_env.glow_enabled = true
+	_env.glow_intensity = 0.85
+	_env.glow_bloom = 0.08
+	_env.glow_hdr_threshold = 1.0
+	_env.adjustment_enabled = true
+	_env.adjustment_saturation = 1.25
+	_env.adjustment_contrast = 1.12
+	# a cool key light from the top of the cabinet and a magenta fill from the screen below
+	_sun.light_color = Color(0.85, 0.9, 1.0)
+	_sun.light_energy = 1.0
+	_sun.rotation_degrees = Vector3(-60, 20, 0)
+	_fill.light_color = Color(1.0, 0.3, 0.75)
+	_fill.light_energy = 0.4
+	_fill.rotation_degrees = Vector3(35, -150, 0)
+
+
+## Every point the route passes and every floor: the far scenery keeps clear of them.
+func _route_points() -> Array[Vector3]:
+	var pts: Array[Vector3] = []
+	for st: Dictionary in route:
+		for key: String in ["from", "to", "entry", "exit", "top", "jump_from"]:
+			if st.has(key) and st[key] is Vector3 and (st[key] as Vector3) != Vector3.ZERO:
+				pts.append(st[key])
+	for p: Vector3 in _cp_world:
+		pts.append(p)
+	for f: Dictionary in _floors:
+		pts.append(f["top"])
+	return pts
+
+
+func _clear_of(p: Vector3, pts: Array[Vector3], dist: float) -> bool:
+	for q: Vector3 in pts:
+		if Vector2(p.x - q.x, p.z - q.z).length() < dist and absf(p.y - q.y) < dist + 30.0:
+			return false
+	return true
+
+
+func _surroundings() -> void:
+	var rng: RandomNumberGenerator = kit.rng
+	var pts: Array[Vector3] = _route_points()
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for p: Vector3 in pts:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	var mid: Vector3 = (lo + hi) * 0.5
+	var span: Vector3 = hi - lo
+	# the dot-matrix screen far below
+	var board := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(2400, 2400)
+	board.mesh = pm
+	var bmat := ShaderMaterial.new()
+	bmat.shader = preload("res://visual/arcade_floor.gdshader")
+	board.material_override = bmat
+	board.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	board.position = Vector3(mid.x, lo.y - 70.0, mid.z)
+	add_child(board)
+	# big voxel signs along the course
+	var signs: Array[String] = ["INSERT COIN", "1UP", "HI SCORE", "READY", "PLAY", "LEVEL 28", "PIXEL PANIC", "GAME ON"]
+	var n_signs: int = 0
+	var tries: int = 0
+	while n_signs < 26 and tries < 600:
+		tries += 1
+		var p2 := Vector3(rng.randf_range(lo.x - 90.0, hi.x + 90.0), rng.randf_range(lo.y - 25.0, hi.y + 40.0), rng.randf_range(lo.z - 90.0, hi.z + 90.0))
+		if not _clear_of(p2, pts, 26.0):
+			continue
+		var yaw: float = rng.randf() * TAU
+		var roll: float = rng.randf()
+		var b: Basis = ArcadeDecor.turn(yaw, rng.randf_range(-0.2, 0.2), rng.randf_range(-0.15, 0.15))
+		if roll < 0.2:
+			deco.text(p2, signs[rng.randi() % signs.size()], rng.randf_range(1.2, 2.2), ArcadeFx.pal(rng.randi()), b, 1.2)
+		elif roll < 0.4:
+			deco.sprite(p2, ArcadeDecor.INVADER, rng.randf_range(2.0, 4.2), ArcadeFx.pal(rng.randi()), b)
+		elif roll < 0.5:
+			deco.sprite(p2, ArcadeDecor.SQUID, rng.randf_range(2.0, 3.6), ArcadeFx.pal(rng.randi()), b)
+		elif roll < 0.62:
+			deco.sprite(p2, ArcadeDecor.GHOST, rng.randf_range(2.0, 3.8), ArcadeFx.pal(rng.randi() % 4 + 3), b)
+		elif roll < 0.7:
+			deco.sprite(p2, ArcadeDecor.HEART, rng.randf_range(1.6, 2.8), ArcadeFx.RED, b)
+		elif roll < 0.78:
+			deco.sprite(p2, ArcadeDecor.COIN, rng.randf_range(1.6, 3.2), ArcadeFx.YELLOW, b)
+		elif roll < 0.9:
+			deco.stack(p2 - Vector3(0, 6.0, 0), rng.randi_range(5, 8), rng.randi_range(5, 11), 1.8, ArcadeDecor.turn(yaw))
+		else:
+			deco.pong(p2, 1.5, b)
+		n_signs += 1
+	# a joystick and buttons far below the course, like a control panel
+	for k: int in 3:
+		var a: float = rng.randf() * TAU
+		var r: float = rng.randf_range(60.0, 140.0)
+		var at := Vector3(mid.x + cos(a) * r, lo.y - 60.0, mid.z + sin(a) * r)
+		if k == 0:
+			deco.joystick(at, 4.0)
+		else:
+			deco.button(at, 5.0, ArcadeFx.pal(k * 3))
+	# pixels drifting up round every stage
+	for i: int in _cp_world.size():
+		var here: Vector3 = _cp_world[i]
+		var prev: Vector3 = _cp_world[i - 1] if i > 0 else Vector3.ZERO
+		var c3: Vector3 = (here + prev) * 0.5 + Vector3(0, 3.0, 0)
+		var ext := Vector3(absf(here.x - prev.x) * 0.5 + 12.0, 8.0, absf(here.z - prev.z) * 0.5 + 12.0)
+		ArcadeFx.pixels(self, c3, ext, 60)
+	var tail: Vector3 = _finish_pos
+	deco.text(tail + _d(Vector3(0, 11.0, -3.0)), "HIGH SCORE", 1.1, ArcadeFx.YELLOW, Basis(_b), 1.6)
+	var sx: Array[float] = [-9.0, 9.0]
+	for x: float in sx:
+		deco.sprite(tail + _d(Vector3(x, 0.0, -2.0)), ArcadeDecor.GHOST, 0.9, ArcadeFx.pal(int(x) + 20), Basis(_b))
+
+
+## Swap every walkable surface to the pixel-tile shader (same colours and sizes).
+func _arcade_materials() -> void:
+	for mi: Node in find_children("*", "MeshInstance3D", true, false):
+		var m: MeshInstance3D = mi as MeshInstance3D
+		var sm: ShaderMaterial = m.material_override as ShaderMaterial
+		if sm == null or sm.shader != Look.PLATFORM_SHADER:
+			continue
+		var r := ShaderMaterial.new()
+		r.shader = preload("res://visual/arcade_tile.gdshader")
+		for key: String in ["top_color", "side_color", "trim_color", "half_size", "is_round", "trim_glow"]:
+			r.set_shader_parameter(key, sm.get_shader_parameter(key))
+		m.material_override = r
 
 
 # ---- stage 1: Insert Coin - four posts and a mantle up the coin slot ------------------------------
@@ -505,7 +645,7 @@ func _stage_4() -> Vector3:
 		r_jump_from_ride(pad, far_pt, 0.5, _w(pa["c"]), true, Vector3(0, 0.3, 0))
 		_hop(pa, merge, Vector3(-3.5, 0, 0.6))
 	else:
-		r_walk(_w(Vector3(3.6, 0, f0 + 0.6)))
+		r_walk(_w(Vector3(4.0, 0, fc.z + 1.3)))
 		r_wallrun(_w(Vector3(4.0, 0, f0 + 0.35)), _w(Vector3(5.2, 1.4, f0 - 3.4)), _w(Vector3(5.2, 1.4, pbz + 7.0)), _w(Vector3(3.6, 0, pbz + 0.2)))
 		_hop(pb, merge, Vector3(3.6, 0, 0.6))
 	stat_branches += 1
@@ -698,7 +838,7 @@ func _stage_8() -> Vector3:
 			prev = p
 		_hop(prev, merge, Vector3(-3.5, 0, 0.6))
 	else:
-		r_walk(_w(Vector3(3.6, 0, fc.z + 0.6)))
+		r_walk(_w(Vector3(4.2, 0, fc.z + 1.3)))
 		r_wallrun(_w(Vector3(4.2, 0, f0 + 0.35)), _w(Vector3(5.6, 1.4, f0 - 3.2)), _w(Vector3(5.6, 1.4, f0 - 10.6)), _w(Vector3(2.0, 4.4, f0 - 14.4)))
 		r_wallrun(Vector3.ZERO, _w(Vector3(2.0, 4.4, f0 - 14.4)), _w(Vector3(2.0, 4.4, f0 - 19.6)), _w(Vector3(3.6, 0.0, f0 - 27.4)), true, true)
 		_hop(pb, pb2)
@@ -918,7 +1058,7 @@ func _stage_12() -> Vector3:
 
 func _stage_13() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
-	var hold: float = 3.6
+	var hold: float = 3.0
 	var a1: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.2))
 	var g1c: Vector3 = _ahead(a1, 0.88, 0.0, 1.3, 0.3)
 	var g1a: Dictionary = _area(g1c, 0.65, 0.65)
@@ -934,25 +1074,25 @@ func _stage_13() -> Vector3:
 	var t_ghost: float = 2.1
 	var t_bat: float = 3.95
 	var period: float = 6.0
-	var g1: ArcadeGlitch = _glitch([g1c, g1c + Vector3(3.2, 0.6, 0.0)], hold, t1 - 1.4, ArcadeFx.CYAN.lerp(Color.WHITE, 0.6))
-	var g2: ArcadeGlitch = _glitch([g2c, g2c + Vector3(-3.2, 0.6, 0.0)], hold, t2 - 1.4, ArcadeFx.YELLOW.lerp(Color.WHITE, 0.6))
+	var g1: ArcadeGlitch = _glitch([g1c, g1c + Vector3(3.2, 0.6, 0.0)], hold, t1 - 0.8, ArcadeFx.CYAN.lerp(Color.WHITE, 0.6))
+	var g2: ArcadeGlitch = _glitch([g2c, g2c + Vector3(-3.2, 0.6, 0.0)], hold, t2 - 0.8, ArcadeFx.YELLOW.lerp(Color.WHITE, 0.6))
 	# the ghost patrols a long rail across the flight between the second post and the second tile
 	var a2c: Vector3 = a2["c"]
 	var zg: float = (a2c.z - 0.6 + g2c.z + 0.65) * 0.5
-	var rail: float = 20.0
+	var rail: float = 24.0
 	var spd: float = 4.0
 	var gh: ArcadeChomper = _chomper(2, [_w(Vector3(a2c.x - rail * 0.5, a2c.y, zg)), _w(Vector3(a2c.x + rail * 0.5, a2c.y, zg))], spd, rail * 0.5 - spd * (t_ghost + 2.8))
 	var bat: Piston = _bat(Vector3(a3c.x - 0.6 - 0.6 - 0.15, a3c.y + 1.35, a3c.z), 1.0, 2.6, period, _ph(0.0, t_bat - 0.5, period))
 	# SHORTCUT: a small post beside the first post; the secret warp pipe on it opens onto the last beam
-	var sp: Dictionary = _post(_ahead(a1, 0.93, 0.0, 1.2, -2.4), 1.2, 1.2, "accent")
+	var sp: Dictionary = _post(_ahead(a1, 0.84, 0.0, 1.2, -2.8), 1.2, 1.2, "accent")
 	var spc: Vector3 = sp["c"]
 	var sdoor: WarpPortal = kit.portal(_w(spc + Vector3(0, 0, -0.3)), _yaw, _w(Vector3(a3c.x, a3c.y, a3c.z + 1.6)), _yaw, 6.0)
 	var spot_g: Vector3 = _w(Vector3(a2c.x, a2c.y, zg))
 	_hop(cp0, a1)
 	if route_variant == 2:
+		_wait(func() -> bool: return _ram_clear(bat, 2.9 - 0.3, 2.9 + 0.4 + 1.5))
 		_hop(a1, sp)
 		r_portal(_w(spc + Vector3(0, 0, -0.6)), sdoor.exit_point())
-		_wait(func() -> bool: return _ram_clear(bat, 1.4 - 0.3, 1.4 + 0.4 + 1.5))
 		r_walk(_w(Vector3(a3c.x, a3c.y, a3c.z - 1.6)))
 	else:
 		_wait(func() -> bool: return _glitch_ok([[g1, 0, t1 - 0.3, t1 + 0.3 + 1.5], [g2, 0, t2 - 0.3, t2 + 0.3 + 1.5]]) \
