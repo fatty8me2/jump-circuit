@@ -298,14 +298,17 @@ const THEMES: Dictionary = {
 		"decor": Color(0.28, 0.36, 0.18), "decor2": Color(0.60, 0.30, 0.20), "metal": Color(0.55, 0.55, 0.60),
 		"cloud_light": Color(0.79, 0.84, 0.68), "cloud_shade": Color(0.28, 0.30, 0.24),
 	},
-	"arcane": {  # PLACEHOLDER palette - the level agent owns and retunes this entry
-		"sky_top": Color(0.08, 0.05, 0.16), "sky_horizon": Color(0.35, 0.20, 0.45), "sky_bottom": Color(0.06, 0.04, 0.10),
-		"sun": Color(1.00, 0.85, 0.60), "sun_energy": 1.0, "sun_rot": Vector3(-45, 150, 0),
-		"ambient": Color(0.60, 0.60, 0.65), "ambient_energy": 0.8, "fog": Color(0.18, 0.10, 0.24), "fog_density": 0.002,
-		"top": Color(0.50, 0.32, 0.20), "side": Color(0.28, 0.16, 0.10), "trim": Color(1.00, 0.80, 0.35),
-		"alt_top": Color(0.40, 0.30, 0.65), "accent": Color(0.55, 0.75, 1.00), "accent2": Color(1.00, 0.80, 0.35),
-		"decor": Color(0.22, 0.12, 0.08), "decor2": Color(0.45, 0.25, 0.65), "metal": Color(0.55, 0.55, 0.60),
-		"cloud_light": Color(0.24, 0.16, 0.30), "cloud_shade": Color(0.07, 0.04, 0.10),
+	# Arcane Library: an endless wizard's library by candlelight - warm oak, oxblood leather and brass,
+	# gold trims, violet spell-light. (levels/level_31_arcane.gd swaps in its own shelf-wall "sky",
+	# a parquet-and-leather surface shader, candle light and the ink / sand / spell materials.)
+	"arcane": {
+		"sky_top": Color(0.05, 0.03, 0.12), "sky_horizon": Color(0.45, 0.24, 0.35), "sky_bottom": Color(0.08, 0.04, 0.12),
+		"sun": Color(1.00, 0.82, 0.55), "sun_energy": 1.1, "sun_rot": Vector3(-52, 28, 0),
+		"ambient": Color(0.82, 0.66, 0.82), "ambient_energy": 0.8, "fog": Color(0.20, 0.10, 0.26), "fog_density": 0.0045,
+		"top": Color(0.62, 0.40, 0.24), "side": Color(0.30, 0.17, 0.12), "trim": Color(1.00, 0.80, 0.36),
+		"alt_top": Color(0.46, 0.20, 0.28), "accent": Color(0.65, 0.45, 1.00), "accent2": Color(1.00, 0.80, 0.38),
+		"decor": Color(0.22, 0.12, 0.10), "decor2": Color(0.50, 0.30, 0.75), "metal": Color(0.72, 0.56, 0.30),
+		"cloud_light": Color(0.30, 0.18, 0.35), "cloud_shade": Color(0.07, 0.04, 0.10),
 	},
 	"siege": {  # PLACEHOLDER palette - the level agent owns and retunes this entry
 		"sky_top": Color(0.30, 0.32, 0.40), "sky_horizon": Color(0.85, 0.55, 0.35), "sky_bottom": Color(0.25, 0.22, 0.20),
