@@ -12,10 +12,12 @@ extends LevelBase
 ## Route variants for the bot: 0 = main line, 1 = every alternative branch, 2 = main line + every
 ## shortcut. Every wait the bot makes holds for 1.5 s more.
 
-const DEV_START: int = 0
+const DEV_START: int = 15
 const DEV_LAST: int = 0
 ## Testing aid: print when the bot starts each route step (to read off its passing times).
 const DEV_TRACE: bool = true
+## Testing aid: start the course clock here (a different alignment of every timed machine for the bot).
+const DEV_SKEW: float = 3.3
 
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
@@ -243,7 +245,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -256,16 +258,20 @@ func _build() -> void:
 		_frame(_w(end), yaws[i + 1])
 	starts.append(route.size())
 	origins.append(_o)
-	# (dev) a finish right after the last stage built
-	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
-	var fin: Dictionary = _blk(Vector3(0, 0, -9.0), 5.0, 5.0, "main", 1.2)
-	kit.finish(_w(Vector3(0, 0, -9.5)), _yaw)
-	_finish_pos = _w(Vector3(0, 0, -9.5))
-	_hop(cp0, fin)
-	r_walk(_w(Vector3(0, 0, -9.8)))
+	if last == stages.size():
+		_stage_15()
+	else:
+		var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+		var fin: Dictionary = _blk(Vector3(0, 0, -9.0), 5.0, 5.0, "main", 1.2)
+		kit.finish(_w(Vector3(0, 0, -9.5)), _yaw)
+		_finish_pos = _w(Vector3(0, 0, -9.5))
+		_hop(cp0, fin)
+		r_walk(_w(Vector3(0, 0, -9.8)))
 	if DEV_START > 1:
 		set_spawn(origins[DEV_START - 1] + Vector3(0, 0.1, 0), yaws[DEV_START - 1])
 		route = route.slice(starts[DEV_START - 1])
+	if DEV_SKEW > 0.0:
+		Game.course_time = DEV_SKEW
 
 
 func _restyle_environment() -> void:
@@ -390,12 +396,15 @@ func _near_of(c: Vector3, n: int) -> Vector3:
 func _stage_3() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
 	var period: float = 7.0
+	var tA: float = 1.2
+	var tB: float = 2.0
+	var tC: float = 2.8
 	var cA: Vector3 = _ahead(cp0, 0.87, 0.0, 3.6)
-	var A: Dictionary = _piece(_near_of(cA, 3), 3, ArcadeFx.CYAN, period, 0.0)
+	var A: Dictionary = _piece(_near_of(cA, 3), 3, ArcadeFx.CYAN, period, 2.5 - tA)
 	var cB: Vector3 = _ahead(A, 0.89, 0.5, 3.6, 0.5)
-	var B: Dictionary = _piece(_near_of(cB, 3), 3, ArcadeFx.ORANGE, period, -1.0, [Vector2(1, -2)])
+	var B: Dictionary = _piece(_near_of(cB, 3), 3, ArcadeFx.ORANGE, period, 2.5 - tB, [Vector2(1, -2)])
 	var cC: Vector3 = _ahead(B, 0.90, 0.5, 2.4, -0.5)
-	var C: Dictionary = _piece(_near_of(cC, 2), 2, ArcadeFx.PURPLE, period, -2.0)
+	var C: Dictionary = _piece(_near_of(cC, 2), 2, ArcadeFx.PURPLE, period, 2.5 - tC)
 	var cp_dy: float = 0.0
 	var lcz: Vector3 = C["c"]
 	var tower_top := Vector3(lcz.x, lcz.y + 3.3, lcz.z - 1.2 - 1.5 - 0.9)
@@ -404,10 +413,7 @@ func _stage_3() -> Vector3:
 	var ba: ArcadeBlock = A["blk"]
 	var bb: ArcadeBlock = B["blk"]
 	var bcc: ArcadeBlock = C["blk"]
-	var tA: float = 0.6
-	var tB: float = 1.6
-	var tC: float = 2.6
-	_wait(func() -> bool: return _blocks_ok([[ba, tA - 0.3, tA + 0.6 + 1.5], [bb, tB - 0.3, tB + 0.6 + 1.5], [bcc, tC - 0.3, tC + 0.6 + 1.5]]))
+	_wait(func() -> bool: return _blocks_ok([[ba, tA - 0.3, tA + 0.4 + 1.5], [bb, tB - 0.3, tB + 0.4 + 1.5], [bcc, tC - 0.3, tC + 0.4 + 1.5]]))
 	_hop(cp0, A)
 	_hop(A, B)
 	_hop(B, C)
@@ -586,4 +592,507 @@ func _stage_6() -> Vector3:
 	return cp["c"]
 
 
-# ==== END MARKER ====
+# ---- stage 7: Bat and Block - a pong paddle punches across the beam, a falling O-block, a mantle ----------
+
+## Phase fraction that puts cycle position `u0` at course time `t0` (the machines are lined up for the bot's
+## passing times, measured with DEV_TRACE: the wait releases when every machine is in its window).
+func _ph(u0: float, t0: float, period: float) -> float:
+	return fposmod(u0 - t0 / period, 1.0)
+
+
+## A pong paddle that punches across the route: the piston. `top` is the ram's top centre when shut; it
+## punches toward local +x when dir = 1 (-x when -1).
+func _bat(top: Vector3, dir: float, stroke: float, period: float, phase: float) -> Piston:
+	var size := Vector3(1.6, 1.3, 1.2)
+	return kit.piston(_w(top), size, _yaw - 90.0 * dir, stroke, period, phase, 10.0)
+
+
+func _press(floor_c: Vector3, size: Vector3, lift: float, period: float, phase: float) -> Crusher:
+	return kit.crusher(_w(floor_c), size, lift, period, phase, _yaw)
+
+
+func _stage_7() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.2))
+	var walk: Dictionary = _blk(_ahead(p1, 0.86, 0.0, 15.0, 0.0), 1.4, 15.0, "alt", 0.6)
+	var wc: Vector3 = walk["c"]
+	var w0: float = wc.z + 7.5
+	var period: float = 6.0
+	var t_bat: float = 2.5
+	var t_press: float = 3.4
+	var bat: Piston = _bat(Vector3(wc.x - 0.7 - 0.6 - 0.15, wc.y + 1.35, w0 - 4.0), 1.0, 2.6, period, _ph(0.0, t_bat - 0.5, period))
+	var press: Crusher = _press(Vector3(wc.x, wc.y, w0 - 10.0), Vector3(2.2, 1.2, 2.0), 3.2, period, _ph(0.90, t_press - 0.5, period))
+	var ledge_top := Vector3(wc.x, wc.y + 3.3, w0 - 15.0 - 1.2 - 1.1)
+	var ld: Dictionary = _ledge(ledge_top, Vector3(3.6, 9.0, 2.2))
+	var p2: Dictionary = _post(_ahead(ld, 0.88, 0.0, 1.2, 0.4))
+	var p3: Dictionary = _post(_ahead(p2, 0.90, 0.6, 1.0, -0.4), 1.0, 1.0)
+	var cp: Dictionary = _cp(_ahead(p3, 0.86, 0.0, 5.0, -(p3["c"] as Vector3).x))
+	_wait(func() -> bool: return _ram_clear(bat, t_bat - 0.3, t_bat + 0.4 + 1.5) and _press_ok(press, t_press - 0.3, t_press + 0.3 + 1.5))
+	_hop(cp0, p1)
+	_hop(p1, walk, Vector3(0, 0, 7.0))
+	r_walk(_w(Vector3(wc.x, wc.y, w0 - 15.0 + 0.9)))
+	r_mantle(_w(Vector3(wc.x, wc.y, w0 - 15.0 + 0.35)), _w(ledge_top + Vector3(0, 0, 0.5)))
+	stat_mantles += 1
+	_hop(ld, p2)
+	_hop(p2, p3)
+	_hop(p3, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 8: Pac Maze (BRANCH) - two ghosts across the beam | two chained wall runs ---------------------
+# [shortcut: a 4.1 m mantle up the power-pellet column, then its narrow cornice]
+
+func _stage_8() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.80, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	# RIGHT (cyan): run the right wall, kick across to the left one, run it, kick to a post
+	kit.wallrun(_w(Vector3(6.1, 1.2, f0 - 7.0)), Vector3(12.0, 6.5, 0.6), _yaw + 90.0)
+	kit.wallrun(_w(Vector3(1.5, 3.6, f0 - 17.5)), Vector3(9.0, 6.5, 0.6), _yaw + 90.0)
+	var pb: Dictionary = _post(Vector3(3.6, 0.0, f0 - 27.6), 1.6, 1.6)
+	var pb2: Dictionary = _post(_ahead(pb, 0.88, 0.0, 1.2))
+	var mc: Vector3 = _ahead(pb2, 0.86, 0.0, 3.0)
+	var merge: Dictionary = _blk(Vector3(0, 0.0, mc.z), 11.0, 3.0)
+	var mz: float = mc.z
+	# LEFT (magenta): a beam across two ghosts' rails, then posts to the merge
+	var left: Dictionary = _area(Vector3(-3.5, 0, fc.z), 1.5, 1.5)
+	var beam: Dictionary = _blk(_ahead(left, 0.86, 0.0, 13.0), 1.2, 13.0, "alt", 0.6)
+	var bc: Vector3 = beam["c"]
+	var z1: float = bc.z + 3.5
+	var z2: float = bc.z - 3.0
+	var t1: float = 1.35
+	var t2: float = 2.1
+	var rail: float = 20.0
+	var spd: float = 4.0
+	var c1: float = t1 + 2.8
+	var c2: float = t2 + 2.8
+	var g1: ArcadeChomper = _chomper(1, [_w(Vector3(bc.x - rail * 0.5, bc.y, z1)), _w(Vector3(bc.x + rail * 0.5, bc.y, z1))], spd, rail * 0.5 - spd * c1)
+	var g2: ArcadeChomper = _chomper(3, [_w(Vector3(bc.x + rail * 0.5, bc.y, z2)), _w(Vector3(bc.x - rail * 0.5, bc.y, z2))], spd, rail * 0.5 - spd * c2)
+	var posts: Array[Dictionary] = _chain(beam, mz + 1.5, 0.88, 0.88, 0.0, "accent")
+	# SHORTCUT: the power-pellet column (a 4.1 m mantle) and its narrow cornice, then a drop to the merge
+	var col: Dictionary = _ledge(Vector3(0, 4.1, f0 - 0.9), Vector3(1.4, 12.0, 1.8), "accent")
+	var cornice: Dictionary = _blk(Vector3(0, 4.1, f0 - 1.8 - 6.0 - 0.4), 1.0, 12.0, "accent", 0.5)
+	var n2: Vector3 = _ahead(cornice, 0.88, 0.0, 0.0)
+	var l2: float = n2.z - (mz + 1.5 + 4.5)
+	var cornice2: Dictionary = _blk(Vector3(0, 4.1, n2.z - l2 * 0.5), 1.0, l2, "accent", 0.5)
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 2:
+		r_walk(_w(Vector3(0, 0, fc.z + 0.9)))
+		r_mantle(_w(Vector3(0, 0, fc.z + 0.65)), _w(Vector3(0, 4.1, f0 - 1.0)))
+		_hop(col, cornice, Vector3(0, 0, 5.0))
+		r_walk(_w(Vector3(0, 4.1, f0 - 13.6)))
+		_hop(cornice, cornice2, Vector3(0, 0, l2 * 0.5 - 0.8))
+		r_walk(_w(Vector3(0, 4.1, n2.z - l2 + 0.6)))
+		_hop(cornice2, merge, Vector3(0, 0, 0.4))
+	elif route_variant != 1:
+		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
+		_wait(func() -> bool: return _chomp_ok([[g1, _w(Vector3(bc.x, bc.y, z1)), t1 - 0.3, t1 + 0.3 + 1.5], [g2, _w(Vector3(bc.x, bc.y, z2)), t2 - 0.3, t2 + 0.3 + 1.5]]),
+			_w(Vector3(-3.5, 0, fc.z + 0.6)))
+		_hop(left, beam, Vector3(0, 0, 5.5))
+		r_walk(_w(Vector3(bc.x, bc.y, bc.z - 5.8)))
+		var prev: Dictionary = beam
+		for p: Dictionary in posts:
+			_hop(prev, p)
+			prev = p
+		_hop(prev, merge, Vector3(-3.5, 0, 0.6))
+	else:
+		r_walk(_w(Vector3(3.6, 0, fc.z + 0.6)))
+		r_wallrun(_w(Vector3(4.2, 0, f0 + 0.35)), _w(Vector3(5.6, 1.4, f0 - 3.2)), _w(Vector3(5.6, 1.4, f0 - 10.6)), _w(Vector3(2.0, 4.4, f0 - 14.4)))
+		r_wallrun(Vector3.ZERO, _w(Vector3(2.0, 4.4, f0 - 14.4)), _w(Vector3(2.0, 4.4, f0 - 19.6)), _w(Vector3(3.6, 0.0, f0 - 27.4)), true, true)
+		_hop(pb, pb2)
+		_hop(pb2, merge, Vector3(3.6, 0, 0.6))
+	stat_branches += 1
+	stat_shortcuts += 1
+	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 9: Scroll Screen - the screen scrolls: run the posts and the wall ahead of the static --------
+
+func _scroll(pts_local: Array[Vector3], trigger_local: Vector3, speed: float, delay: float, lead: float, stop_before_end: float) -> ArcadeScroll:
+	var s := ArcadeScroll.new()
+	var ws: Array[Vector3] = []
+	for p: Vector3 in pts_local:
+		ws.append(_w(p))
+	s.path = ws
+	s.speed = speed
+	s.delay = delay
+	s.lead = lead
+	s.stop_before_end = stop_before_end
+	s.trigger_pos = _w(trigger_local)
+	s.trigger_size = Vector3(2.4, 3.0, 2.4)
+	add_child(s)
+	return s
+
+
+func _stage_9() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var s1: Dictionary = _post(_ahead(cp0, 0.87, 0.0, 1.4), 1.4, 1.4)
+	var s2: Dictionary = _post(_ahead(s1, 0.89, 0.5, 1.2, -0.5))
+	var s3: Dictionary = _post(_ahead(s2, 0.90, 0.5, 1.2, 0.5))
+	var beam: Dictionary = _blk(_ahead(s3, 0.86, 0.0, 4.0, -0.5), 1.2, 4.0, "alt", 0.6)
+	var w2: Dictionary = _post(_ahead(beam, 0.88, 0.0, 1.6, 0.5), 1.6, 1.6)
+	var wc: Vector3 = w2["c"]
+	var f: float = wc.z - 0.8
+	kit.wallrun(_w(Vector3(wc.x + 2.4, wc.y + 1.2, f - 9.0)), Vector3(15.0, 6.5, 0.6), _yaw + 90.0)
+	var land: Dictionary = _post(Vector3(wc.x - 0.6, wc.y, f - 21.5), 1.6, 2.0)
+	var s4: Dictionary = _post(_ahead(land, 0.90, 0.5, 1.0, 0.4), 1.0, 1.0)
+	var cp: Dictionary = _cp(_ahead(s4, 0.86, 0.0, 5.0, -(s4["c"] as Vector3).x))
+	var pts: Array[Vector3] = [Vector3.ZERO, s1["c"], s2["c"], s3["c"], beam["c"], w2["c"], land["c"], s4["c"], cp["c"]]
+	_scroll(pts, (s1["c"] as Vector3) + Vector3(0, 1.2, 0), 4.6, 2.4, 16.0, 6.0)
+	_hop(cp0, s1)
+	_hop(s1, s2)
+	_hop(s2, s3)
+	_hop(s3, beam, Vector3(0, 0, 0.5))
+	_hop(beam, w2)
+	r_wallrun(_w(Vector3(wc.x + 0.3, wc.y, f + 0.35)), _w(Vector3(wc.x + 1.9, wc.y + 1.4, f - 3.6)),
+		_w(Vector3(wc.x + 1.9, wc.y + 1.4, f - 14.0)), _w(Vector3(wc.x - 0.6, wc.y, f - 21.2)))
+	_hop(land, s4)
+	_hop(s4, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 10: Stack Climb - three pieces stack up a stair, MANTLE the tower, wall run out ---------------
+
+func _stage_10() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var period: float = 7.0
+	var tA: float = 1.2
+	var tB: float = 2.0
+	var tC: float = 2.8
+	var cA: Vector3 = _ahead(cp0, 0.87, 1.2, 2.4)
+	var A: Dictionary = _piece(_near_of(cA, 2), 2, ArcadeFx.CYAN, period, 2.5 - tA)
+	var cB: Vector3 = _ahead(A, 0.88, 1.2, 3.6, 0.5)
+	var B: Dictionary = _piece(_near_of(cB, 3), 3, ArcadeFx.GREEN, period, 2.5 - tB, [Vector2(-1, 0)])
+	var cC: Vector3 = _ahead(B, 0.89, 1.2, 2.4, -0.5)
+	var C: Dictionary = _piece(_near_of(cC, 2), 2, ArcadeFx.RED, period, 2.5 - tC)
+	var lc: Vector3 = C["c"]
+	var tower_top := Vector3(lc.x, lc.y + 3.3, lc.z - 1.2 - 1.5 - 0.9)
+	var tower: Dictionary = _ledge(tower_top, Vector3(2.4, 9.0, 1.8))
+	var w2: Dictionary = _post(_ahead(tower, 0.88, 0.0, 1.6, -0.3), 1.6, 1.6)
+	var wc: Vector3 = w2["c"]
+	var f: float = wc.z - 0.8
+	kit.wallrun(_w(Vector3(wc.x - 2.4, wc.y + 1.2, f - 9.0)), Vector3(15.0, 6.5, 0.6), _yaw + 90.0)
+	var land: Dictionary = _post(Vector3(wc.x + 0.6, wc.y, f - 21.5), 1.6, 2.0)
+	var cp: Dictionary = _cp(_ahead(land, 0.86, 0.0, 5.0, -(wc.x + 0.6)))
+	var ba: ArcadeBlock = A["blk"]
+	var bb: ArcadeBlock = B["blk"]
+	var bcc: ArcadeBlock = C["blk"]
+	_wait(func() -> bool: return _blocks_ok([[ba, tA - 0.3, tA + 0.4 + 1.5], [bb, tB - 0.3, tB + 0.4 + 1.5], [bcc, tC - 0.3, tC + 0.4 + 1.5]]))
+	_hop(cp0, A)
+	_hop(A, B)
+	_hop(B, C)
+	r_mantle(_w(Vector3(lc.x, lc.y, lc.z - 1.2 + 0.35)), _w(tower_top + Vector3(0, 0, 0.3)))
+	stat_mantles += 1
+	_hop(tower, w2)
+	r_wallrun(_w(Vector3(wc.x - 0.3, wc.y, f + 0.35)), _w(Vector3(wc.x - 1.9, wc.y + 1.4, f - 3.6)),
+		_w(Vector3(wc.x - 1.9, wc.y + 1.4, f - 14.0)), _w(Vector3(wc.x + 0.6, wc.y, f - 21.2)))
+	_hop(land, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 11: Space Invaders (BRANCH) - the marching laser lane | the mantle stair --------------------
+# [shortcut: the warp pipe on the small post]
+
+func _stage_11() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.80, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	# RIGHT (cyan): mantle the first invader block, cross its top, drop to a post
+	var la_top := Vector3(3.6, 3.3, f0 - 1.6 - 1.2)
+	var la: Dictionary = _ledge(la_top, Vector3(2.4, 9.0, 2.4))
+	var tb: Dictionary = _blk(_ahead(la, 0.86, 0.0, 8.0), 1.2, 8.0, "alt", 0.6)
+	var pr: Dictionary = _post(_ahead(tb, 0.85, -3.3, 1.2))
+	var mc: Vector3 = _ahead(pr, 0.86, 0.0, 3.0)
+	var merge: Dictionary = _blk(Vector3(0, 0.0, mc.z), 11.0, 3.0)
+	var mz: float = mc.z
+	# LEFT (magenta): a beam under three lasers that march across it
+	var left: Dictionary = _area(Vector3(-3.5, 0, fc.z), 1.5, 1.5)
+	var beam: Dictionary = _blk(_ahead(left, 0.86, 0.0, 14.0), 1.2, 14.0, "alt", 0.6)
+	var bc: Vector3 = beam["c"]
+	var period: float = 5.4
+	var t0: float = 1.0
+	var lz: Array[float] = [bc.z + 3.5, bc.z, bc.z - 3.5]
+	var tl: Array[float] = [t0 + 0.3, t0 + 0.7, t0 + 1.05]
+	var lasers: Array[LaserGate] = []
+	for k: int in 3:
+		lasers.append(kit.laser(_w(Vector3(bc.x, bc.y + 1.2, lz[k])), Vector3(3.2, 2.4, 0.2), period, 0.3, _ph(0.3, tl[k] - 0.5, period), _yaw))
+	var posts: Array[Dictionary] = _chain(beam, mz + 1.5, 0.88, 0.88, 0.0, "accent")
+	# SHORTCUT: a small post off the fork's front; the warp pipe on it opens onto the merge
+	var sp: Dictionary = _post(_ahead(_area(fc, 5.5, 1.5), 0.93, 0.0, 1.2), 1.2, 1.2, "accent")
+	var spc: Vector3 = sp["c"]
+	var sdoor: WarpPortal = kit.portal(_w(spc + Vector3(0, 0, -0.3)), _yaw, _w(Vector3(0.5, 0, mz + 0.8)), _yaw, 6.0)
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 2:
+		r_walk(_w(Vector3(0, 0, fc.z)))
+		_hop(_area(fc, 5.5, 1.5), sp, Vector3(0, 0, 0.35))
+		r_portal(_w(spc + Vector3(0, 0, -0.6)), sdoor.exit_point())
+	elif route_variant != 1:
+		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
+		_wait(func() -> bool: return _dark(lasers[0], tl[0] - 0.3, tl[0] + 0.3 + 1.5) and _dark(lasers[1], tl[1] - 0.3, tl[1] + 0.3 + 1.5) \
+			and _dark(lasers[2], tl[2] - 0.3, tl[2] + 0.3 + 1.5), _w(Vector3(-3.5, 0, fc.z + 0.6)))
+		_hop(left, beam, Vector3(0, 0, 6.0))
+		r_walk(_w(Vector3(bc.x, bc.y, bc.z - 6.2)))
+		var prev: Dictionary = beam
+		for p: Dictionary in posts:
+			_hop(prev, p)
+			prev = p
+		_hop(prev, merge, Vector3(-3.5, 0, 0.6))
+	else:
+		r_walk(_w(Vector3(3.6, 0, fc.z + 0.6)))
+		r_mantle(_w(Vector3(3.6, 0, f0 + 0.35)), _w(la_top + Vector3(0, 0, 0.3)))
+		stat_mantles += 1
+		_hop(la, tb)
+		r_walk(_w(Vector3(3.6, 3.3, (tb["c"] as Vector3).z - 3.4)))
+		_hop(tb, pr)
+		_hop(pr, merge, Vector3(0, 0, 0.6))
+	stat_branches += 1
+	stat_shortcuts += 1
+	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 12: Pong Arena - two sideways paddles ferry you across, a slow ball roams the middle -----------
+
+## A paddle you ride sideways: it slides along x from `x0` to `x1` at height `y`, lane centre z.
+func _lane_paddle(x0: float, x1: float, y: float, z: float, period: float, phase_s: float) -> ArcadePaddle:
+	return _paddle(Vector3(x0, y, z), Vector3(2.6, 0.5, 1.8), Vector3(x1 - x0, 0, 0), period, phase_s)
+
+
+func _stage_12() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var xa: float = -3.5
+	var xb: float = 3.5
+	var pa: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.4, xa), 1.4, 1.4)
+	var pac: Vector3 = pa["c"]
+	var z1: float = pac.z - 0.7 - 2.6 - 0.9
+	var period: float = 6.0
+	var tb: float = 1.4
+	var p1: ArcadePaddle = _lane_paddle(xa, xb, pac.y, z1, period, 0.0)
+	var m: Dictionary = _post(Vector3(xb, pac.y, z1 - 0.9 - 3.0 - 0.7), 1.4, 1.4)
+	var mc: Vector3 = m["c"]
+	var z2: float = mc.z - 0.7 - 2.6 - 0.9
+	var t_m: float = tb + 4.2
+	var p2: ArcadePaddle = _lane_paddle(xb, xa, pac.y, z2, period, -3.9)
+	var pb: Dictionary = _post(Vector3(xa, pac.y, z2 - 0.9 - 3.0 - 0.7), 1.4, 1.4)
+	var pbc: Vector3 = pb["c"]
+	var q1: Dictionary = _post(_ahead(pb, 0.90, 0.5, 1.2, 0.4))
+	var q2: Dictionary = _post(_ahead(q1, 0.91, 0.5, 1.0, -0.4), 1.0, 1.0)
+	var cp: Dictionary = _cp(_ahead(q2, 0.86, 0.0, 5.0, -(q2["c"] as Vector3).x))
+	# the ball: a slow pong ball bouncing in the court between the lanes
+	var lo := Vector3(-8.0, pac.y, mc.z - 2.4)
+	var hi := Vector3(8.0, pac.y, mc.z + 2.4)
+	var ball: ArcadeChomper = _chomper(5, [_w(lo), _w(hi)], 0.0, 0.0, ArcadeChomper.Mode.COURT, 0.7, 0.55)
+	ball.vel = Vector2(3.0, 1.1)
+	ball.court_o = Vector2(3.0, 1.0)
+	_wait(func() -> bool: return p1.offset_at(Game.course_time + tb).length() < 0.45 		and ball.clear_at(_w(Vector3(mc.x, mc.y, mc.z)), 1.5, t_m - 1.0, t_m + 1.0 + 1.5))
+	_hop(cp0, pa)
+	route.append({"kind": "x_jump", "from": _w(_edge(pa, Vector3(xa, 0, z1))), "when_node": p1, "when_local": Vector3(0, 0.25, 0),
+		"when_point": _w(Vector3(xa, pac.y, z1)), "when_radius": 0.8, "lead": 0.5,
+		"to_node": p1, "to_local": Vector3(0, 0.3, 0), "hold": true})
+	var p1_end: Vector3 = _w(Vector3(xb, pac.y, z1)) - Vector3(0, 0.25, 0)
+	r_jump_from_ride(p1, p1_end, 0.5, _w(mc), true, Vector3(0, 0.3, 0))
+	route.append({"kind": "x_jump", "from": _w(_edge(m, Vector3(xb, 0, z2))), "when_node": p2, "when_local": Vector3(0, 0.25, 0),
+		"when_point": _w(Vector3(xb, pac.y, z2)), "when_radius": 0.8, "lead": 0.5,
+		"to_node": p2, "to_local": Vector3(0, 0.3, 0), "hold": true})
+	var p2_end: Vector3 = _w(Vector3(xa, pac.y, z2)) - Vector3(0, 0.25, 0)
+	r_jump_from_ride(p2, p2_end, 0.5, _w(pbc), true, Vector3(0, 0.3, 0))
+	_hop(pb, q1)
+	_hop(q1, q2)
+	_hop(q2, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 13: Crossfire - two hopping glitch tiles, a ghost over the gap, a bat on the last beam ------------
+# [shortcut: the secret warp pipe past the tiles]
+
+func _stage_13() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var hold: float = 3.6
+	var a1: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.2))
+	var g1c: Vector3 = _ahead(a1, 0.88, 0.0, 1.3, 0.3)
+	var g1a: Dictionary = _area(g1c, 0.65, 0.65)
+	var a2: Dictionary = _post(_ahead(g1a, 0.89, 0.4, 1.2, -0.3))
+	var g2c: Vector3 = _ahead(a2, 0.88, 0.0, 1.3, 0.3)
+	var g2a: Dictionary = _area(g2c, 0.65, 0.65)
+	var a3: Dictionary = _blk(_ahead(g2a, 0.86, 0.0, 4.4, -0.3), 1.2, 4.4, "alt", 0.6)
+	var a3c: Vector3 = a3["c"]
+	var a4: Dictionary = _post(_ahead(a3, 0.90, 0.5, 1.0, 0.4), 1.0, 1.0)
+	var cp: Dictionary = _cp(_ahead(a4, 0.86, 0.0, 5.0, -(a4["c"] as Vector3).x))
+	var t1: float = 0.95
+	var t2: float = 2.55
+	var t_ghost: float = 2.1
+	var t_bat: float = 3.95
+	var period: float = 6.0
+	var g1: ArcadeGlitch = _glitch([g1c, g1c + Vector3(3.2, 0.6, 0.0)], hold, t1 - 1.4, ArcadeFx.CYAN.lerp(Color.WHITE, 0.6))
+	var g2: ArcadeGlitch = _glitch([g2c, g2c + Vector3(-3.2, 0.6, 0.0)], hold, t2 - 1.4, ArcadeFx.YELLOW.lerp(Color.WHITE, 0.6))
+	# the ghost patrols a long rail across the flight between the second post and the second tile
+	var a2c: Vector3 = a2["c"]
+	var zg: float = (a2c.z - 0.6 + g2c.z + 0.65) * 0.5
+	var rail: float = 20.0
+	var spd: float = 4.0
+	var gh: ArcadeChomper = _chomper(2, [_w(Vector3(a2c.x - rail * 0.5, a2c.y, zg)), _w(Vector3(a2c.x + rail * 0.5, a2c.y, zg))], spd, rail * 0.5 - spd * (t_ghost + 2.8))
+	var bat: Piston = _bat(Vector3(a3c.x - 0.6 - 0.6 - 0.15, a3c.y + 1.35, a3c.z), 1.0, 2.6, period, _ph(0.0, t_bat - 0.5, period))
+	# SHORTCUT: a small post beside the first post; the secret warp pipe on it opens onto the last beam
+	var sp: Dictionary = _post(_ahead(a1, 0.93, 0.0, 1.2, -2.4), 1.2, 1.2, "accent")
+	var spc: Vector3 = sp["c"]
+	var sdoor: WarpPortal = kit.portal(_w(spc + Vector3(0, 0, -0.3)), _yaw, _w(Vector3(a3c.x, a3c.y, a3c.z + 1.6)), _yaw, 6.0)
+	var spot_g: Vector3 = _w(Vector3(a2c.x, a2c.y, zg))
+	_hop(cp0, a1)
+	if route_variant == 2:
+		_hop(a1, sp)
+		r_portal(_w(spc + Vector3(0, 0, -0.6)), sdoor.exit_point())
+		_wait(func() -> bool: return _ram_clear(bat, 1.4 - 0.3, 1.4 + 0.4 + 1.5))
+		r_walk(_w(Vector3(a3c.x, a3c.y, a3c.z - 1.6)))
+	else:
+		_wait(func() -> bool: return _glitch_ok([[g1, 0, t1 - 0.3, t1 + 0.3 + 1.5], [g2, 0, t2 - 0.3, t2 + 0.3 + 1.5]]) \
+			and gh.clear_at(spot_g, 0.95, t_ghost - 0.5, t_ghost + 0.5 + 1.5) and _ram_clear(bat, t_bat - 0.3, t_bat + 0.4 + 1.5))
+		_hop(a1, g1a)
+		_hop(g1a, a2)
+		_hop(a2, g2a)
+		_hop(g2a, a3)
+		r_walk(_w(Vector3(a3c.x, a3c.y, a3c.z - 1.9)))
+	_hop(a3, a4)
+	_hop(a4, cp, Vector3(0, 0, 1.2))
+	stat_shortcuts += 1
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 14: Level Up - two falling O-blocks on the beam, MANTLE, the longest jump, the wall run ---------
+
+func _stage_14() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.2))
+	var walk: Dictionary = _blk(_ahead(p1, 0.86, 0.0, 13.0), 1.4, 13.0, "alt", 0.6)
+	var wc: Vector3 = walk["c"]
+	var w0: float = wc.z + 6.5
+	var period: float = 6.0
+	var t1: float = 2.4
+	var t2: float = 3.2
+	var c1: Crusher = _press(Vector3(wc.x, wc.y, w0 - 3.5), Vector3(2.2, 1.2, 2.0), 3.2, period, _ph(0.90, t1 - 0.5, period))
+	var c2: Crusher = _press(Vector3(wc.x, wc.y, w0 - 8.0), Vector3(2.2, 1.2, 2.0), 3.2, period, _ph(0.90, t2 - 0.5, period))
+	var ledge_top := Vector3(wc.x, wc.y + 3.3, w0 - 13.0 - 1.4 - 1.0)
+	var ld: Dictionary = _ledge(ledge_top, Vector3(3.2, 9.0, 2.0))
+	var runway: Dictionary = _blk(_ahead(ld, 0.88, 0.0, 5.0, 0.0), 1.2, 5.0, "alt", 0.6)
+	var far: Dictionary = _post(_ahead(runway, 0.94, 0.0, 1.2, 0.0))
+	var farc: Vector3 = far["c"]
+	var f: float = farc.z - 0.6
+	kit.wallrun(_w(Vector3(farc.x + 2.4, farc.y + 1.2, f - 9.0)), Vector3(15.0, 6.5, 0.6), _yaw + 90.0)
+	var land: Dictionary = _post(Vector3(farc.x - 0.6, farc.y, f - 21.5), 1.6, 2.0)
+	var cp: Dictionary = _cp(_ahead(land, 0.86, 0.0, 5.0, -(farc.x - 0.6)))
+	_wait(func() -> bool: return _press_ok(c1, t1 - 0.3, t1 + 0.3 + 1.5) and _press_ok(c2, t2 - 0.3, t2 + 0.3 + 1.5))
+	_hop(cp0, p1)
+	_hop(p1, walk, Vector3(0, 0, 6.0))
+	r_walk(_w(Vector3(wc.x, wc.y, w0 - 13.0 + 0.9)))
+	r_mantle(_w(Vector3(wc.x, wc.y, w0 - 13.0 + 0.35)), _w(ledge_top + Vector3(0, 0, 0.4)))
+	stat_mantles += 1
+	r_walk(_w(Vector3(ledge_top.x, ledge_top.y, ledge_top.z - 0.4)))
+	_hop(ld, runway, Vector3(0, 0, 1.6))
+	r_walk(_w((runway["c"] as Vector3) + Vector3(0, 0, -1.9)))
+	_hop(runway, far)
+	r_wallrun(_w(Vector3(farc.x + 0.3, farc.y, f + 0.35)), _w(Vector3(farc.x + 1.9, farc.y + 1.4, f - 3.6)),
+		_w(Vector3(farc.x + 1.9, farc.y + 1.4, f - 14.0)), _w(Vector3(farc.x - 0.6, farc.y, f - 21.2)))
+	_hop(land, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 15: THE PIXEL BOSS - the screen scrolls, the boss takes aim, the HIGH SCORE gate ----------------
+
+var boss: ArcadeBoss
+var _finish_light: OmniLight3D
+
+
+func _stage_15() -> void:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	# the arena: eleven small platforms in a line, the boss's gaze falling on some of them
+	var pcts: Array[float] = [0.88, 0.86, 0.90, 0.90, 0.86, 0.91, 0.88, 0.90, 0.91, 0.88, 0.90]
+	var dys: Array[float] = [0.0, 0.0, 0.5, 0.0, 0.5, 0.0, 0.5, 0.0, 0.5, 0.0, 0.5]
+	var lens: Array[float] = [1.2, 3.0, 1.2, 1.2, 4.0, 1.0, 2.4, 1.2, 1.0, 3.0, 1.2]
+	var wid: Array[float] = [1.2, 1.2, 1.2, 1.2, 1.2, 1.0, 2.4, 1.2, 1.0, 1.2, 1.2]
+	var dxs: Array[float] = [0.0, 0.0, 0.4, -0.4, 0.0, 0.4, 0.0, -0.4, 0.4, 0.0, -0.4]
+	var areas: Array[Dictionary] = []
+	var prev: Dictionary = cp0
+	for i: int in pcts.size():
+		var c: Vector3 = _ahead(prev, pcts[i], dys[i], lens[i], dxs[i])
+		var a: Dictionary
+		if lens[i] > 2.0:
+			a = _blk(c, wid[i], lens[i], "alt", 0.6)
+		else:
+			a = _post(c, wid[i], lens[i])
+		areas.append(a)
+		prev = a
+	var last: Dictionary = areas[areas.size() - 1]
+	var fin: Dictionary = _blk(_ahead(last, 0.86, 0.5, 6.0, -(last["c"] as Vector3).x), 6.0, 6.0, "main", 1.2)
+	var fc: Vector3 = fin["c"]
+	kit.finish(_w(fc + Vector3(0, 0, -0.6)), _yaw)
+	_finish_pos = _w(fc + Vector3(0, 0, -0.6))
+	# the scrolling screen: it starts when you step on the first platform
+	var pts: Array[Vector3] = [Vector3.ZERO]
+	for a2: Dictionary in areas:
+		pts.append(a2["c"])
+	pts.append(fc)
+	_scroll(pts, (areas[0]["c"] as Vector3) + Vector3(0, 1.2, 0), 4.0, 3.0, 20.0, 8.0)
+	# the boss, towering past the podium and facing the course; its gaze falls on four of the platforms
+	boss = ArcadeBoss.new()
+	boss.boss_pos = _w(fc + Vector3(0, -3.0, -32.0))
+	boss.face_dir = _d(Vector3(0, 0, 1))
+	add_child(boss)
+	var tau: Array[float] = [1.16, 1.98, 2.88, 3.70, 4.49, 5.53, 6.31, 7.20, 8.0, 8.79, 9.71]
+	var period: float = 6.5
+	var targets: Array[int] = [2, 4, 6, 8]
+	var fire_idx: Array[int] = []
+	for k: int in targets:
+		var ac: Vector3 = areas[k]["c"]
+		var half: Vector2 = Vector2(0.9, 0.9) if lens[k] < 2.0 else Vector2(wid[k] * 0.5 + 0.4, minf(lens[k] * 0.5, 1.6) + 0.2)
+		var fire_t: float = tau[k] - 2.3
+		fire_idx.append(boss.add_attack(_w(ac), half if absf(fmod(_yaw, 180.0)) < 1.0 else Vector2(half.y, half.x), period, 1.1 - fire_t))
+	_wait(func() -> bool:
+		for j: int in targets.size():
+			var tk: float = tau[targets[j]]
+			if not boss.window_clear(fire_idx[j], Game.course_time, tk - 0.7, tk + 0.4 + 1.5):
+				return false
+		return true)
+	prev = cp0
+	for i2: int in areas.size():
+		_hop(prev, areas[i2])
+		prev = areas[i2]
+	_hop(prev, fin, Vector3(0, 0, 0.6))
+	r_walk(_w(fc + Vector3(0, 0, -0.9)))
+	# the high-score podium: a frame round the gate and a glow on the floor
+	_finish_light = OmniLight3D.new()
+	_finish_light.light_color = ArcadeFx.YELLOW
+	_finish_light.light_energy = 2.0
+	_finish_light.omni_range = 16.0
+	_finish_light.position = _finish_pos + Vector3(0, 4.0, 0)
+	add_child(_finish_light)
+
+
+func _finish_sequence() -> void:
+	var cols: Array[Color] = [ArcadeFx.MAGENTA, ArcadeFx.CYAN, ArcadeFx.YELLOW, ArcadeFx.GREEN, ArcadeFx.ORANGE]
+	for i: int in cols.size():
+		var fw: GPUParticles3D = ArcadeFx.finale(cols[i], 80)
+		fw.position = _finish_pos + _d(Vector3(-6.0 + 3.0 * float(i), 6.0 + float(i % 2) * 3.0, -2.0))
+		add_child(fw)
+		fw.restart()
+		fw.emitting = true
+	if boss != null:
+		boss.finish_burst()
+	# SOUND: arcade_finish - HIGH SCORE: a rising chiptune fanfare
+	WorldAudio.at(self, "arcade_finish", _finish_pos + Vector3(0, 3.0, 0), 1.0, 120.0)
+	if _finish_light != null:
+		_finish_light.light_energy = 9.0
+		create_tween().tween_property(_finish_light, "light_energy", 2.0, 1.6)
+	await get_tree().create_timer(0.9).timeout
+

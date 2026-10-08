@@ -38,6 +38,7 @@ func attach(lvl: LevelBase) -> void:
 
 
 func _on_respawn() -> void:
+	_hp_left = 0.0   # TEMP-PAUSE
 	retries += 1
 	log_lines.append("respawn during step %d (%s)" % [step_index, str(level.route[mini(step_index, level.route.size() - 1)]["kind"])])
 	_sync_checkpoint_step()
@@ -85,6 +86,11 @@ func _physics_process(dt: float) -> void:
 		done = true
 		player.cmd_move = Vector2.ZERO
 		return
+	if _hp_left > 0.0:   # TEMP-PAUSE
+		_hp_left -= dt   # TEMP-PAUSE
+		player.cmd_move = Vector2.ZERO   # TEMP-PAUSE
+		player.cmd_jump = false   # TEMP-PAUSE
+		return   # TEMP-PAUSE
 	if step_index >= level.route.size():
 		# route exhausted: keep heading for the last walk target; give up (stuck) if the finish never triggers
 		# (only a walk's `to` is a real spot: r_jump_onto stores a placeholder Vector3.ZERO)
@@ -148,8 +154,14 @@ func _physics_process(dt: float) -> void:
 
 
 func _next() -> void:
+	var done_kind: String = str(level.route[step_index]["kind"]) if step_index < level.route.size() else ""   # TEMP-PAUSE
 	step_index += 1
 	_begin_step()
+	if FileAccess.file_exists("res://tests/scratch/bot_pause") and done_kind in ["b_wait", "wait", "x_wait", "c_wait", "checkpoint"]:   # TEMP-PAUSE
+		_hp_left = 1.0   # TEMP-PAUSE
+
+
+var _hp_left: float = 0.0   # TEMP-PAUSE
 
 
 func _target(step: Dictionary, dt: float) -> Vector3:
