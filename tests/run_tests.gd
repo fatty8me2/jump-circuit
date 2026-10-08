@@ -7865,7 +7865,9 @@ func test_zpm_hill() -> void:
 	z.pts.clear()
 	z._seconds.clear()
 	lvl.player.teleport(Transform3D(Basis(), z.zone_pos + Vector3(0, 0.3, 0)))
-	await seconds(2.5)
+	for i: int in 150:   # (held on the spot: this lawn has a launcher next to it)
+		lvl.player.teleport(Transform3D(Basis(), z.zone_pos + Vector3(0, 0.3, 0)))
+		await get_tree().physics_frame
 	check(z.holder == 1 and int(z.pts.get(1, 0)) >= 1, "standing in the zone alone makes you the holder and scores (%d pts)" % int(z.pts.get(1, 0)))
 	check(not z.hud_lines().is_empty() and p.hud._mode_box.visible, "the mode's HUD widget shows")
 	check(not z.round_over(Game.course_time), "King of the Hill adds no end condition of its own")
@@ -7935,7 +7937,12 @@ func test_zpm_coin_rush() -> void:
 			for j: int in range(i + 1, pts.size()):
 				if pts[i].distance_to(pts[j]) < PartyModeCoins.MIN_GAP - 0.01:
 					spaced = false
-		check(pts.size() >= 8 and pts.size() <= PartyModeCoins.MAX_COINS and spaced, "course %d: %d coin spots on the route, spaced out" % [li + 1, pts.size()])
+		check(pts.size() >= 4 and pts.size() <= PartyModeCoins.MAX_COINS and spaced, "course %d: %d coin spots on the route, spaced out" % [li + 1, pts.size()])
+	if Game.LEVELS.size() > 5:
+		var short: LevelBase = await _pm_round("coins", 0, "normal", 5)
+		var sc: PartyModeCoins = short.party.mode as PartyModeCoins
+		check(sc != null and sc.coins.size() >= 8, "a course with a short route still gets coins (on its checkpoint lawns too): %d" % (sc.coins.size() if sc != null else -1))
+		await _cpu_cleanup()
 	var lvl: LevelBase = await _pm_round("coins", 2)
 	var p: PartyLayer = lvl.party
 	var c: PartyModeCoins = p.mode as PartyModeCoins

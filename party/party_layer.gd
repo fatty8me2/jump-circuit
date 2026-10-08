@@ -1383,7 +1383,7 @@ func _on_relay_notice(text: String) -> void:
 
 ## The scoreboard message for the round as this peer knows it (host: authoritative).
 func build_round_end() -> Dictionary:
-	var finished: Array[int] = []
+	var finished: Array = []
 	for id: int in Net.standings():
 		if float(Net.roster[id].get("finished", -1.0)) >= 0.0:
 			finished.append(id)

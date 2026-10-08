@@ -10,6 +10,8 @@ extends PartyMode
 const PICK_RADIUS: float = 1.7
 const MIN_GAP: float = 5.5
 const MAX_COINS: int = 70
+## A route with fewer coin spots than this gets coins on its checkpoint lawns too.
+const FILL_BELOW: int = 14
 const DROP_MAX: int = 3
 const FIRST_DROP_ID: int = 1000
 
@@ -45,35 +47,59 @@ func _build_route_coins() -> void:
 	if _built or layer.level.route.is_empty():
 		return
 	_built = true
+	var spots: Array[Vector3] = route_coin_points(layer.level)
+	if spots.size() < FILL_BELOW:
+		# a course with a short route (a ride, a flight): coins also lie on every checkpoint lawn
+		for xf: Transform3D in layer.respawn_points():
+			for ahead: float in [7.0, 5.0, 3.0, 1.0, -1.5]:
+				for q: Vector3 in layer.lawn_spots(xf, [-2.0, 0.0, 2.0], [ahead]):
+					_add_spot(spots, q, 2.2)
 	var i: int = 0
-	for p: Vector3 in route_coin_points(layer.level):
+	for p: Vector3 in spots:
 		coins[i] = p
 		i += 1
 	_build_nodes()
 
 
-## The coin spots for a level: its route's walk targets and static jump landings, thinned to MIN_GAP apart.
+## The coin spots for a level: every static ground point its route reaches (walk targets, jump landings, wall-run
+## exits ...) plus evenly spaced points along its walked stretches, thinned to MIN_GAP apart.
 static func route_coin_points(level: LevelBase) -> Array[Vector3]:
 	var out: Array[Vector3] = []
+	var prev: Vector3 = Vector3.INF
 	for step: Dictionary in level.route:
 		var kind: String = str(step.get("kind", ""))
-		if kind not in ["walk", "jump", "pad", "b_jump", "x_pad", "kick"]:
+		var end: Vector3 = Vector3.INF
+		if step.has("to_node") or step.has("node") and kind == "jump":
+			end = Vector3.INF
+		elif kind in ["walk", "jump", "pad", "b_jump", "x_pad", "kick", "w_run", "k_barrel", "k_zip"]:
+			if step.get("to", Vector3.ZERO) is Vector3 and step["to"] != Vector3.ZERO:
+				end = step["to"]
+		elif kind == "m_climb" and step.get("top", Vector3.ZERO) is Vector3:
+			end = step["top"]
+		elif kind == "portal" and step.get("exit", Vector3.ZERO) is Vector3:
+			end = step["exit"]
+		if end == Vector3.INF:
+			prev = Vector3.INF
 			continue
-		if step.has("to_node") or not (step.get("to", Vector3.ZERO) is Vector3):
-			continue
-		var p: Vector3 = step["to"]
-		if p == Vector3.ZERO:
-			continue
-		var ok: bool = true
-		for q: Vector3 in out:
-			if q.distance_to(p) < MIN_GAP:
-				ok = false
-				break
-		if ok:
-			out.append(p)
-			if out.size() >= MAX_COINS:
-				break
+		if kind == "walk" and prev != Vector3.INF:
+			var d: float = prev.distance_to(end)
+			var n: int = int(d / (MIN_GAP * 1.2))
+			for k: int in range(1, n + 1):
+				_add_spot(out, prev.lerp(end, float(k) / float(n + 1)))
+		_add_spot(out, end)
+		prev = end
+		if out.size() >= MAX_COINS:
+			break
 	return out
+
+
+static func _add_spot(out: Array[Vector3], p: Vector3, gap: float = MIN_GAP) -> void:
+	if out.size() >= MAX_COINS:
+		return
+	for q: Vector3 in out:
+		if q.distance_to(p) < gap:
+			return
+	out.append(p)
 
 
 func _build_nodes() -> void:

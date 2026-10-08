@@ -96,7 +96,10 @@ func _boom(el: Array[int]) -> void:
 func on_hit(by: int, victim: int, _src: String) -> void:
 	if by != holder or victim <= 0 or holder == 0:
 		return
-	ask({"m": "pass", "to": victim})
+	if is_host():
+		on_request(by, {"m": "pass", "to": victim})   # (a CPU's hit is reported by the host on its behalf)
+	else:
+		ask({"m": "pass", "to": victim})
 
 
 func on_request(from_id: int, m: Dictionary) -> void:
