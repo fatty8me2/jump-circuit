@@ -76,6 +76,8 @@ var party_round: int = 0
 ## Party vs CPU: a one-person "session" (host, no peers) that runs the normal party race flow
 ## with CPU racers (party/cpu/). Never set in the main mode.
 var local_session: bool = false
+## The host's Party Cup rules as last synced to us (PartyRuleset.cur() reads it on a guest).
+var synced_ruleset: Dictionary = {}
 
 var _clock_offset: float = 0.0
 var _best_rtt: float = 999.0
@@ -283,6 +285,7 @@ func _shutdown() -> void:
 	teams.clear()
 	party_round = 0
 	local_session = false
+	synced_ruleset = {}
 	if preferred_color >= 0:
 		Settings.color_index = preferred_color
 		preferred_color = -1
@@ -1040,6 +1043,20 @@ func host_set_team(id: int, team: int) -> void:
 	roster_changed.emit()
 
 
+## Host: the Party Cup rules changed (PartyRuleset.set_value): every guest gets the new copy with the next roster snapshot.
+func publish_ruleset() -> void:
+	if not is_host():
+		return
+	CpuField.apply_ruleset()
+	_broadcast_roster()
+	roster_changed.emit()
+
+
+## Has the finite cup just finished (the party round counter reached the cup length)?
+func cup_complete() -> bool:
+	return game_mode != "race" and PartyRuleset.cup_done(party_round)
+
+
 ## Host: starts a fresh Party Cup (round numbers from 1 again).
 func host_reset_cup() -> void:
 	if not is_host():
@@ -1057,7 +1074,7 @@ func _party_cfg() -> Dictionary:
 	var t: Array = []
 	for id: Variant in teams:
 		t.append([int(id), int(teams[id])])
-	return {"mode": game_mode, "teams": t, "round": party_round}
+	return {"mode": game_mode, "teams": t, "round": party_round, "rs": PartyRuleset.cur()}
 
 
 func _apply_party_cfg(raw: Variant) -> void:
@@ -1066,6 +1083,8 @@ func _apply_party_cfg(raw: Variant) -> void:
 	var cfg: Dictionary = raw
 	var mode: String = str(cfg.get("mode", "race"))
 	game_mode = mode if mode in ["race", "party", "team"] else "race"
+	if cfg.has("rs"):
+		synced_ruleset = PartyRuleset.sanitize(cfg["rs"])
 	teams.clear()
 	var t: Variant = cfg.get("teams", [])
 	if typeof(t) == TYPE_ARRAY:

@@ -1046,9 +1046,9 @@ func _apply_ko(by: int, victim: int) -> void:
 		var g: RemoteRacer = ghost(victim)
 		if g != null and is_instance_valid(g) and g.global_position.y > level.kill_y + 3.0:
 			PartyFx.ko_burst(self, g.global_position + Vector3(0, 0.8, 0))
-	hud.feed("%s KO'd %s   +%d" % [racer_name(by), racer_name(victim), PartyRules.KO_POINTS], team_color_of(by))
+	hud.feed("%s KO'd %s   +%d" % [racer_name(by), racer_name(victim), PartyRules.ko_value()], team_color_of(by))
 	if by == Net.my_id():
-		hud.announce("KO!  +%d" % PartyRules.KO_POINTS, Color(1.0, 0.45, 0.3))
+		hud.announce("KO!  +%d" % PartyRules.ko_value(), Color(1.0, 0.45, 0.3))
 		sfx.play("ko", 0.9, 1.3)
 
 
