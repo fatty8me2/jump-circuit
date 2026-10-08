@@ -513,3 +513,49 @@ func great_toadstool(pos: Vector3, stalk_r: float, stalk_h: float, cap_r: float,
 		g.rotation.y = -a3
 		_put(n, g, true)
 	return n
+
+
+## THE GREAT TOADSTOOL, mature: a vast stalk flaring at the foot with ribs and a ruffled skirt, topped by a
+## FLAT red cap (a drum whose top face is the walkable summit at y = pos.y + stalk_h + cap_h), cream warts
+## flat on top, a cream rolled rim and a fan of gills under it. `pos` = the foot on the forest floor.
+func great_toadstool_flat(pos: Vector3, stalk_r: float, stalk_h: float, cap_r: float, cap_h: float) -> Node3D:
+	var n: Node3D = _node(pos)
+	var stem: StandardMaterial3D = Look.flat(CREAM, 0.88)
+	var top_y: float = stalk_h + cap_h
+	_put(n, Look.cylinder(stalk_r * 2.2, stalk_h * 0.06, stem, Vector3(0, stalk_h * 0.03, 0), stalk_r * 1.2, 32))
+	_put(n, Look.cylinder(stalk_r * 1.05, stalk_h, stem, Vector3(0, stalk_h * 0.5, 0), stalk_r * 0.9, 32))
+	var rib: StandardMaterial3D = Look.flat(CREAM.darkened(0.08), 0.9)
+	for i: int in 12:
+		var a: float = TAU * float(i) / 12.0
+		var rb := Look.box(Vector3(stalk_r * 0.07, stalk_h * 0.96, stalk_r * 0.1), rib, Vector3(cos(a), 0, sin(a)) * stalk_r * 0.99 + Vector3(0, stalk_h * 0.5, 0))
+		rb.rotation.y = -a
+		_put(n, rb, true)
+	# the ruffled skirt hanging a third of the way down
+	_put(n, Look.cylinder(stalk_r * 1.8, stalk_h * 0.025, Look.flat(CREAM.darkened(0.05), 0.85), Vector3(0, stalk_h * 0.55, 0), stalk_r * 1.1, 36))
+	# the cap: a flat-topped red drum with a cream rim
+	var red: StandardMaterial3D = Look.flat(RED, 0.5)
+	_put(n, Look.cylinder(cap_r * 0.6, cap_h, red, Vector3(0, stalk_h + cap_h * 0.5, 0), cap_r, 40))
+	var rim := TorusMesh.new()
+	rim.inner_radius = cap_r - 0.35
+	rim.outer_radius = cap_r + 0.15
+	rim.rings = 48
+	rim.ring_segments = 6
+	var rim_n := Look.mesh_node(rim, Look.flat(Color(1.0, 0.94, 0.8), 0.6), Vector3(0, top_y - 0.1, 0))
+	rim_n.scale = Vector3(1, 0.5, 1)
+	_put(n, rim_n, true)
+	# warts lying flat on the top (none near the middle, where the finish stands)
+	var wart: StandardMaterial3D = Look.flat(Color(1.0, 0.96, 0.88), 0.6)
+	for i2: int in 30:
+		var a2: float = rng.randf() * TAU
+		var d: float = rng.randf_range(4.5, cap_r - 2.0)
+		var wr: float = rng.randf_range(0.5, 1.5)
+		var wsp := Look.cylinder(wr, 0.05, wart, Vector3(cos(a2) * d, top_y + 0.03, sin(a2) * d), -1.0, 14)
+		_put(n, wsp, true)
+	# gills: thin radial blades under the cap
+	var gill: StandardMaterial3D = Look.flat(Color(0.96, 0.88, 0.72), 0.9)
+	for i3: int in 56:
+		var a3: float = TAU * float(i3) / 56.0
+		var g := Look.box(Vector3(cap_r * 0.55, cap_h * 0.5, 0.08), gill, Vector3(cos(a3), 0, sin(a3)) * (cap_r * 0.58 + stalk_r * 0.3) + Vector3(0, stalk_h - cap_h * 0.05, 0))
+		g.rotation.y = -a3
+		_put(n, g, true)
+	return n

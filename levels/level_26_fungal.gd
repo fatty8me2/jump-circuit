@@ -30,9 +30,9 @@ const SLIDE_SPEED: float = 14.0
 const GROUND_Y: float = -13.0
 
 ## Testing aid: build every stage but start the player (and the bot's route) at stage N. 0 = off.
-const DEV_START: int = 16
+const DEV_START: int = 17
 ## Testing aid: stop building after stage N (a finish gate goes at its end). 0 = build them all.
-const DEV_LAST: int = 16
+const DEV_LAST: int = 17
 
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
@@ -92,7 +92,7 @@ func _blk(c: Vector3, sx: float, sz: float, style: String = "main", thick: float
 
 
 ## A spotted toadstool CAP to stand on (round, a flat top painted with spots): local top centre `c`.
-func _cap_plat(c: Vector3, r: float, col: Color = RED) -> Dictionary:
+func _cap_plat(c: Vector3, r: float, col: Color = RED, nosup: bool = false) -> Dictionary:
 	var body := StaticBody3D.new()
 	body.collision_layer = 1
 	body.collision_mask = 0
@@ -121,7 +121,7 @@ func _cap_plat(c: Vector3, r: float, col: Color = RED) -> Dictionary:
 		body.add_child(sp)
 	body.position = _w(c) - Vector3(0, 0.25, 0)
 	add_child(body)
-	_floors.append({"top": _w(c), "size": Vector3(r * 2.0, 0, r * 2.0), "drop": 0.5, "kind": 0})
+	_floors.append({"top": _w(c), "size": Vector3(r * 2.0, 0, r * 2.0), "drop": 0.5, "kind": 0, "nosup": nosup})
 	return {"c": c, "hx": r, "hz": r, "r": r}
 
 
@@ -283,7 +283,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16, _stage_17]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -293,11 +293,15 @@ func _build() -> void:
 		starts.append(route.size())
 		origins.append(_o)
 		var end: Vector3 = stages[i].call()
-		_frame(_w(end), yaws[i + 1])
+		var ny: float = yaws[i + 1]
+		if _yaw_override != INF:
+			ny = _yaw_override
+			_yaw_override = INF
+		_frame(_w(end), ny)
 	starts.append(route.size())
 	origins.append(_o)
-	if last == stages.size() and false:
-		pass
+	if last == stages.size():
+		_stage_18()
 	else:
 		# (dev) the finish right after the last stage built
 		var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
@@ -412,13 +416,14 @@ func _sign(p: Vector3, col: Color) -> void:
 
 ## A dewdrop: hangs over local floor point `c`. `hit` = the course time (relative to the bot's start)
 ## at which the drop should become deadly; the phase is set from it.
-func _drip(c: Vector3, height: float, period: float, hit: float) -> FungalDrip:
+func _drip(c: Vector3, height: float, period: float, hit: float, yaw: float = 0.0) -> FungalDrip:
 	var d := FungalDrip.new()
 	d.drop_height = height
 	d.period = period
 	var c0: float = d.swell + d.fall_time() * 0.88
 	d.phase = fposmod((c0 - hit) / period, 1.0)
 	d.position = _w(c)
+	d.rotation.y = yaw
 	add_child(d)
 	return d
 
@@ -1251,6 +1256,206 @@ func _stage_16() -> Vector3:
 	r_checkpoint()
 	return cp["c"]
 
+
+# ---- stages 17 and 18: THE GREAT TOADSTOOL - up the gill shelves round its stalk, out over the rim -----------------------
+# The great toadstool's stalk stands on the forest floor; bracket shelves wind up it in a spiral. The axis is
+# `_axis_w` (world), `_b_axis` the basis of the frame it was laid out in. Stage 17 climbs the lower turns to the
+# checkpoint; stage 18 (the set piece) climbs on while the dew weeps down the gills in a wave behind you, then
+# a springcap beyond the rim throws you onto the flat red cap and the finish.
+
+const SPIRAL_R: float = 9.0
+const STALK_R: float = 7.0
+const SHELF_R: float = 1.7
+const RISE: float = 1.4
+const CAP_R: float = 15.0
+const CAP_H: float = 4.0
+
+var _axis_w: Vector3 = Vector3.ZERO
+var _b_axis: Basis = Basis.IDENTITY
+var _y_over: float = INF
+var _yaw_override: float = INF
+var _top_y: float = 0.0
+var _summit_w: Vector3 = Vector3.ZERO
+
+
+## Local position (current frame) of a point on the spiral: angle `phi`, radius `rad`, absolute world height `y`.
+func _spl(phi: float, rad: float, y: float) -> Vector3:
+	var wp: Vector3 = _axis_w + _b_axis * Vector3(sin(phi) * rad, 0.0, cos(phi) * rad)
+	wp.y = y
+	return _b.inverse() * (wp - _o)
+
+
+## Angle step between two points at radii r1, r2 whose centres must be `dist` apart.
+func _step_angle(r1: float, r2: float, dist: float) -> float:
+	return acos(clampf((r1 * r1 + r2 * r2 - dist * dist) / (2.0 * r1 * r2), -1.0, 1.0))
+
+
+## The arm joining a shelf to the stalk (visual only): a short bracket of bark under it.
+func _gill_arm(phi: float, y_top: float) -> void:
+	var p: Vector3 = _axis_w + _b_axis * Vector3(sin(phi) * (STALK_R + 0.9), 0.0, cos(phi) * (STALK_R + 0.9))
+	var arm := Look.box(Vector3(1.5, 0.5, 2.2), Look.flat(Color(0.93, 0.84, 0.62), 0.85), Vector3(p.x, y_top - 0.5, p.z))
+	arm.transform = Transform3D(_b_axis * Basis(Vector3.UP, phi), Vector3(p.x, y_top - 0.5, p.z))
+	add_child(arm)
+
+
+func _stage_17() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	_axis_w = _w(Vector3(0, 0, -12.5))
+	_b_axis = _b
+	var y0: float = _o.y
+	var dist: float = 0.76 * _reach(RISE) - 0.75 + 2.0 * SHELF_R
+	var delta: float = _step_angle(SPIRAL_R, SPIRAL_R, dist)
+	var shelves: Array[Dictionary] = []
+	var cols: Array[Color] = [ORANGE, YELLOW, PINKCAP, ORANGE, YELLOW, PINKCAP]
+	var phis: Array[float] = []
+	var prev: Dictionary = cp0
+	var first_phi: float = 0.0
+	# the first shelf: from the checkpoint (radius 12.5, angle 0) a step of about the same length
+	var d0: float = 0.76 * _reach(RISE) - 0.75 + 2.5 + SHELF_R
+	first_phi = _step_angle(12.5, SPIRAL_R, d0 + 0.6)
+	for k: int in 6:
+		var phi: float = first_phi + delta * float(k)
+		phis.append(phi)
+		var c: Vector3 = _spl(phi, SPIRAL_R, y0 + RISE * float(k + 1))
+		shelves.append(_cap_plat(c, SHELF_R, cols[k], true))
+		_gill_arm(phi, y0 + RISE * float(k + 1))
+	# the checkpoint: a slab out on the shelf-spiral's next step, facing along it
+	var phi_cp: float = phis[5] + _step_angle(SPIRAL_R, 12.5, d0 + 0.6)
+	var cp_c: Vector3 = _spl(phi_cp, 12.5, y0 + RISE * 7.0)
+	var f_axis := Vector3(cos(phi_cp), 0.0, -sin(phi_cp))
+	var f_w: Vector3 = _b_axis * f_axis
+	var cp_yaw: float = rad_to_deg(atan2(-f_w.x, -f_w.z))
+	kit.plat(_w(cp_c), Vector3(5.0, 1.2, 5.0), "main", 0.0, cp_yaw)
+	_floors.append({"top": _w(cp_c), "size": Vector3(5.0, 0, 5.0), "drop": 1.2, "kind": 2})
+	var cpn: Checkpoint = kit.checkpoint(_w(cp_c), cp_yaw)
+	_cp_world.append(_w(cp_c))
+	var fx17: Array[GPUParticles3D] = FungalFx.cp_burst(GOLD)
+	for p: GPUParticles3D in fx17:
+		p.position = _w(cp_c) + Vector3(0, 0.6, 0)
+		add_child(p)
+	_cp_bursts[cpn] = fx17
+	cpn.reached.connect(func(which: Checkpoint) -> void:
+		if which.index > current_checkpoint:
+			WorldAudio.at(self, "fungal_checkpoint", which.global_position, 0.9, 40.0)
+			for p2: GPUParticles3D in _cp_bursts[which]:
+				p2.restart()
+				p2.emitting = true)
+	var cp_area: Dictionary = {"c": cp_c, "hx": 2.5, "hz": 2.5}
+	# two dewdrops on the way, gentle ones
+	var arrive: Array[float] = [2.6, 4.3]
+	var d1: FungalDrip = _drip((shelves[2]["c"] as Vector3), 7.0, 5.5, arrive[0] + 2.7)
+	var d2: FungalDrip = _drip((shelves[4]["c"] as Vector3), 7.0, 5.5, arrive[1] + 2.7)
+	_wait(func() -> bool: return d1.clear_over(Game.course_time, arrive[0] - 0.5, arrive[0] + 0.7 + 1.5) \
+		and d2.clear_over(Game.course_time, arrive[1] - 0.5, arrive[1] + 0.7 + 1.5))
+	prev = cp0
+	for st: Dictionary in shelves:
+		_hop(prev, st)
+		prev = st
+	_hop(prev, cp_area)
+	r_checkpoint()
+	_yaw_override = cp_yaw
+	_y_over = y0 + RISE * 7.0
+	print("S17 delta deg ", rad_to_deg(delta), " first ", rad_to_deg(first_phi), " cp_yaw ", cp_yaw)
+	return cp_c
+
+
+func _stage_18() -> void:
+	# the frame is now the stage-17 checkpoint; the spiral continues from its angle
+	var y0: float = _y_over
+	var dist: float = 0.76 * _reach(RISE) - 0.75 + 2.0 * SHELF_R
+	var delta: float = _step_angle(SPIRAL_R, SPIRAL_R, dist)
+	var cp_area: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var cp_w: Vector3 = _w(Vector3.ZERO)
+	var rel: Vector3 = _b_axis.inverse() * (cp_w - _axis_w)
+	var phi_cp: float = atan2(rel.x, rel.z)
+	var d0: float = 0.76 * _reach(RISE) - 0.75 + 2.5 + SHELF_R
+	var shelves: Array[Dictionary] = []
+	var cols: Array[Color] = [YELLOW, PINKCAP, ORANGE, YELLOW, PINKCAP, ORANGE, YELLOW, PINKCAP, ORANGE]
+	var phi: float = phi_cp + _step_angle(12.5, SPIRAL_R, d0 + 0.6)
+	var n_inner: int = 8
+	var phis_18: Array[float] = []
+	for k: int in n_inner:
+		if k > 0:
+			phi += delta
+		phis_18.append(phi)
+		var y: float = y0 + RISE * float(k + 1)
+		shelves.append(_cap_plat(_spl(phi, SPIRAL_R, y), SHELF_R, cols[k % cols.size()], true))
+		_gill_arm(phi, y)
+	# out under the rim: a wider shelf, then the springcap beyond the rim
+	var y_last: float = y0 + RISE * float(n_inner)
+	var y_mid: float = y_last + RISE
+	var r_mid: float = 12.6
+	var phi_mid: float = phi + _step_angle(SPIRAL_R, r_mid, 0.76 * _reach(RISE) - 0.75 + 2.0 * SHELF_R + 0.0)
+	var mid: Dictionary = _cap_plat(_spl(phi_mid, r_mid, y_mid), SHELF_R, ORANGE, true)
+	_gill_arm(phi_mid, y_mid)
+	var r_out: float = CAP_R + 3.0
+	var y_out: float = y_mid + RISE
+	var phi_out: float = phi_mid + _step_angle(r_mid, r_out, 0.76 * _reach(RISE) - 0.75 + 2.0 * 1.9)
+	var out_c: Vector3 = _spl(phi_out, r_out, y_out)
+	_top_y = y_out + 6.0
+	# the flat red cap: its top is the summit (solid, walkable); the finish gate stands in the middle of it
+	var summit := StaticBody3D.new()
+	summit.collision_layer = 1
+	summit.collision_mask = 0
+	var sshape := CylinderShape3D.new()
+	sshape.radius = CAP_R - 0.2
+	sshape.height = 1.0
+	var scs := CollisionShape3D.new()
+	scs.shape = sshape
+	summit.add_child(scs)
+	summit.position = Vector3(_axis_w.x, _top_y - 0.5, _axis_w.z)
+	add_child(summit)
+	_floors.append({"top": Vector3(_axis_w.x, _top_y, _axis_w.z), "size": Vector3(CAP_R * 2.0, 0, CAP_R * 2.0), "drop": 1.0, "kind": 2, "nosup": true})
+	var land_phi: float = phi_out + 0.0
+	var land_w: Vector3 = _axis_w + _b_axis * Vector3(sin(land_phi) * (CAP_R - 7.5), 0.0, cos(land_phi) * (CAP_R - 7.5))
+	land_w.y = _top_y
+	var dist_b: float = Vector2(r_out - (CAP_R - 7.5), 0.0).length()
+	var s_out: float = _solve_strength(_top_y - y_out, dist_b)
+	var bounce := FungalCap.new()
+	bounce.radius = 1.9
+	bounce.tint = RED
+	bounce.stalk = 0.0
+	bounce.high = s_out
+	bounce.low = s_out - 7.0
+	bounce.position = _w(out_c)
+	add_child(bounce)
+	_floors.append({"top": _w(out_c), "size": Vector3(3.8, 0, 3.8), "drop": 0.6, "kind": 0, "nosup": true})
+	_gill_arm(phi_out, y_out)
+	var fin_w: Vector3 = Vector3(_axis_w.x, _top_y, _axis_w.z)
+	kit.finish(fin_w, deg_to_rad(0.0))
+	_finish_pos = fin_w
+	_summit_w = fin_w
+	# the dew weeps down the gills: dewdrops over every other shelf, a wave that follows you up
+	var drips: Array[FungalDrip] = []
+	var arrives: Array[float] = []
+	var idxs: Array[int] = [1, 3, 5, 7]
+	for ix: int in idxs:
+		var ta: float = 0.9 + 0.83 * float(ix)
+		arrives.append(ta)
+		drips.append(_drip((shelves[ix]["c"] as Vector3), 7.0 if ix < 4 else 4.2, 5.5, ta + 2.7, phis_18[ix] + _b_axis.get_euler().y))
+	_wait(func() -> bool:
+		for j: int in drips.size():
+			if not drips[j].clear_over(Game.course_time, arrives[j] - 0.5, arrives[j] + 0.7 + 1.5):
+				return false
+		return true)
+	var prev: Dictionary = cp_area
+	for st: Dictionary in shelves:
+		_hop(prev, st)
+		prev = st
+	_hop(prev, mid)
+	var out_area: Dictionary = {"c": out_c, "hx": 1.9, "hz": 1.9, "r": 1.9}
+	_hop(mid, out_area)
+	r_pad(_w(out_c), land_w)
+	r_walk(fin_w + Vector3(land_w.x - fin_w.x, 0, land_w.z - fin_w.z) * 0.3)
+	r_walk(fin_w)
+	# the great toadstool itself
+	var stalk_h: float = _top_y - CAP_H - GROUND_Y
+	deco.great_toadstool_flat(Vector3(_axis_w.x, GROUND_Y, _axis_w.z), STALK_R, stalk_h, CAP_R, CAP_H)
+	FungalFx.halo(self, fin_w + Vector3(0, 1.0, 0), 4.5, 40, GOLD)
+	FungalFx.petals(self, fin_w + Vector3(0, 6.0, 0), Vector3(10, 4, 10), 30)
+	FungalFx.spores(self, fin_w + Vector3(0, 1.0, 0), 5.0, 30, Color(1.0, 0.9, 0.6))
+	print("S18 top_y ", _top_y, " s_out ", s_out, " dist_b ", dist_b, " delta deg ", rad_to_deg(delta))
+
 # @@STAGES@@
 
 
@@ -1347,7 +1552,7 @@ func _surroundings() -> void:
 		var s: Vector3 = f["size"]
 		var under: Vector3 = t - Vector3(0, float(f["drop"]), 0)
 		var r: float = clampf(minf(s.x, s.z) * 0.28, 0.35, 1.9)
-		if bool(f.get("tall", false)):
+		if bool(f.get("tall", false)) or bool(f.get("nosup", false)):
 			continue
 		var length: float = under.y - GROUND_Y
 		if length > 0.5 and _column_free(under, r, f):
