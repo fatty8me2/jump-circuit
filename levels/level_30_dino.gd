@@ -429,22 +429,24 @@ func _stage_4() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
 	var ledge: Dictionary = _blk(_ahead(cp0, 0.87, 0.0, 4.0), 4.0, 4.0, "alt")
 	var lc: Vector3 = ledge["c"]
-	var far: Dictionary = _blk(Vector3(0, 0.6, lc.z - 25.0), 6.0, 8.0)
+	var far: Dictionary = _blk(Vector3(0, 0.6, -37.0), 6.0, 8.0)
 	var fc: Vector3 = far["c"]
+	print("DINO s4 lc=", lc, " far=", fc)
 	var z: Zipline = _vine(lc, Vector3(lc.x, lc.y + 0.6, fc.z + 1.0))
 	var f1: Dictionary = _post(_ahead(far, 0.88, 0.0, 1.4, 0.4), 1.4, 1.4)
 	var f2: Dictionary = _post(_ahead(f1, 0.89, 0.5, 1.3, -0.5))
 	var f3: Dictionary = _post(_ahead(f2, 0.88, 0.0, 1.3, 0.4))
 	var cp: Dictionary = _cp(_ahead(f3, 0.86, 0.0, 5.0, -(f3["c"] as Vector3).x))
 	# SHORTCUT: the gorge's two walls, run one and kick across to the other onto the far ledge
-	kit.wallrun(_w(Vector3(-3.4, 1.2, lc.z + 1.5)), Vector3(14.0, 6.5, 0.5), _yaw + 90.0)
-	kit.wallrun(_w(Vector3(3.4, 3.6, lc.z - 11.5)), Vector3(12.0, 7.0, 0.5), _yaw + 90.0)
-	_hop(cp0, ledge)
+	kit.wallrun(_w(Vector3(-3.0, 1.2, -13.0)), Vector3(14.0, 6.5, 0.5), _yaw + 90.0)
+	kit.wallrun(_w(Vector3(3.0, 3.6, -26.0)), Vector3(12.0, 7.0, 0.5), _yaw + 90.0)
 	if route_variant == 2:
-		r_wallrun(_w(Vector3(-1.4, 0, lc.z + 6.9)), _w(Vector3(-2.5, 1.4, lc.z + 3.0)), _w(Vector3(-2.5, 1.4, lc.z - 3.8)), _w(Vector3(2.7, 3.8, lc.z - 9.5)))
-		r_wallrun(Vector3.ZERO, _w(Vector3(2.7, 3.8, lc.z - 9.5)), _w(Vector3(2.7, 3.8, lc.z - 16.8)), _w(Vector3(0, 0.6, fc.z + 2.0)), true, true)
+		r_walk(_w(Vector3(-1.4, 0, -1.6)))
+		r_wallrun(_w(Vector3(-1.4, 0, -2.65)), _w(Vector3(-2.5, 1.4, -7.4)), _w(Vector3(-2.5, 1.4, -15.6)), _w(Vector3(2.5, 3.8, -21.4)))
+		r_wallrun(Vector3.ZERO, _w(Vector3(2.5, 3.8, -21.4)), _w(Vector3(2.5, 3.8, -28.6)), _w(Vector3(0, 0.6, -36.6)), true, true)
 	else:
-		r_zipline(z, _w(Vector3(lc.x, lc.y + 2.2 + 0.45, lc.z - 18.0)), 0.7, _w(Vector3(0, 0.6, fc.z + 1.0)))
+		_hop(cp0, ledge)
+		r_zipline(z, _w(Vector3(lc.x, lc.y + 2.2 + 0.55, lc.z - 24.5)), 0.7, _w(Vector3(0, 0.6, fc.z + 1.0)))
 	_hop(far, f1)
 	_hop(f1, f2)
 	_hop(f2, f3)
@@ -477,7 +479,7 @@ func _stage_5() -> Vector3:
 	var pb: Dictionary = _post(Vector3(3.6, 0.0, f0 - 19.6), 2.0, 2.0)
 	var skull_top := Vector3(3.6, 3.3, f0 - 19.6 - 1.0 - 1.6 - 0.8)
 	var skull: Dictionary = _ledge(skull_top, Vector3(2.6, 9.0, 1.6))
-	var q1: Dictionary = _post(_ahead(skull, 0.87, 0.0, 1.4, 0.0), 1.4, 1.4)
+	var q1: Dictionary = _post(_ahead(skull, 0.80, -3.3, 1.4, 0.0), 1.4, 1.4)
 	var merge: Dictionary = _blk(_ahead(q1, 0.88, 0.0, 8.0, -(q1["c"] as Vector3).x), 11.0, 8.0)
 	var mz: float = (merge["c"] as Vector3).z + 4.0
 	# LEFT (main): tar pit, a stone, a leap to a post, the second tar pit, onto the merge
@@ -492,6 +494,7 @@ func _stage_5() -> Vector3:
 	var pc_probe: Vector3 = _ahead(_area(Vector3.ZERO, 1.7, 1.2), 0.87, 0.0, 1.5)
 	var s2z: float = (mz + 0.75) - pc_probe.z
 	var t2_len: float = (pac.z - 0.75) - (s2z + 1.2)
+	print("DINO s5 t2_len=", t2_len, " mz=", mz - f0, " s2z=", s2z - f0, " pac=", pac.z - f0)
 	var t2: DinoTar = _tar(Vector3(lx, 0, pac.z - 0.75 - t2_len * 0.5), 3.6, t2_len)
 	var s2: Dictionary = _blk(Vector3(lx, 0, s2z), 3.4, 2.4, "alt")
 	var pc: Dictionary = _post(_ahead(s2, 0.87, 0.0, 1.5), 1.5, 1.5)
