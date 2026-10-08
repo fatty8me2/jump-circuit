@@ -39,7 +39,7 @@ const PARCHMENT := Color(0.96, 0.9, 0.74)
 const OXBLOOD := Color(0.5, 0.1, 0.22)
 
 ## Testing aid: build every stage but start the player (and the bot's route) at stage N. 0 = off.
-const DEV_START: int = 6
+const DEV_START: int = 11
 ## Testing aid: stop building after stage N (a finish gate goes at its end). 0 = build them all.
 const DEV_LAST: int = 0
 
@@ -312,7 +312,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -695,6 +695,203 @@ func _stage_10() -> Vector3:
 	_hop(merge, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	return cp["c"]
+
+
+# ---- stage 11: The Lectern - a seesaw lectern across the gap, then a book ride ----------------------
+
+func _stage_11() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var deck_a: Dictionary = _blk(_ahead(cp0, 0.86, 0.0, 4.0), 8.0, 4.0, "main", 1.0)
+	var ac: Vector3 = deck_a["c"]
+	var a_front: float = ac.z - 2.0
+	var along_x: bool = absf(fmod(absf(_yaw), 180.0) - 90.0) < 1.0
+	var saw: Seesaw = kit.seesaw(_w(Vector3(ac.x, ac.y, a_front - 4.5)), 9.0, 2.6, along_x, 0.0)
+	var deck_b: Dictionary = _blk(Vector3(ac.x, ac.y, a_front - 9.0 - 1.0 - 2.0), 8.0, 4.0, "main", 1.0)
+	var bc: Vector3 = deck_b["c"]
+	var b_front: float = bc.z - 2.0
+	# a book out over the dark to a high landing
+	var bsz := Vector3(2.8, 0.35, 2.4)
+	var local := Vector3(0, bsz.y * 0.5 + 0.05, 0)
+	var run: float = 13.0
+	var rise: float = 2.0
+	var bk_top := Vector3(bc.x, bc.y, b_front - 1.2 - bsz.z * 0.5)
+	var bk: ArcaneBook = _book(bk_top, bsz, Vector3(0, rise, -run), 9.5, 0.25, Color(0.45, 0.32, 0.08))
+	var bk_far: Vector3 = bk_top + Vector3(0, rise, -run)
+	var deck_c: Dictionary = _blk(Vector3(bc.x, bc.y + rise, bk_far.z - bsz.z * 0.5 - 1.2 - 1.5), 3.6, 3.0)
+	var p1: Dictionary = _post(_ahead(deck_c, 0.88, 0.0, 1.2, 0.4))
+	var cp: Dictionary = _cp(_ahead(p1, 0.86, 0.0, 5.0, -(p1["c"] as Vector3).x))
+	_hop(cp0, deck_a)
+	r_walk(_w(Vector3(ac.x, ac.y, a_front + 1.0)))
+	r_walk(_w(Vector3(ac.x, ac.y, a_front - 4.5)))
+	r_walk(_w(Vector3(ac.x, ac.y, a_front - 8.4)))
+	r_jump(_w(Vector3(ac.x, ac.y, a_front - 8.6)), _w(Vector3(bc.x, bc.y, bc.z)))
+	r_walk(_w(Vector3(bc.x, bc.y, bc.z + 0.3)))
+	var far_w: Vector3 = _w(bk_far) - Vector3(0, bsz.y * 0.5, 0)
+	_ride(_w(Vector3(bc.x, bc.y, b_front + 0.45)), bk, local, _w((deck_c["c"] as Vector3) + Vector3(0, 0, 0.3)),
+		func() -> bool: return bk.global_position.distance_to(far_w) < 0.8)
+	_hop(deck_c, p1)
+	_hop(p1, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 12: Reading Wing (BRANCH) - the spell door up to a lintel | the wall-run chimney --------------
+# [shortcut: a 4.1 m mantle up the broken column, then its narrow cornices]
+
+func _stage_12() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.80, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	# RIGHT (alt): two chained wall runs, then two posts (this fixes where the merge is)
+	kit.wallrun(_w(Vector3(6.1, 1.2, f0 - 7.0)), Vector3(12.0, 6.5, 0.6), _yaw + 90.0)
+	kit.wallrun(_w(Vector3(1.5, 3.6, f0 - 17.5)), Vector3(9.0, 6.5, 0.6), _yaw + 90.0)
+	var my: float = -0.6
+	var pb: Dictionary = _post(Vector3(3.6, my, f0 - 27.6), 1.6, 1.6)
+	var pb2: Dictionary = _post(_ahead(pb, 0.88, 0.0, 1.2))
+	var mc: Vector3 = _ahead(pb2, 0.86, 0.0, 3.0)
+	var mz: float = mc.z
+	var merge: Dictionary = _blk(Vector3(0, my, mz), 11.0, 3.0)
+	# LEFT (main): a door on the fork sends you up onto the lintel beam; the beam is as long as it must be
+	var ref: Dictionary = _area(Vector3(-3.5, 4.5, f0 - 9.0), 0.6, 2.5)
+	var la0: Vector3 = _ahead(ref, 0.90, -1.5, 1.2, 0.3)
+	var la20: Vector3 = _ahead(_area(la0, 0.6, 0.6), 0.90, -1.5, 1.2, -0.3)
+	var m0: Vector3 = _ahead(_area(la20, 0.6, 0.6), 0.86, -2.1, 3.0)
+	var shift: float = mz - m0.z
+	var hi_len: float = 5.0 - shift
+	if hi_len < 2.5:
+		push_warning("arcane stage 12: lintel beam too short (%.1f)" % hi_len)
+	var hi: Dictionary = _blk(Vector3(-3.5, 4.5, (f0 - 6.5) - hi_len * 0.5), 1.2, hi_len, "alt", 0.6)
+	var door: WarpPortal = kit.portal(_w(Vector3(-3.5, 0, fc.z - 0.6)), _yaw, _w(Vector3(-3.5, 4.5, f0 - 7.2)), _yaw, 7.0)
+	var la: Dictionary = _post(_ahead(hi, 0.90, -1.5, 1.2, 0.3))
+	var la2: Dictionary = _post(_ahead(la, 0.90, -1.5, 1.2, -0.3))
+	# SHORTCUT: the broken column (a 4.1 m mantle) and its cornices
+	var col: Dictionary = _ledge(Vector3(0, 4.1, f0 - 0.9), Vector3(1.4, 12.0, 1.8), "accent")
+	var cornice: Dictionary = _blk(Vector3(0, 4.1, f0 - 1.8 - 6.0 - 0.4), 1.0, 12.0, "accent", 0.5)
+	var n2: Vector3 = _ahead(cornice, 0.88, 0.0, 0.0)
+	var l2: float = n2.z - (mz + 1.5 + 4.5)
+	var cornice2: Dictionary = _blk(Vector3(0, 4.1, n2.z - l2 * 0.5), 1.0, l2, "accent", 0.5)
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 2:
+		r_walk(_w(Vector3(0, 0, fc.z + 0.9)))
+		r_mantle(_w(Vector3(0, 0, fc.z + 0.65)), _w(Vector3(0, 4.1, f0 - 1.0)))
+		_hop(col, cornice, Vector3(0, 0, 5.0))
+		r_walk(_w(Vector3(0, 4.1, f0 - 13.6)))
+		_hop(cornice, cornice2, Vector3(0, 0, l2 * 0.5 - 0.8))
+		r_walk(_w(Vector3(0, 4.1, n2.z - l2 + 0.6)))
+		_hop(cornice2, merge, Vector3(0, 0, 0.4))
+	elif route_variant != 1:
+		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
+		r_portal(_w(Vector3(-3.5, 0, fc.z - 0.9)), door.exit_point())
+		r_walk(_w(Vector3(-3.5, 4.5, f0 - 8.5)))
+		_hop(hi, la)
+		_hop(la, la2)
+		_hop(la2, merge, Vector3(-3.5, 0, 0.6))
+	else:
+		r_walk(_w(Vector3(3.6, 0, fc.z + 0.6)))
+		r_wallrun(_w(Vector3(4.2, 0, f0 + 0.35)), _w(Vector3(5.6, 1.4, f0 - 3.2)), _w(Vector3(5.6, 1.4, f0 - 10.6)), _w(Vector3(2.0, 4.4, f0 - 14.4)))
+		r_wallrun(Vector3.ZERO, _w(Vector3(2.0, 4.4, f0 - 14.4)), _w(Vector3(2.0, 4.4, f0 - 19.6)), _w(Vector3(3.6, my, f0 - 27.4)), true, true)
+		_hop(pb, pb2)
+		_hop(pb2, merge, Vector3(3.6, 0, 0.6))
+	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 13: The Book Press - two presses (crushers) on the beam, a spell circle, mantle ------------
+
+func _stage_13() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.3))
+	var beam: Dictionary = _blk(_ahead(p1, 0.86, 0.0, 16.0), 1.4, 16.0, "alt", 0.6)
+	var wc: Vector3 = beam["c"]
+	var back: float = wc.z + 8.0
+	var front: float = wc.z - 8.0
+	var period: float = 6.0
+	var t1: float = 0.45
+	var t2: float = 1.05
+	var c1: Crusher = kit.crusher(_w(Vector3(wc.x, wc.y, back - 4.0)), Vector3(2.2, 1.2, 2.0), 3.2, period, fposmod(0.92 - (t1 - 0.4) / period, 1.0), _yaw)
+	var c2: Crusher = kit.crusher(_w(Vector3(wc.x, wc.y, back - 9.0)), Vector3(2.2, 1.2, 2.0), 3.2, period, fposmod(0.92 - (t2 - 0.4) / period, 1.0), _yaw)
+	var disc_c := Vector3(wc.x, wc.y, front - 1.55)
+	var land_c := Vector3(wc.x, wc.y + 3.0, front - 15.0)
+	var land: Dictionary = _blk(land_c, 5.0, 5.0, "main", 1.0)
+	var circ: ArcaneCircle = _circle(disc_c, land_c, 3.6)
+	var ledge_top := Vector3(land_c.x, land_c.y + 3.3, land_c.z - 2.5 - 1.6 - 0.7)
+	var ld: Dictionary = _ledge(ledge_top, Vector3(3.0, 9.0, 1.4))
+	var cp: Dictionary = _cp(_ahead(ld, 0.85, 0.0, 5.0, -land_c.x))
+	_hop(cp0, p1)
+	_hop(p1, beam, Vector3(0, 0, 0.6))
+	r_walk(_w(Vector3(wc.x, wc.y, back - 1.5)))
+	_wait(func() -> bool: return _press_ok(c1, t1 - 0.3, t1 + 0.3 + 1.5) and _press_ok(c2, t2 - 0.3, t2 + 0.3 + 1.5),
+		_w(Vector3(wc.x, wc.y, back - 1.5)))
+	r_walk(_w(Vector3(disc_c.x, disc_c.y, disc_c.z + 0.2)))
+	route.append({"kind": "kick", "from": _w(Vector3(disc_c.x, disc_c.y, disc_c.z + 0.2)), "to": _w(land_c)})
+	r_walk(_w(Vector3(land_c.x, land_c.y, land_c.z - 1.4)))
+	r_mantle(_w(Vector3(land_c.x, land_c.y, land_c.z - 2.15)), _w(ledge_top + Vector3(0, 0, 0.3)))
+	_hop(ld, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	land.clear()
+	return cp["c"]
+
+
+# ---- stage 14: Floating Stairs - crumbling steps round a quill sweeper [shortcut: a circle throw] -------
+
+func _stage_14() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var prev: Dictionary = cp0
+	var steps: Array[Dictionary] = []
+	var dxs: Array[float] = [0.0, 0.4, -0.4, 0.4]
+	for i: int in 2:
+		prev = _crumble(_ahead(prev, 0.87, 0.6, 1.4, dxs[i]))
+		steps.append(prev)
+	var land: Dictionary = _blk(_ahead(prev, 0.86, 0.6, 9.0, -(prev["c"] as Vector3).x), 8.0, 9.0, "alt", 0.6)
+	var lc: Vector3 = land["c"]
+	var sw: Sweeper = kit.sweeper(_w(lc + Vector3(-2.6, 0, 0)), 3.6, 1, 6.0, 0.0, 0.45)
+	var after: Array[Dictionary] = []
+	prev = land
+	for i: int in 3:
+		prev = _crumble(_ahead(prev, 0.87, 0.6, 1.4, dxs[i + 1]))
+		after.append(prev)
+	var cp: Dictionary = _cp(_ahead(prev, 0.86, 0.0, 5.0, -(prev["c"] as Vector3).x))
+	# SHORTCUT: a circle on a post off the side of the first step throws you straight onto the landing
+	var sc_c: Vector3 = _ahead(cp0, 0.93, 0.0, 3.0, -3.4)
+	var throw_to := Vector3(lc.x, lc.y, lc.z + 3.2)
+	var circ: ArcaneCircle = _circle(sc_c, throw_to, 3.6, 1.3, GOLD)
+	if route_variant == 2:
+		r_jump(_w(_edge(cp0, sc_c)), _w(sc_c), true)
+		r_walk(_w(sc_c + Vector3(0, 0, -0.1)))
+		route.append({"kind": "kick", "from": _w(sc_c + Vector3(0, 0, -0.1)), "to": _w(throw_to)})
+	else:
+		prev = cp0
+		for i: int in 2:
+			_hop(prev, steps[i])
+			prev = steps[i]
+		_hop(prev, land, Vector3(0, 0, 3.0))
+	r_walk(_w(Vector3(lc.x, lc.y, lc.z + 3.0)))
+	route.append({"kind": "b_sweep", "to": _w(Vector3(lc.x, lc.y, lc.z - 3.2)), "sweeper": sw, "tol": 0.6})
+	prev = land
+	for i: int in 3:
+		_hop(prev, after[i])
+		prev = after[i]
+	_hop(prev, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	circ.get_index()
+	return cp["c"]
+
+
+## A crumbling stair step (square), gone a moment after you land on it.
+func _crumble(top: Vector3, edge: float = 1.4, delay: float = 0.6) -> Dictionary:
+	var cp := CollapsingPlatform.new()
+	cp.size = Vector3(edge, 0.4, edge)
+	cp.delay = delay
+	cp.respawn = 3.0
+	cp.is_round = false
+	cp.rotation.y = deg_to_rad(_yaw)
+	cp.position = _w(top) - Vector3(0, 0.2, 0)
+	add_child(cp)
+	_floors.append({"top": _w(top), "size": Vector3(edge, 0, edge), "drop": 0.4})
+	return {"c": top, "hx": edge * 0.5, "hz": edge * 0.5}
 
 
 # ---- environment ----------------------------------------------------------------------------------
