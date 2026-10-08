@@ -243,7 +243,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -641,6 +641,174 @@ func _stage_8() -> Vector3:
 		_hop(la, la2)
 		_hop(la2, merge, Vector3(3.5, 0, 0.6))
 	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 9: Train Set - ride the train across the rug, then wall run the brick wall ----------------
+
+## A chain of `n` little blocks hopped at ~`pct`, to the side (`dx`) of the line they bypass.
+func _side_chain(from: Dictionary, n: int, dx: float, pct: float) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var prev: Dictionary = from
+	for i: int in n:
+		prev = _post(_ahead(prev, pct - (0.08 if i == 0 else 0.0), 0.0, 1.8, dx if i == 0 else 0.0), 1.8, 1.8, "accent")
+		out.append(prev)
+	return out
+
+
+func _stage_9() -> Vector3:
+	var clen: float = 6.5
+	var ride: float = 16.0
+	var near_z: float = -2.5 - 0.8 - clen * 0.5
+	var cars: Array[ToyboxCar] = []
+	cars.append(_car(Vector3(-1.9, 0, near_z), Vector3(0, 0, -ride), 18.0, 0.0, GREEN, 0.36, clen))
+	cars.append(_car(Vector3(1.9, 0, near_z), Vector3(0, 0, -ride), 18.0, 0.5, YELLOW, 0.36, clen))
+	var fz: float = near_z - ride - clen * 0.5 - 0.8 - 1.75
+	_blk(Vector3(0, 0, fz), 3.5, 3.5, "main", 0.8)
+	var froms: Array[Vector3] = [_w(Vector3(-1.9, 0, -2.15)), _w(Vector3(1.9, 0, -2.15))]
+	var exits: Array[Vector3] = [_w(Vector3(-1.0, 0, fz + 0.5)), _w(Vector3(1.0, 0, fz + 0.5))]
+	var poses: Array[Vector3] = [_w(Vector3(-1.9, -0.25, near_z - ride)), _w(Vector3(1.9, -0.25, near_z - ride))]
+	_ferry(cars, froms, exits, poses)
+	# the brick wall: a wall-run panel along the right, over the void, to a post
+	var f: float = fz - 1.75
+	kit.wallrun(_w(Vector3(2.3, 1.2, f - 9.5)), Vector3(16.0, 6.5, 0.6), _yaw + 90.0)
+	var post: Dictionary = _post(Vector3(-0.6, 0, f - 22.5), 2.4, 2.8)
+	var cp: Dictionary = _cp(_ahead(post, 0.80, 0.0, 5.0, 0.6))
+	r_walk(_w(Vector3(0.3, 0, fz - 0.6)))
+	r_wallrun(_w(Vector3(0.3, 0, f + 0.35)), _w(Vector3(1.8, 1.4, f - 3.6)), _w(Vector3(1.8, 1.4, f - 14.5)), _w(Vector3(-0.6, 0, f - 22.2)))
+	_hop(post, cp, Vector3(0.6, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 10: Block Press - a giant dice slams the crayon [shortcut: a side path of blocks] ------------
+
+func _stage_10() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _post(_ahead(cp0, 0.78, 0.0, 2.0), 2.0, 2.0)
+	var blen: float = 18.0
+	var beam: Dictionary = _blk(_ahead(p1, 0.80, 0.0, blen), 1.6, blen, "alt", 0.6)
+	var bc: Vector3 = beam["c"]
+	var near: float = bc.z + blen * 0.5
+	var far: float = bc.z - blen * 0.5
+	var d1: Crusher = _die(Vector3(bc.x, bc.y, near - 4.5), Vector3(2.2, 1.2, 2.0), 3.2, 7.0, 0.0)
+	var d2: Crusher = _die(Vector3(bc.x, bc.y, near - 8.5), Vector3(2.2, 1.2, 2.0), 3.2, 7.0, 0.0)
+	var shelf_top := Vector3(bc.x, bc.y + 3.3, far - 1.6 - 0.8)
+	var shelf: Dictionary = _ledge(shelf_top, Vector3(3.0, 9.0, 1.6))
+	var cp: Dictionary = _cp(_ahead(shelf, 0.80, 0.0, 5.0, -bc.x))
+	var sc: Array[Dictionary] = _side_chain(p1, 2, 3.6, 0.84)
+	_hop(cp0, p1)
+	if route_variant == 2:
+		_hop(p1, sc[0])
+		_hop(sc[0], sc[1])
+		r_jump(_w(_edge(sc[1], Vector3(bc.x, 0, near - 11.5))), _w(Vector3(bc.x, bc.y, near - 11.5)))
+	else:
+		_hop(p1, beam, Vector3(0, 0, blen * 0.5 - 0.8))
+		var hold: Vector3 = _w(Vector3(bc.x, bc.y, near - 1.8))
+		r_walk(hold)
+		_wait(func() -> bool: return _press_ok(d1, 0.0, 0.6 + 1.5) and _press_ok(d2, 0.3, 1.0 + 1.5), hold)
+	r_walk(_w(Vector3(bc.x, bc.y, far + 0.9)))
+	r_mantle(_w(Vector3(bc.x, bc.y, far + 0.35)), _w(shelf_top + Vector3(0, 0, 0.3)))
+	_hop(shelf, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 11: Teddy Terrace (BRANCH) - the jack-in-the-box up | the xylophone keys up ----------------
+
+func _stage_11() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.78, 0.0, 3.2), 11.0, 3.2)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.6
+	var top_y: float = 4.8
+	# RIGHT (yellow): three keys climbing, the last flight lands on the terrace
+	var right: Dictionary = _area(Vector3(3.5, 0, fc.z), 1.5, 1.6)
+	var k: Vector3 = _ahead(right, 0.78, 0.0, 2.2)
+	var cols: Array[Color] = [ORANGE, GREEN, PURPLE]
+	var keys: Array[Vector3] = []
+	for i: int in 3:
+		_key(k, i + 1, cols[i])
+		keys.append(k)
+		var ny: float = k.y + 1.6 if i < 2 else top_y
+		var land: Vector3 = _key_landing(k, ny)
+		k = Vector3(k.x, ny, land.z)
+	var mz: float = k.z
+	var merge: Dictionary = _blk(Vector3(0, top_y, mz), 11.0, 7.0, "main", 1.0)
+	# LEFT (blue): a jack throws you onto a long terrace
+	var jc: Vector3 = _ahead(_area(Vector3(-3.5, 0, fc.z), 1.5, 1.6), 0.78, 0.0, 2.6)
+	var jack: ToyboxJack = _jack(jc, 4.5, 0.0, Vector3(0, 20.5, -3.0), BLUE)
+	var t_near: float = jc.z - 1.3 - 2.0
+	var t_far: float = (mz + 3.5) - 0.35 + _e(0.80, 0.0)
+	var terrace: Dictionary = _blk(Vector3(-3.5, top_y, (t_near + t_far) * 0.5), 3.2, t_near - t_far, "alt", 0.8)
+	var cp: Dictionary = _cp(_ahead(merge, 0.80, 0.0, 5.0))
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant != 1:
+		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
+		_wait(func() -> bool: return _resting(jack, 0.0, 2.0))
+		_hop(_area(Vector3(-3.5, 0, fc.z), 1.5, 1.6), _area(jc, 1.3, 1.3))
+		_kick(jc, Vector3(-3.5, top_y, t_near - 1.5))
+		r_walk(_w(Vector3(-3.5, top_y, t_far + 0.9)))
+		_hop(terrace, merge, Vector3(-3.5, 0, 2.5))
+	else:
+		r_walk(_w(Vector3(3.5, 0, fc.z + 0.6)))
+		_hop(right, _area(keys[0], 1.7, 1.1))
+		for i: int in 3:
+			r_pad(_w(keys[i]), _w(keys[i + 1] if i < 2 else k))
+	var mg: Dictionary = _area(Vector3(0, top_y, mz), 5.5, 3.5)
+	_hop(mg, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 12: Tumbling Towers - two block towers topple one after the other ---------------------------
+
+func _stage_12() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var len_a: float = 8.0
+	var tower_a: ToyboxTower = _tower(Vector3(0, 0, -2.5), len_a, 0.0)
+	var dock: Dictionary = _blk(Vector3(1.0, 0, -2.5 - len_a - 1.5), 3.0, 3.0, "main", 0.8)
+	var dz: float = (dock["c"] as Vector3).z
+	var tower_b: ToyboxTower = _tower(Vector3(1.0, 0, dz - 1.5), len_a, 0.0)
+	tower_b.phase = -2.2
+	var dock2: Dictionary = _blk(Vector3(1.0, 0, dz - 1.5 - len_a - 1.5), 3.0, 3.0, "main", 0.8)
+	var p1: Dictionary = _post(_ahead(dock2, 0.80, 0.6, 2.0, -1.0), 2.0, 2.0)
+	var cp: Dictionary = _cp(_ahead(p1, 0.80, 0.0, 5.0))
+	var hold_a: Vector3 = _w(Vector3(0, 0, -2.0))
+	r_walk(hold_a)
+	_wait(func() -> bool: return _bridge_ok(tower_a, 0.0, 3.6), hold_a)
+	r_walk(_w(Vector3(1.0, 0, dz + 0.4)))
+	var hold_b: Vector3 = _w(Vector3(1.0, 0, dz - 0.6))
+	r_walk(hold_b)
+	_wait(func() -> bool: return _bridge_ok(tower_b, 0.0, 3.6), hold_b)
+	r_walk(_w(Vector3(1.0, 0, dz - 1.5 - len_a - 0.9)))
+	_hop(dock2, p1)
+	_hop(p1, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 13: Seesaw Park - two seesaw planks, a runway, the cardboard tube over the chasm -------------
+
+func _stage_13() -> Vector3:
+	var along_x: bool = absf(fmod(absf(_yaw), 180.0) - 90.0) < 1.0
+	var opts: Dictionary = {"tilt_about_x": along_x, "tilt_about_z": not along_x, "edge_tilt_deg": 9.0, "max_tilt_deg": 14.0, "sink_depth": 0.35}
+	kit.tilt(_w(Vector3(0, 0, -9.5)), _sz(Vector3(2.4, 0.4, 7.0)), opts)
+	kit.tilt(_w(Vector3(0, 0.4, -19.5)), _sz(Vector3(2.4, 0.4, 7.0)), opts)
+	_blk(Vector3(0, 0.8, -31.0), 3.4, 10.0, "alt", 0.8)
+	var exit_c: Vector3 = Vector3(0, 0.8, -31.0 - 5.0 - 14.0 - 2.5)
+	var cp: Dictionary = _cp(exit_c)
+	var door: WarpPortal = kit.portal(_w(Vector3(0, 0.8, -34.2)), _yaw, _w(exit_c + Vector3(0, 0, 1.2)), _yaw, 7.0)
+	_dress_portal(_w(Vector3(0, 0.8, -34.2)), _yaw, ORANGE)
+	_dress_portal(_w(exit_c + Vector3(0, 0, 1.2)), _yaw, BLUE)
+	r_jump(_w(Vector3(0, 0, -2.65)), _w(Vector3(0, 0, -7.2)))
+	r_walk(_w(Vector3(0, 0, -12.4)))
+	r_jump(_w(Vector3(0, 0, -12.6)), _w(Vector3(0, 0.4, -17.2)))
+	r_walk(_w(Vector3(0, 0.4, -22.4)))
+	r_jump(_w(Vector3(0, 0.4, -22.6)), _w(Vector3(0, 0.8, -27.0)))
+	r_walk(_w(Vector3(0, 0.8, -31.5)))
+	r_portal(_w(Vector3(0, 0.8, -34.5)), door.exit_point())
 	r_checkpoint()
 	return cp["c"]
 
