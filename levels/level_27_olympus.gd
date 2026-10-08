@@ -6,10 +6,27 @@ extends LevelBase
 ## Seventeen stages, sixteen checkpoints; it is hard through precision (eight-plus main-path jumps at
 ## 85-91% of max reach onto 1.2-1.5 m posts), timing and combinations, never through blind timing.
 ##
-##  1 Cloud Landing     a stair of three floating posts and a beam, MANTLE the great gate
+##  1 Cloud Landing        a stair of three floating posts and a beam, MANTLE the great gate
 ##  2 Crumbling Colonnade  five fluted columns that give way a beat after you land: keep moving
-##  3 Helios Walk       two posts, a long beam through two SUN GATES (lasers), WALL RUN the temple wall
-##  (the rest of the stages are listed here as they are built)
+##  3 Helios Walk          two posts, a long beam through two SUN GATES (lasers), WALL RUN the temple wall
+##  4 Whistling Terrace    precision posts across two WIND SPIRIT gust lanes
+##  5 Chariot Crossing     BRANCH: ride the winged CHARIOT | WALL RUN the flank, MANTLE the cella wall
+##                         [shortcut: a chain of 94% leaps down the middle]
+##  6 Aqueduct Run         the narrow aqueduct past two BULL RAMS (pistons), MANTLE the arcade wall
+##  7 Press Hall           three platforms under falling pediments (crushers), MANTLE the cella, columns
+##  8 Cloud Gates          BRANCH: the cloud gate (PORTAL) to the high beam | a ladder of crumbling columns
+##                         [shortcut: the small gate on the hanging post]
+##  9 Hall of Mirrors      a long court crossed by two SUN MIRRORS' blades
+## 10 Stepping Stones      small landings, two of them crumbling [shortcut: a cloud BOUNCE PAD]
+## 11 Pantheon Chimney     a cloud pad throws you up, a three-panel WALL-RUN chimney, out onto the roof
+## 12 Chariot Run         BRANCH: the CHARIOT that climbs | two stacked MANTLES up the cella walls
+## 13 Spirit Ridge         columns through a gust, then a ridge walked past a sun mirror
+## 14 Sun Stair           four landings climbing, three SUN GATES to run through on the beat
+## 15 Sky Colonnade       BRANCH: the mirror walk (three mirrors) | two chained mirror WALL RUNS
+##                         [shortcut: a 4.1 m MANTLE up the broken column and its cornice]
+## 16 Gate of Dawn        crumbling steps, a short CHARIOT hop, the longest leap, MANTLE the porch
+## 17 THE SUN TEMPLE STAIR SET PIECE: eight landings climb to the sun disc while four giant statues turn
+##                         and sweep their hand-mirrors' blades across the stair; the finish is the gate in the sun
 ##
 ## Olympus mechanics (own scripts): OlympusChariot (a winged chariot you ride), OlympusColumn (crumbling
 ## column), OlympusMirror (a sun mirror that sweeps a blade of light), OlympusSpirit (a wind spirit's gust
@@ -233,10 +250,9 @@ static func _mover_at(m: MovingPlatform, at: Vector3, r: float, a: float, b: flo
 
 # ---- the course ---------------------------------------------------------------------------------
 
-## Testing aids (environment variables): build every stage but start at stage N / stop after stage N.
-func _dev(name: String) -> int:
-	var v: String = OS.get_environment(name)
-	return int(v) if v != "" else 0
+## Testing aids: build every stage but start (and route) at stage N / stop after stage N. 0 = off.
+const DEV_START: int = 0
+const DEV_LAST: int = 0
 
 
 func _build() -> void:
@@ -247,8 +263,8 @@ func _build() -> void:
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
 	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16]
-	var dev_last: int = _dev("OLY_LAST")
-	var dev_start: int = _dev("OLY_START")
+	var dev_last: int = DEV_LAST
+	var dev_start: int = DEV_START
 	var last: int = stages.size() if (dev_last <= 0 or dev_last > stages.size()) else dev_last
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
