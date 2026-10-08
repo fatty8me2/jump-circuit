@@ -264,14 +264,16 @@ const THEMES: Dictionary = {
 		"decor": Color(0.36, 0.26, 0.16), "decor2": Color(0.45, 0.65, 0.25), "metal": Color(0.55, 0.55, 0.60),
 		"cloud_light": Color(0.79, 0.89, 0.63), "cloud_shade": Color(0.28, 0.32, 0.22),
 	},
-	"olympus": {  # PLACEHOLDER palette - the level agent owns and retunes this entry
-		"sky_top": Color(0.35, 0.55, 0.90), "sky_horizon": Color(1.00, 0.80, 0.50), "sky_bottom": Color(0.95, 0.85, 0.75),
-		"sun": Color(1.00, 0.85, 0.55), "sun_energy": 1.0, "sun_rot": Vector3(-45, 150, 0),
-		"ambient": Color(0.60, 0.60, 0.65), "ambient_energy": 0.8, "fog": Color(1.00, 0.90, 0.75), "fog_density": 0.002,
-		"top": Color(0.95, 0.93, 0.88), "side": Color(0.75, 0.72, 0.68), "trim": Color(1.00, 0.78, 0.25),
-		"alt_top": Color(0.85, 0.80, 0.95), "accent": Color(1.00, 0.78, 0.25), "accent2": Color(0.40, 0.70, 1.00),
-		"decor": Color(0.80, 0.78, 0.74), "decor2": Color(0.30, 0.55, 0.85), "metal": Color(0.55, 0.55, 0.60),
-		"cloud_light": Color(1.00, 1.00, 0.84), "cloud_shade": Color(0.40, 0.36, 0.30),
+	# Sky Citadel: marble temples on golden-hour cloud - cream marble over warm travertine, gold trim,
+	# lapis accents, a peach-gold sky. (levels/level_27_olympus.gd swaps in its own sky, sun and marble shader.)
+	"olympus": {
+		"sky_top": Color(0.10, 0.22, 0.58), "sky_horizon": Color(1.00, 0.76, 0.46), "sky_bottom": Color(0.86, 0.66, 0.56),
+		"sun": Color(1.00, 0.86, 0.60), "sun_energy": 1.6, "sun_rot": Vector3(-22, 200, 0),
+		"ambient": Color(0.88, 0.80, 0.80), "ambient_energy": 0.82, "fog": Color(1.00, 0.84, 0.62), "fog_density": 0.0016,
+		"top": Color(0.95, 0.92, 0.85), "side": Color(0.78, 0.72, 0.62), "trim": Color(1.00, 0.78, 0.28),
+		"alt_top": Color(0.84, 0.88, 0.96), "accent": Color(1.00, 0.78, 0.28), "accent2": Color(0.40, 0.70, 1.00),
+		"decor": Color(0.80, 0.74, 0.64), "decor2": Color(0.30, 0.55, 0.85), "metal": Color(0.80, 0.62, 0.30),
+		"cloud_light": Color(1.00, 0.92, 0.76), "cloud_shade": Color(0.66, 0.56, 0.74),
 	},
 	"arcade": {  # PLACEHOLDER palette - the level agent owns and retunes this entry
 		"sky_top": Color(0.02, 0.02, 0.06), "sky_horizon": Color(0.10, 0.05, 0.25), "sky_bottom": Color(0.00, 0.00, 0.03),
