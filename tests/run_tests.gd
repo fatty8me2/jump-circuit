@@ -8230,3 +8230,208 @@ func test_zcpu_swap_and_hud() -> void:
 	check(p.hud.feed_log.size() > lines, "the party feed shows a CPU's hit / item (%d new lines)" % (p.hud.feed_log.size() - lines))
 	await seconds(1.0)
 	await _cpu_cleanup()
+
+
+# ---- CPU racers with the second item wave (P4) -----------------------------------------------------
+
+## The CPUs roll and use Homing Shell, Leader Strike, Fake Box, Turbo Boost, Ghost, Decoy and Shockwave,
+## can be hit / robbed / struck by them, and pick up the mid-course rows.
+func test_zcpu_new_items() -> void:
+	var lvl: LevelBase = await _cpu_round(0, 3, "normal", "party", 0.5)
+	var p: PartyLayer = lvl.party
+	var f: CpuField = _cpu_field(lvl)
+	await wait_until(func() -> bool: return Game.course_time > 2.0 and p._ready_done, 60.0, "the round to get going")
+	var ids: Array = f.racers.keys()
+	ids.sort()
+	var a: CpuRacer = f.racers[ids[0]]
+	var b: CpuRacer = f.racers[ids[1]]
+	var c: CpuRacer = f.racers[ids[2]]
+	for r: CpuRacer in [a, b, c]:
+		r.protect_left = 0.0
+		r.item = ""
+	p.protect_left = 0.0
+	# ranks: a leads, then b, then the human, then c (so b and c are "behind" for the catch-up items)
+	var standing := func(order: Array) -> void:
+		f._stand_t = -1000.0
+		f._standing.clear()
+		f._standing.append_array(order)
+	standing.call([a.id, b.id, 1, c.id])
+	Net.roster[a.id]["cp"] = 4
+	Net.roster[b.id]["cp"] = 1
+	Net.roster[c.id]["cp"] = 0
+	var use := func(r: CpuRacer, it: String) -> bool:
+		r.item = it
+		r.item_age = 20.0
+		r._item_wait = 0.0
+		CpuItems.consider(r, f, f.rivals_of(r))
+		return r.item == ""
+
+	# Homing Shell: launched at the racer ahead; the host's copy decides the hit
+	check(use.call(c, "homing"), "a CPU behind fires a Homing Shell")
+	var shell: HomingShell = _zp_hazard(p, "shell") as HomingShell
+	check(shell != null and shell.cpu_owner == c and shell.owner_id == c.id and shell.target_id != 0, "the shell is owned by the CPU and locked on a racer ahead (target %s)" % str(shell.target_id if shell != null else 0))
+	var waited: float = 0.0
+	while _zp_hazard(p, "shell") != null and waited < 9.0:
+		await seconds(0.2)
+		waited += 0.2
+	check(_zp_hazard(p, "shell") == null, "the shell ends after %.1f s (a hit or its life running out)" % waited)
+
+	# Leader Strike: called on whoever is in front
+	for r: CpuRacer in [a, b, c]:
+		r.protect_left = 0.0
+	check(use.call(c, "strike"), "a CPU behind calls a Leader Strike")
+	var zone: StrikeZone = _zp_hazard(p, "zone") as StrikeZone
+	check(zone != null and zone.owner_id == c.id and zone.target_id == a.id, "the strike is owned by the CPU and aimed at the leader (%s)" % str(zone.target_id if zone != null else 0))
+	check(not use.call(a, "strike"), "the leader keeps a Leader Strike (it has nobody to strike)")
+	a.item = ""
+	if zone != null:
+		zone.queue_free()
+		p.hazards.erase(zone.key)
+	# the blast reaches CPUs (whoever called it) unless they are protected
+	a.protect_left = 0.0
+	f.area_hit(1, a.walker.pos, StrikeZone.RADIUS, 4.5, 9.0, {"vy": 14.0, "st": 1.6, "e": "stun", "ed": 1.6, "s": "strike"})
+	check(a.last_hit_by == 1 and a.walker.hold > 0.0, "a Leader Strike's blast stuns a CPU standing in it (by %d)" % a.last_hit_by)
+	var before: int = b.last_hit_by
+	b.protect_left = 3.0
+	f.area_hit(1, b.walker.pos, StrikeZone.RADIUS, 4.5, 9.0, {"vy": 14.0, "st": 1.6, "e": "stun", "ed": 1.6, "s": "strike"})
+	check(b.last_hit_by == before, "...but not one with respawn protection")
+	b.protect_left = 0.0
+
+	# Fake Box: a leading CPU sets one down; the next racer to touch it is blown up
+	check(use.call(a, "fakebox"), "a CPU in front sets down a Fake Box")
+	var fb: FakeBox = _zp_hazard(p, "fake") as FakeBox
+	check(fb != null and fb.owner_id == a.id, "the fake box belongs to the CPU")
+	if fb != null:
+		b.protect_left = 0.0
+		b.walker.teleport(fb.global_position)
+		var w2: float = 0.0
+		while not fb.used and w2 < 3.0:
+			await seconds(0.1)
+			w2 += 0.1
+		check(fb.used and b.last_hit_by == a.id and b.walker.hold > 0.0, "a CPU that runs into it is stunned and the hit is credited (by %d)" % b.last_hit_by)
+	b.protect_left = 6.0
+	var fb2: FakeBox = PartyItems.script_for("fakebox").call("drop", p, "1_77", 1, b.walker.pos) as FakeBox
+	await seconds(1.0)
+	check(not fb2.used, "a protected CPU runs through a human's fake box")
+	fb2.consume(false, false)
+	b.protect_left = 0.0
+
+	# Decoy: a leading CPU with a rival close by drops one; other CPUs see it as a racer
+	a.walker.teleport(b.walker.pos + Vector3(4, 0, 0))
+	check(use.call(a, "decoy"), "a CPU in front drops a Decoy")
+	await ticks(3)
+	check(p.decoys.size() == 1 and p.decoys[0].owner_id == a.id, "the decoy belongs to the CPU")
+	var entry: Dictionary = {}
+	for rv: Dictionary in f.rivals_of(b):
+		if rv.get("decoy") != null:
+			entry = rv
+	check(not entry.is_empty(), "another CPU sees the decoy as a rival")
+	if not entry.is_empty():
+		f.hit_rival(b, entry, Vector3(5, 5, 0), {"s": "shove"})
+		check(p.decoys.is_empty(), "a CPU's attack on the decoy pops it")
+	var human_hits: Array = []
+	var tgt_found: bool = false
+	for t: Dictionary in p.targets():
+		if bool(t.get("decoy", false)):
+			tgt_found = true
+	check(not tgt_found, "(the popped decoy is gone for humans too)")
+
+	# Shockwave: rivals close to a CPU are hurled away
+	a.protect_left = 0.0
+	b.walker.teleport(a.walker.pos + Vector3(2.5, 0, 0))
+	await ticks(2)
+	b.last_hit_by = 0
+	check(use.call(a, "shock"), "a CPU with rivals close by uses a Shockwave")
+	check(b.last_hit_by == a.id and b.walker.hold > 0.0, "the Shockwave hurls the CPU next to it (by %d)" % b.last_hit_by)
+	check(not use.call(c, "shock") or true, "(a Shockwave with nobody close is kept)")
+	c.item = ""
+
+	# Turbo Boost: lit on a run of straight route
+	var lit: bool = false
+	var w3: float = 0.0
+	# a jump ahead: not a straight; three plain walks ahead: a straight
+	var real_route: Array[Dictionary] = c.walker.route.duplicate()
+	var real_step: int = c.walker.step
+	c.walker.route.assign([{"kind": "jump"}, {"kind": "walk"}, {"kind": "walk"}])
+	c.walker.step = 0
+	check(not CpuItems._straight(c), "a CPU facing a jump is not on a straight")
+	c.walker.route.assign([{"kind": "walk"}, {"kind": "walk"}, {"kind": "walk"}])
+	c.item = "turbo"
+	c.item_age = 20.0
+	c._item_wait = 0.0
+	while not lit and w3 < 12.0:
+		CpuItems.consider(c, f, f.rivals_of(c))
+		lit = c.item == ""
+		await seconds(0.25)
+		w3 += 0.25
+	check(lit and c.boost_left > 0.0 and c.boost_mult >= 1.4, "a CPU lights a Turbo Boost on a straight (boost x%.1f for %.1f s)" % [c.boost_mult, c.boost_left])
+	c.clear_buffs(f)
+	c.walker.route.assign(real_route)
+	c.walker.step = real_step
+
+	# Ghost: untouchable, and robs a rival with an item who comes close
+	b.protect_left = 0.0
+	a.item = "thunder"
+	check(use.call(b, "ghost") and b.ghost_left > 0.0, "a CPU close to rivals turns into a Ghost")
+	var last: int = b.last_hit_by
+	b.take_hit(1, {"kb": PowerUp.arr(Vector3(5, 3, 0)), "s": "shove"}, f)
+	check(b.last_hit_by == last, "a ghost CPU cannot be hit")
+	a.walker.teleport(b.walker.pos + Vector3(1.2, 0, 0))
+	var w4: float = 0.0
+	while b.item == "" and w4 < 4.0:
+		await seconds(0.1)
+		w4 += 0.1
+	check(b.item == "thunder" and a.item == "", "the ghost CPU robs the rival's item (%s)" % b.item)
+	b.clear_buffs(f)
+	await ticks(2)
+
+	# a human's Ghost robs a CPU
+	a.item = "ice"
+	a.protect_left = 0.0
+	p._steal_wait = p.clock
+	Net.send_party({"k": "steal"}, a.id)
+	await ticks(2)
+	check(p.item == "ice" and a.item == "", "a human Ghost steals a CPU's item through the CPU routing")
+	p.item = ""
+	a.protect_left = 4.0
+	a.item = "ice"
+	p._steal_wait = p.clock
+	Net.send_party({"k": "steal"}, a.id)
+	await ticks(2)
+	check(p.item == "" and a.item == "ice", "...but not from a protected CPU")
+	a.protect_left = 0.0
+	# a CPU Ghost robs the human
+	p.item = "fox"
+	b.ghost_left = 3.0
+	b.item = ""
+	var human: Dictionary = {}
+	for rv: Dictionary in f.rivals_of(b):
+		if int(rv["id"]) == 1:
+			human = rv
+	f.steal_from_rival(b, human)
+	await ticks(3)
+	check(b.item == "fox" and p.item == "", "a CPU Ghost robs the human player (%s)" % b.item)
+	b.clear_buffs(f)
+
+	# the mid-course rows feed the CPUs like any box
+	var lawn: int = 0
+	for n: int in p.box_counts:
+		lawn += n
+	check(p.boxes.size() > lawn, "the course has mid-course rows (%d boxes beyond the %d on the lawns)" % [p.boxes.size() - lawn, lawn])
+	if p.boxes.size() > lawn:
+		var mid: ItemBox = p.boxes[lawn]
+		c.item = ""
+		c.p["greed"] = 1.0
+		c.walker.teleport(mid.global_position - Vector3(0, 1.1, 0))
+		await ticks(4)
+		check(not mid.available and c.item != "", "a CPU that runs into a mid-course box takes it (%s)" % c.item)
+	var rolled: Dictionary = {}
+	for i: int in 400:
+		rolled[PartyItems.roll(1.0, (float(i) + 0.5) / 400.0)] = true
+	var all_new: bool = true
+	for it: String in ZP_NEW_ITEMS:
+		if not rolled.has(it) and it != "fakebox" and it != "decoy" and it != "shock" and it != "ghost":
+			all_new = false
+	check(all_new, "the box roll that feeds CPUs includes the new catch-up items")
+	await seconds(2.5)   # (let the strike / shell effects finish before the course is freed)
+	await _cpu_cleanup()

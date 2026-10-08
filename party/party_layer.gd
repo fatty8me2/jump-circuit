@@ -1382,11 +1382,17 @@ func _on_message(from_id: int, m: Dictionary) -> void:
 			if from_id != Net.my_id():
 				hud.on_hit_event(int(m.get("a", 0)), from_id, str(m.get("s", "")))
 		"steal":
-			_on_steal(from_id)
-		"stolen":
-			_on_stolen(from_id, str(m.get("it", "")), bool(m.get("ret", false)))
-		"steal_no":
-			_on_steal_no(str(m.get("why", "")))
+			_on_steal(from_id, int(m.get("by", 0)))
+		"stolen", "steal_no":
+			var cpu: int = int(m.get("for", 0))
+			if cpu != 0:
+				# an answer for a CPU thief: the host (who simulates it) takes it from here
+				if Net.is_host() and CpuField.is_cpu_id(cpu):
+					Net.send_party(m, cpu)
+			elif k == "stolen":
+				_on_stolen(from_id, str(m.get("it", "")), bool(m.get("ret", false)), int(m.get("v", 0)))
+			else:
+				_on_steal_no(str(m.get("why", "")))
 		"hf":
 			hud.on_remote_hit(from_id, int(m.get("v", 0)), str(m.get("s", "")))
 		"use":
@@ -1450,31 +1456,44 @@ func try_steal(t: Dictionary) -> void:
 
 
 ## Victim side: a Ghost reaches into our pockets.
-func _on_steal(from_id: int) -> void:
-	if not is_rival(from_id) or not local_vulnerable():
-		Net.send_party({"k": "steal_no", "why": "safe"}, from_id)
+## `thief` (0 = the sender): a CPU's request reaches a remote human from the host, so the thief is
+## named in the message; the answer carries it back ("for") and the host hands it to that CPU.
+func _on_steal(from_id: int, thief: int = 0) -> void:
+	if thief == 0:
+		thief = from_id
+	if not is_rival(thief) or not local_vulnerable():
+		_steal_reply(from_id, thief, {"k": "steal_no", "why": "safe"})
 		return
 	for pw: PowerUp in actives:
-		if not pw.ended and pw.absorb_hit(from_id):
-			Net.send_party({"k": "steal_no", "why": "safe"}, from_id)
+		if not pw.ended and pw.absorb_hit(thief):
+			_steal_reply(from_id, thief, {"k": "steal_no", "why": "safe"})
 			return
 	if item == "":
-		Net.send_party({"k": "steal_no", "why": "empty"}, from_id)
+		_steal_reply(from_id, thief, {"k": "steal_no", "why": "empty"})
 		return
 	var it: String = item
 	slot_quiet = true
 	item = ""
 	item_changed.emit("")
 	slot_quiet = false
-	Net.send_party({"k": "stolen", "it": it}, from_id)
+	_steal_reply(from_id, thief, {"k": "stolen", "it": it})
+	from_id = thief
 	hit_taken.emit(from_id, "ghost")
 	hud.announce("%s stole your %s!" % [racer_name(from_id), PartyNames.item_name(it)], PartyNames.item_color("ghost"))
 	sfx.play("steal", 0.9, 0.8)
 	PartyFx.burst(self, player.global_position + Vector3(0, 0.9, 0), Color(0.7, 0.85, 1.0), 20, 4.0, 0.22, 0.5)
 
 
+func _steal_reply(to_id: int, thief: int, msg: Dictionary) -> void:
+	msg["v"] = Net.my_id()
+	if thief != to_id:
+		msg["for"] = thief
+	Net.send_party(msg, to_id)
+
+
 ## Thief side: the item arrives (or comes back to us - `returned` - because the thief could not take it).
-func _on_stolen(from_id: int, it: String, returned: bool) -> void:
+## `victim` is who it came from (0 = the sender).
+func _on_stolen(from_id: int, it: String, returned: bool, victim: int = 0) -> void:
 	if not PartyItems.PRACTICE_ORDER.has(it):
 		return
 	if returned:
@@ -1486,9 +1505,11 @@ func _on_stolen(from_id: int, it: String, returned: bool) -> void:
 		Net.send_party({"k": "stolen", "it": it, "ret": true}, from_id)
 		return
 	_steal_wait = -1.0
-	var g: RemoteRacer = ghost(from_id)
+	if victim == 0:
+		victim = from_id
+	var g: RemoteRacer = ghost(victim)
 	_steal_done(it, g.global_position + Vector3(0, 0.8, 0) if g != null else player.global_position)
-	hit_landed.emit(from_id, "ghost")
+	hit_landed.emit(victim, "ghost")
 
 
 func _on_steal_no(why: String) -> void:

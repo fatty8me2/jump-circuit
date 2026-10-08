@@ -20,6 +20,9 @@ var owner_id: int = 0
 var key: String = ""
 var target_id: int = 0
 var local: bool = false
+## Host only, a CPU's shell: the CpuField decides what it hits (the shell is otherwise a mirror).
+var cpu_owner: CpuRacer
+var cpu_field: CpuField
 var velocity: Vector3 = Vector3.ZERO
 var age: float = 0.0
 var done: bool = false
@@ -90,6 +93,13 @@ func _physics_process(dt: float) -> void:
 			return
 		if age >= LIFE:
 			end(global_position, false)
+	elif cpu_field != null and is_instance_valid(cpu_field) and cpu_owner != null:
+		for rv: Dictionary in cpu_field.rivals_of(cpu_owner):
+			if (rv["center"] as Vector3).distance_to(global_position) <= HIT_RADIUS:
+				_cpu_strike(rv)
+				return
+		if age >= LIFE:
+			cpu_field.cpu_fx(owner_id, "homing", "boom", {"k": key, "at": PowerUp.arr(global_position), "hit": false})
 	elif age >= LIFE + 0.8:
 		end(global_position, false)
 
@@ -104,6 +114,13 @@ func _strike(t: Dictionary) -> void:
 	var at: Vector3 = global_position
 	layer.send_fx("homing", "boom", {"k": key, "at": PowerUp.arr(at), "hit": true})
 	end(at, true)
+
+
+func _cpu_strike(rv: Dictionary) -> void:
+	var flat := Vector3(velocity.x, 0, velocity.z)
+	var dir: Vector3 = flat.normalized() if flat.length() > 0.1 else Vector3.FORWARD
+	cpu_field.hit_rival(cpu_owner, rv, dir * 9.0 + Vector3(0, 8.5, 0), {"st": 1.3, "e": "spin", "ed": 1.3, "s": "homing", "quiet": true})
+	cpu_field.cpu_fx(owner_id, "homing", "boom", {"k": key, "at": PowerUp.arr(global_position), "hit": true})
 
 
 ## Ends the flight (the owner's "boom" message calls this on the remote copies).

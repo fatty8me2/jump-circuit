@@ -32,6 +32,10 @@ var boost_mult: float = 1.0
 var slow_left: float = 0.0
 var shrink_left: float = 0.0
 var magnet_left: float = 0.0
+## Ghost: nothing touches it, and it robs the first rival with an item that comes close.
+var ghost_left: float = 0.0
+var steal_cd: float = 0.0
+var steal_wait: float = -1.0
 var last_hit_by: int = 0
 var last_hit_at: float = -99.0
 var finished: bool = false
@@ -60,6 +64,7 @@ func tick(dt: float, f: CpuField) -> void:
 	protect_left = maxf(protect_left - dt, 0.0)
 	slow_left = maxf(slow_left - dt, 0.0)
 	shrink_left = maxf(shrink_left - dt, 0.0)
+	steal_cd = maxf(steal_cd - dt, 0.0)
 	_tick_buffs(dt, f)
 	walker.pace = _pace(f)
 	walker.tick(dt)
@@ -76,6 +81,8 @@ func tick(dt: float, f: CpuField) -> void:
 		_think(f)
 	if magnet_left > 0.0:
 		_magnet(dt, f)
+	if ghost_left > 0.0:
+		_ghost_steal(f)
 
 
 func _drain(f: CpuField) -> void:
@@ -120,6 +127,10 @@ func _tick_buffs(dt: float, f: CpuField) -> void:
 		shield_left -= dt
 		if shield_left <= 0.0:
 			f.cpu_power(id, "balloon", false)
+	if ghost_left > 0.0:
+		ghost_left -= dt
+		if ghost_left <= 0.0:
+			f.cpu_power(id, "ghost", false)
 
 
 ## A fall or a catch: buffs end like a human's power-ups do on a respawn.
@@ -128,6 +139,9 @@ func clear_buffs(f: CpuField) -> void:
 		f.cpu_power(id, form, false)
 	if shield_left > 0.0:
 		f.cpu_power(id, "balloon", false)
+	if ghost_left > 0.0:
+		f.cpu_power(id, "ghost", false)
+	ghost_left = 0.0
 	form = ""
 	form_left = 0.0
 	boost_left = 0.0
@@ -211,7 +225,7 @@ func _magnet(dt: float, f: CpuField) -> void:
 
 ## A hit message (the same shape PartyLayer.hit sends): {kb, st, ko, e, ed, s, add}.
 func take_hit(by: int, m: Dictionary, f: CpuField) -> void:
-	if finished or protect_left > 0.0 or walker.done:
+	if finished or protect_left > 0.0 or walker.done or ghost_left > 0.0:
 		return
 	if shield_left > 0.0:
 		shield_left = 0.0
@@ -253,7 +267,7 @@ func take_hit(by: int, m: Dictionary, f: CpuField) -> void:
 func swap_request(by: int, pos: Vector3, cp: int, f: CpuField) -> void:
 	if pos == Vector3.ZERO:
 		return
-	if finished or walker.done or protect_left > 0.0 or shield_left > 0.0:
+	if finished or walker.done or protect_left > 0.0 or shield_left > 0.0 or ghost_left > 0.0:
 		f.reply(by, id, {"k": "swap_no"})
 		return
 	last_hit_by = by
@@ -281,6 +295,64 @@ func swap_ok(pos: Vector3, cp: int, f: CpuField) -> void:
 
 func swap_no() -> void:
 	swap_wait = -1.0
+
+
+# ---- the Ghost's theft -----------------------------------------------------------------------------
+
+## Victim side (a Ghost reached into our pockets): {it: item} or {why: ...} like a human's answer.
+func steal_from(by: int, f: CpuField) -> Dictionary:
+	if finished or walker.done or protect_left > 0.0 or ghost_left > 0.0:
+		return {"k": "steal_no", "why": "safe"}
+	if shield_left > 0.0:
+		shield_left = 0.0
+		f.cpu_power(id, "balloon", false)
+		return {"k": "steal_no", "why": "safe"}
+	if item == "":
+		return {"k": "steal_no", "why": "empty"}
+	var it: String = item
+	item = ""
+	item_age = 0.0
+	f.cpu_hit_feed(by, id, "ghost")
+	return {"k": "stolen", "it": it, "v": id}
+
+
+## Thief side: the loot (or the refusal) arrives.
+func steal_result(m: Dictionary, f: CpuField) -> void:
+	steal_wait = -1.0
+	if str(m.get("k", "")) != "stolen":
+		return
+	var it: String = str(m.get("it", ""))
+	if not PartyItems.PRACTICE_ORDER.has(it):
+		return
+	if bool(m.get("ret", false)) or item == "":
+		give(it)
+		if not bool(m.get("ret", false)):
+			var victim: int = int(m.get("v", 0))
+			var g: RemoteRacer = f.level._ghosts.get(victim) as RemoteRacer
+			f.cpu_fx(id, "ghost", "steal", {"b": PowerUp.arr((g.global_position if g != null else walker.pos) + Vector3(0, 0.8, 0))})
+			f.cpu_hit_feed(id, victim, "ghost")
+			ghost_left = minf(ghost_left, 1.0)   # job done: it fades back in
+	else:
+		# the slot filled meanwhile: give it back
+		var back: int = int(m.get("v", 0))
+		if back == Net.my_id():
+			f.layer._on_stolen(id, it, true)
+		elif back != 0:
+			Net.send_party({"k": "stolen", "it": it, "ret": true}, back)
+
+
+## While a Ghost: rob the first rival close by (one try a second, one answer at a time).
+func _ghost_steal(f: CpuField) -> void:
+	if item != "" or steal_cd > 0.0 or (steal_wait >= 0.0 and f.clock - steal_wait < 2.0):
+		return
+	for rv: Dictionary in f.rivals_of(self):
+		if int(rv["id"]) < 0:
+			continue
+		if (rv["center"] as Vector3).distance_to(walker.pos + Vector3(0, 0.8, 0)) > 2.4:
+			continue
+		steal_cd = 1.0
+		f.steal_from_rival(self, rv)
+		return
 
 
 func _land_swap(pos: Vector3, cp: int) -> void:

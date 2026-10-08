@@ -159,6 +159,9 @@ func _impact() -> void:
 			var away := Vector3(d.x, 0, d.z)
 			away = away.normalized() if away.length() > 0.2 else Vector3(1, 0, 0).rotated(Vector3.UP, float(seed_value % 628) / 100.0)
 			layer.take_hazard(owner_id, away * 9.0 + Vector3(0, 14.0, 0), {"st": 1.6, "e": "stun", "ed": 1.6, "s": "strike", "feed": true})
+	# CPU racers live on the host: it applies the blast to them (whoever called it)
+	if Net.is_host() and CpuField.current != null and is_instance_valid(CpuField.current):
+		CpuField.current.area_hit(owner_id, at, RADIUS, 4.5, 9.0, {"vy": 14.0, "st": 1.6, "e": "stun", "ed": 1.6, "s": "strike"})
 	# the caster's copy: practice dummies in the blast
 	if owner_id == Net.my_id():
 		for t: Dictionary in layer.targets():
