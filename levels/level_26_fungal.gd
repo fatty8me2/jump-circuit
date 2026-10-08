@@ -30,9 +30,9 @@ const SLIDE_SPEED: float = 14.0
 const GROUND_Y: float = -13.0
 
 ## Testing aid: build every stage but start the player (and the bot's route) at stage N. 0 = off.
-const DEV_START: int = 0
+const DEV_START: int = 10
 ## Testing aid: stop building after stage N (a finish gate goes at its end). 0 = build them all.
-const DEV_LAST: int = 0
+const DEV_LAST: int = 10
 
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
@@ -283,7 +283,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -900,6 +900,213 @@ func _stage_9() -> Vector3:
 		deco.lily(pc + Vector3(cos(a) * d, 0.12, sin(a) * d), kit.rng.randf_range(1.4, 2.6), kit.rng.randf() < 0.4)
 	return cp["c"]
 
+
+# ---- stage 10: Hollow Log - the sunbeam on the plank, then wall-run up the inside of the hollow trunk -----------------
+
+## Re-skin a laser gate as a SUNBEAM focused by two dew-lens flowers: a golden-white beam, a dewdrop bead on a
+## stalk at each end instead of the dark posts. It still switches on and off on the clock with a long tell
+## (the guide line flickers for `warn` s, and the hum winds up).
+func _dress_sunbeam(g: LaserGate) -> void:
+	g.warn = 0.95
+	var beam: MeshInstance3D = g.get("_beam") as MeshInstance3D
+	var guide: MeshInstance3D = g.get("_guide") as MeshInstance3D
+	var haze: Variant = g.get("_haze")
+	var bm := StandardMaterial3D.new()
+	bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bm.albedo_color = Color(1.0, 0.82, 0.3)
+	bm.emission_enabled = true
+	bm.emission = Color(1.0, 0.75, 0.25)
+	bm.emission_energy_multiplier = 3.0
+	beam.material_override = bm
+	if beam.get_child_count() >= 2:
+		var core := beam.get_child(0) as MeshInstance3D
+		var sleeve := beam.get_child(1) as MeshInstance3D
+		var cm := StandardMaterial3D.new()
+		cm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		cm.albedo_color = Color(1.0, 0.97, 0.85)
+		cm.emission_enabled = true
+		cm.emission = Color(1.0, 0.95, 0.8)
+		cm.emission_energy_multiplier = 4.0
+		core.material_override = cm
+		var sm := StandardMaterial3D.new()
+		sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		sm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		sm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		sm.cull_mode = BaseMaterial3D.CULL_DISABLED
+		sm.albedo_color = Color(1.0, 0.65, 0.15, 0.22)
+		sleeve.material_override = sm
+	var gm: StandardMaterial3D = g.get("_guide_mat") as StandardMaterial3D
+	if gm != null:
+		gm.albedo_color = Color(1.0, 0.8, 0.3, gm.albedo_color.a)
+	var lamp: OmniLight3D = g.get("_lamp") as OmniLight3D
+	if lamp != null:
+		lamp.light_color = Color(1.0, 0.75, 0.3)
+	for c: Node in g.get_children():
+		if c is MeshInstance3D and c != beam and c != guide and c != haze:
+			(c as MeshInstance3D).visible = false
+	var green: StandardMaterial3D = Look.flat(Color(0.36, 0.62, 0.24), 0.8)
+	var glass := StandardMaterial3D.new()
+	glass.albedo_color = Color(0.75, 0.92, 1.0, 0.6)
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.roughness = 0.04
+	glass.rim_enabled = true
+	glass.rim = 0.9
+	glass.emission_enabled = true
+	glass.emission = Color(1.0, 0.85, 0.5)
+	glass.emission_energy_multiplier = 0.6
+	for sx: float in [-1.0, 1.0]:
+		var x: float = sx * (g.size.x * 0.5 + 0.35)
+		g.add_child(Look.cylinder(0.08, 6.0, green, Vector3(x, -3.0 - 0.2, 0), 0.05, 8))
+		var leaf := Look.sphere(1.0, green, Vector3(x + sx * 0.5, -1.2, 0))
+		leaf.scale = Vector3(0.55, 0.05, 0.25)
+		leaf.rotation.z = sx * 0.4
+		g.add_child(leaf)
+		var bead := Look.sphere(0.4, glass, Vector3(x, 0.0, 0))
+		bead.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		g.add_child(bead)
+
+
+func _chimney_panel(x: float, y: float, z0: float, z1: float, height: float = 7.0) -> void:
+	kit.wallrun(_w(Vector3(x, y, (z0 + z1) * 0.5)), Vector3(absf(z0 - z1), height, 0.5), _yaw + 90.0)
+
+
+func _stage_10() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var plank: Dictionary = _blk(_ahead(cp0, 0.76, 0.0, 12.0), 1.8, 12.0, "alt", 0.6)
+	var pc: Vector3 = plank["c"]
+	var bz: float = pc.z + 0.5
+	var beam: LaserGate = kit.laser(_w(Vector3(pc.x, pc.y + 1.2, bz)), Vector3(3.2, 2.4, 0.2), 5.0, 0.3, 0.0, _yaw)
+	_dress_sunbeam(beam)
+	var foot: Dictionary = _blk(_ahead(plank, 0.78, 0.0, 2.8), 2.8, 2.8, "main", 1.0)
+	var fcen: Vector3 = foot["c"]
+	# the chimney, in the proven geometry: three bark panels up the inside of the trunk
+	var o := Vector3(fcen.x, fcen.y - 6.0, fcen.z + 15.2)
+	_chimney_panel(o.x + 2.3, o.y + 7.2, o.z - 19.5, o.z - 26.0)
+	_chimney_panel(o.x - 2.3, o.y + 12.0, o.z - 24.5, o.z - 32.5)
+	_chimney_panel(o.x + 2.3, o.y + 15.0, o.z - 30.5, o.z - 38.5)
+	var top: Dictionary = _ledge(Vector3(o.x - 0.75, o.y + 17.9, o.z - 42.0), Vector3(4.5, 14.0, 4.0), "alt")
+	var cp: Dictionary = _cp(_ahead(top, 0.78, 0.0, 5.0, 0.75))
+	_hop(cp0, plank, Vector3(0, 0, 5.0))
+	var pre: Vector3 = _w(Vector3(pc.x, pc.y, bz + 1.6))
+	r_walk(pre)
+	_wait(func() -> bool: return _dark(beam, 0.0, 1.2 + 1.5), pre)
+	r_walk(_w(Vector3(pc.x, pc.y, pc.z - 5.4)))
+	_hop(plank, foot)
+	r_walk(_w(o + Vector3(0, 6.0, -14.4)))
+	r_wallrun(_w(o + Vector3(0.5, 6.0, -15.95)), _w(o + Vector3(1.7, 7.4, -20.6)), _w(o + Vector3(1.7, 7.4, -23.5)), _w(o + Vector3(-1.7, 11.5, -27.4)))
+	r_wallrun(Vector3.ZERO, _w(o + Vector3(-1.7, 11.5, -27.4)), _w(o + Vector3(-1.7, 11.5, -30.4)), _w(o + Vector3(1.7, 14.5, -34.0)), true, true)
+	r_wallrun(Vector3.ZERO, _w(o + Vector3(1.7, 14.5, -34.0)), _w(o + Vector3(1.7, 14.5, -35.4)), _w(o + Vector3(-0.75, 17.9, -40.6)), true, true)
+	_hop(top, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	# the hollow trunk: dark bark walls behind the panels, knotholes with the sun pouring through
+	var bark: StandardMaterial3D = Look.flat(Color(0.34, 0.23, 0.14), 0.95)
+	add_child(Look.box(_sz(Vector3(0.6, 20.0, 22.0)), bark, _w(o + Vector3(3.1, 8.0 + 6.0 - 6.0 + 0.0, -29.0))))
+	add_child(Look.box(_sz(Vector3(0.6, 18.0, 14.0)), bark, _w(o + Vector3(-3.1, 10.0, -29.0))))
+	for w: Vector3 in [Vector3(2.78, 12.0, -28.2), Vector3(-2.78, 8.5, -34.0)]:
+		var win := Look.box(_sz(Vector3(0.08, 2.2, 1.8)), Look.flat(Color(1.0, 0.88, 0.5), 0.3, 0.0, 1.6), _w(o + w))
+		win.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(win)
+	return cp["c"]
+
+
+# ---- stage 11: Ladybird Crossing (BRANCH) - ride the flying ladybird | bounce down the caps -------------------------
+# [shortcut: mantle the stem and run the high branch]
+
+func _stage_11() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.80, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	# LEFT (main): a flying ladybird shuttles across the gap
+	var travel: float = 24.0
+	var lb := FungalSnail.new()
+	lb.kind = "ladybird"
+	lb.size = Vector3(3.0, 0.4, 3.0)
+	var pts: Array[Vector3] = [Vector3.ZERO, _d(Vector3(0, 0, -travel))]
+	lb.points = pts
+	lb.period = 12.0
+	lb.dwell = 0.1
+	var start := Vector3(-3.5, 0.0, f0 - 1.2 - 1.5)
+	lb.position = _w(start) - Vector3(0, 0.2, 0)
+	add_child(lb)
+	var mz: float = start.z - travel - 1.5 - 1.2 - 1.5
+	var merge: Dictionary = _blk(Vector3(0, 0, mz), 11.0, 3.0)
+	# RIGHT: two springcaps zigzag across to the merge
+	var a_c: Vector3 = _ahead(_area(fc, 5.5, 1.5), 0.74, 0.0, 3.2, 3.6)
+	var b_c := Vector3(6.6, a_c.y - 1.5, (a_c.z + mz) * 0.5)
+	var m_t := Vector3(3.6, 0.0, mz)
+	var s_ab: float = _solve_strength(-1.5, Vector2(a_c.x - b_c.x, a_c.z - b_c.z).length())
+	var s_bm: float = _solve_strength(m_t.y - b_c.y, Vector2(b_c.x - m_t.x, b_c.z - m_t.z).length())
+	var cap_a: FungalCap = _spring_cap(a_c, 1.6, RED)
+	cap_a.high = s_ab
+	cap_a.low = s_ab - 7.0
+	var cap_b: FungalCap = _spring_cap(b_c, 1.6, ORANGE)
+	cap_b.high = s_bm
+	cap_b.low = s_bm - 7.0
+	# SHORTCUT: a mantle up a tall stem, then a high branch and a drop to the merge
+	var col_top := Vector3(0.0, 4.1, f0 - 1.0)
+	var col: Dictionary = _ledge(col_top, Vector3(2.4, 12.0, 2.0), "accent")
+	var m_k: int = ceili((0.85 * _reach(-4.1) - 0.4) / 0.2 - 0.001)
+	var front_b: float = mz + (float(m_k) * 0.2 - 0.03) + 1.5 - 0.35
+	var col_front: float = col_top.z - 1.0
+	var br_len: float = col_front - front_b
+	var branch: Dictionary = _blk(Vector3(0.0, 4.1, col_front - br_len * 0.5), 1.8, br_len, "alt", 0.6)
+	var cp: Dictionary = _cp(_ahead(merge, 0.78, 0.0, 5.0))
+	print("S11 br_len ", br_len, " mz ", mz, " s_ab ", s_ab, " s_bm ", s_bm)
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 2:
+		r_walk(_w(Vector3(0, 0, fc.z + 0.9)))
+		r_mantle(_w(Vector3(0, 0, fc.z + 0.65)), _w(col_top + Vector3(0, 0, 0.4)))
+		r_walk(_w(Vector3(0.0, 4.1, front_b + 0.6)))
+		_hop(branch, merge, Vector3(0, 0, 0.4))
+	elif route_variant == 1:
+		r_walk(_w(Vector3(3.6, 0, fc.z + 0.4)))
+		_hop(_area(Vector3(3.6, 0, fc.z), 1.5, 1.5), _area(a_c, 1.6, 1.6))
+		r_pad(_w(a_c), _w(b_c))
+		r_pad(_w(b_c), _w(m_t))
+	else:
+		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.4)))
+		route.append({"kind": "candy_board", "from": _w(Vector3(-3.5, 0, f0 - 0.3)), "cars": [lb], "reach": 3.8, "lead": 0.45, "local": Vector3(0, 0.1, 0)})
+		var end_w: Vector3 = _w(start + Vector3(0, 0, -travel))
+		route.append({"kind": "candy_ride", "stand": Vector3(0, 0.1, 0), "to": _w(Vector3(-3.5, 0, mz + 0.6)), "until": func() -> bool:
+			return Vector2(lb.global_position.x - end_w.x, lb.global_position.z - end_w.z).length() < 0.4})
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	_sign(Vector3(-3.5, 0, fc.z + 1.2), Color(1.0, 0.3, 0.25))
+	_sign(Vector3(3.6, 0, fc.z + 1.2), ORANGE)
+	_sign(Vector3(0, 0, fc.z + 1.2), GOLD)
+	return cp["c"]
+
+
+# ---- stage 12: Falling Leaves - dry leaves that give way, one green one under a dewdrop ----------------------------
+
+func _stage_12() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var prev: Dictionary = cp0
+	var areas: Array[Dictionary] = []
+	var dxs: Array[float] = [0.0, 0.5, -0.5, 0.5, -0.5, 0.5]
+	var drip: FungalDrip
+	for i: int in 6:
+		var c: Vector3 = _ahead(prev, 0.78, 0.5, 2.4, dxs[i])
+		if i == 3:
+			areas.append(_leaf_plat(c, 1.3))
+			drip = _drip(c, 7.0, 5.5, 3.3 + 2.7)
+		else:
+			kit.collapse(_w(c), 2.4, 0.8, 3.0)
+			_floors.append({"top": _w(c), "size": Vector3(2.4, 0, 2.4), "drop": 0.4, "kind": 1})
+			areas.append({"c": c, "hx": 1.2, "hz": 1.2, "r": 1.2})
+		prev = areas[i]
+	var cp: Dictionary = _cp(_ahead(prev, 0.78, 0.0, 5.0, -(prev["c"] as Vector3).x))
+	var arrive: float = 3.3
+	_wait(func() -> bool: return drip.clear_over(Game.course_time, arrive - 0.5, arrive + 0.7 + 1.5))
+	prev = cp0
+	for a: Dictionary in areas:
+		_hop(prev, a)
+		prev = a
+	_hop(prev, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
 # @@STAGES@@
 
 
@@ -1115,3 +1322,10 @@ func _process(_dt: float) -> void:
 		_dbg_connected = true
 		player_failed.connect(func(cause: String) -> void: print("FAIL ", cause, " t=", snappedf(Game.course_time, 0.01), " at ", player.global_position.snapped(Vector3.ONE * 0.01)))
 		player.jumped.connect(func() -> void: print("JUMP t=", snappedf(Game.course_time, 0.01), " at ", player.global_position.snapped(Vector3.ONE * 0.01), " hspeed ", snappedf(player.horizontal_speed(), 0.01)))
+var _dbg_acc: float = 0.0
+func _physics_process(dt: float) -> void:
+	super._physics_process(dt)
+	_dbg_acc += dt
+	if DEBUG_JUMPS and player != null and _dbg_acc > 0.1 and Game.course_time > 3.0 and Game.course_time < 7.0:
+		_dbg_acc = 0.0
+		print("TR t=", snappedf(Game.course_time, 0.1), " ", player.global_position.snapped(Vector3.ONE * 0.01), " v ", player.velocity.snapped(Vector3.ONE * 0.1), " wall ", player.is_wall_running(), " gr ", player.grounded)
