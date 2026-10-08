@@ -79,6 +79,11 @@ func _begin_step() -> void:
 func _physics_process(dt: float) -> void:
 	if level == null or done or stuck:
 		return
+	if _pause_left > 0.0:  # PAUSE-HOOK
+		_pause_left -= dt  # PAUSE-HOOK
+		player.cmd_move = Vector2.ZERO  # PAUSE-HOOK
+		player.cmd_jump = false  # PAUSE-HOOK
+		return  # PAUSE-HOOK
 	if not keep_camera:
 		player.camera_yaw = 0.0
 	if level.finished:
@@ -148,7 +153,14 @@ func _physics_process(dt: float) -> void:
 		_pending_bounce = false
 
 
+var _pause_left: float = 0.0  # PAUSE-HOOK
+
+
 func _next() -> void:
+	if OS.get_environment("BOT_TRACE") != "" and step_index < level.route.size():  # PAUSE-HOOK
+		print("TRACE step %d %s t=%.2f pos=%s" % [step_index, str(level.route[step_index]["kind"]), Game.course_time, str(player.global_position.snapped(Vector3.ONE * 0.1))])  # PAUSE-HOOK
+	if OS.get_environment("BOT_PAUSE") != "" and step_index < level.route.size() and str(level.route[step_index]["kind"]) in ["checkpoint", "b_wait", "wait", "x_wait", "c_wait", "candy_board"]:  # PAUSE-HOOK
+		_pause_left = float(OS.get_environment("BOT_PAUSE"))  # PAUSE-HOOK
 	step_index += 1
 	_begin_step()
 

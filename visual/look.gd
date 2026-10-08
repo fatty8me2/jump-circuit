@@ -280,14 +280,17 @@ const THEMES: Dictionary = {
 		"decor": Color(0.08, 0.06, 0.18), "decor2": Color(1.00, 0.45, 0.10), "metal": Color(0.55, 0.55, 0.60),
 		"cloud_light": Color(0.09, 0.07, 0.16), "cloud_shade": Color(0.02, 0.01, 0.04),
 	},
-	"carnival": {  # PLACEHOLDER palette - the level agent owns and retunes this entry
-		"sky_top": Color(0.30, 0.25, 0.60), "sky_horizon": Color(1.00, 0.55, 0.35), "sky_bottom": Color(0.35, 0.20, 0.30),
-		"sun": Color(1.00, 0.70, 0.45), "sun_energy": 1.0, "sun_rot": Vector3(-45, 150, 0),
-		"ambient": Color(0.60, 0.60, 0.65), "ambient_energy": 0.8, "fog": Color(0.85, 0.55, 0.50), "fog_density": 0.002,
-		"top": Color(0.95, 0.20, 0.25), "side": Color(0.98, 0.95, 0.90), "trim": Color(1.00, 0.82, 0.20),
-		"alt_top": Color(0.20, 0.55, 0.95), "accent": Color(1.00, 0.82, 0.20), "accent2": Color(0.20, 0.85, 0.75),
-		"decor": Color(0.40, 0.18, 0.30), "decor2": Color(1.00, 0.45, 0.75), "metal": Color(0.55, 0.55, 0.60),
-		"cloud_light": Color(0.94, 0.63, 0.58), "cloud_shade": Color(0.34, 0.22, 0.20),
+	# Carnival Chaos: a funfair at sunset - warm painted boardwalk planks with marquee-bulb edges over
+	# red-and-cream circus stripes, magenta and gold accents under a blazing orange-to-indigo sky.
+	# (levels/level_29_carnival.gd swaps in its own sunset sky and the boardwalk shader for every walkable surface.)
+	"carnival": {
+		"sky_top": Color(0.09, 0.06, 0.26), "sky_horizon": Color(1.00, 0.52, 0.28), "sky_bottom": Color(0.26, 0.10, 0.16),
+		"sun": Color(1.00, 0.66, 0.40), "sun_energy": 1.25, "sun_rot": Vector3(-19, 150, 0),
+		"ambient": Color(0.70, 0.48, 0.62), "ambient_energy": 0.95, "fog": Color(0.95, 0.46, 0.42), "fog_density": 0.0019,
+		"top": Color(0.80, 0.56, 0.36), "side": Color(0.98, 0.93, 0.82), "trim": Color(1.00, 0.82, 0.22),
+		"alt_top": Color(0.90, 0.33, 0.34), "accent": Color(1.00, 0.42, 0.62), "accent2": Color(0.25, 0.80, 0.82),
+		"decor": Color(0.52, 0.20, 0.32), "decor2": Color(1.00, 0.45, 0.70), "metal": Color(0.85, 0.74, 0.55),
+		"cloud_light": Color(1.00, 0.62, 0.50), "cloud_shade": Color(0.40, 0.18, 0.30),
 	},
 	"dino": {  # PLACEHOLDER palette - the level agent owns and retunes this entry
 		"sky_top": Color(0.40, 0.62, 0.85), "sky_horizon": Color(0.95, 0.85, 0.60), "sky_bottom": Color(0.30, 0.32, 0.20),
