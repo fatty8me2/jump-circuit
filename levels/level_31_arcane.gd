@@ -491,7 +491,7 @@ func _stage_5() -> Vector3:
 	_hop(p1, _area(disc_c, 1.6, 1.6))
 	r_walk(_w(disc_c + Vector3(0, 0, -0.2)))
 	route.append({"kind": "kick", "from": _w(disc_c + Vector3(0, 0, -0.2)), "to": _w(land_c)})
-	r_walk(_w(Vector3(3.6, land_c.y, f0 + 0.6)))
+	r_walk(_w(Vector3(3.6, land_c.y, f0 + 2.2)))
 	r_wallrun(_w(Vector3(4.0, land_c.y, f0 + 0.35)), _w(Vector3(5.2, land_c.y + 1.4, f0 - 3.4)),
 		_w(Vector3(5.2, land_c.y + 1.4, f0 - 12.6)), _w(Vector3(3.6, land_c.y, f0 - 19.4)))
 	_hop(pb, cp, Vector3(0, 0, 1.2))
