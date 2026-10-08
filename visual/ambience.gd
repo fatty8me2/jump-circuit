@@ -712,10 +712,24 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 			]
 		"arcade":
 			return [
-				# PLACEHOLDER - the Pixel Panic level agent replaces this case (near / mid / far layers)
-				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
-					"color": Color(1.00, 0.95, 0.20), "speed": Vector2(0.05, 0.3), "spread": 180.0,
-					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# near: square pixels of phosphor drifting up like dust on the glass
+				{"depth": "near", "amount": 110, "lifetime": 3.5, "facing": "mesh", "mesh": ArcadeFx.pixel_mesh(),
+					"pick": PackedColorArray([Color(0.5, 2.2, 2.6), Color(2.6, 0.7, 1.8), Color(2.6, 2.3, 0.5), Color(2.2, 2.2, 2.4)]),
+					"dir": Vector3.UP, "spread": 25.0, "speed": Vector2(0.2, 0.9), "scale": Vector2(0.4, 1.0), "curve": "pop",
+					"turbulence": 0.3},
+				# mid: slow pixel confetti falling past, in the cabinet's colours
+				{"depth": "mid", "amount": 70, "lifetime": 7.0, "facing": "mesh", "mesh": ArcadeFx.pixel_mesh(),
+					"pick": PackedColorArray([Color(0.4, 1.8, 2.4), Color(2.4, 0.5, 1.6), Color(2.4, 2.0, 0.4)]),
+					"dir": Vector3.DOWN, "spread": 20.0, "speed": Vector2(0.6, 1.6), "scale": Vector2(1.0, 2.6),
+					"angle": Vector2(0, 360), "spin": Vector2(-60, 60), "curve": "pop"},
+				# far: huge soft glows rolling by, and long streaks of light shooting past like lasers on the screen
+				{"depth": "far", "amount": 30, "lifetime": 9.0, "tex": Fx.Tex.SMOKE, "additive": true, "size": 20.0,
+					"radius": 85.0, "pick": PackedColorArray([Color(0.5, 0.1, 0.5, 0.18), Color(0.1, 0.4, 0.6, 0.18)]),
+					"speed": Vector2(0.5, 1.5), "dir": Vector3(0.3, 0.1, 0.1), "spread": 40.0, "angle": Vector2(0, 360),
+					"curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 12, "lifetime": 1.6, "facing": "velocity", "tex": Fx.Tex.SPARK,
+					"size": Vector2(0.3, 6.0), "radius": 100.0, "pick": PackedColorArray([Color(2.6, 0.8, 1.8), Color(0.8, 2.4, 2.8), Color(2.8, 2.5, 0.6)]),
+					"dir": Vector3(1, 0.0, 0.2), "spread": 4.0, "speed": Vector2(30.0, 55.0), "fade": PackedFloat32Array([0.0, 1.0, 0.0])},
 			]
 		"carnival":
 			return [
