@@ -246,10 +246,10 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16]
 	var dev_last: int = _dev("OLY_LAST")
 	var dev_start: int = _dev("OLY_START")
-	var last: int = stages.size() if dev_last <= 0 else mini(dev_last, stages.size())
+	var last: int = stages.size() if (dev_last <= 0 or dev_last > stages.size()) else dev_last
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
 	_frame(Vector3.ZERO, yaws[0])
@@ -262,8 +262,8 @@ func _build() -> void:
 		_frame(_w(end), yaws[i + 1])
 	starts.append(route.size())
 	origins.append(_o)
-	if last == 17:
-		pass
+	if last == stages.size():
+		_stage_17()
 	else:
 		# (dev) the finish right after the last stage built
 		var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
@@ -286,8 +286,8 @@ func _stage_1() -> Vector3:
 	_floors.append({"top": _w(Vector3.ZERO), "size": Vector3(12, 0, 12), "drop": 2.0})
 	var start: Dictionary = _area(Vector3(0, 0, 0), 6.0, 6.0)
 	var p1: Dictionary = _post(_ahead(start, 0.86, 0.0, 1.3), 1.3, 1.3)
-	var p2: Dictionary = _post(_ahead(p1, 0.88, 0.6, 1.2, -0.4))
-	var p3: Dictionary = _post(_ahead(p2, 0.88, 0.6, 1.2, 0.4))
+	var p2: Dictionary = _post(_ahead(p1, 0.86, 0.6, 1.2, -0.4))
+	var p3: Dictionary = _post(_ahead(p2, 0.86, 0.6, 1.2, 0.4))
 	var beam: Dictionary = _blk(_ahead(p3, 0.86, 0.0, 3.0, -0.4), 1.2, 3.0, "alt", 0.6)
 	var bc: Vector3 = beam["c"]
 	var front: float = bc.z - 1.5
@@ -333,7 +333,7 @@ func _stage_2() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
 	var prev: Dictionary = cp0
 	var cols: Array[Dictionary] = []
-	var pcts: Array[float] = [0.86, 0.87, 0.88, 0.87, 0.88]
+	var pcts: Array[float] = [0.86, 0.86, 0.86, 0.86, 0.86]
 	var dys: Array[float] = [0.6, 0.0, 0.6, 0.0, 0.6]
 	var dxs: Array[float] = [0.0, 0.4, -0.4, 0.4, -0.4]
 	for i: int in 5:
@@ -359,15 +359,19 @@ func _stage_2() -> Vector3:
 
 func _stage_3() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
-	var p1: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.2))
-	var p2: Dictionary = _post(_ahead(p1, 0.88, 0.6, 1.2, 0.4))
+	var p1: Dictionary = _post(_ahead(cp0, 0.86, 0.0, 1.2))
+	var p2: Dictionary = _post(_ahead(p1, 0.86, 0.6, 1.2, 0.4))
 	var beam: Dictionary = _blk(_ahead(p2, 0.86, 0.0, 14.0, -0.4), 1.2, 14.0, "alt", 0.6)
 	var bc: Vector3 = beam["c"]
 	var front: float = bc.z - 7.0
 	var l1: LaserGate = kit.laser(_w(Vector3(bc.x, bc.y + 1.2, bc.z + 2.5)), Vector3(3.2, 2.4, 0.2), 5.0, 0.3, 0.0, _yaw)
 	var l2: LaserGate = kit.laser(_w(Vector3(bc.x, bc.y + 1.2, bc.z - 2.5)), Vector3(3.2, 2.4, 0.2), 5.0, 0.3, fposmod(-0.12, 1.0), _yaw)
+	l1.warn = 0.95
+	l2.warn = 0.95
 	_dress_laser(l1)
 	_dress_laser(l2)
+	_gate_tell(l1, Vector3(bc.x, bc.y, bc.z + 2.5))
+	_gate_tell(l2, Vector3(bc.x, bc.y, bc.z - 2.5))
 	# the temple wall: a wall-run panel on the right over the cloud, a landing post beyond
 	var f: float = front
 	kit.wallrun(_w(Vector3(bc.x + 2.3, bc.y + 1.2, f - 9.5)), Vector3(16.0, 6.5, 0.6), _yaw + 90.0)
@@ -526,7 +530,7 @@ func _stage_4() -> Vector3:
 	var a1: Dictionary = _post(_ahead(cp0, 0.86, 0.0, 1.3), 1.3, 1.3)
 	var a2: Dictionary = _post(_ahead(a1, 0.88, 0.6, 1.2, 0.4))
 	var a3: Dictionary = _post(_ahead(a2, 0.86, 0.6, 1.2, -0.4))
-	var a4: Dictionary = _post(_ahead(a3, 0.88, 0.0, 1.2, 0.4))
+	var a4: Dictionary = _post(_ahead(a3, 0.86, 0.0, 1.2, 0.4))
 	var rest: Dictionary = _blk(_ahead(a4, 0.86, 0.6, 3.0, -0.4), 2.2, 3.0, "alt", 0.6)
 	var cp: Dictionary = _cp(_ahead(rest, 0.86, 0.0, 5.0, -(rest["c"] as Vector3).x))
 	# two lanes of wind: the first spirit crosses the first pair of posts, the second the next pair,
@@ -618,7 +622,7 @@ func _stage_5() -> Vector3:
 func _stage_6() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
 	var a1: Dictionary = _post(_ahead(cp0, 0.86, 0.0, 1.3), 1.3, 1.3)
-	var beam: Dictionary = _blk(_ahead(a1, 0.88, 0.6, 18.0, 0.4), 1.4, 18.0, "alt", 0.6)
+	var beam: Dictionary = _blk(_ahead(a1, 0.86, 0.6, 18.0, 0.4), 1.4, 18.0, "alt", 0.6)
 	var bc: Vector3 = beam["c"]
 	var bn: float = bc.z + 9.0
 	# two bull rams in the aqueduct's piers shoving across the walkway, one from each side
@@ -667,13 +671,13 @@ func _stage_7() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
 	var p1: Dictionary = _post(_ahead(cp0, 0.86, 0.0, 1.3), 1.3, 1.3)
 	var q1: Dictionary = _blk(_ahead(p1, 0.86, 0.0, 2.2), 2.2, 2.2, "alt", 0.6)
-	var q2: Dictionary = _blk(_ahead(q1, 0.88, 0.6, 2.2, 0.4), 2.2, 2.2, "alt", 0.6)
+	var q2: Dictionary = _blk(_ahead(q1, 0.86, 0.6, 2.2, 0.4), 2.2, 2.2, "alt", 0.6)
 	var q3: Dictionary = _blk(_ahead(q2, 0.86, 0.6, 2.2, -0.4), 2.2, 2.2, "alt", 0.6)
 	var q3c: Vector3 = q3["c"]
 	var ledge_top := Vector3(q3c.x, q3c.y + 3.3, q3c.z - 1.1 - 1.6 - 1.3)
 	var cella: Dictionary = _ledge(ledge_top, Vector3(3.0, 9.0, 2.6))
 	var k1: Dictionary = _crumb(_ahead(cella, 0.86, 0.0, 1.5, 0.4))
-	var p2: Dictionary = _post(_ahead(k1, 0.88, 0.6, 1.2, -0.4))
+	var p2: Dictionary = _post(_ahead(k1, 0.86, 0.6, 1.2, -0.4))
 	var cp: Dictionary = _cp(_ahead(p2, 0.86, 0.0, 5.0, -(p2["c"] as Vector3).x))
 	# three presses, one over each platform, each safe from the moment the bot could first be there to
 	# well after it has left (+1.5 s slack, which covers the 1.0 s pause); staggered one hop apart
@@ -796,11 +800,11 @@ func _stage_8() -> Vector3:
 func _stage_9() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
 	var p1: Dictionary = _post(_ahead(cp0, 0.86, 0.0, 1.3), 1.3, 1.3)
-	var p2: Dictionary = _post(_ahead(p1, 0.88, 0.6, 1.2, 0.4))
+	var p2: Dictionary = _post(_ahead(p1, 0.86, 0.6, 1.2, 0.4))
 	var court: Dictionary = _blk(_ahead(p2, 0.86, 0.0, 16.0, -0.4), 2.4, 16.0, "alt", 0.6)
 	var cc: Vector3 = court["c"]
 	var cn: float = cc.z + 8.0
-	var p3: Dictionary = _post(_ahead(court, 0.88, 0.6, 1.2, 0.4))
+	var p3: Dictionary = _post(_ahead(court, 0.86, 0.6, 1.2, 0.4))
 	var cp: Dictionary = _cp(_ahead(p3, 0.86, 0.0, 5.0, -(p3["c"] as Vector3).x))
 	# two sun mirrors on pedestals either side of the court, sweeping their blades across it in turn:
 	# the left one over the first stretch, the right one over the second
@@ -816,9 +820,9 @@ func _stage_9() -> Vector3:
 	_hop(cp0, p1)
 	_hop(p1, p2)
 	_hop(p2, court, Vector3(0, 0, 7.0))
-	r_walk(_w(Vector3(cc.x, cc.y, cn - 2.0)))
-	_wait(func() -> bool: return _mirror_dark(m1, t1 - 0.5, t1 + 0.8 + SLACK) and _mirror_dark(m2, t2 - 0.5, t2 + 0.8 + SLACK),
-		_w(Vector3(cc.x, cc.y, cn - 2.0)))
+	r_walk(_w(Vector3(cc.x, cc.y, cn - 1.0)))
+	_wait(func() -> bool: return _mirror_dark(m1, 0.0, t1 + 0.8 + SLACK) and _mirror_dark(m2, t2 - 0.7, t2 + 0.8 + SLACK),
+		_w(Vector3(cc.x, cc.y, cn - 1.0)))
 	r_walk(_w(Vector3(cc.x, cc.y, cn - 16.0 + 0.9)))
 	_hop(court, p3, Vector3(0, 0, 0.2))
 	_hop(p3, cp, Vector3(0, 0, 1.2))
@@ -851,9 +855,9 @@ func _stage_10() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
 	var s1: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.2), 1.2, 1.2)
 	var s2: Dictionary = _crumb(_ahead(s1, 0.86, 0.6, 1.4, 0.6), 1.4)
-	var s3: Dictionary = _blk(_ahead(s2, 0.88, 0.0, 2.4, -0.6), 3.8, 2.4, "accent", 0.6)
+	var s3: Dictionary = _blk(_ahead(s2, 0.86, 0.0, 2.4, -0.6), 3.8, 2.4, "accent", 0.6)
 	var s4: Dictionary = _post(_ahead(s3, 0.86, 0.6, 1.2, 0.7))
-	var s5: Dictionary = _crumb(_ahead(s4, 0.88, -0.6, 1.4, -0.6), 1.4)
+	var s5: Dictionary = _crumb(_ahead(s4, 0.86, -0.6, 1.4, -0.6), 1.4)
 	var s6: Dictionary = _post(_ahead(s5, 0.86, 0.6, 1.2, 0.5))
 	var s7: Dictionary = _post(_ahead(s6, 0.88, 0.6, 1.2, -0.5))
 	var rest: Dictionary = _blk(_ahead(s7, 0.86, 0.0, 4.0, 0.0), 3.6, 4.0, "alt", 0.6)
@@ -887,6 +891,429 @@ func _stage_10() -> Vector3:
 	deco.island(_w(Vector3(15.0, -7.0, (s2["c"] as Vector3).z - 6.0)), 8.0, 15.0, true, false)
 	deco.temple(_w(Vector3(0.0, -22.0, (s5["c"] as Vector3).z - 30.0)), OlympusDecor.turn(yr), 6, 8, 5.0, true)
 	return cp["c"]
+
+
+# ---- stage 11: Pantheon Chimney - a cloud pad throws you up, a three-panel wall-run chimney, out onto the roof ---
+
+func _chimney_panel(l: Vector3, x: float, y: float, z0: float, z1: float, height: float = 7.0) -> void:
+	kit.wallrun(_w(l + Vector3(x, y, (z0 + z1) * 0.5)), Vector3(absf(z0 - z1), height, 0.5), _yaw + 90.0)
+
+
+func _stage_11() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var padp: Dictionary = _blk(_ahead(cp0, 0.86, 0.0, 3.0), 3.0, 3.0, "main", 0.8)
+	var pc: Vector3 = padp["c"]
+	var strength: float = 21.0
+	var arc: Vector3 = Ballistics.landing_point(_tuning, Vector3.ZERO, Vector3(0, strength, -8.5), 6.0)
+	var l := Vector3(pc.x, 6.0, pc.z + arc.z)
+	var landing: Dictionary = _blk(l, 2.8, 2.8, "main", 0.8)
+	var pad: BouncePad = kit.pad(_w(pc), strength, 0.0, _yaw, 1.0)
+	deco.cloud_puff(_w(pc + Vector3(0, -0.1, 0)))
+	# the chimney: three alternating panels climbing the inside of a temple drum, then the roof ledge
+	_chimney_panel(l, 2.3, 1.2, -4.3, -10.8)
+	_chimney_panel(l, -2.3, 6.0, -9.3, -17.3)
+	_chimney_panel(l, 2.3, 9.0, -15.3, -23.3)
+	var top: Dictionary = _ledge(l + Vector3(-0.75, 11.9, -26.8), Vector3(4.5, 14.0, 4.0), "alt")
+	var cp: Dictionary = _cp(_ahead(top, 0.85, 0.0, 5.0, 0.75))
+	_hop(cp0, padp)
+	r_pad(_w(pc), _w(l))
+	r_walk(_w(l + Vector3(0, 0, 0.8)))
+	r_wallrun(_w(l + Vector3(0.5, 0, -0.75)), _w(l + Vector3(1.7, 1.4, -5.4)), _w(l + Vector3(1.7, 1.4, -8.3)), _w(l + Vector3(-1.7, 5.5, -12.2)))
+	r_wallrun(Vector3.ZERO, _w(l + Vector3(-1.7, 5.5, -12.2)), _w(l + Vector3(-1.7, 5.5, -15.2)), _w(l + Vector3(1.7, 8.5, -18.8)), true, true)
+	r_wallrun(Vector3.ZERO, _w(l + Vector3(1.7, 8.5, -18.8)), _w(l + Vector3(1.7, 8.5, -20.2)), _w(l + Vector3(-0.75, 11.9, -25.4)), true, true)
+	_hop(top, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	# the drum: tall marble walls behind the panels with gold windows, an oculus of sun over the roof
+	var marble: StandardMaterial3D = Look.flat(MARBLE, 0.5)
+	add_child(Look.box(_sz(Vector3(0.6, 20.0, 22.0)), marble, _w(l + Vector3(3.1, 8.0, -13.0))))
+	add_child(Look.box(_sz(Vector3(0.6, 18.0, 14.0)), marble, _w(l + Vector3(-3.1, 10.0, -13.0))))
+	for w: Vector3 in [Vector3(2.78, 6.0, -12.2), Vector3(-2.78, 2.0, -18.0)]:
+		var win := Look.box(_sz(Vector3(0.08, 2.4, 1.8)), Look.flat(Color(1.0, 0.82, 0.5), 0.3, 0.0, 1.8), _w(l + w))
+		win.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(win)
+	deco.god_ray(_w(l + Vector3(0, 30.0, -20.0)), OlympusDecor.turn(deg_to_rad(_yaw), 0.5), 5.0, 30.0)
+	deco.statue(_w(Vector3(-13.0, 3.0, pc.z - 6.0)), OlympusDecor.turn(deg_to_rad(_yaw) - 0.4), 12.0, 1)
+	return cp["c"]
+
+
+# ---- stage 12: Chariot Run (BRANCH) - the climbing chariot | two stacked mantles up the cella walls ---------
+
+func _stage_12() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.80, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	var fa: Dictionary = _area(Vector3(3.6, 0, fc.z), 1.5, 1.5)
+	# RIGHT (lapis): a post, mantle a wall, mantle the wall behind it, hop up to the merge
+	var pb: Dictionary = _post(_ahead(fa, 0.86, 0.0, 2.0), 2.0, 2.0)
+	var pbc: Vector3 = pb["c"]
+	var top_a := Vector3(3.6, pbc.y + 3.3, pbc.z - 1.0 - 1.6 - 1.2)
+	var led_a: Dictionary = _ledge(top_a, Vector3(3.0, 9.0, 2.4))
+	var top_b := Vector3(3.6, top_a.y + 3.3, top_a.z - 2.4)
+	var led_b: Dictionary = _ledge(top_b, Vector3(3.0, 12.0, 2.4))
+	var mcv: Vector3 = _ahead(led_b, 0.84, 1.4, 3.0, -3.6)
+	var merge: Dictionary = _blk(Vector3(0, mcv.y, mcv.z), 11.0, 3.0)
+	var mc: Vector3 = merge["c"]
+	# LEFT (gold): the chariot climbs from the fork to the merge's level
+	var z0: float = f0 - 0.9 - 1.6
+	var z_end: float = mc.z + 1.5 + 1.0 + 1.6
+	var travel := Vector3(0, mc.y, z_end - z0)
+	var car: OlympusChariot = _chariot(Vector3(-3.5, 0.0, z0), Vector3(2.8, 0.5, 3.2), travel, 14.0, 0.0, 0.3)
+	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant != 1:
+		r_walk(_w(Vector3(-3.5, 0, f0 + 0.9)))
+		_wait(func() -> bool: return _mover_at(car, Vector3.ZERO, 0.2, 0.0, 2.4), _w(Vector3(-3.5, 0, f0 + 0.9)))
+		_board(_w(Vector3(-3.5, 0, f0 + 0.35)), car, _d(Vector3(0, 0.25, 0.9)), func() -> bool: return _mover_at(car, Vector3.ZERO, 0.2, 0.0, 1.6))
+		r_jump_from_ride(car, _home(car) + _d(travel), 0.3, _w(Vector3(-3.5, mc.y, mc.z + 0.9)), true, Vector3(0, 0.25, 0) + _d(Vector3(0, 0, -1.0)))
+	else:
+		r_walk(_w(Vector3(3.6, 0, fc.z + 0.6)))
+		_hop(fa, pb)
+		r_walk(_w(Vector3(3.6, 0, pbc.z - 1.0 + 0.9)))
+		r_mantle(_w(Vector3(3.6, 0, pbc.z - 1.0 + 0.35)), _w(top_a + Vector3(0, 0, 0.3)))
+		r_walk(_w(top_a + Vector3(0, 0, -1.2 + 0.9)))
+		r_mantle(_w(top_a + Vector3(0, 0, -1.2 + 0.35)), _w(top_b + Vector3(0, 0, 0.3)))
+		_hop(led_b, merge, Vector3(3.6, 0, 0.6))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	_sign(Vector3(-3.5, 0, fc.z + 1.2), GOLD)
+	_sign(Vector3(3.6, 0, fc.z + 1.2), SKY_BLUE)
+	_gate_dress(top_a, 3.0, 9.0, 2.4)
+	_gate_dress(top_b, 3.0, 12.0, 2.4)
+	var yr: float = deg_to_rad(_yaw)
+	deco.island(_w(Vector3(-17.0, -3.0, (f0 + mc.z) * 0.5)), 10.0, 18.0, true, true)
+	deco.temple(_w(Vector3(18.0, 1.0, (f0 + mc.z) * 0.5 - 6.0)), OlympusDecor.turn(yr + PI * 0.5), 5, 7, 5.0, true)
+	return cp["c"]
+
+
+# ---- stage 13: Spirit Ridge - columns through a gust, then the mirror ridge ----------------------------
+
+func _stage_13() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var c1: Dictionary = _crumb(_ahead(cp0, 0.86, 0.6, 1.5))
+	var c2: Dictionary = _crumb(_ahead(c1, 0.86, 0.0, 1.5, 0.4))
+	var c3: Dictionary = _crumb(_ahead(c2, 0.86, 0.6, 1.5, -0.4))
+	var rest: Dictionary = _blk(_ahead(c3, 0.86, 0.0, 2.6), 2.6, 2.6, "alt", 0.6)
+	var rc: Vector3 = rest["c"]
+	var ridge: Dictionary = _blk(_ahead(rest, 0.86, 0.0, 10.0), 1.6, 10.0, "alt", 0.6)
+	var gc: Vector3 = ridge["c"]
+	var gn: float = gc.z + 5.0
+	var d1: Dictionary = _crumb(_ahead(ridge, 0.86, 0.6, 1.5, 0.4))
+	var d2: Dictionary = _post(_ahead(d1, 0.86, 0.0, 1.2, -0.4))
+	var cp: Dictionary = _cp(_ahead(d2, 0.86, 0.0, 5.0, -(d2["c"] as Vector3).x))
+	var mid: Vector3 = ((c1["c"] as Vector3) + (c3["c"] as Vector3)) * 0.5
+	var g1: OlympusSpirit = _gust(mid + Vector3(0, 1.5, 0), Vector3(16.0, 7.0, 13.0), Vector3(26.0, 0, 0), 9.0, 0.0)
+	var m1: OlympusMirror = _mirror(Vector3(gc.x - 4.4, gc.y, gn - 5.0), 60.0, 120.0, 7.0, 1.4, 0.0, 8.0)
+	_wait(func() -> bool: return _calm(g1, -0.2, 3.6 + SLACK))
+	_hop(cp0, c1)
+	_hop(c1, c2)
+	_hop(c2, c3)
+	_hop(c3, rest)
+	r_walk(_w(Vector3(rc.x, rc.y, rc.z - 1.0)))
+	_wait(func() -> bool: return _mirror_dark(m1, 0.0, 2.0 + SLACK), _w(Vector3(rc.x, rc.y, rc.z - 1.0)))
+	_hop(rest, ridge, Vector3(0, 0, 4.0))
+	r_walk(_w(Vector3(gc.x, gc.y, gn - 10.0 + 0.9)))
+	_hop(ridge, d1)
+	_hop(d1, d2)
+	_hop(d2, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	var yr: float = deg_to_rad(_yaw)
+	deco.colonnade(_w(Vector3(gc.x + 7.0, gc.y - 0.2, gc.z)), OlympusDecor.turn(yr + PI * 0.5), 6, 2.6, 6.0, 0.4)
+	deco.tholos(_w(Vector3(-15.0, -3.0, rc.z - 4.0)), 4.2, 10, 4.2)
+	return cp["c"]
+
+
+# ---- stage 14: Sun Stair - four landings climbing, three sun gates to run through on the beat -----------
+
+func _stage_14() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var l1: Dictionary = _blk(_ahead(cp0, 0.86, 0.6, 3.0), 3.0, 3.0, "alt", 0.6)
+	var l2: Dictionary = _blk(_ahead(l1, 0.86, 0.6, 3.0, 0.4), 3.0, 3.0, "alt", 0.6)
+	var l3: Dictionary = _blk(_ahead(l2, 0.86, 0.0, 3.0, -0.4), 3.0, 3.0, "alt", 0.6)
+	var l4: Dictionary = _blk(_ahead(l3, 0.86, 0.6, 3.0, 0.4), 3.0, 3.0, "alt", 0.6)
+	var land: Dictionary = _post(_ahead(l4, 0.86, 0.6, 1.4, -0.4), 1.4, 1.4)
+	var cp: Dictionary = _cp(_ahead(land, 0.86, 0.0, 5.0, -(land["c"] as Vector3).x))
+	var period: float = 4.4
+	var gates: Array[LaserGate] = []
+	var plats: Array[Dictionary] = [l1, l2, l4]
+	var pass_t: Array[float] = [1.3, 2.4, 4.6]
+	for i: int in 3:
+		var pc: Vector3 = plats[i]["c"]
+		var g: LaserGate = kit.laser(_w(pc + Vector3(0, 1.2, 0.0)), Vector3(3.2, 2.4, 0.2), period, 0.3, fposmod(0.3 - (pass_t[i] - 0.6) / period, 1.0), _yaw)
+		g.warn = 0.95
+		_dress_laser(g)
+		_gate_tell(g, pc)
+		gates.append(g)
+	_wait(func() -> bool:
+		for i: int in 3:
+			if not _dark(gates[i], pass_t[i] - 0.5, pass_t[i] + 0.5 + SLACK):
+				return false
+		return true)
+	_hop(cp0, l1, Vector3(0, 0, 1.0))
+	_hop(l1, l2, Vector3(0, 0, 1.0))
+	_hop(l2, l3)
+	_hop(l3, l4, Vector3(0, 0, 1.0))
+	_hop(l4, land)
+	_hop(land, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	var yr: float = deg_to_rad(_yaw)
+	deco.statue(_w(Vector3(-11.0, -2.0, (l2["c"] as Vector3).z)), OlympusDecor.turn(yr - 0.6), 11.0, 1)
+	deco.aqueduct(_w(Vector3(14.0, -12.0, (l3["c"] as Vector3).z - 10.0)), OlympusDecor.turn(yr + 0.4), 5, 5.0, 10.0)
+	return cp["c"]
+
+
+## A sun-glyph tablet beside a sun gate that rings before the beam fires.
+func _gate_tell(g: LaserGate, pc: Vector3) -> void:
+	_tell(_w(pc + Vector3(-2.2, 0.0, 0.0)), func(t: float) -> float: return g.time_until_on(t), 0.8)
+
+
+# ---- stage 15: Sky Colonnade (BRANCH) - the mirror walk | two chained mirror-wall runs ----------------------
+# [shortcut: a 4.1 m mantle up the broken column, then its narrow cornice]
+
+func _e(pct: float, dy: float) -> float:
+	var m: float = pct * _reach(dy)
+	var k: int = ceili((m - 0.4) / 0.2 - 0.001)
+	return float(k) * 0.2 - 0.03
+
+
+func _stage_15() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.80, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	# RIGHT (lapis): run the right wall, kick across to the left one, run it, kick to a post
+	kit.wallrun(_w(Vector3(6.1, 1.2, f0 - 7.0)), Vector3(12.0, 6.5, 0.6), _yaw + 90.0)
+	kit.wallrun(_w(Vector3(1.5, 3.6, f0 - 17.5)), Vector3(9.0, 6.5, 0.6), _yaw + 90.0)
+	var pb: Dictionary = _post(Vector3(3.6, -0.6, f0 - 27.6), 1.6, 1.6)
+	var pb2: Dictionary = _post(_ahead(pb, 0.88, 0.0, 1.2))
+	var mcv: Vector3 = _ahead(pb2, 0.86, 0.0, 3.0, -3.6)
+	var merge: Dictionary = _blk(Vector3(0, mcv.y, mcv.z), 11.0, 3.0)
+	var mz: float = mcv.z
+	# LEFT (gold): a long beam walked past three sun mirrors; its length is set so both branches meet
+	var pa_z: float = mz + 1.5 - 0.35 + _e(0.86, 0.0) + 0.6
+	var beam_front: float = pa_z + 0.6 - 0.35 + _e(0.88, -0.6)
+	var beam_near: float = f0 + 0.35 - _e(0.86, 0.0)
+	var blen: float = beam_near - beam_front
+	var beam: Dictionary = _blk(Vector3(-3.5, 0.0, (beam_near + beam_front) * 0.5), 1.4, blen, "alt", 0.6)
+	var pa: Dictionary = _post(Vector3(-3.5, -0.6, pa_z))
+	# the three mirrors, alternate sides, each over its own third of the walk
+	var period: float = 7.4
+	var mirrors: Array[OlympusMirror] = []
+	var arr_t: Array[float] = []
+	for i: int in 3:
+		var mzz: float = beam_near - blen * (0.2 + 0.3 * float(i))
+		var side: float = -1.0 if i % 2 == 0 else 1.0
+		var mr: OlympusMirror = _mirror(Vector3(-3.5 + side * 4.6, 0.0, mzz), 90.0 * (-side) + 30.0 * side, 90.0 * (-side) - 30.0 * side, period, 1.3, fposmod(-0.5 * float(i) / period, 1.0), 8.0)
+		mirrors.append(mr)
+		arr_t.append(maxf((beam_near - mzz - 1.0 - 2.6) / 9.0, 0.0) + 0.1)
+	# SHORTCUT: the broken column (a 4.1 m mantle) and its narrow cornice, a hop to the merge
+	var col: Dictionary = _ledge(Vector3(0, 4.1, f0 - 0.9), Vector3(1.4, 12.0, 1.8), "accent")
+	var cornice: Dictionary = _blk(Vector3(0, 4.1, f0 - 1.8 - 6.0 - 0.4), 1.0, 12.0, "accent", 0.5)
+	var n2: Vector3 = _ahead(cornice, 0.88, 0.0, 0.0)
+	var l2: float = n2.z - (mz + 1.5 + 4.5)
+	var cornice2: Dictionary = _blk(Vector3(0, 4.1, n2.z - l2 * 0.5), 1.0, l2, "accent", 0.5)
+	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 2:
+		r_walk(_w(Vector3(0, 0, fc.z + 0.9)))
+		r_mantle(_w(Vector3(0, 0, fc.z + 0.65)), _w(Vector3(0, 4.1, f0 - 1.0)))
+		_hop(col, cornice, Vector3(0, 0, 5.0))
+		r_walk(_w(Vector3(0, 4.1, f0 - 13.6)))
+		_hop(cornice, cornice2, Vector3(0, 0, l2 * 0.5 - 0.8))
+		r_walk(_w(Vector3(0, 4.1, n2.z - l2 + 0.6)))
+		_hop(cornice2, merge, Vector3(0, 0, 0.4))
+	elif route_variant != 1:
+		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
+		_hop(_area(Vector3(-3.5, 0, fc.z), 1.5, 1.5), beam, Vector3(0, 0, blen * 0.5 - 0.9))
+		_wait(func() -> bool:
+			for i: int in 3:
+				if not _mirror_dark(mirrors[i], arr_t[i] - 0.1, arr_t[i] + 0.9 + SLACK):
+					return false
+			return true, _w(Vector3(-3.5, 0, beam_near - 1.0)))
+		r_walk(_w(Vector3(-3.5, 0, beam_front + 0.9)))
+		_hop(beam, pa)
+		_hop(pa, merge, Vector3(-3.5, 0, 0.6))
+	else:
+		r_walk(_w(Vector3(3.6, 0, fc.z + 0.6)))
+		r_wallrun(_w(Vector3(4.2, 0, f0 + 0.35)), _w(Vector3(5.6, 1.4, f0 - 3.2)), _w(Vector3(5.6, 1.4, f0 - 10.6)), _w(Vector3(2.0, 4.4, f0 - 14.4)))
+		r_wallrun(Vector3.ZERO, _w(Vector3(2.0, 4.4, f0 - 14.4)), _w(Vector3(2.0, 4.4, f0 - 19.6)), _w(Vector3(3.6, mcv.y, f0 - 27.4)), true, true)
+		_hop(pb, pb2)
+		_hop(pb2, merge, Vector3(3.6, 0, 0.6))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	_sign(Vector3(-3.5, 0, fc.z + 1.2), GOLD)
+	_sign(Vector3(3.6, 0, fc.z + 1.2), SKY_BLUE)
+	var yr: float = deg_to_rad(_yaw)
+	deco.colonnade(_w(Vector3(7.0, 1.2, f0 - 7.0)), OlympusDecor.turn(yr + PI * 0.5), 6, 2.2, 7.0, 0.4)
+	deco.statue(_w(Vector3(-13.0, -3.0, f0 - 12.0)), OlympusDecor.turn(yr + 0.5), 12.0, 2)
+	return cp["c"]
+
+
+# ---- stage 16: Gate of Dawn - crumbling steps, a short chariot hop, the longest leap, the porch mantle -------
+
+func _stage_16() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var c1: Dictionary = _crumb(_ahead(cp0, 0.86, 0.6, 1.5))
+	var c2: Dictionary = _crumb(_ahead(c1, 0.86, 0.0, 1.5, 0.4))
+	var d0: Dictionary = _blk(_ahead(c2, 0.86, 0.0, 3.0, -0.4), 3.0, 3.0, "alt", 0.6)
+	var d0c: Vector3 = d0["c"]
+	var f0: float = d0c.z - 1.5
+	var z0: float = f0 - 0.9 - 1.6
+	var z_end: float = z0 - 14.0
+	var d1c := Vector3(d0c.x, d0c.y, z_end - 1.6 - 1.0 - 1.5)
+	var d1: Dictionary = _blk(d1c, 3.0, 3.0, "alt", 0.6)
+	var car: OlympusChariot = _chariot(Vector3(d0c.x, d0c.y, z0), Vector3(2.8, 0.5, 3.2), Vector3(0, 0, -14.0), 11.0, 0.0, 0.3)
+	var far: Dictionary = _post(_ahead(d1, 0.88, 0.0, 1.2, 0.0))
+	var fz: Vector3 = far["c"]
+	var porch_top := Vector3(fz.x, fz.y + 3.3, fz.z - 0.6 - 1.4 - 1.3)
+	var porch: Dictionary = _ledge(porch_top, Vector3(3.0, 9.0, 2.6))
+	var p2: Dictionary = _post(_ahead(porch, 0.86, 0.0, 1.4, 0.4), 1.4, 1.4)
+	var cp: Dictionary = _cp(_ahead(p2, 0.86, 0.0, 5.0, -(p2["c"] as Vector3).x))
+	_hop(cp0, c1)
+	_hop(c1, c2)
+	_hop(c2, d0)
+	r_walk(_w(Vector3(d0c.x, d0c.y, f0 + 0.9)))
+	_wait(func() -> bool: return _mover_at(car, Vector3.ZERO, 0.2, 0.0, 2.4), _w(Vector3(d0c.x, d0c.y, f0 + 0.9)))
+	_board(_w(Vector3(d0c.x, d0c.y, f0 + 0.35)), car, _d(Vector3(0, 0.25, 0.9)), func() -> bool: return _mover_at(car, Vector3.ZERO, 0.2, 0.0, 1.6))
+	r_jump_from_ride(car, _home(car) + _d(Vector3(0, 0, -14.0)), 0.3, _w(d1c + Vector3(0, 0, 0.9)), true, Vector3(0, 0.25, 0) + _d(Vector3(0, 0, -1.0)))
+	_hop(d1, far)
+	r_mantle(_w(Vector3(fz.x, fz.y, fz.z - 0.3)), _w(porch_top + Vector3(0, 0, 0.3)))
+	_hop(porch, p2)
+	_hop(p2, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	_gate_dress(porch_top, 3.0, 9.0, 2.6)
+	var yr: float = deg_to_rad(_yaw)
+	deco.temple(_w(Vector3(-20.0, -2.0, d0c.z - 10.0)), OlympusDecor.turn(yr + 0.3), 6, 8, 5.5, true)
+	deco.statue(_w(Vector3(15.0, -1.0, d1c.z)), OlympusDecor.turn(yr - 0.4), 14.0, 1)
+	return cp["c"]
+
+
+# ---- stage 17: THE SUN TEMPLE STAIR - the set piece. Eight landings climb to the sun disc while four giant
+# statues turn and sweep their hand-mirrors' blades across the stair; the finish is the gate in the sun.
+
+var _finish_light: OmniLight3D
+
+
+## Dress a sun mirror as a giant statue: robed legs below, and a torso, head and outstretched arm
+## holding a gilded hand-mirror that turn with the blade (on the mirror's pivot).
+func _statue_mirror(m: OlympusMirror) -> void:
+	var marble: StandardMaterial3D = Look.flat(MARBLE, 0.5)
+	var gold: StandardMaterial3D = Look.flat(GOLD, 0.35, 0.5, 0.45)
+	m.add_child(Look.cylinder(1.0, 2.0, marble, Vector3(0, 1.0, 0), 0.75, 14))
+	m.add_child(Look.box(Vector3(2.4, 0.3, 2.4), Look.flat(Color(0.84, 0.76, 0.64), 0.7), Vector3(0, 0.15, 0)))
+	var p: Node3D = m.pivot
+	p.add_child(Look.cylinder(0.82, 2.0, marble, Vector3(0, 0.9, 0), 0.7, 14))
+	p.add_child(Look.cylinder(0.3, 0.5, marble, Vector3(0, 2.15, 0), -1.0, 10))
+	p.add_child(Look.sphere(0.5, marble, Vector3(0, 2.75, 0)))
+	p.add_child(Look.cylinder(0.52, 0.34, gold, Vector3(0, 3.0, 0), 0.46, 12))
+	p.add_child(Look.box(Vector3(0.12, 0.4, 0.8), gold, Vector3(0, 3.3, 0)))
+	p.add_child(Look.box(Vector3(2.1, 0.5, 0.6), marble, Vector3(0, 1.75, 0.0)))
+	var arm := Look.box(Vector3(0.38, 0.38, 2.7), marble, Vector3(0, 0.0, -1.75))
+	p.add_child(arm)
+	var disc := Look.cylinder(0.75, 0.1, Look.flat(Color(1.0, 0.95, 0.8), 0.1, 1.0, 0.5), Vector3(0, 0.1, -3.15), -1.0, 24)
+	disc.rotation.x = PI * 0.5
+	p.add_child(disc)
+	var rim := Look.cylinder(0.82, 0.08, gold, Vector3(0, 0.1, -3.1), -1.0, 24)
+	rim.rotation.x = PI * 0.5
+	p.add_child(rim)
+
+
+func _stage_17() -> void:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var lands: Array[Dictionary] = []
+	var prev: Dictionary = cp0
+	var pcts: Array[float] = [0.84, 0.86, 0.84, 0.86, 0.84, 0.86, 0.84, 0.86]
+	for i: int in 8:
+		var dx: float = 0.0 if i == 0 else (0.4 if i % 2 == 1 else -0.4)
+		prev = _blk(_ahead(prev, pcts[i], 1.0, 2.6, dx), 3.2, 2.6, "main", 0.8)
+		lands.append(prev)
+	var last: Vector3 = lands[7]["c"]
+	var fin: Dictionary = _blk(_ahead(lands[7], 0.84, 1.0, 6.0, -last.x), 6.0, 6.0, "goal", 1.0)
+	var fc: Vector3 = fin["c"]
+	kit.finish(_w(fc + Vector3(0, 0, -1.0)), _yaw)
+	_finish_pos = _w(fc + Vector3(0, 0, -1.0))
+	# four statues, each turning its hand-mirror's blade across two landings
+	var period: float = 6.6
+	var on_time: float = 1.5
+	var stat: Array[OlympusMirror] = []
+	var los: Array[float] = []
+	var his: Array[float] = []
+	for k: int in 4:
+		var a: Vector3 = lands[2 * k]["c"]
+		var b: Vector3 = lands[2 * k + 1]["c"]
+		var side: float = -1.0 if k % 2 == 0 else 1.0
+		var mid := Vector3(side * 5.6, (a.y + b.y) * 0.5, (a.z + b.z) * 0.5)
+		_blk(mid + Vector3(0, 0, 0), 2.8, 2.8, "alt", 0.8)
+		var lo: float = 0.1 + 0.82 * float(2 * k + 1) - 0.8
+		var hi: float = 0.1 + 0.82 * float(2 * k + 2) + 0.6 + SLACK
+		var m: OlympusMirror = _mirror(mid, 90.0 * (-side) + 42.0 * side, 90.0 * (-side) - 42.0 * side, period, on_time,
+			fposmod((on_time + 0.2 - lo) / period, 1.0), 8.5)
+		m.plain_head = false
+		m.head_h = 2.2
+		m.min_range = 3.3
+		m.beam_h = 3.6
+		m.half_width = 0.55
+		stat.append(m)
+		los.append(lo)
+		his.append(hi)
+	_wait(func() -> bool:
+		for k: int in 4:
+			if not _mirror_dark(stat[k], los[k], his[k]):
+				return false
+		return true)
+	var pv: Dictionary = cp0
+	for l: Dictionary in lands:
+		_hop(pv, l)
+		pv = l
+	_hop(pv, fin, Vector3(0, 0, 1.0))
+	r_walk(_w(fc + Vector3(0, 0, -1.0)))
+	# build the statues' bodies after the mirrors exist (they need their pivots)
+	for m2: OlympusMirror in stat:
+		_statue_mirror(m2)
+	# the temple at the top: the great sun disc rising behind a colonnade, braziers up the stair
+	var yr: float = deg_to_rad(_yaw)
+	deco.sun_disc(_w(fc + Vector3(0, 11.0, -9.0)), OlympusDecor.turn(yr + PI), 9.0, 24)
+	deco.temple(_w(fc + Vector3(0, -0.2, -8.0)), OlympusDecor.turn(yr), 6, 5, 7.0, true)
+	OlympusFx.halo(self, _w(fc + Vector3(0, 11.0, -8.5)), 10.5, 90, GOLD, Vector3(0, 0, 1))
+	OlympusFx.motes(self, _w(fc + Vector3(0, 5.0, -2.0)), _sz(Vector3(8.0, 6.0, 8.0)), 80)
+	for l2: Dictionary in lands:
+		var lc: Vector3 = l2["c"]
+		deco.brazier(_w(lc + Vector3(-1.4, 0, 0.3)), 0.7)
+		deco.brazier(_w(lc + Vector3(1.4, 0, 0.3)), 0.7)
+	_finish_light = OmniLight3D.new()
+	_finish_light.light_color = Color(1.0, 0.82, 0.5)
+	_finish_light.light_energy = 2.0
+	_finish_light.omni_range = 18.0
+	_finish_light.position = _finish_pos + Vector3(0, 5.0, 0)
+	add_child(_finish_light)
+	for k2: int in 4:
+		deco.statue(_w(Vector3((-1.0 if k2 % 2 == 0 else 1.0) * 16.0, lands[k2 * 2]["c"].y - 3.0, lands[k2 * 2]["c"].z)), OlympusDecor.turn(yr + 0.3 * float(k2)), 12.0, 1)
+
+
+# ---- live effects -----------------------------------------------------------------------------------
+
+## The sun blazes: gold and light fountain out of the disc over the gate.
+func _finish_sequence() -> void:
+	var cols: Array[Color] = [GOLD, Color(1.0, 0.95, 0.8), SKY_BLUE, GOLD, Color(1.0, 0.95, 0.8)]
+	for i: int in cols.size():
+		var fw: GPUParticles3D = OlympusFx.finale(cols[i], 80)
+		fw.position = _finish_pos + Vector3(-6.0 + 3.0 * float(i), 6.0 + float(i % 2) * 3.0, -2.0)
+		add_child(fw)
+		fw.restart()
+		fw.emitting = true
+	var fx: Array[GPUParticles3D] = OlympusFx.cp_burst(GOLD)
+	for p2: GPUParticles3D in fx:
+		p2.position = _finish_pos + Vector3(0, 0.6, 0)
+		add_child(p2)
+		p2.restart()
+		p2.emitting = true
+	# SOUND: olympus_finish - the sun temple opens: a swell of brass and choir
+	WorldAudio.at(self, "olympus_finish", _finish_pos + Vector3(0, 3.0, 0), 1.0, 120.0)
+	if _finish_light != null:
+		_finish_light.light_energy = 9.0
+		var tw: Tween = create_tween()
+		tw.tween_property(_finish_light, "light_energy", 2.0, 1.6)
+	await get_tree().create_timer(0.9).timeout
 
 
 # ---- environment ----------------------------------------------------------------------------------
