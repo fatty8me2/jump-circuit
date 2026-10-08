@@ -158,6 +158,33 @@ func _ahead(a: Dictionary, pct: float, dy: float, sz: float, dx: float = 0.0) ->
 	return Vector3(ac.x + dx, ac.y + dy, front + 0.35 - e - sz * 0.5)
 
 
+## The mirror of _ahead: the local top centre of a platform `sz` deep BEHIND block `b` (further +z) from
+## which a jump needs `pct` of max reach to land on `b`'s near edge; `dy` = b's height minus the platform's.
+func _behind(b: Dictionary, pct: float, dy: float, sz: float, dx: float = 0.0) -> Vector3:
+	var bc: Vector3 = b["c"]
+	var near: float = bc.z + float(b["hz"])
+	var m: float = pct * _reach(dy)
+	var k: int = ceili((m - 0.4) / 0.2 - 0.001)
+	var e: float = float(k) * 0.2 - 0.03
+	return Vector3(bc.x + dx, bc.y - dy, near + e - 0.35 + sz * 0.5)
+
+
+## Stepping stones laid evenly along local -z from `a`'s front edge to `b`'s near edge: `n` stones, each
+## `sz` square, all at b's height... (dy spread evenly), returned in order.
+func _stones(a: Dictionary, b: Dictionary, n: int, sz: float = 1.2, style: String = "accent") -> Array[Dictionary]:
+	var ac: Vector3 = a["c"]
+	var bc: Vector3 = b["c"]
+	var z0: float = ac.z - float(a["hz"])
+	var z1: float = bc.z + float(b["hz"])
+	var gap: float = (z0 - z1 - float(n) * sz) / float(n + 1)
+	var out: Array[Dictionary] = []
+	for i: int in n:
+		var z: float = z0 - gap * float(i + 1) - sz * (float(i) + 0.5)
+		var t: float = float(i + 1) / float(n + 1)
+		out.append(_post(Vector3(lerpf(ac.x, bc.x, t), lerpf(ac.y, bc.y, t), z), sz, sz, style))
+	return out
+
+
 ## Checkpoint slab facing the next stage's heading (_next_yaw), with a banner and two braziers.
 func _cp(c: Vector3, size: float = 5.0) -> Dictionary:
 	var d: Dictionary = _blk(c, size, size, "main", 1.2)

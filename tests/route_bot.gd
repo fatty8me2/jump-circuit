@@ -76,9 +76,17 @@ func _begin_step() -> void:
 	player.cmd_jump = false
 
 
+var _pause_left: float = 0.0  # TEMP-PAUSE
+
+
 func _physics_process(dt: float) -> void:
 	if level == null or done or stuck:
 		return
+	if _pause_left > 0.0:  # TEMP-PAUSE
+		_pause_left -= dt  # TEMP-PAUSE
+		player.cmd_move = Vector2.ZERO  # TEMP-PAUSE
+		player.cmd_jump = false  # TEMP-PAUSE
+		return  # TEMP-PAUSE
 	if not keep_camera:
 		player.camera_yaw = 0.0
 	if level.finished:
@@ -149,6 +157,8 @@ func _physics_process(dt: float) -> void:
 
 
 func _next() -> void:
+	if step_index < level.route.size() and str(level.route[step_index]["kind"]) in ["b_wait", "wait", "x_wait", "c_wait", "checkpoint"]:  # TEMP-PAUSE
+		_pause_left = float(OS.get_environment("BOT_PAUSE"))  # TEMP-PAUSE
 	step_index += 1
 	_begin_step()
 
