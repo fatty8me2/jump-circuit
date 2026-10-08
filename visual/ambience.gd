@@ -704,10 +704,29 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 			]
 		"siege":
 			return [
-				# PLACEHOLDER - the Castle Siege level agent replaces this case (near / mid / far layers)
-				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
-					"color": Color(0.85, 0.20, 0.15), "speed": Vector2(0.05, 0.3), "spread": 180.0,
-					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# near: embers lifting off the fires and drifting downwind, and grey ash sifting down
+				{"depth": "near", "amount": 110, "lifetime": 2.6, "tex": Fx.Tex.DOT, "size": 0.07,
+					"pick": PackedColorArray([Color(3.0, 1.2, 0.3), Color(2.8, 0.8, 0.2), Color(3.0, 2.0, 0.7)]),
+					"dir": Vector3(0.35, 1, 0.1), "spread": 35.0, "speed": Vector2(0.5, 1.6), "gravity": Vector3(0.45, 0.3, 0.1),
+					"turbulence": 1.0, "turbulence_scale": 3.0, "curve": "pop"},
+				{"depth": "near", "amount": 80, "lifetime": 3.5, "tex": Fx.Tex.DOT, "additive": false, "size": 0.05,
+					"color": Color(0.5, 0.46, 0.44, 0.8), "speed": Vector2(0.1, 0.4), "dir": Vector3(0.4, -0.5, 0.1),
+					"spread": 60.0, "gravity": Vector3(0.3, -0.2, 0), "turbulence": 0.7, "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# mid: drifting smoke lit orange from below, and streaks of fire arrows far off
+				{"depth": "mid", "amount": 36, "lifetime": 6.5, "tex": Fx.Tex.SMOKE, "additive": false, "size": 3.6,
+					"pick": PackedColorArray([Color(0.28, 0.14, 0.1, 0.2), Color(0.22, 0.17, 0.16, 0.18), Color(0.4, 0.18, 0.1, 0.2)]),
+					"dir": Vector3(0.7, 0.35, 0.2), "spread": 25.0, "speed": Vector2(0.7, 1.7), "angle": Vector2(0, 360),
+					"spin": Vector2(-15, 15), "curve": "puff", "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 14, "lifetime": 1.6, "facing": "velocity", "tex": Fx.Tex.SPARK, "size": Vector2(0.04, 0.9),
+					"color": Color(3.0, 1.6, 0.5), "dir": Vector3(0.1, -1, -0.5), "spread": 8.0, "speed": Vector2(14.0, 22.0),
+					"fade": PackedFloat32Array([0.0, 1.0, 0.0])},
+				# far: great black veils of smoke and the glow of burning camps smeared into embers
+				{"depth": "far", "amount": 45, "lifetime": 9.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 18.0,
+					"radius": 85.0, "color": Color(0.12, 0.08, 0.08, 0.34), "speed": Vector2(1.0, 2.6), "dir": Vector3(0.6, 0.5, 0.2),
+					"spread": 15.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 70, "lifetime": 6.0, "tex": Fx.Tex.DOT, "size": 1.3, "radius": 95.0,
+					"pick": PackedColorArray([Color(2.6, 0.8, 0.2, 0.4), Color(2.2, 0.4, 0.1, 0.35), Color(2.8, 1.5, 0.5, 0.35)]),
+					"dir": Vector3.UP, "spread": 30.0, "speed": Vector2(0.4, 1.4), "curve": "pop"},
 			]
 		"ascent":
 			return [

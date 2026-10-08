@@ -6717,3 +6717,50 @@ func test_zk_gallery() -> void:
 	await seconds(2.6)
 	lvl.player.cmd_move = Vector2.ZERO
 	check(lvl.player.global_position.x < 40.0 and lvl.player.grounded and lvl.deaths == 0, "and you can walk back over the join to the playground (x %.1f)" % lvl.player.global_position.x)
+
+
+# ---- Castle Siege (world-siege): its mechanics, tells and the machines it must contain -----------------
+
+func test_zsg_siege_level_contents() -> void:
+	var lvl: LevelBase = await load_level(29)
+	check(lvl.theme_id == "siege" and lvl.checkpoints.size() == 14, "Castle Siege has 14 checkpoints (%d)" % lvl.checkpoints.size())
+	var counts: Dictionary = {}
+	for k: String in ["SiegeBoulder", "SiegeRam", "SiegeOil", "SiegeVolley", "SiegeTrebuchet", "LaserGate", "Piston", "Crusher", "WarpPortal",
+			"Drawbridge", "GapWall", "SpinHammer", "FallingBlock", "CannonBattery", "LaunchBarrel", "WallRunPanel", "LedgeBlock"]:
+		counts[k] = lvl.find_children("*", k, true, false).size()
+	check(int(counts["SiegeBoulder"]) >= 6 and int(counts["SiegeRam"]) >= 1 and int(counts["SiegeOil"]) >= 1 and int(counts["SiegeVolley"]) >= 3, "the four siege mechanics are all in the course %s" % str(counts))
+	check(int(counts["LaserGate"]) >= 1 and int(counts["Piston"]) >= 1 and int(counts["Crusher"]) >= 1 and int(counts["WarpPortal"]) >= 1, "all four machines are in the course")
+	var kit_kinds: int = 0
+	for k: String in ["Drawbridge", "GapWall", "SpinHammer", "FallingBlock", "CannonBattery", "LaunchBarrel"]:
+		if int(counts[k]) > 0:
+			kit_kinds += 1
+	check(kit_kinds >= 3, "at least three kit obstacles are used (%d)" % kit_kinds)
+	check(int(counts["WallRunPanel"]) >= 3 and int(counts["LedgeBlock"]) >= 3, "at least 3 wall runs and 3 mantles")
+	check(lvl.route_variants == 3, "three route variants (main, branches, shortcuts)")
+
+
+func test_zsg_siege_tells_and_clock() -> void:
+	var lvl: LevelBase = await load_level(29)
+	var ok_tell: bool = true
+	for n: Node in lvl.find_children("*", "SiegeBoulder", true, false):
+		var b: SiegeBoulder = n as SiegeBoulder
+		ok_tell = ok_tell and b.warn >= 0.8
+		# deadly exactly at the impact instant, clear a moment later, and the prediction agrees
+		var t0: float = (1.0 - b.phase) * b.period
+		check(b.is_deadly_at(t0 + 0.05) and not b.is_deadly_at(t0 + b.deadly + 0.2), "a boulder is deadly only for its short impact window")
+		check(not b.is_clear_between(t0 - 1.0, 0.8, 1.2) and b.is_clear_between(t0 + 0.6, 0.0, 1.0), "boulder clear-window prediction matches the clock")
+		break
+	for n: Node in lvl.find_children("*", "SiegeBoulder", true, false):
+		ok_tell = ok_tell and (n as SiegeBoulder).warn >= 0.8
+	for n: Node in lvl.find_children("*", "SiegeVolley", true, false):
+		ok_tell = ok_tell and (n as SiegeVolley).warn >= 0.8
+	for n: Node in lvl.find_children("*", "SiegeOil", true, false):
+		ok_tell = ok_tell and (n as SiegeOil).tilt_time >= 0.8
+	for n: Node in lvl.find_children("*", "LaserGate", true, false):
+		ok_tell = ok_tell and (n as LaserGate).warn >= 0.8
+	check(ok_tell, "every siege hazard and flame gate shows its tell for 0.8 s or more")
+	var oil: SiegeOil = lvl.find_children("*", "SiegeOil", true, false)[0] as SiegeOil
+	check(not oil.covers(2.9, 0.1) and oil.covers(2.9, (oil.tilt_time + 3.0 / oil.speed) + 0.2), "the oil tongue reaches a lane point only after its tilt and run")
+	var ram: SiegeRam = lvl.find_children("*", "SiegeRam", true, false)[0] as SiegeRam
+	var t_mid: float = (0.5 - ram.phase) * ram.period
+	check(not ram.clear_at(t_mid, 0.0) and ram.clear_at(t_mid + ram.period * 0.25, 0.0), "the ram crosses the lane centre at the middle of its swing and is clear at the ends")
