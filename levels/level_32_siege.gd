@@ -13,12 +13,14 @@ extends LevelBase
 ##
 ##  1 The Camp          four stakes-top posts, a timber beam, MANTLE the palisade gate
 ##  2 The Moat          two piers, the DRAWBRIDGE (kit) over the moat, a cratered apron under a BOULDER
+##                      [shortcut: a lone 1 m stone beside the bridge, a 92-94% leap, skips the bridge's clock]
 ##  3 Boulder Field    a post, the 16 m causeway under two BOULDERS and the barbican GAP WALL (kit),
 ##                      WALL RUN the siege-tower hoarding
 ##  4 The Gatehouse     BRANCH: a 12 m beam under two ARROW VOLLEYS | a court under BOILING OIL + MANTLE
 ##                      [shortcut: arrow-slit stones across the middle]
 ##  5 Siege Tower       board the SIEGE TOWER (it rides you up the wall), leap onto the battlements
-##                      through an ARROW VOLLEY
+##                      through an ARROW VOLLEY [shortcut: three chained WALL RUNS up the wall's buttresses
+##                      skip the tower's clock and the volley]
 ##  6 The Wall-Walk     four merlons and a 12 m walk under the swinging BATTERING RAM
 ##  7 Portcullis Row    the walk under two falling PORTCULLISES (crushers), MANTLE under the third
 ##  8 Bailey Gate       BRANCH: the BALLISTA RAMS (pistons) shoot across the beam | WALL RUN the hall
@@ -30,6 +32,7 @@ extends LevelBase
 ## 12 Crumbling Stair   six CRUMBLING steps under an ARROW VOLLEY [shortcut: a 4.1 m MANTLE up the
 ##                      buttress, then its narrow cornice]
 ## 13 The Windlass      board the turning WINDLASS wheel (spinner), leap off to the stones
+##                      [shortcut: a 4.1 m MANTLE up the buttress and a 20 m narrow cornice skip the wheel]
 ## 14 Keep Gate         three stones under staggered BOULDERS (the wave follows a running player),
 ##                      MANTLE the keep's plinth
 ## 15 THE TREBUCHET     SET PIECE: step into the sling basket; the arm swings after its tell and
@@ -401,11 +404,18 @@ func _stage_2() -> Vector3:
 	var fc: Vector3 = far["c"]
 	var ring: SiegeBoulder = _boulder(Vector3(fc.x, fc.y, fc.z), 1.9, 4.6, 0.3)
 	var cp: Dictionary = _cp(_ahead(far, 0.86, 0.0, 5.0, -fc.x))
+	# SHORTCUT: a lone 1 m stone in the moat beside the bridge; a 95% leap to it (skip the bridge's clock)
+	var ss: Dictionary = _post(_ahead(ap, 0.92, 0.0, 1.0, 2.5), 1.0, 1.0, "accent")
 	_hop(cp0, m1)
 	_hop(m1, m2)
 	_hop(m2, ap)
-	r_walk(_w(Vector3(ac.x, ac.y, hinge_z + 1.2)))
-	_wait(func() -> bool: return bridge.is_down_for(Game.course_time, 1.6 + 1.5), _w(Vector3(ac.x, ac.y, hinge_z + 1.2)))
+	if route_variant == 2:
+		r_walk(_w(Vector3(ac.x + 1.9, ac.y, hinge_z + 2.0)))
+		r_jump(_w(Vector3(ac.x + 1.9, ac.y, hinge_z + 0.35)), _w(ss["c"]))
+		_hop(ss, far, Vector3(1.6, 0, 3.0))
+	else:
+		r_walk(_w(Vector3(ac.x, ac.y, hinge_z + 1.2)))
+		_wait(func() -> bool: return bridge.is_down_for(Game.course_time, 1.6 + 1.5), _w(Vector3(ac.x, ac.y, hinge_z + 1.2)))
 	r_walk(_w(Vector3(fc.x, fc.y, fc.z + 3.2)))
 	# the ring: the bot reaches it about 0.3 s after stepping off the deck and is through in under a second
 	_wait(func() -> bool: return ring.is_clear_between(Game.course_time, 0.0, 1.4 + 1.5), _w(Vector3(fc.x, fc.y, fc.z + 3.2)))
@@ -598,15 +608,36 @@ func _stage_5() -> Vector3:
 	vol.position = _w(Vector3(dc.x, t1.y, near - 4.2))
 	add_child(vol)
 	var cp: Dictionary = _cp(_ahead(wallp, 0.86, 0.0, 5.0, -dc.x))
-	_hop(cp0, dock)
-	r_walk(_w(Vector3(dc.x, dc.y, zf + 0.6)))
-	r_wait(tower, _w(t0 - Vector3(0, 0.25, 0)), 0.3)
-	r_jump_onto(_w(Vector3(dc.x, dc.y, zf + 0.35)), tower, Vector3(0, 0.2, 0))
-	r_jump_from_ride(tower, _w(t1 - Vector3(0, 0.25, 0)), 0.5, _w(Vector3(dc.x, t1.y, near - 2.2)))
-	r_walk(_w(Vector3(dc.x, t1.y, near - 1.2)))
-	_wait(func() -> bool: return vol.is_clear_between(Game.course_time, 0.1, 1.0 + 1.5), _w(Vector3(dc.x, t1.y, near - 1.2)))
-	r_walk(_w(Vector3(dc.x, t1.y, near - 7.3)))
-	_hop(wallp, cp, Vector3(0, 0, 1.2))
+	# SHORTCUT: a side stage, then three chained wall runs up the wall's buttresses to a parapet, and a stone back to the checkpoint
+	var ssp: Dictionary = _blk(Vector3(dc.x + 7.0, dc.y, dc.z), 3.0, 3.0)
+	var sx0: float = dc.x + 7.0
+	var zb: float = dc.z - 1.5
+	var y0: float = dc.y
+	_chim(sx0 + 2.3, 1.0, y0 + 1.2, zb - 3.1, zb - 9.6)
+	_chim(sx0 - 2.3, -1.0, y0 + 6.0, zb - 8.1, zb - 16.1)
+	_chim(sx0 + 2.3, 1.0, y0 + 9.0, zb - 14.1, zb - 22.1)
+	var par_c := Vector3(sx0 - 0.75, y0 + 11.9, zb - 25.6)
+	var par: Dictionary = _ledge(par_c, Vector3(6.5, 14.0, 4.0), "alt")
+	var ps: Dictionary = _post(_ahead(par, 0.88, -1.9, 1.3, 3.5 - par_c.x))
+	if route_variant == 2:
+		_hop(cp0, dock)
+		_hop(dock, ssp)
+		r_walk(_w(Vector3(sx0 + 0.5, y0, zb + 0.45)))
+		r_wallrun(_w(Vector3(sx0 + 0.5, y0, zb + 0.45)), _w(Vector3(sx0 + 1.7, y0 + 1.4, zb - 4.2)), _w(Vector3(sx0 + 1.7, y0 + 1.4, zb - 7.1)), _w(Vector3(sx0 - 1.7, y0 + 5.5, zb - 11.0)))
+		r_wallrun(Vector3.ZERO, _w(Vector3(sx0 - 1.7, y0 + 5.5, zb - 11.0)), _w(Vector3(sx0 - 1.7, y0 + 5.5, zb - 14.0)), _w(Vector3(sx0 + 1.7, y0 + 8.5, zb - 17.6)), true, true)
+		r_wallrun(Vector3.ZERO, _w(Vector3(sx0 + 1.7, y0 + 8.5, zb - 17.6)), _w(Vector3(sx0 + 1.7, y0 + 8.5, zb - 19.0)), _w(Vector3(sx0 - 0.75, y0 + 11.9, zb - 24.2)), true, true)
+		_hop(par, ps)
+		_hop(ps, cp, Vector3(1.6, 0, 1.2))
+	else:
+		_hop(cp0, dock)
+		r_walk(_w(Vector3(dc.x, dc.y, zf + 0.6)))
+		r_wait(tower, _w(t0 - Vector3(0, 0.25, 0)), 0.3)
+		r_jump_onto(_w(Vector3(dc.x, dc.y, zf + 0.35)), tower, Vector3(0, 0.2, 0))
+		r_jump_from_ride(tower, _w(t1 - Vector3(0, 0.25, 0)), 0.5, _w(Vector3(dc.x, t1.y, near - 2.2)))
+		r_walk(_w(Vector3(dc.x, t1.y, near - 1.2)))
+		_wait(func() -> bool: return vol.is_clear_between(Game.course_time, 0.1, 1.0 + 1.5), _w(Vector3(dc.x, t1.y, near - 1.2)))
+		r_walk(_w(Vector3(dc.x, t1.y, near - 7.3)))
+		_hop(wallp, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	# the outer wall the tower is wheeled up to: a long curtain wall with a tower either side
 	var yr: float = deg_to_rad(_yaw)
@@ -615,6 +646,13 @@ func _stage_5() -> Vector3:
 	deco.tower(_w(Vector3(dc.x + 9.0, t1.y - 28.0, near + 4.0)), 5.0, 32.0, true)
 	deco.brazier(_w(Vector3(dc.x - 1.8, dc.y, dc.z + 1.6)), 1.0)
 	return cp["c"]
+
+
+## One wall-run panel of the buttress chimney (local centre x / y, z span) with the stone of the wall
+## behind it on side `side` (+1 / -1).
+func _chim(x: float, side: float, y: float, z0: float, z1: float, height: float = 7.0) -> void:
+	kit.wallrun(_w(Vector3(x, y, (z0 + z1) * 0.5)), Vector3(absf(z0 - z1), height, 0.5), _yaw + 90.0)
+	add_child(Look.box(_sz(Vector3(0.9, height + 1.0, absf(z0 - z1) + 0.4)), Look.flat(STONE, 0.92), _w(Vector3(x + side * 0.7, y, (z0 + z1) * 0.5))))
 
 
 ## The siege tower under its deck: timber legs, rungs and cross-braces down into the smoke, wheels at
@@ -1072,21 +1110,32 @@ func _stage_13() -> Vector3:
 	var top := Vector3(p3c.x, p3c.y + 3.3, p3c.z - 0.6 - 1.4 - 1.0)
 	var ld: Dictionary = _ledge(top, Vector3(2.8, 9.0, 2.0))
 	var cp: Dictionary = _cp(_ahead(ld, 0.85, 0.0, 5.0, -p3c.x))
+	# SHORTCUT: a max-height buttress beside the checkpoint (4.1 m mantle) and a narrow cornice that runs alongside the plinth
+	var col: Dictionary = _ledge(Vector3(2.6, 4.1, -2.5 - 0.9), Vector3(1.4, 12.0, 1.8), "accent")
+	var cor_front: float = top.z
+	var cor_near: float = -2.5 - 1.8
+	var cornice: Dictionary = _blk(Vector3(2.6, 4.1, (cor_near + cor_front) * 0.5), 1.0, cor_near - cor_front, "accent", 0.5)
 	var tips: Array = [Vector3(6.2, 0.25, 0), Vector3(-6.2, 0.25, 0), Vector3(0, 0.25, 6.2), Vector3(0, 0.25, -6.2)]
-	r_walk(_w(Vector3(-1.8, 0, -2.2)))
-	route.append({"kind": "x_jump", "from": _w(Vector3(-1.8, 0, -2.2)), "to_node": board, "to_locals": tips, "reach": 3.2, "lead": 0.55})
-	var hw: Vector3 = _w(hub)
-	var ex: Vector3 = _w(m["c"]) - hw
-	ex = Vector3(ex.x, 0, ex.z).normalized()
-	var sgn: float = signf(board.period)
-	route.append({"kind": "h_jump", "to": _w(m["c"]), "test": func() -> bool:
-		var rel: Vector3 = player.global_position - hw
-		rel = Vector3(rel.x, 0, rel.z).normalized()
-		var a: float = rad_to_deg(atan2(rel.cross(ex).y, rel.dot(ex))) * sgn
-		return a >= 8.0 and a <= 22.0})
-	_hop(m, p2)
-	_hop(p2, p3)
-	r_mantle(_w(Vector3(p3c.x, p3c.y, p3c.z - 0.3)), _w(top + Vector3(0, 0, 0.3)))
+	if route_variant == 2:
+		r_walk(_w(Vector3(2.6, 0, -1.6)))
+		r_mantle(_w(Vector3(2.6, 0, -2.5 + 0.25)), _w(Vector3(2.6, 4.1, -2.5 - 1.0)))
+		r_walk(_w(Vector3(2.6, 4.1, cor_front + 0.9)))
+		r_jump(_w(Vector3(2.6, 4.1, cor_front + 0.35)), _w(top + Vector3(0, 0, 0.3)))
+	else:
+		r_walk(_w(Vector3(-1.8, 0, -2.2)))
+		route.append({"kind": "x_jump", "from": _w(Vector3(-1.8, 0, -2.2)), "to_node": board, "to_locals": tips, "reach": 3.2, "lead": 0.55})
+		var hw: Vector3 = _w(hub)
+		var ex: Vector3 = _w(m["c"]) - hw
+		ex = Vector3(ex.x, 0, ex.z).normalized()
+		var sgn: float = signf(board.period)
+		route.append({"kind": "h_jump", "to": _w(m["c"]), "test": func() -> bool:
+			var rel: Vector3 = player.global_position - hw
+			rel = Vector3(rel.x, 0, rel.z).normalized()
+			var a: float = rad_to_deg(atan2(rel.cross(ex).y, rel.dot(ex))) * sgn
+			return a >= 8.0 and a <= 22.0})
+		_hop(m, p2)
+		_hop(p2, p3)
+		r_mantle(_w(Vector3(p3c.x, p3c.y, p3c.z - 0.3)), _w(top + Vector3(0, 0, 0.3)))
 	_hop(ld, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	_windlass_dress(board, arms)
