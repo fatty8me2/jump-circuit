@@ -12,6 +12,7 @@ extends LevelBase
 ##  4 Dewdrop Valley     BRANCH: stepping leaves under two DEWDROPS | the DEW-LEAF SLIDE
 ##                       [shortcut: two springcaps straight down the middle]
 ##  5 Snail Ferry        board the SNAIL and ride it over the stream
+##                       [shortcut: two springcaps throw you across, 91% hop onto the first, hearts only]
 ##  6 Spore Lift         two PUFFBALLS: wait for the spores to blow, ride the cloud up to the ledge
 ##  7 Fairy Ring         BRANCH: two chained bark WALL RUNS | the FAIRY RING (portal) up to a long branch
 ##                       [shortcut: a little ring on a cap by the fork]
@@ -24,6 +25,7 @@ extends LevelBase
 ## 13 Ant Highway        two stepping stones under dewdrops [shortcut: WALL RUN the bark]
 ## 14 Dew Garden         a spore lift, then leaves under a dewdrop
 ## 15 Ladybird Lane      two LADYBIRDS ferry you over the gaps
+##                       [shortcut: five springcaps down the lane beside them, hearts only]
 ## 16 Root Flare         two MANTLES up the roots at the foot of the great toadstool
 ## 17 The Lower Gills    SPIRAL of bracket shelves up the great toadstool's stalk
 ## 18 THE GREAT TOADSTOOL  SET PIECE: climb the gills while the dew weeps down them in a wave behind you,
@@ -604,12 +606,23 @@ func _stage_5() -> Vector3:
 	var d2c := Vector3(dc.x, dc.y, start.z - travel - 1.4 - 1.4 - 2.0)
 	var d2: Dictionary = _blk(d2c, 4.0, 4.0, "alt", 0.8)
 	var cp: Dictionary = _cp(_ahead(d2, 0.76, 0.0, 5.0))
+	# SHORTCUT: two springcaps beside the snail's twig throw you across the whole stream (heart landings only)
+	var sx5: float = 6.0
+	var sa := Vector3(dc.x + sx5, dc.y, dc.z - 7.2)
+	var sb := Vector3(dc.x + sx5, dc.y, (sa.z + d2c.z) * 0.5)
+	var sp5: Array[Vector3] = [sa, sb]
+	var sr5: Array[float] = [1.6, 1.3]
+	var sc5: Array[Color] = [RED, YELLOW]
+	_spring_line(sp5, d2c, sr5, sc5)
 	_hop(cp0, d1)
-	r_walk(_w(Vector3(dc.x, dc.y, dc.z - 0.2)))
-	route.append({"kind": "candy_board", "from": _w(Vector3(dc.x, dc.y, dc.z - 1.5)), "cars": [snail], "reach": 3.4, "lead": 0.45, "local": Vector3(0, 0.1, 0)})
-	var end_w: Vector3 = _w(start + Vector3(0, 0, -travel))
-	route.append({"kind": "candy_ride", "stand": Vector3(0, 0.1, 0), "to": _w(d2c), "until": func() -> bool:
-		return Vector2(snail.global_position.x - end_w.x, snail.global_position.z - end_w.z).length() < 0.35})
+	if route_variant == 2:
+		_run_springs(d1, sp5, d2c, 1.6)
+	else:
+		r_walk(_w(Vector3(dc.x, dc.y, dc.z - 0.2)))
+		route.append({"kind": "candy_board", "from": _w(Vector3(dc.x, dc.y, dc.z - 1.5)), "cars": [snail], "reach": 3.4, "lead": 0.45, "local": Vector3(0, 0.1, 0)})
+		var end_w: Vector3 = _w(start + Vector3(0, 0, -travel))
+		route.append({"kind": "candy_ride", "stand": Vector3(0, 0.1, 0), "to": _w(d2c), "until": func() -> bool:
+			return Vector2(snail.global_position.x - end_w.x, snail.global_position.z - end_w.z).length() < 0.35})
 	r_walk(_w(Vector3(d2c.x, d2c.y, d2c.z - 1.0)))
 	_hop(d2, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
@@ -1236,11 +1249,25 @@ func _stage_15() -> Vector3:
 	var d2c := Vector3(dc.x, dc.y, s2.z - travel - 1.5 - 1.2 - 2.0)
 	var d2: Dictionary = _blk(d2c, 4.0, 4.0, "alt", 0.8)
 	var cp: Dictionary = _cp(_ahead(d2, 0.76, 0.0, 5.0))
+	# SHORTCUT: four springcaps down the lane beside the ladybirds, land in the heart each time
+	var sx15: float = 6.5
+	var z0: float = dc.z - 6.6
+	var step: float = (z0 - d2c.z) / 5.0
+	var sp15: Array[Vector3] = []
+	var sr15: Array[float] = []
+	for i: int in 5:
+		sp15.append(Vector3(dc.x + sx15, dc.y, z0 - step * float(i)))
+		sr15.append(1.6 if i % 2 == 0 else 1.3)
+	var sc15: Array[Color] = [ORANGE, RED, YELLOW, PINKCAP, ORANGE]
+	_spring_line(sp15, d2c, sr15, sc15)
 	_hop(cp0, d1)
-	r_walk(_w(Vector3(dc.x, dc.y, dc.z + 0.0)))
-	_ride(lb1, Vector3(dc.x, dc.y, dc.z - 0.6), s1, travel, isl_c)
-	r_walk(_w(Vector3(isl_c.x, isl_c.y, isl_c.z + 0.6)))
-	_ride(lb2, Vector3(isl_c.x, isl_c.y, isl_c.z - 0.6), s2, travel, d2c)
+	if route_variant == 2:
+		_run_springs(d1, sp15, d2c, 1.6)
+	else:
+		r_walk(_w(Vector3(dc.x, dc.y, dc.z + 0.0)))
+		_ride(lb1, Vector3(dc.x, dc.y, dc.z - 0.6), s1, travel, isl_c)
+		r_walk(_w(Vector3(isl_c.x, isl_c.y, isl_c.z + 0.6)))
+		_ride(lb2, Vector3(isl_c.x, isl_c.y, isl_c.z - 0.6), s2, travel, d2c)
 	r_walk(_w(Vector3(d2c.x, d2c.y, d2c.z - 1.0)))
 	_hop(d2, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
@@ -1471,6 +1498,34 @@ func _stage_18() -> void:
 	FungalFx.halo(self, fin_w + Vector3(0, 1.0, 0), 4.5, 40, GOLD)
 	FungalFx.petals(self, fin_w + Vector3(0, 6.0, 0), Vector3(10, 4, 10), 30)
 	FungalFx.spores(self, fin_w + Vector3(0, 1.0, 0), 5.0, 30, Color(1.0, 0.9, 0.6))
+
+
+# ---- SHORTCUT helpers: a line of springcaps (land in the gold heart or you fall short) ---------------------------------
+
+## Build springcaps at the local points `pts` (each launches toward the next point, the last toward `final`), their
+## strengths solved so a landing in the heart comes down on the next one. Returns nothing; see _run_springs.
+func _spring_line(pts: Array[Vector3], final: Vector3, radii: Array[float], cols: Array[Color]) -> void:
+	for i: int in pts.size():
+		var nxt: Vector3 = pts[i + 1] if i + 1 < pts.size() else final
+		var dist: float = Vector2(nxt.x - pts[i].x, nxt.z - pts[i].z).length()
+		var sp: float = _solve_strength(nxt.y - pts[i].y, dist)
+		var cap: FungalCap = _spring_cap(pts[i], radii[i], cols[i % cols.size()])
+		cap.high = sp
+		cap.low = sp - 7.0
+
+
+## Bot: hop from `from_area` onto the first springcap, then bounce cap to cap and out to `final`.
+func _run_springs(from_area: Dictionary, pts: Array[Vector3], final: Vector3, r0: float) -> void:
+	_hop(from_area, _area(pts[0], r0, r0))
+	for i: int in pts.size():
+		r_pad(_w(pts[i]), _w(pts[i + 1] if i + 1 < pts.size() else final))
+
+
+## % of max reach the hop from `a` onto a round landing of radius `r` at `c` needs (the validator's measure).
+func _hop_pct(a: Dictionary, c: Vector3, r: float) -> float:
+	var t: Vector3 = _edge(a, c)
+	var d: float = Vector2(c.x - t.x, c.z - t.z).length() - r + 0.4
+	return d / _reach(c.y - t.y)
 
 # @@STAGES@@
 
