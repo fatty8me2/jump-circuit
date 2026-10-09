@@ -56,6 +56,13 @@ const ITEMS: Dictionary = {
 	"tornado": {"name": "Tornado", "desc": "Releases a tornado that wanders up the course flinging rivals.", "color": Color(0.7, 0.85, 0.9)},
 	"gravity": {"name": "Gravity Bomb", "desc": "Thrown. Rivals caught in the blast float helplessly.", "color": Color(0.65, 0.35, 1.0)},
 	"ice": {"name": "Ice Beam", "desc": "Freezes the rival in front of you in a block of ice.", "color": Color(0.55, 0.9, 1.0)},
+	"homing": {"name": "Homing Shell", "desc": "A shell that chases the racer ahead of you along the course and spins them out.", "color": Color(0.4, 1.0, 0.45)},
+	"strike": {"name": "Leader Strike", "desc": "Calls an orbital strike on whoever is in 1st. They get a long warning to run.", "color": Color(1.0, 0.3, 0.25)},
+	"fakebox": {"name": "Fake Box", "desc": "Sets down a perfect fake item box behind you. The first rival to grab it is blasted and stunned.", "color": Color(1.0, 0.85, 0.3)},
+	"turbo": {"name": "Turbo Boost", "desc": "Rocket nozzles ignite on your heels: a few seconds of much higher speed.", "color": Color(0.4, 0.75, 1.0)},
+	"ghost": {"name": "Ghost", "desc": "Go intangible: nothing can hit you. Touch a rival to steal the item they hold.", "color": Color(0.72, 0.78, 1.0)},
+	"decoy": {"name": "Decoy", "desc": "A fake you runs up the course. Rivals chase it, and it soaks up one hit.", "color": Color(0.9, 0.6, 1.0)},
+	"shock": {"name": "Shockwave", "desc": "Stamp the ground: every rival close to you is hurled away.", "color": Color(1.0, 0.75, 0.25)},
 }
 
 ## Named moves inside the transformations.

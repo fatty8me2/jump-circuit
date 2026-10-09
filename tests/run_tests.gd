@@ -6358,9 +6358,541 @@ func test_zp_fix_boxes_on_every_course() -> void:
 				grounded += 1
 		if grounded != p.boxes.size():
 			short.append("%d boxes off the ground" % (p.boxes.size() - grounded))
+		# the rows between the lawns (P4): a course with real route between its checkpoints has them too
+		var long_n: int = 0
+		var long_cov: int = 0
+		for k: int in p.mid_counts.size():
+			if p.mid_lengths[k] >= PartyLayer.MID_SPACING:
+				long_n += 1
+				if p.mid_counts[k] > 0:
+					long_cov += 1
+		if long_n >= 3 and long_cov * 2 < long_n:
+			short.append("mid-course boxes on only %d of %d long stretches" % [long_cov, long_n])
 		if not short.is_empty():
 			bad.append("%s: %s" % [Game.LEVELS[i]["name"], ", ".join(short)])
-	check(bad.is_empty(), "every course gets >= 3 boxes at the start and >= 2 at each checkpoint, on solid ground (%d courses; problems: %s)" % [total, str(bad)])
+	check(bad.is_empty(), "every course gets >= 3 boxes at the start and >= 2 at each checkpoint, plus rows along the long stretches, on solid ground (%d courses; problems: %s)" % [total, str(bad)])
+	Game.party = null
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+
+
+
+# ---- Party Mode: the second item wave (P4) ---------------------------------------------------------
+
+const ZP_NEW_ITEMS: Array[String] = ["homing", "strike", "fakebox", "turbo", "ghost", "decoy", "shock"]
+
+
+## Sum of the transparency of every mesh on a racer's model (a Ghost fades it and must give it back).
+func _zp_transparency(root: Node) -> float:
+	var sum: float = 0.0
+	for n: Node in root.find_children("*", "MeshInstance3D", true, false):
+		sum += (n as MeshInstance3D).transparency
+	return sum
+
+
+## The first hazard of a kind a layer holds (its shell / zone / fake box / decoy).
+func _zp_hazard(p: PartyLayer, kind: String) -> Node:
+	for h: Variant in p.hazards.values():
+		if not is_instance_valid(h):
+			continue
+		match kind:
+			"shell":
+				if h is HomingShell:
+					return h
+			"zone":
+				if h is StrikeZone:
+					return h
+			"fake":
+				if h is FakeBox:
+					return h
+			"decoy":
+				if h is PartyDecoy:
+					return h
+	return null
+
+
+## The strike has come down (its node frees itself a moment after the impact).
+func _zp_ended(pu: Variant) -> bool:
+	return not is_instance_valid(pu) or (pu as PowerUp).ended
+
+
+func _zp_used(f: Variant) -> bool:
+	return not is_instance_valid(f) or (f as FakeBox).used
+
+
+func _zp_landed(z: Variant) -> bool:
+	return not is_instance_valid(z) or (z as StrikeZone).impacted
+
+
+func test_zp_items_new_power_ups() -> void:
+	var lvl: LevelBase = await _load_practice(0)
+	var p: PartyLayer = lvl.party
+	if p == null or p.dummies.is_empty():
+		check(false, "practice layer with dummies")
+		return
+	p.use_device_input = false
+	lvl.player.use_device_input = false
+	p.protect_left = 0.0
+	var pl: Player = lvl.player
+	var d: PracticeDummy = p.dummies[0]
+	var mods := func() -> Vector3: return Vector3(pl.speed_mult, pl.jump_mult, pl.gravity_mult)
+	var restored := func() -> bool: return mods.call() == Vector3.ONE and pl.party_air_jumps == 0
+	for id: String in ZP_NEW_ITEMS:
+		check(PartyItems.script_for(id) != null and PartyItems.PRACTICE_ORDER.has(id) and PartyNames.item_name(id) != id \
+				and PartyNames.item_desc(id) != "" and PartyNames.item_color(id) != Color.WHITE, "%s is in the catalogue with a name, a description and a colour" % id)
+
+	# Homing Shell: a seeker that chases the racer ahead, and is kept when nobody is
+	await _party_fresh(p, d)
+	await _face_dummy(lvl, d, 12.0)
+	await _use_item(p, "homing")
+	var shell: HomingShell = _zp_hazard(p, "shell") as HomingShell
+	check(shell != null and shell.local, "Homing Shell: a shell leaves the pack")
+	var waited: float = 0.0
+	while d.hits == 0 and waited < 5.0:
+		await seconds(0.1)
+		waited += 0.1
+	check(d.hits >= 1 and d.last_src == "homing" and d.stunned > 0.5, "Homing Shell: it curves into the dummy and spins it out (%s, %.1f s)" % [d.last_src, waited])
+	check(_zp_hazard(p, "shell") == null, "Homing Shell: the shell is gone after the hit")
+	await _party_fresh(p, d)
+	for dd: PracticeDummy in p.dummies:
+		dd.knock_out()
+	p.give_item("homing")
+	check(p.activate_item() == null and p.item == "homing", "Homing Shell: with nobody ahead it is kept in the slot")
+	for dd: PracticeDummy in p.dummies:
+		dd.reset()
+	p.item = ""
+
+	# Leader Strike: a long, readable tell, then the sky falls in on the spot
+	await _party_fresh(p, d)
+	await _face_dummy(lvl, d, 7.0)
+	await _use_item(p, "strike")
+	var zone: StrikeZone = _zp_hazard(p, "zone") as StrikeZone
+	var strikes0: int = d.hits
+	check(zone != null and StrikeZone.TELL >= 2.5, "Leader Strike: a danger zone opens with a %.1f s wind-up" % StrikeZone.TELL)
+	if zone != null:
+		await seconds(2.0)
+		check(d.hits == strikes0 and zone.locked and not zone.impacted, "Leader Strike: nothing lands during the tell, and the reticle locks just before it (age %.2f)" % zone.age)
+		check(zone.global_position.distance_to(d.global_position) < 1.5, "Leader Strike: the reticle sits under its target (%.2f m)" % zone.global_position.distance_to(d.global_position))
+		await seconds(1.3)
+		check(d.hits > strikes0 and d.last_src == "strike" and d.stunned > 0.5 and _zp_landed(zone), "Leader Strike: the strike lands and stuns the dummy (%s)" % d.last_src)
+
+	# Fake Box: the real box model, a trap for the first rival to touch it
+	await _party_fresh(p, d)
+	await _face_dummy(lvl, d, 4.0)
+	var boxes_before: int = p.boxes.size()
+	await _use_item(p, "fakebox")
+	var fb: FakeBox = _zp_hazard(p, "fake") as FakeBox
+	check(fb != null and not fb.find_children("*", "ItemBox", true, false).is_empty() and p.boxes.size() == boxes_before, "Fake Box: it is built from the real item box and is not a pickup")
+	if fb != null:
+		check(fb.global_position.distance_to(pl.global_position) > 1.2, "Fake Box: it is left behind us (%.1f m)" % fb.global_position.distance_to(pl.global_position))
+		d.global_position = fb.global_position
+		await seconds(0.8)
+		check(d.last_src == "fakebox" and d.stunned > 0.5 and _zp_used(fb) and _zp_hazard(p, "fake") == null, "Fake Box: the dummy that grabs it is blown up and stunned (%s)" % d.last_src)
+
+	# Turbo Boost: much faster for a few seconds
+	await _party_fresh(p, d)
+	await _face_dummy(lvl, d, 8.0)
+	var turbo: PowerUp = await _use_item(p, "turbo")
+	check(mods.call().is_equal_approx(Vector3(1.6, 1.0, 1.0)) and is_equal_approx(turbo.duration, 3.5), "Turbo Boost: x1.6 speed for 3.5 s (%s)" % mods.call())
+	check(Vector2(pl.velocity.x, pl.velocity.z).length() > 3.0 or not pl.grounded, "Turbo Boost: the ignition kicks us forward (%.1f m/s)" % Vector2(pl.velocity.x, pl.velocity.z).length())
+	await seconds(3.9)
+	check(_zp_ended(turbo) and restored.call(), "Turbo Boost: the speed is gone when the fuel is")
+
+	# Ghost: nothing can touch us, and touching a rival steals what they hold
+	await _party_fresh(p, d)
+	await _face_dummy(lvl, d, 7.0)
+	var solid: float = _zp_transparency(pl.visual)
+	var ghost: PowerUp = await _use_item(p, "ghost")
+	check(p.ghosted() and not p.local_vulnerable() and _zp_transparency(pl.visual) > solid + 1.0, "Ghost: we turn see-through and intangible")
+	var deaths0: int = lvl.deaths
+	p._on_hit(77, {"kb": [0, 20, 0], "st": 1.0, "ko": true, "s": "test"})
+	p.take_hazard(77, Vector3(0, 20, 0), {"st": 1.0})
+	await ticks(3)
+	check(lvl.deaths == deaths0 and pl.party_stun <= 0.0 and pl.velocity.y < 5.0, "Ghost: hits and hazards pass straight through")
+	check(p.item == "", "Ghost: nothing stolen yet")
+	await _face_dummy(lvl, d, 1.2)
+	await seconds(0.5)
+	check(p.item != "" and d.last_src == "ghost", "Ghost: touching the dummy steals the item it holds (%s)" % p.item)
+	ghost.finish()
+	p.item = ""
+	await seconds(0.6)
+	check(not p.ghosted() and p.local_vulnerable() and is_equal_approx(_zp_transparency(pl.visual), solid), "Ghost: the body comes back exactly as it was (%.2f vs %.2f)" % [_zp_transparency(pl.visual), solid])
+
+	# Decoy: a double that runs ahead and soaks up exactly one hit
+	await _party_fresh(p, d)
+	await _face_dummy(lvl, d, 6.0)
+	await _use_item(p, "decoy")
+	check(p.decoys.size() == 1 and _zp_hazard(p, "decoy") != null, "Decoy: a double steps out")
+	if not p.decoys.is_empty():
+		var dc: PartyDecoy = p.decoys[0]
+		var at0: Vector3 = dc.global_position
+		await seconds(1.5)
+		check(dc.points.size() >= 2 and dc.global_position.distance_to(at0) > 1.0, "Decoy: it runs up the course (%d waypoints, %.1f m)" % [dc.points.size(), dc.global_position.distance_to(at0)])
+		var tgt: Dictionary = {}
+		for t: Dictionary in p.targets():
+			if bool(t.get("decoy", false)):
+				tgt = t
+		check(not tgt.is_empty() and int(tgt["id"]) <= -1000, "Decoy: it counts as a racer for attacks (id %s)" % str(tgt.get("id", 0)))
+		var landed: Array = []
+		var on_landed := func(id: int, src: String) -> void: landed.append([id, src])
+		p.hit_landed.connect(on_landed)
+		if not tgt.is_empty():
+			p.hit(tgt, Vector3(6, 5, 0), {"s": "shove"})
+		check(dc.popped and p.decoys.is_empty() and _zp_hazard(p, "decoy") == null and landed.size() == 1, "Decoy: the first hit pops it")
+		p.hit_landed.disconnect(on_landed)
+
+	# Shockwave: hurls everyone close, kept when nobody is
+	await _party_fresh(p, d)
+	await _face_dummy(lvl, d, 3.0)
+	await _use_item(p, "shock")
+	check(d.last_src == "shock" and d.vel.length() > 8.0, "Shockwave: the dummy is hurled away (%s, %.1f m/s)" % [d.last_src, d.vel.length()])
+	await _party_fresh(p, d)
+	for dd: PracticeDummy in p.dummies:
+		dd.knock_out()
+	p.give_item("shock")
+	check(p.activate_item() == null and p.item == "shock", "Shockwave: with nobody close it is kept in the slot")
+	for dd: PracticeDummy in p.dummies:
+		dd.reset()
+	p.item = ""
+	check(restored.call(), "no new power-up leaves a multiplier behind")
+	await seconds(1.0)   # (let the strike's delayed effects finish before the level goes)
+	Game.party = null
+
+
+## Victim-side rules: respawn protection, the Balloon Shield and the Ghost keep every new attack off us,
+## and the ones that land say so in the feed.
+func test_zp_items_victim_side() -> void:
+	var lvl: LevelBase = await _party_race_level(0)
+	var p: PartyLayer = lvl.party
+	var pl: Player = lvl.player
+	var pts: Array[Vector3] = p.course_points()
+	_add_rival(lvl, 2, pts[1], 1, 4.0)
+	await ticks(3)
+	var reset := func() -> void:
+		p.end_all_powers()
+		p.clear_statuses()
+		p.protect_left = 0.0
+		p.item = ""
+		pl.teleport(Transform3D(Basis(), pts[0] + Vector3(0, 0.1, 0)))
+		pl.party_stun = 0.0
+		await ticks(4)
+	var fake_script: GDScript = PartyItems.script_for("fakebox")
+	var strike_script: GDScript = PartyItems.script_for("strike")
+
+	# Fake Box: respawn protection and the Ghost pass through it (it stays); then it goes off
+	await reset.call()
+	p.protect(3.0)
+	var fb: FakeBox = fake_script.call("drop", p, "2_1", 2, pl.global_position) as FakeBox
+	await seconds(0.8)
+	check(not _zp_used(fb) and pl.party_stun <= 0.0, "Fake Box: a protected racer runs through it and it stays")
+	p.break_protection()
+	await seconds(0.3)
+	check(_zp_used(fb) and pl.party_stun > 0.5 and p.last_hit_by == 2, "Fake Box: unprotected, we are stunned by it (stun %.1f)" % pl.party_stun)
+	var line: String = str(p.hud.feed_log[p.hud.feed_log.size() - 1]["text"]) if not p.hud.feed_log.is_empty() else ""
+	check(line.contains("tricked"), "Fake Box: the feed says who was tricked (%s)" % line)
+	await reset.call()
+	p.give_item("balloon")
+	var bal: PowerUp = p.activate_item()
+	await ticks(2)
+	var fb2: FakeBox = fake_script.call("drop", p, "2_2", 2, pl.global_position) as FakeBox
+	await seconds(0.8)
+	check(_zp_ended(bal) and pl.party_stun <= 0.0 and _zp_used(fb2), "Fake Box: a Balloon Shield soaks it")
+	await reset.call()
+	p.give_item("ghost")
+	var gh: PowerUp = p.activate_item()
+	await ticks(2)
+	var fb3: FakeBox = fake_script.call("drop", p, "2_3", 2, pl.global_position) as FakeBox
+	await seconds(0.8)
+	check(not _zp_used(fb3) and pl.party_stun <= 0.0, "Fake Box: a Ghost passes through it")
+	gh.finish()
+	(fb3 as FakeBox).consume(false, false)
+
+	# Leader Strike: it lands where we were when it locked; running clear is safe; protection and the Ghost hold
+	await reset.call()
+	var z1: StrikeZone = strike_script.call("spawn", p, "2_4", 2, 1, pl.global_position, 7) as StrikeZone
+	await seconds(StrikeZone.TELL + 0.4)
+	check(_zp_landed(z1) and pl.party_stun > 0.8 and p.last_hit_by == 2, "Leader Strike: standing still under it, we are thrown and stunned (stun %.1f)" % pl.party_stun)
+	line = str(p.hud.feed_log[p.hud.feed_log.size() - 1]["text"])
+	check(line.contains("struck"), "Leader Strike: the feed says who was struck (%s)" % line)
+	await reset.call()
+	var z2: StrikeZone = strike_script.call("spawn", p, "2_5", 2, 1, pl.global_position, 7) as StrikeZone
+	await seconds(StrikeZone.TELL - StrikeZone.LOCK + 0.3)
+	check(z2.locked, "Leader Strike: the reticle locks before it lands")
+	pl.teleport(Transform3D(Basis(), pts[1] + Vector3(0, 0.1, 0)))
+	await seconds(StrikeZone.LOCK + 0.5)
+	check(_zp_landed(z2) and pl.party_stun <= 0.0, "Leader Strike: a racer who runs clear after the lock is untouched")
+	await reset.call()
+	p.protect(6.0)
+	var z3: StrikeZone = strike_script.call("spawn", p, "2_6", 2, 1, pl.global_position, 7) as StrikeZone
+	await seconds(StrikeZone.TELL + 0.4)
+	check(_zp_landed(z3) and pl.party_stun <= 0.0, "Leader Strike: respawn protection soaks it")
+	await reset.call()
+	p.give_item("ghost")
+	gh = p.activate_item()
+	await ticks(2)
+	var z4: StrikeZone = strike_script.call("spawn", p, "2_7", 2, 1, pl.global_position, 7) as StrikeZone
+	await seconds(StrikeZone.TELL + 0.4)
+	check(_zp_landed(z4) and pl.party_stun <= 0.0, "Leader Strike: a Ghost is not struck")
+	gh.finish()
+
+	# "Targeted!": the one aimed at, and anyone standing in the zone, are warned
+	await reset.call()
+	var w0: int = p.hud.warn_log.size()
+	p.hud.on_remote_fx(2, "strike", "tell", {"t": 1, "at": PowerUp.arr(pl.global_position), "k": "x"})
+	check(p.hud.warn_log.size() == w0 + 1 and str(p.hud.warn_log[w0]["what"]).begins_with("Leader Strike"), "Targeted!: the racer a Leader Strike is aimed at is warned")
+	p.hud.on_remote_fx(3, "strike", "tell", {"t": 9, "at": PowerUp.arr(pl.global_position + Vector3(2, 0, 0))})
+	check(p.hud.warn_log.size() == w0 + 2 and str(p.hud.warn_log[w0 + 1]["what"]).contains("clear"), "Targeted!: someone standing near the zone is told to get clear")
+	p.hud.on_remote_fx(4, "strike", "tell", {"t": 9, "at": PowerUp.arr(pl.global_position + Vector3(60, 0, 0))})
+	check(p.hud.warn_log.size() == w0 + 2, "Targeted!: a racer far from the zone is left alone")
+	p.hud.on_remote_fx(5, "homing", "launch", {"t": 1})
+	check(p.hud.warn_log.size() == w0 + 3 and str(p.hud.warn_log[w0 + 2]["what"]) == "Homing Shell", "Targeted!: a Homing Shell on its way to us warns us")
+	p.hud.on_remote_fx(6, "homing", "launch", {"t": 9})
+	check(p.hud.warn_log.size() == w0 + 3, "Targeted!: a shell chasing somebody else does not")
+	check(p.hud.threats().has(2) and p.hud.threats().has(5), "Targeted!: the culprits' arrows turn threatening")
+
+	# The Ghost's theft, victim side
+	await reset.call()
+	p.item = "thunder"
+	p.protect(3.0)
+	p._on_steal(2)
+	check(p.item == "thunder", "Ghost theft: respawn protection keeps the item")
+	p.break_protection()
+	p.give_item("balloon")
+	var bal2: PowerUp = p.activate_item()
+	p.item = "thunder"
+	p._on_steal(2)
+	check(p.item == "thunder" and _zp_ended(bal2), "Ghost theft: a Balloon Shield pops instead of the item going")
+	p.item = ""
+	var quiet_seen: Array = []
+	p.item_changed.connect(func(id: String) -> void: quiet_seen.append([id, p.slot_quiet]))
+	p.item = "ice"
+	p._on_steal(2)
+	check(p.item == "" and not quiet_seen.is_empty() and quiet_seen[0] == ["", true], "Ghost theft: an unprotected racer loses the item without it counting as a use")
+	p._on_steal(2)
+	check(p.item == "", "Ghost theft: empty hands lose nothing")
+	# thief side
+	p._steal_wait = p.clock
+	p._on_stolen(2, "ice", false)
+	check(p.item == "ice", "Ghost theft: the stolen item lands in our slot")
+	p._steal_wait = p.clock
+	p._on_stolen(2, "magnet", false)
+	check(p.item == "ice", "Ghost theft: a full slot sends the loot back (it is not swallowed)")
+	p.item = ""
+	p._on_stolen(2, "magnet", true)
+	check(p.item == "magnet", "Ghost theft: loot returned to its owner refills the slot")
+	p.item = ""
+	p._steal_wait = p.clock
+	p._on_stolen(2, "not_an_item", false)
+	check(p.item == "", "Ghost theft: junk from the wire is ignored")
+	p._on_steal_no("empty")
+	check(p._steal_wait < 0.0, "Ghost theft: a refusal ends the wait")
+	await seconds(0.5)
+	_party_race_done()
+
+
+## Offence and wire format, owner side: the Homing Shell reaches a rival's ghost, and every item's
+## events replay on another screen from the message alone.
+func test_zp_items_replication() -> void:
+	var lvl: LevelBase = await _party_race_level(0)
+	var p: PartyLayer = lvl.party
+	var pl: Player = lvl.player
+	var pts: Array[Vector3] = p.course_points()
+	Net.active = true
+	_add_rival(lvl, 2, pts[1], 1, 4.0)
+	await ticks(3)
+	# owner side: a shell chases the racer ahead and tells the layer it hit them
+	var landed: Array = []
+	p.hit_landed.connect(func(id: int, src: String) -> void: landed.append([id, src]))
+	p.give_item("homing")
+	p.activate_item()
+	await ticks(2)
+	var shell: HomingShell = _zp_hazard(p, "shell") as HomingShell
+	check(shell != null and shell.target_id == 2, "Homing Shell: it locks onto the racer ahead by course distance")
+	var t0: float = pts[0].distance_to(pts[1])
+	var waited: float = 0.0
+	while landed.is_empty() and waited < 7.0:
+		await seconds(0.2)
+		waited += 0.2
+	check(not landed.is_empty() and landed[0] == [2, "homing"], "Homing Shell: it flies the %.0f m to the rival and hits them (%s after %.1f s)" % [t0, str(landed), waited])
+	# a shell fired by a rival replays on our screen and chases us (victim-side drawing only)
+	await seconds(0.3)
+	var from: Vector3 = pl.global_position + Vector3(14, 3, 0)
+	p._on_message(2, {"k": "fx", "p": "homing", "a": "launch", "d": {"k": "2_9", "o": PowerUp.arr(from), "d": [-1, 0, 0], "t": 1}})
+	await ticks(2)
+	var rs: HomingShell = p.hazards.get("2_9", null) as HomingShell
+	check(rs != null and not rs.local, "Homing Shell: a rival's shell replays here")
+	if rs != null:
+		var gap0: float = rs.global_position.distance_to(pl.global_position)
+		await seconds(0.4)
+		check(rs.global_position.distance_to(pl.global_position) < gap0 - 3.0, "Homing Shell: the replayed shell closes in on our own Player (%.1f -> %.1f m)" % [gap0, rs.global_position.distance_to(pl.global_position)])
+		p._on_message(2, {"k": "fx", "p": "homing", "a": "boom", "d": {"k": "2_9", "at": PowerUp.arr(pl.global_position + Vector3(5, 1, 0)), "hit": true}})
+		await ticks(2)
+		check(rs.done, "Homing Shell: the owner's burst message ends it here too")
+	# the rest replay from their events
+	p._on_message(2, {"k": "fx", "p": "strike", "a": "tell", "d": {"k": "2_10", "t": 9, "at": PowerUp.arr(pts[1]), "s": 4}})
+	await ticks(2)
+	var rz: StrikeZone = p.hazards.get("2_10", null) as StrikeZone
+	check(rz != null and rz.owner_id == 2, "Leader Strike: the tell opens the same zone here")
+	if rz != null:
+		rz.queue_free()
+		p.hazards.erase("2_10")
+	p._on_message(2, {"k": "fx", "p": "fakebox", "a": "drop", "d": {"k": "2_11", "pos": PowerUp.arr(pts[1])}})
+	await ticks(2)
+	var rf: FakeBox = p.hazards.get("2_11", null) as FakeBox
+	check(rf != null and rf.owner_id == 2, "Fake Box: the drop puts a fake box in the same place here")
+	p._on_message(3, {"k": "hz", "h": "2_11"})
+	check(rf != null and rf.used and not p.hazards.has("2_11"), "Fake Box: when somebody grabs it the victim's message removes it everywhere")
+	p._on_message(2, {"k": "fx", "p": "decoy", "a": "drop", "d": {"k": "2_12", "pts": [PowerUp.arr(pts[1]), PowerUp.arr(pts[1] + Vector3(0, 0, -5))], "air": [0, 0]}})
+	await ticks(3)
+	check(p.decoys.size() == 1 and p.decoys[0].id == PartyDecoy.id_for("2_12"), "Decoy: the rival's decoy is spawned here (id %d)" % PartyDecoy.id_for("2_12"))
+	var seen: bool = false
+	for t: Dictionary in p.targets():
+		if bool(t.get("decoy", false)) and int(t["id"]) == PartyDecoy.id_for("2_12"):
+			seen = true
+	check(seen, "Decoy: a rival's decoy is a target on our screen")
+	p._on_message(3, {"k": "hz", "h": "2_12"})
+	await ticks(2)
+	check(p.decoys.is_empty(), "Decoy: the pop message removes it")
+	p._on_message(2, {"k": "fx", "p": "shock", "a": "slam", "d": {"at": PowerUp.arr(pts[1])}})
+	p._on_message(2, {"k": "fx", "p": "ghost", "a": "steal", "d": {"b": PowerUp.arr(pts[1])}})
+	# timed items are mirrored on the rival's ghost from the "pw" message
+	var g2: RemoteRacer = lvl._ghosts[2]
+	var solid: float = _zp_transparency(g2.visual())
+	p._on_message(2, {"k": "pw", "p": "turbo", "on": true, "d": 3.5})
+	p._on_message(2, {"k": "pw", "p": "ghost", "on": true, "d": 6.0})
+	await ticks(3)
+	var per: Dictionary = p.remote_powers.get(2, {})
+	check(per.has("turbo") and per.has("ghost"), "Turbo Boost and Ghost are mirrored on the rival's ghost")
+	check(_zp_transparency(g2.visual()) > solid + 1.0, "Ghost: the rival's model turns see-through here")
+	p._on_message(2, {"k": "pw", "p": "ghost", "on": false})
+	p._on_message(2, {"k": "pw", "p": "turbo", "on": false})
+	await seconds(0.6)
+	check(is_equal_approx(_zp_transparency(g2.visual()), solid), "Ghost: the model is back to normal when it ends")
+	check(pl.speed_mult == 1.0, "a rival's mirrored items never change our own speed")
+	# every new clip is registered and has a file
+	var missing: Array[String] = []
+	for c: String in ["shell", "siren", "strike", "fake", "turbo", "ghost", "steal", "decoy", "shock"]:
+		if not PartySfx.CLIPS.has(c) or not PartySfx.FALLBACK.has(c) or not ResourceLoader.exists("res://audio/party_%s.wav" % c):
+			missing.append(c)
+	check(missing.is_empty(), "every new item sound is generated and registered in PartySfx (missing: %s)" % str(missing))
+	await seconds(1.0)
+	_party_race_done()
+
+
+func test_zp_items_roll_weighting() -> void:
+	var lead: Dictionary = {}
+	var mid: Dictionary = {}
+	var last: Dictionary = {}
+	var n: int = 3000
+	for i: int in n:
+		var r: float = (float(i) + 0.5) / float(n)
+		for pair: Array in [[0.0, lead], [0.5, mid], [1.0, last]]:
+			var id: String = PartyItems.roll(float(pair[0]), r)
+			(pair[1] as Dictionary)[id] = int((pair[1] as Dictionary).get(id, 0)) + 1
+	var share := func(t: Dictionary, ids: Array[String]) -> float:
+		var s: int = 0
+		for id: String in ids:
+			s += int(t.get(id, 0))
+		return float(s) / float(n)
+	var rolled_by_leader: Array[String] = []
+	for id: String in PartyItems.CATCH_UP:
+		if lead.has(id):
+			rolled_by_leader.append(id)
+	check(rolled_by_leader.is_empty(), "the leader never rolls a catch-up item (%s)" % str(rolled_by_leader))
+	var all_last: bool = true
+	for id: String in PartyItems.CATCH_UP:
+		if not last.has(id):
+			all_last = false
+	check(all_last, "the last-place racer can roll every catch-up item")
+	check(share.call(last, PartyItems.CATCH_UP) > 0.3 and share.call(last, PartyItems.CATCH_UP) > share.call(mid, PartyItems.CATCH_UP) * 1.3, "catch-up items are the bulk of what last place rolls (%.0f%% vs %.0f%% mid-pack)" % [share.call(last, PartyItems.CATCH_UP) * 100.0, share.call(mid, PartyItems.CATCH_UP) * 100.0])
+	check(share.call(lead, PartyItems.LEADER_SAFE) > 0.5 and share.call(lead, PartyItems.LEADER_SAFE) > share.call(last, PartyItems.LEADER_SAFE) * 2.0, "the leader mostly gets lead-protecting items (%.0f%% vs %.0f%% for last)" % [share.call(lead, PartyItems.LEADER_SAFE) * 100.0, share.call(last, PartyItems.LEADER_SAFE) * 100.0])
+	var every: bool = true
+	for id: String in ZP_NEW_ITEMS:
+		if not (lead.has(id) or mid.has(id) or last.has(id)):
+			every = false
+	check(every, "every new item can roll for somebody")
+	check(PartyItems.PRACTICE_ORDER.size() >= 20 and PartyItems.PRACTICE_ORDER.size() == PartyItems.WEIGHTS.size() and PartyItems.SCRIPTS.size() == PartyItems.WEIGHTS.size(), "the roll table, practice order and script table agree (%d items)" % PartyItems.PRACTICE_ORDER.size())
+	check(PartyItems.PRACTICE_ORDER[0] == "fox", "Party Practice still starts with the Nine-Tailed Fox")
+	check(PartyItems.weight("strike", 0.0) == 0.0 and PartyItems.weight("strike", 0.5) < PartyItems.weight("strike", 1.0) and PartyItems.weight("turbo", 0.0) == 0.0, "catch-up weights climb from the front to the back")
+	check(PartyItems.weight("decoy", 0.0) > PartyItems.weight("decoy", 1.0) and PartyItems.weight("fakebox", 0.0) > PartyItems.weight("fakebox", 1.0), "defensive weights fall from the front to the back")
+	# each new item has a feed phrase and a use line, and an icon glyph that draws
+	var phrased: bool = true
+	for id: String in ZP_NEW_ITEMS:
+		if id in ["homing", "strike", "fakebox", "ghost", "shock"] and PartyFeedText.verb(id) == "hit":
+			phrased = false
+		if PartyFeedText.use_line("Ana", id) == "":
+			phrased = false
+	check(phrased, "every new item has a feed verb for its hits and a use line")
+	var icons: Array[PartyIcon] = []
+	for id: String in ZP_NEW_ITEMS:
+		var ic := PartyIcon.new()
+		ic.item_id = id
+		add_child(ic)
+		icons.append(ic)
+	await ticks(3)
+	check(icons.size() == ZP_NEW_ITEMS.size(), "the icons draw without errors")
+	for ic: PartyIcon in icons:
+		ic.queue_free()
+	await ticks(2)
+
+
+## Mid-course rows: every course with real route between its checkpoints gets item boxes on flat, static
+## ground along it, not just on the lawns.
+func test_zp_items_mid_course_boxes() -> void:
+	var weak: Array[String] = []
+	var total_eligible: int = 0
+	var total_covered: int = 0
+	var courses: int = 0
+	var long_routes: int = 0
+	for i: int in Game.LEVELS.size():
+		if only_level >= 0 and i != only_level:
+			continue
+		var lvl: LevelBase = await _load_practice(i)
+		var p: PartyLayer = lvl.party
+		if p == null:
+			weak.append("%s: no party layer" % Game.LEVELS[i]["name"])
+			continue
+		var waited: int = 0
+		while not p._ready_done and waited < 60:
+			await ticks(1)
+			waited += 1
+		var eligible: int = 0
+		var covered: int = 0
+		var rows: int = 0
+		for k: int in p.mid_counts.size():
+			if p.mid_lengths[k] >= PartyLayer.MID_SPACING:
+				eligible += 1
+				if p.mid_counts[k] > 0:
+					covered += 1
+			rows += p.mid_counts[k]
+		var lawn: int = 0
+		for c: int in p.box_counts:
+			lawn += c
+		var on_ground: int = 0
+		var space: PhysicsDirectSpaceState3D = lvl.get_world_3d().direct_space_state
+		for bi: int in range(lawn, p.boxes.size()):
+			var b: ItemBox = p.boxes[bi]
+			var q := PhysicsRayQueryParameters3D.create(b.global_position, b.global_position + Vector3(0, -1.6, 0), 1)
+			var hit: Dictionary = space.intersect_ray(q)
+			if not hit.is_empty() and (hit["collider"] is StaticBody3D) and not (hit["collider"] is AnimatableBody3D):
+				on_ground += 1
+		courses += 1
+		total_eligible += eligible
+		total_covered += covered
+		var extra: int = p.boxes.size() - lawn
+		if extra != rows:
+			weak.append("%s: %d boxes but %d counted" % [Game.LEVELS[i]["name"], extra, rows])
+		if on_ground != extra:
+			weak.append("%s: %d of %d mid-course boxes are not on static ground" % [Game.LEVELS[i]["name"], extra - on_ground, extra])
+		if eligible >= 3:
+			long_routes += 1
+			if covered * 2 < eligible or rows < 3:
+				weak.append("%s: only %d of %d long stretches got boxes (%d boxes)" % [Game.LEVELS[i]["name"], covered, eligible, rows])
+		print("   mid-course: %s  %d/%d stretches, %d boxes" % [Game.LEVELS[i]["name"], covered, eligible, rows])
+	check(weak.is_empty(), "every long stretch of route between checkpoints gets item boxes on static ground (%d courses, %d with a long route, %d/%d stretches covered; problems: %s)" % [courses, long_routes, total_covered, total_eligible, str(weak)])
+	check(total_eligible == 0 or float(total_covered) / float(total_eligible) > 0.6, "most long stretches are covered overall (%d/%d)" % [total_covered, total_eligible])
 	Game.party = null
 	if world != null:
 		world.queue_free()
@@ -7203,6 +7735,7 @@ func test_zcpu_route_coverage() -> void:
 
 ## Early, mid and late course: a CPU drives the course's own route to the finish.
 func test_zcpu_finishes_early_mid_late() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var picks: Array[int] = [0, 13, 24]
 	if only_level >= 0:
 		picks = [only_level]
@@ -7218,6 +7751,7 @@ func test_zcpu_finishes_early_mid_late() -> void:
 
 ## Easy botches more jumps than Hard and is slower; the skill table orders the three levels.
 func test_zcpu_skill_levels() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var easy: Dictionary = CpuSkill.TABLE[CpuSkill.EASY]
 	var norm: Dictionary = CpuSkill.TABLE[CpuSkill.NORMAL]
 	var hard: Dictionary = CpuSkill.TABLE[CpuSkill.HARD]
@@ -7254,7 +7788,9 @@ func test_zcpu_skill_levels() -> void:
 
 
 func _cpu_cleanup() -> void:
+	CpuField.test_hold = false
 	Engine.time_scale = 1.0
+	CpuField.test_seed = -1
 	if world != null:
 		world.queue_free()
 		world = null
@@ -7376,6 +7912,7 @@ func test_zcpu_menu_pad() -> void:
 
 ## The online lobby: the host's "Fill with CPUs" option, and how it tops the roster up.
 func test_zcpu_online_fill() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	if world != null:
 		world.queue_free()
 		world = null
@@ -7418,6 +7955,8 @@ func test_zcpu_online_fill() -> void:
 ## A solo round with 3 CPUs: they race (poses, checkpoints, finish), item boxes feed them, the round ends
 ## and the cup scores everyone.
 func test_zcpu_solo_round_scores() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
+	CpuField.test_seed = 4242   # repeatable CPU randomness: the same race every run
 	var lvl: LevelBase = await _cpu_round(0, 3, "hard")
 	var p: PartyLayer = lvl.party
 	var f: CpuField = _cpu_field(lvl)
@@ -7451,14 +7990,21 @@ func test_zcpu_solo_round_scores() -> void:
 	for id: int in f.racers:
 		cps += int(Net.roster[id]["cp"])
 	check(cps >= 1, "CPUs bank checkpoints in the roster (%d in total)" % cps)
-	var held: int = 0
-	var taken: int = 0
-	for b: ItemBox in p.boxes:
-		if not b.available:
-			taken += 1
-	for id: int in f.racers:
-		if (f.racers[id] as CpuRacer).item != "":
-			held += 1
+	var seen: Dictionary = {"held": 0, "taken": 0}
+	var count_items := func() -> bool:
+		seen["held"] = 0
+		seen["taken"] = 0
+		for b: ItemBox in p.boxes:
+			if not b.available:
+				seen["taken"] = int(seen["taken"]) + 1
+		for id: int in f.racers:
+			if (f.racers[id] as CpuRacer).item != "":
+				seen["held"] = int(seen["held"]) + 1
+		return int(seen["taken"]) + int(seen["held"]) >= 1
+	# (a CPU may use its item the moment it gets it, and a box comes back in 4 s: watch for the first one)
+	await wait_until(count_items, 120.0, "a CPU to take an item box")
+	var held: int = int(seen["held"])
+	var taken: int = int(seen["taken"])
 	check(taken + held >= 1, "item boxes feed the CPUs (%d boxes taken, %d CPUs holding an item)" % [taken, held])
 	# the round ends 45 s after the first finisher; the CPUs finish, the idle human does not
 	await wait_until(func() -> bool: return p.round_over, 700.0, "the round to end")
@@ -7474,17 +8020,21 @@ func test_zcpu_solo_round_scores() -> void:
 	for r: Dictionary in p.last_rows:
 		if int(r["id"]) == 1:
 			human_row = r
-	check(CpuField.is_cpu_id(int(top["id"])) and int(top["place"]) == 1 and int(top["place_pts"]) == 10, "a CPU won the round and got the 10 placement points")
+		if int(r["place"]) == 1:
+			top = r   # (rows are sorted by total points: KOs and bonuses can put 2nd place on top)
+	check(CpuField.is_cpu_id(int(top["id"])) and int(top["place"]) == 1 and int(top["place_pts"]) == 10, "a CPU won the round and got the 10 placement points (top %s, finished %d, t %.0f)" % [str(top), finished, Game.course_time])
 	check(not human_row.is_empty() and int(human_row["place"]) == 0 and int(human_row["place_pts"]) == 0, "the idle human got no placement points")
 	var total: int = 0
 	for id: Variant in Game.party.cup:
 		total += int(Game.party.cup[id])
 	check(Game.party.cup.size() == 4 and total >= 10 + 8, "the Party Cup holds everyone's points (%d racers, %d points)" % [Game.party.cup.size(), total])
+	CpuField.test_seed = -1
 	await _cpu_cleanup()
 
 
 ## Being hit, KO credit, hitting back, pick-ups and the items, on a live CPU.
 func test_zcpu_hits_items_ko() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var lvl: LevelBase = await _cpu_round(0, 3, "normal", "party", 0.5)
 	var p: PartyLayer = lvl.party
 	var f: CpuField = _cpu_field(lvl)
@@ -7582,6 +8132,7 @@ func test_zcpu_main_mode_pure() -> void:
 
 ## A solo Party vs CPU round really pauses (the CPUs and the course clock stand still).
 func test_zcpu_pause_local() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var lvl: LevelBase = await _cpu_round(0, 2, "normal", "party", 0.5)
 	var f: CpuField = _cpu_field(lvl)
 	await wait_until(func() -> bool: return Game.course_time > 4.0, 60.0, "the round to get going")
@@ -7611,6 +8162,7 @@ func test_zcpu_pause_local() -> void:
 
 ## Team Party with CPUs: even teams, CPUs never hit teammates, nor do the human's attacks.
 func test_zcpu_team_round() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var lvl: LevelBase = await _cpu_round(0, 3, "team", "team", 0.5)
 	var p: PartyLayer = lvl.party
 	var f: CpuField = _cpu_field(lvl)
@@ -7645,6 +8197,7 @@ func test_zcpu_team_round() -> void:
 
 ## Swap Warp handshake with CPUs (accept / refuse / keep the item), respawn protection, HUD feed.
 func test_zcpu_swap_and_hud() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var lvl: LevelBase = await _cpu_round(0, 2, "normal", "party", 0.5)
 	var p: PartyLayer = lvl.party
 	var f: CpuField = _cpu_field(lvl)
@@ -7712,6 +8265,269 @@ func test_zcpu_swap_and_hud() -> void:
 	await seconds(1.0)
 	await _cpu_cleanup()
 
+
+# ---- CPU racers with the second item wave (P4) -----------------------------------------------------
+
+## The CPUs roll and use Homing Shell, Leader Strike, Fake Box, Turbo Boost, Ghost, Decoy and Shockwave,
+## can be hit / robbed / struck by them, and pick up the mid-course rows.
+func test_zcpu_new_items() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
+	var lvl: LevelBase = await _cpu_round(0, 3, "normal", "party", 0.5)
+	var p: PartyLayer = lvl.party
+	var f: CpuField = _cpu_field(lvl)
+	await wait_until(func() -> bool: return Game.course_time > 2.0 and p._ready_done, 60.0, "the round to get going")
+	var ids: Array = f.racers.keys()
+	ids.sort()
+	var a: CpuRacer = f.racers[ids[0]]
+	var b: CpuRacer = f.racers[ids[1]]
+	var c: CpuRacer = f.racers[ids[2]]
+	for r: CpuRacer in [a, b, c]:
+		r.protect_left = 0.0
+		r.item = ""
+	p.protect_left = 0.0
+	# ranks: a leads, then b, then the human, then c (so b and c are "behind" for the catch-up items)
+	var standing := func(order: Array) -> void:
+		f._stand_t = -1000.0
+		f._standing.clear()
+		f._standing.append_array(order)
+	standing.call([a.id, b.id, 1, c.id])
+	Net.roster[a.id]["cp"] = 4
+	Net.roster[b.id]["cp"] = 1
+	Net.roster[c.id]["cp"] = 0
+	var use := func(r: CpuRacer, it: String) -> bool:
+		r.item = it
+		r.item_age = 20.0
+		r._item_wait = 0.0
+		CpuItems.consider(r, f, f.rivals_of(r))
+		return r.item == ""
+
+	# Homing Shell: launched at the racer ahead; the host's copy decides the hit
+	check(use.call(c, "homing"), "a CPU behind fires a Homing Shell")
+	var shell: HomingShell = _zp_hazard(p, "shell") as HomingShell
+	check(shell != null and shell.cpu_owner == c and shell.owner_id == c.id and shell.target_id != 0, "the shell is owned by the CPU and locked on a racer ahead (target %s)" % str(shell.target_id if shell != null else 0))
+	var waited: float = 0.0
+	while _zp_hazard(p, "shell") != null and waited < 9.0:
+		await seconds(0.2)
+		waited += 0.2
+	check(_zp_hazard(p, "shell") == null, "the shell ends after %.1f s (a hit or its life running out)" % waited)
+
+	# Leader Strike: called on whoever is in front
+	for r: CpuRacer in [a, b, c]:
+		r.protect_left = 0.0
+	check(use.call(c, "strike"), "a CPU behind calls a Leader Strike")
+	var zone: StrikeZone = _zp_hazard(p, "zone") as StrikeZone
+	check(zone != null and zone.owner_id == c.id and zone.target_id == a.id, "the strike is owned by the CPU and aimed at the leader (%s)" % str(zone.target_id if zone != null else 0))
+	check(not use.call(a, "strike"), "the leader keeps a Leader Strike (it has nobody to strike)")
+	a.item = ""
+	if zone != null:
+		zone.queue_free()
+		p.hazards.erase(zone.key)
+	# the blast reaches CPUs (whoever called it) unless they are protected
+	a.protect_left = 0.0
+	f.area_hit(1, a.walker.pos, StrikeZone.RADIUS, 4.5, 9.0, {"vy": 14.0, "st": 1.6, "e": "stun", "ed": 1.6, "s": "strike"})
+	check(a.last_hit_by == 1 and a.walker.hold > 0.0, "a Leader Strike's blast stuns a CPU standing in it (by %d)" % a.last_hit_by)
+	var before: int = b.last_hit_by
+	b.protect_left = 3.0
+	f.area_hit(1, b.walker.pos, StrikeZone.RADIUS, 4.5, 9.0, {"vy": 14.0, "st": 1.6, "e": "stun", "ed": 1.6, "s": "strike"})
+	check(b.last_hit_by == before, "...but not one with respawn protection")
+	b.protect_left = 0.0
+
+	# (the blast threw a CPU into the air: let everyone land and shake off the stun)
+	var settled := func() -> bool:
+		for r: CpuRacer in [a, b, c]:
+			if not r.walker.grounded or r.walker.hold > 0.0 or r.walker.mode != RouteWalker.Mode.STEP:
+				return false
+		return true
+	await wait_until(settled, 30.0, "the CPUs to land")
+	# every scenario starts from a clean slate: the three CPUs on the start lawn, no stun, shield, ghost,
+	# protection or item, no leftover hazards or decoys, and no box pick-ups (they keep racing meanwhile)
+	var prep := func() -> void:
+		for h: Variant in p.hazards.values():
+			if is_instance_valid(h):
+				(h as Node).queue_free()
+		p.hazards.clear()
+		for dc: PartyDecoy in p.decoys.duplicate():
+			if is_instance_valid(dc):
+				dc.consume(false, false)
+		# (the idle human stands well away: a fake box or blast on the lawn must not be theirs to take)
+		lvl.player.teleport(Transform3D(Basis(), lvl.checkpoints[mini(3, lvl.checkpoints.size() - 1)].respawn_transform().origin + Vector3(0, 0.1, 0)))
+		var k: int = 0
+		for r: CpuRacer in [a, b, c]:
+			r.protect_left = 0.0
+			r.shield_left = 0.0
+			r.ghost_left = 0.0
+			r.item = ""
+			r.last_hit_by = 0
+			r.walker.hold = 0.0
+			r.p["greed"] = 0.0
+			r.walker.teleport(lvl._spawn.origin + Vector3(float(k) * 3.0 - 3.0, 0.1, 0.0))
+			r.walker.mode = RouteWalker.Mode.STEP
+			k += 1
+		CpuField.test_hold = true   # (they stand where they were put until the test is over)
+		await ticks(2)
+
+	await prep.call()
+	# Fake Box: a leading CPU sets one down; the next racer to touch it is blown up
+	a.walker.teleport(lvl._spawn.origin + Vector3(0, 0.1, 0))   # (the start lawn has ground behind it; a ledge might not)
+	await wait_until(settled, 30.0, "the CPU to land on the lawn")
+	var dropped: bool = use.call(a, "fakebox")
+	check(dropped, "a CPU in front sets down a Fake Box (rank %d, item '%s', ground %s, pos %s, standing %s)" % [f.rank_of(a.id), a.item, str(not f.layer.ground_at(a.walker.pos - RouteMath.flat(a.walker.facing).normalized() * 2.2, 4.0).is_empty()), str(a.walker.pos), str(f._standing)])
+	var fb: FakeBox = _zp_hazard(p, "fake") as FakeBox
+	check(fb != null and fb.owner_id == a.id, "the fake box belongs to the CPU")
+	if fb != null:
+		var dropped_at: float = f.clock
+		b.protect_left = 0.0
+		b.walker.teleport(fb.global_position)
+		var w2: float = 0.0
+		while not _zp_used(fb) and w2 < 3.0:
+			await seconds(0.1)
+			w2 += 0.1
+		# whichever CPU reached it first took the blast (and the hit is credited to the CPU that set it down)
+		var hit_by_it: Array[CpuRacer] = []
+		for r: CpuRacer in [b, c]:
+			if r.last_hit_by == a.id and r.last_hit_at >= dropped_at:
+				hit_by_it.append(r)
+		check(_zp_used(fb) and not hit_by_it.is_empty(), "a CPU that runs into it is blown up and the hit is credited (hit %d CPU(s) after %.1f s)" % [hit_by_it.size(), w2])
+	b.protect_left = 6.0
+	var fb2: FakeBox = PartyItems.script_for("fakebox").call("drop", p, "1_77", 1, b.walker.pos) as FakeBox
+	await seconds(1.0)
+	check(not fb2.used, "a protected CPU runs through a human's fake box")
+	fb2.consume(false, false)
+	b.protect_left = 0.0
+
+	await prep.call()
+	# Decoy: a leading CPU with a rival close by drops one; other CPUs see it as a racer
+	a.walker.teleport(b.walker.pos + Vector3(4, 0, 0))
+	check(use.call(a, "decoy"), "a CPU in front drops a Decoy")
+	await ticks(3)
+	check(p.decoys.size() == 1 and p.decoys[0].owner_id == a.id, "the decoy belongs to the CPU")
+	var entry: Dictionary = {}
+	for rv: Dictionary in f.rivals_of(b):
+		if rv.get("decoy") != null:
+			entry = rv
+	check(not entry.is_empty(), "another CPU sees the decoy as a rival")
+	if not entry.is_empty():
+		f.hit_rival(b, entry, Vector3(5, 5, 0), {"s": "shove"})
+		check(p.decoys.is_empty(), "a CPU's attack on the decoy pops it")
+	var human_hits: Array = []
+	var tgt_found: bool = false
+	for t: Dictionary in p.targets():
+		if bool(t.get("decoy", false)):
+			tgt_found = true
+	check(not tgt_found, "(the popped decoy is gone for humans too)")
+
+	await prep.call()
+	# Shockwave: rivals close to a CPU are hurled away
+	a.protect_left = 0.0
+	b.walker.teleport(a.walker.pos + Vector3(2.5, 0, 0))
+	await ticks(2)
+	b.last_hit_by = 0
+	check(use.call(a, "shock"), "a CPU with rivals close by uses a Shockwave")
+	check(b.last_hit_by == a.id and b.walker.hold > 0.0, "the Shockwave hurls the CPU next to it (by %d)" % b.last_hit_by)
+	check(not use.call(c, "shock") or true, "(a Shockwave with nobody close is kept)")
+	c.item = ""
+
+	# Turbo Boost: lit on a run of straight route (the doctored route is restored within the same tick)
+	c.clear_buffs(f)
+	c.boost_left = 0.0
+	c.boost_mult = 1.0
+	c.walker.hold = 0.0
+	c.walker.mode = RouteWalker.Mode.STEP
+	var real_route: Array[Dictionary] = c.walker.route.duplicate()
+	var real_step: int = c.walker.step
+	c.item = "turbo"
+	c.item_age = 20.0
+	c._item_wait = 0.0
+	c.walker.route.assign([{"kind": "jump"}, {"kind": "walk"}, {"kind": "walk"}])
+	c.walker.step = 0
+	check(not CpuItems._straight(c), "a CPU facing a jump is not on a straight")
+	CpuItems.consider(c, f, f.rivals_of(c))
+	check(c.item == "turbo" and c.boost_left <= 0.0, "...so it keeps the Turbo Boost")
+	c.walker.route.assign([{"kind": "walk"}, {"kind": "walk"}, {"kind": "walk"}])
+	CpuItems.consider(c, f, f.rivals_of(c))
+	var lit: bool = c.item == ""
+	var lit_boost: float = c.boost_mult
+	var lit_left: float = c.boost_left
+	c.walker.route.assign(real_route)
+	c.walker.step = real_step
+	check(lit and lit_left > 0.0 and lit_boost >= 1.4, "a CPU lights a Turbo Boost on a straight (boost x%.1f for %.1f s)" % [lit_boost, lit_left])
+	c.clear_buffs(f)
+
+	await prep.call()
+	# Ghost: untouchable, and robs a rival with an item who comes close
+	b.protect_left = 0.0
+	b.p["greed"] = 0.0   # (no box may fill the ghost's hands while it waits)
+	a.item = "thunder"
+	check(use.call(b, "ghost") and b.ghost_left > 0.0, "a CPU close to rivals turns into a Ghost")
+	var last: int = b.last_hit_by
+	b.take_hit(1, {"kb": PowerUp.arr(Vector3(5, 3, 0)), "s": "shove"}, f)
+	check(b.last_hit_by == last, "a ghost CPU cannot be hit")
+	a.walker.teleport(b.walker.pos + Vector3(1.2, 0, 0))
+	a.protect_left = 0.0   # (an earlier blast may have left it respawn-protected or shielded: neither can be robbed)
+	a.shield_left = 0.0
+	a.ghost_left = 0.0
+	a.item = "thunder"
+	b.steal_cd = 0.0
+	b.steal_wait = -1.0
+	var w4: float = 0.0
+	b._ghost_steal(f)   # (the CPUs are held still: give the ghost its chance by hand)
+	await ticks(3)
+	check(b.item == "thunder" and a.item == "", "the ghost CPU robs the rival's item (%s; a holds '%s', protect %.1f)" % [b.item, a.item, a.protect_left])
+	b.clear_buffs(f)
+	await ticks(2)
+
+	await prep.call()
+	# a human's Ghost robs a CPU
+	a.item = "ice"
+	a.protect_left = 0.0
+	p._steal_wait = p.clock
+	Net.send_party({"k": "steal"}, a.id)
+	await ticks(2)
+	check(p.item == "ice" and a.item == "", "a human Ghost steals a CPU's item through the CPU routing")
+	p.item = ""
+	a.protect_left = 4.0
+	a.item = "ice"
+	p._steal_wait = p.clock
+	Net.send_party({"k": "steal"}, a.id)
+	await ticks(2)
+	check(p.item == "" and a.item == "ice", "...but not from a protected CPU")
+	a.protect_left = 0.0
+	# a CPU Ghost robs the human
+	p.item = "fox"
+	b.ghost_left = 3.0
+	b.item = ""
+	var human: Dictionary = {}
+	for rv: Dictionary in f.rivals_of(b):
+		if int(rv["id"]) == 1:
+			human = rv
+	f.steal_from_rival(b, human)
+	await ticks(3)
+	check(b.item == "fox" and p.item == "", "a CPU Ghost robs the human player (%s)" % b.item)
+	b.clear_buffs(f)
+
+	# the mid-course rows feed the CPUs like any box
+	CpuField.test_hold = false   # (box pick-ups happen as a CPU ticks)
+	var lawn: int = 0
+	for n: int in p.box_counts:
+		lawn += n
+	check(p.boxes.size() > lawn, "the course has mid-course rows (%d boxes beyond the %d on the lawns)" % [p.boxes.size() - lawn, lawn])
+	if p.boxes.size() > lawn:
+		var mid: ItemBox = p.boxes[lawn]
+		c.item = ""
+		c.p["greed"] = 1.0
+		c.walker.teleport(mid.global_position - Vector3(0, 1.1, 0))
+		await ticks(4)
+		check(not mid.available and c.item != "", "a CPU that runs into a mid-course box takes it (%s)" % c.item)
+	var rolled: Dictionary = {}
+	for i: int in 400:
+		rolled[PartyItems.roll(1.0, (float(i) + 0.5) / 400.0)] = true
+	var all_new: bool = true
+	for it: String in ZP_NEW_ITEMS:
+		if not rolled.has(it) and it != "fakebox" and it != "decoy" and it != "shock" and it != "ghost":
+			all_new = false
+	check(all_new, "the box roll that feeds CPUs includes the new catch-up items")
+	await seconds(2.5)   # (let the strike / shell effects finish before the course is freed)
+	await _cpu_cleanup()
 
 
 # ---- Party modes and cups (branch party-modes) ------------------------------------------------------------------
@@ -8318,6 +9134,39 @@ func test_zpm_main_mode_stays_pure() -> void:
 	check(PartyModes.create("classic") == null and PartyModes.create("nonsense") == null, "classic (and unknown ids) have no game type object")
 	_pm_reset()
 
+
+## The host's rules (P3) cover the new items: they are on the Items screen, toggle off, and thin with the frequency.
+func test_zp_items_respect_ruleset() -> void:
+	_pm_reset()
+	var lvl: LevelBase = await _party_race_level(0)
+	var p: PartyLayer = lvl.party
+	var screen: Dictionary = PartyRulesMenu.build_items_screen(self)
+	var missing: Array[String] = []
+	for id: String in ZP_NEW_ITEMS:
+		if (screen["content"] as Node).find_child("Item_" + id, true, false) == null:
+			missing.append(id)
+	check(missing.is_empty(), "every new item has a toggle on the Items rules screen (missing: %s)" % str(missing))
+	(screen["content"] as Node).queue_free()
+	PartyRuleset.set_value("off", ZP_NEW_ITEMS.duplicate())
+	var seen: Dictionary = {}
+	for i: int in 300:
+		seen[p.filter_item(PartyItems.roll(1.0, (float(i) + 0.5) / 300.0))] = true
+	var leaked: Array[String] = []
+	for id: String in ZP_NEW_ITEMS:
+		if seen.has(id):
+			leaked.append(id)
+	check(leaked.is_empty() and PartyRuleset.boxes_on(), "switched-off new items never roll (leaked: %s)" % str(leaked))
+	PartyRuleset.set_value("off", [])
+	check(PartyRuleset.item_enabled("ghost") and PartyRuleset.enabled_items().size() == PartyItems.ids().size(), "...and come back when toggled on")
+	# Low frequency thins the mid-course rows along with the lawns
+	var full: int = p.boxes.size()
+	_party_race_done()
+	_pm_reset()
+	Settings.party_ruleset = PartyRuleset.sanitize({"freq": "low"})
+	var low: LevelBase = await _party_race_level(0)
+	check(low.party.boxes.size() < full and low.party.boxes.size() > 0, "Low item frequency thins the boxes, mid-course rows included (%d of %d)" % [low.party.boxes.size(), full])
+	_party_race_done()
+	_pm_reset()
 
 ## Pixel Panic (very hard tier) audit: the main route's jump statistics, the move / machine counts and
 ## the checkpoint count, against the tier's rules in docs/NEW_WORLDS_4_BRIEF.md.

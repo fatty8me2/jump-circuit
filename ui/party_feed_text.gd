@@ -10,6 +10,7 @@ const VERBS: Dictionary = {
 	"boomerang": "bonked", "hookshot": "hooked", "bombs": "bombed", "dash_punch": "punched", "wave": "blasted",
 	"thunder": "zapped", "slick": "slipped", "glove": "punched", "magnet": "pulled", "shrink": "shrank",
 	"swap": "swapped with", "balloon": "bounced", "gravity": "floated", "ice": "iced", "tornado": "twirled",
+	"homing": "shelled", "strike": "struck", "fakebox": "tricked", "ghost": "robbed", "shock": "blasted away",
 }
 ## hit source -> item id (for the icon); sources that are an item themselves map to themselves.
 const ITEM_OF: Dictionary = {
@@ -21,6 +22,8 @@ const USE_LINES: Dictionary = {
 	"fox": "turned into the %s!", "tunic": "put on the %s!", "surge": "went %s!", "jetpack": "strapped on the %s!",
 	"tornado": "unleashed a %s!", "balloon": "popped up a %s!", "slick": "left a %s!", "magnet": "switched on the %s!",
 	"swap": "fired the %s!", "thunder": "called the %s!",
+	"homing": "fired a %s!", "strike": "called down a %s!", "fakebox": "planted a %s!", "turbo": "lit the %s!",
+	"ghost": "became a %s!", "decoy": "dropped a %s!", "shock": "slammed a %s!",
 }
 
 

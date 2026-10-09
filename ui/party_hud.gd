@@ -470,7 +470,10 @@ func _scan_threats() -> void:
 
 
 ## A rival's item action reached us (fx message): a charging attack is a threat while it lasts.
-func on_remote_fx(from_id: int, _item: String, action: String, d: Dictionary) -> void:
+func on_remote_fx(from_id: int, item: String, action: String, d: Dictionary) -> void:
+	if party != null and not party.practice and (action == "tell" or action == "launch") and party.is_rival(from_id):
+		_on_incoming(from_id, item, action, d)
+		return
 	if party == null or party.practice or action != "charge" or not party.is_rival(from_id):
 		return
 	if bool(d.get("on", true)):
@@ -480,6 +483,25 @@ func on_remote_fx(from_id: int, _item: String, action: String, d: Dictionary) ->
 			warn(from_id, "charging an attack")
 	else:
 		_threat_until.erase(from_id)
+
+
+## A rival's Leader Strike ("tell") or Homing Shell ("launch") is on its way: the one it is aimed at
+## gets the big "Targeted!" banner, and so does anyone standing close enough to the strike's zone.
+func _on_incoming(from_id: int, item: String, action: String, d: Dictionary) -> void:
+	if party.player == null or party.level.finished or party.round_over:
+		return
+	var aimed: bool = int(d.get("t", 0)) == Net.my_id()
+	var near: bool = false
+	if action == "tell" and not aimed:
+		var at: Vector3 = PowerUp.v3(d.get("at", []))
+		near = at != Vector3.ZERO and at.distance_to(party.player.global_position) < StrikeZone.RADIUS + 5.0
+	if not aimed and not near:
+		return
+	_threat_until[from_id] = maxf(float(_threat_until.get(from_id, 0.0)), _now + (StrikeZone.TELL + 0.5 if action == "tell" else 3.0))
+	var what: String = PartyNames.item_name(item)
+	if near:
+		what += " - get clear!"
+	warn(from_id, what)
 
 
 ## A rival used an item (use message): the feed says so, and Thunder / Swap warn when they reach us.
@@ -567,7 +589,7 @@ func _racer_word(id: int, victim: bool) -> String:
 ## Our attack connected: a feed line here, and everyone else hears of it (hf message).
 func _on_hit_landed(target_id: int, src: String) -> void:
 	on_hit_event(Net.my_id(), target_id, src)
-	if target_id > 0 and Net.active:
+	if (target_id > 0 or target_id <= -1000) and Net.active:
 		Net.send_party({"k": "hf", "v": target_id, "s": src})
 
 
@@ -576,7 +598,7 @@ func on_hit_event(attacker: int, victim: int, src: String) -> void:
 	if party == null:
 		return
 	var who: String = _racer_word(attacker, false)
-	var vic: String = "Dummy" if victim < 0 else _racer_word(victim, true)
+	var vic: String = party.racer_name(victim) if victim <= -1000 else ("Dummy" if victim < 0 else _racer_word(victim, true))
 	var key: String = "%d|%s" % [attacker, src]
 	if not _hit_merge.is_empty() and str(_hit_merge["key"]) == key and _now - float(_hit_merge["t"]) < 0.9 \
 			and is_instance_valid(_hit_merge["label"]) and not (_hit_merge["victims"] as Array).has(vic):
@@ -601,7 +623,7 @@ func _on_item_changed(id: String) -> void:
 		_held = id
 	elif _held != "":
 		# the slot emptied: that item was used (everyone else is told, for their feed and warnings)
-		if Net.active and not party.practice:
+		if Net.active and not party.practice and not party.slot_quiet:
 			Net.send_party({"k": "use", "p": _held})
 		_held = ""
 

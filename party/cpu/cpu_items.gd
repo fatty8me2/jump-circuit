@@ -8,9 +8,14 @@ extends RefCounted
 ## (CpuField.hit_rival) and replays the item's own visuals on every screen through the same
 ## static `remote_fx` / power-up mirrors the human items use.
 
+## (The second wave: Homing Shell and Leader Strike when behind, Fake Box and Decoy when leading,
+## Shockwave when rivals crowd it, Turbo Boost on a straight, Ghost to rob a rival who is close.)
+
 ## Seconds a held item that never found a use is kept before it is thrown away.
 const STALE: float = 24.0
 
+## The Shockwave item's reach (party/powerups/shock.gd RADIUS).
+const SHOCK_RADIUS: float = 7.0
 const FORM_BOOST: Dictionary = {"fox": 1.5, "tunic": 1.2, "surge": 1.35}
 
 
@@ -24,7 +29,7 @@ static func consider(r: CpuRacer, f: CpuField, rivals: Array[Dictionary]) -> voi
 		var flat: Vector3 = RouteMath.flat((rv["pos"] as Vector3) - me)
 		rv["dist"] = flat.length()
 		rv["fwd"] = flat.normalized().dot(fwd) if flat.length() > 0.1 else 1.0
-		rv["prog"] = f.progress_of(int(rv["id"]), rv["pos"] as Vector3)
+		rv["prog"] = f.progress_of(int(rv.get("owner", rv["id"])), rv["pos"] as Vector3)
 		if float(rv["prog"]) > mine + 0.5:
 			ahead.append(rv)   # (ahead by real course distance, like the human items)
 	var age: float = r.item_age
@@ -84,6 +89,37 @@ static func consider(r: CpuRacer, f: CpuField, rivals: Array[Dictionary]) -> voi
 			if not t4.is_empty():
 				f.hit_rival(r, t4, Vector3.ZERO, {"e": "float", "ed": 2.0, "s": "gravity", "quiet": true, "add": true})
 				used = true
+		"homing":
+			if not ahead.is_empty() and (my_rank >= 2 or age > 6.0):
+				used = _homing(r, f, rivals, mine)
+		"strike":
+			if my_rank >= 2 or age > 12.0:
+				used = _strike(r, f, rivals, mine)
+		"fakebox":
+			if my_rank <= 2 or age > 10.0:
+				used = _fakebox(r, f)
+		"decoy":
+			if (my_rank <= 3 and not _nearest(rivals, 30.0, -2.0).is_empty()) or age > 10.0:
+				used = _decoy(r, f)
+		"shock":
+			var near: int = 0
+			for rv4: Dictionary in rivals:
+				if float(rv4["dist"]) <= SHOCK_RADIUS:
+					near += 1
+			if near > 0:
+				used = _shock(r, f, rivals)
+		"turbo":
+			if (my_rank >= 2 or age > 8.0) and _straight(r):
+				r.boost_left = 3.5
+				r.boost_mult = 1.5
+				f.cpu_power(r.id, "turbo", true, 3.5)
+				used = true
+		"ghost":
+			if not _nearest(rivals, 7.0, -2.0).is_empty() or age > 10.0:
+				r.ghost_left = 6.0
+				r.steal_cd = 0.0
+				f.cpu_power(r.id, "ghost", true, 6.0)
+				used = true
 	if used:
 		f.cpu_used(r, r.item)
 		r.protect_left = 0.0   # using an item ends the respawn grace (no box camping)
@@ -103,6 +139,92 @@ static func _nearest(rivals: Array[Dictionary], reach: float, min_fwd: float) ->
 			bd = d
 			best = rv
 	return best
+
+
+## Homing Shell: the nearest racer (or decoy) ahead by course distance. The shell is the same
+## HomingShell node every screen draws; the host's copy also decides what it hits.
+static func _homing(r: CpuRacer, f: CpuField, rivals: Array[Dictionary], mine: float) -> bool:
+	var prog: Dictionary = {}
+	for rv: Dictionary in rivals:
+		prog[int(rv["id"])] = float(rv["prog"])
+	var pick: int = PartyRules.swap_target(mine, prog, 140.0)
+	if pick == 0:
+		return false
+	var fwd: Vector3 = RouteMath.flat(r.walker.facing).normalized()
+	var key: String = f.new_key(r.id)
+	var o: Vector3 = _chest(r) + fwd * 0.8 + Vector3(0, 0.3, 0)
+	var dir: Vector3 = (fwd + Vector3(0, 0.45, 0)).normalized()
+	f.cpu_fx(r.id, "homing", "launch", {"k": key, "o": PowerUp.arr(o), "d": PowerUp.arr(dir), "t": pick})
+	var sh: Variant = f.layer.hazards.get(key, null)
+	if sh is HomingShell:
+		(sh as HomingShell).cpu_owner = r
+		(sh as HomingShell).cpu_field = f
+	return true
+
+
+## Leader Strike: whoever is furthest along, if that is not us.
+static func _strike(r: CpuRacer, f: CpuField, rivals: Array[Dictionary], mine: float) -> bool:
+	var leader: Dictionary = {}
+	var best: float = mine
+	for rv: Dictionary in rivals:
+		if rv.get("decoy") == null and float(rv["prog"]) > best:
+			best = float(rv["prog"])
+			leader = rv
+	if leader.is_empty():
+		return false
+	f.cpu_fx(r.id, "strike", "tell", {"k": f.new_key(r.id), "t": int(leader["id"]), "at": PowerUp.arr(leader["center"] as Vector3), "s": r.rng.randi() % 10000})
+	return true
+
+
+## Fake Box: set down behind us, like the Slick Puddle.
+static func _fakebox(r: CpuRacer, f: CpuField) -> bool:
+	var back: Vector3 = -RouteMath.flat(r.walker.facing).normalized()
+	var g: Dictionary = f.layer.ground_at(r.walker.pos + back * 2.2, 4.0)
+	if g.is_empty():
+		return false
+	f.cpu_fx(r.id, "fakebox", "drop", {"k": f.new_key(r.id), "pos": PowerUp.arr(g["position"] as Vector3)})
+	return true
+
+
+## Decoy: a double that runs the route ahead of us.
+static func _decoy(r: CpuRacer, f: CpuField) -> bool:
+	var fwd: Vector3 = RouteMath.flat(r.walker.facing).normalized()
+	var start: Vector3 = r.walker.pos + fwd * 1.1
+	var path: Dictionary = f.layer.route_path(r.walker.pos, PartyDecoy.SPEED * PartyDecoy.LIFE * 1.2)
+	var pts: Array = [PowerUp.arr(start)]
+	var air: Array = [0]
+	for i: int in (path["pts"] as Array).size():
+		pts.append(PowerUp.arr((path["pts"] as Array)[i]))
+		air.append(1 if bool((path["air"] as Array)[i]) else 0)
+	if pts.size() < 2:
+		pts.append(PowerUp.arr(start + fwd * 60.0))
+		air.append(0)
+	f.cpu_fx(r.id, "decoy", "drop", {"k": f.new_key(r.id), "pts": pts, "air": air})
+	return true
+
+
+## Shockwave: everyone within the ring is hurled away.
+static func _shock(r: CpuRacer, f: CpuField, rivals: Array[Dictionary]) -> bool:
+	var radius: float = SHOCK_RADIUS
+	f.cpu_fx(r.id, "shock", "slam", {"at": PowerUp.arr(r.walker.pos)})
+	for rv: Dictionary in rivals:
+		if float(rv["dist"]) > radius:
+			continue
+		var away: Vector3 = RouteMath.flat((rv["pos"] as Vector3) - r.walker.pos)
+		away = away.normalized() if away.length() > 0.2 else RouteMath.flat(r.walker.facing).normalized()
+		var k: float = 1.0 - clampf(float(rv["dist"]) / radius, 0.0, 1.0) * 0.5
+		f.hit_rival(r, rv, away * 17.0 * k + Vector3(0, 10.0 * k, 0), {"st": 0.7, "s": "shock", "quiet": true})
+	return true
+
+
+## A run of plain walking ahead (this step and the next two are walks, no jumps or waits).
+static func _straight(r: CpuRacer) -> bool:
+	if r.walker.mode != RouteWalker.Mode.STEP or r.walker.hold > 0.0:
+		return false
+	for i: int in range(r.walker.step, r.walker.step + 3):
+		if i >= r.walker.route.size() or str(r.walker.route[i].get("kind", "")) != "walk":
+			return false
+	return true
 
 
 static func _chest(r: CpuRacer) -> Vector3:
@@ -134,7 +256,8 @@ static func _thunder(r: CpuRacer, f: CpuField, ahead: Array[Dictionary]) -> bool
 static func _swap(r: CpuRacer, f: CpuField, rivals: Array[Dictionary], mine: float) -> bool:
 	var prog: Dictionary = {}
 	for rv: Dictionary in rivals:
-		prog[int(rv["id"])] = float(rv["prog"])
+		if rv.get("decoy") == null:
+			prog[int(rv["id"])] = float(rv["prog"])
 	var pick: int = PartyRules.swap_target(mine, prog, PartyLayer.SWAP_RANGE)
 	if pick == 0:
 		return false   # nobody to swap with: the item is kept

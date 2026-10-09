@@ -21,11 +21,27 @@ const WEIGHTS: Dictionary = {
 	"fox": [0.3, 3.5],
 	"tunic": [0.3, 3.5],
 	"surge": [0.3, 3.5],
+	# the second wave: catch-up tools for the back of the pack...
+	"homing": [0.0, 3.0],    # needs somebody ahead to chase
+	"strike": [0.0, 3.0],    # hits whoever is in front
+	"turbo": [0.0, 3.5],     # a burst of speed: the leader does not need one
+	# ...a little for the middle...
+	"ghost": [0.6, 2.5],
+	# ...and tools for the racer in front to defend their place
+	"fakebox": [3.0, 1.0],
+	"decoy": [3.0, 1.0],
+	"shock": [3.0, 1.0],
 }
+
+## Items only worth having when somebody is ahead of you (or you are behind): the leader never rolls them.
+const CATCH_UP: Array[String] = ["thunder", "swap", "jetpack", "homing", "strike", "turbo"]
+## Items that protect a lead: they weigh most for the racer in front and least at the back.
+const LEADER_SAFE: Array[String] = ["balloon", "slick", "fakebox", "decoy", "shock"]
 
 ## Order Party Practice hands items out in (every box gives the next one), transformations first.
 const PRACTICE_ORDER: Array[String] = ["fox", "tunic", "surge", "thunder", "slick", "glove", "magnet",
-	"shrink", "swap", "balloon", "jetpack", "tornado", "gravity", "ice"]
+	"shrink", "swap", "balloon", "jetpack", "tornado", "gravity", "ice",
+	"homing", "strike", "fakebox", "turbo", "ghost", "decoy", "shock"]
 
 ## Transformations take over the Attack button and run on a HUD timer.
 const TRANSFORMATIONS: Array[String] = ["fox", "tunic", "surge"]
@@ -45,6 +61,13 @@ const SCRIPTS: Dictionary = {
 	"tornado": preload("res://party/powerups/tornado.gd"),
 	"gravity": preload("res://party/powerups/gravity_bomb.gd"),
 	"ice": preload("res://party/powerups/ice.gd"),
+	"homing": preload("res://party/powerups/homing.gd"),
+	"strike": preload("res://party/powerups/strike.gd"),
+	"fakebox": preload("res://party/powerups/fakebox.gd"),
+	"turbo": preload("res://party/powerups/turbo.gd"),
+	"ghost": preload("res://party/powerups/ghost.gd"),
+	"decoy": preload("res://party/powerups/decoy.gd"),
+	"shock": preload("res://party/powerups/shock.gd"),
 }
 
 

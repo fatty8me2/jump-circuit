@@ -559,10 +559,16 @@ func _practice_screen() -> Control:
 	box.add_child(UiKit.shadowed(UiKit.label(keys, 16, Color(1, 1, 1, 0.8)), 5))
 	root.add_child(box)
 	# the power-up list
-	var list_panel: PanelContainer = UiKit.panel(Vector2(560, 0))
+	var list_panel: PanelContainer = UiKit.panel(Vector2(740, 0))
 	var list: VBoxContainer = UiKit.vbox(4)
 	list_panel.add_child(list)
 	list.add_child(UiKit.label("POWER-UPS", 16, UiKit.TEAL))
+	# two columns: 21 power-ups no longer fit one
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 18)
+	grid.add_theme_constant_override("v_separation", 4)
+	list.add_child(grid)
 	for id: String in PartyItems.PRACTICE_ORDER:
 		var row: HBoxContainer = UiKit.hbox(10)
 		var icon := PartyIcon.new()
@@ -571,15 +577,15 @@ func _practice_screen() -> Control:
 		row.add_child(icon)
 		var txt: VBoxContainer = UiKit.vbox(0)
 		txt.add_child(UiKit.label(PartyNames.item_name(id), 17, PartyNames.item_color(id).lightened(0.3)))
-		var d: Label = UiKit.label(PartyNames.item_desc(id), 13, UiKit.SOFT)
+		var d: Label = UiKit.label(PartyNames.item_desc(id), 12, UiKit.SOFT)
 		d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		d.custom_minimum_size = Vector2(470, 0)
+		d.custom_minimum_size = Vector2(300, 0)
 		txt.add_child(d)
 		row.add_child(txt)
-		list.add_child(row)
+		grid.add_child(row)
 	root.add_child(list_panel)
 	_focus_pref = first
-	return _left_column(root, 1140)
+	return _left_column(root, 1340)
 
 
 # ---- locker (characters, hats, paints, trails, finishes, titles, colour) ---------------------------

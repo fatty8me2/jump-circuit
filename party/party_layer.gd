@@ -25,6 +25,11 @@ extends Node3D
 ##   round_end {r, rows, cup}      (host)  the round is over: its scoreboard and the cup totals
 ##   hf        {v, s}                      sender's attack s connected with racer v (feed line, from the HUD)
 ##   use       {p}                         sender used item p (feed line + Thunder / Swap "Targeted!", from the HUD)
+##   hh        {a, s}                      sender (the victim) was hit by a's hazard s (Strike, Fake Box ...): feed line
+##   steal     {}                          -> victim: a Ghost is robbing you (your held item)
+##   stolen    {it, ret}                   -> thief: here is the item (ret: bounced back to its owner instead)
+##   steal_no  {why}                       -> thief: refused (empty, Balloon Shield, protection, ghost)
+## Item "fx" actions (p / a): homing launch + boom, strike tell, fakebox drop, decoy drop, shock slam, ghost steal.
 ##   md        {v, m, ...}         (host)  a game type's decision (party/modes/): v = type id, m = its message
 ##   mq        {v, m, ...}         -> host: a game type's request (coin pickup, passing the bomb)
 
@@ -53,6 +58,13 @@ const SWAP_RANGE: float = 160.0
 const SAFE_SETTLE: float = 0.25
 ## Shrink factor of the model and the collision capsule.
 const SHRINK_SCALE: float = 0.5
+## Mid-course item box rows: no stretch of route longer than about this many metres without a row (lawns count), never closer than
+## MID_LAWN_CLEAR to a checkpoint lawn or MID_ROW_CLEAR to another row.
+const MID_SPACING: float = 46.0
+const MID_LAWN_CLEAR: float = 8.0
+const MID_ROW_CLEAR: float = 14.0
+## Spacing of the extra candidate spots along a walked stretch of route.
+const MID_SAMPLE: float = 3.0
 ## The player scene's capsule (player/player.tscn): radius 0.38, height 1.3, centred 0.65 up.
 const SHAPE_RADIUS: float = 0.38
 const SHAPE_HEIGHT: float = 1.3
@@ -136,6 +148,17 @@ var _ready_done: bool = false
 var _stun_fx: PartyStatusFx
 ## Racer id -> clock of the last KO burst drawn for them (so one KO shows one burst).
 var _ko_fx_at: Dictionary = {}
+## Decoys (ours and rivals') standing in the world; they are targets like any racer.
+var decoys: Array[PartyDecoy] = []
+## Item boxes placed along the course between the checkpoint lawns, per segment (0 = start .. checkpoint 1).
+var mid_counts: Array[int] = []
+## Route metres in each of those segments (what the mid-course rows were spread over).
+var mid_lengths: Array[float] = []
+## The HUD ignores the next "slot emptied" (a theft is not a use).
+var slot_quiet: bool = false
+## A Ghost's steal request we are waiting on (clock), -1 none.
+var _steal_wait: float = -1.0
+var _steal_hint_at: float = -9.0
 
 
 func setup(p_level: LevelBase) -> void:
@@ -255,11 +278,193 @@ func place_boxes() -> void:
 			nth += 1
 			if thin and nth % 2 == 0:
 				continue   # Low item frequency: every second box
-			var box := ItemBox.new()
-			box.index = boxes.size()
-			add_child(box)
-			box.global_position = s + Vector3(0, 1.15, 0)
-			boxes.append(box)
+			_add_box(s)
+	if practice or PartyRuleset.boxes_on():
+		place_mid_boxes(pts)
+
+
+func _add_box(ground: Vector3) -> void:
+	var box := ItemBox.new()
+	box.index = boxes.size()
+	add_child(box)
+	box.global_position = ground + Vector3(0, 1.15, 0)
+	boxes.append(box)
+
+
+## Rows of boxes along the course between the checkpoint lawns, so that no stretch of route is
+## longer than about MID_SPACING metres without boxes (the lawns count as rows). Walking the
+## level's own route (the points the bot stands on): a segment of L route metres between two
+## respawn points gets ceil(L / MID_SPACING) - 1 rows, spread evenly; each goes on the route
+## point nearest its slot that is flat static ground. Boxes are found with rays that skip moving
+## platforms, so they sit where a racer really can run through them.
+func place_mid_boxes(pts: Array[Transform3D]) -> void:
+	mid_counts.clear()
+	mid_lengths.clear()
+	for i: int in pts.size():
+		mid_counts.append(0)
+		mid_lengths.append(0.0)
+	var seq: Array[Dictionary] = route_points()
+	if seq.is_empty():
+		return
+	var skip: Array[RID] = []
+	for n: Node in level.find_children("*", "AnimatableBody3D", true, false):
+		skip.append((n as CollisionObject3D).get_rid())
+	# each segment's route points with the route metres at each (from the segment's start)
+	var segs: Array = []
+	for i: int in pts.size():
+		segs.append([])
+	var prev: Vector3 = seq[0]["p"]
+	var run: float = 0.0
+	var cur: int = 0
+	for e: Dictionary in seq:
+		var p: Vector3 = e["p"]
+		var cp: int = clampi(int(e["cp"]), 0, pts.size() - 1)
+		if cp != cur:
+			cur = cp
+			run = 0.0
+			prev = p
+		var leg: float = p.distance_to(prev)
+		var flat := Vector3(p.x - prev.x, 0, p.z - prev.z)
+		# a run along the ground (not a jump): spots every few metres along it are fair game too
+		if not bool(e["air"]) and leg > 6.0:
+			var m: int = 1
+			while float(m) * MID_SAMPLE < leg - 1.5:
+				(segs[cur] as Array).append({"p": prev.lerp(p, float(m) * MID_SAMPLE / leg), "at": run + float(m) * MID_SAMPLE, "dir": flat})
+				m += 1
+		run += leg
+		(segs[cur] as Array).append({"p": p, "at": run, "dir": flat})
+		mid_lengths[cur] = run
+		prev = p
+	var rows: Array[Vector3] = []
+	var thin: bool = not practice and PartyRuleset.box_share() < 1.0
+	for sg: int in segs.size():
+		var list: Array = segs[sg]
+		var length: float = mid_lengths[sg]
+		var n: int = maxi(ceili(length / MID_SPACING) - 1, 0)
+		for k: int in range(1, n + 1):
+			if thin and k % 2 == 0:
+				continue   # Low item frequency: every second row
+			var want: float = length * float(k) / float(n + 1)
+			# the route points of the segment, nearest to the slot first (a bad stretch of platforms
+			# moves the row along rather than dropping it)
+			var cand: Array = list.duplicate()
+			cand.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return absf(float(a["at"]) - want) < absf(float(b["at"]) - want))
+			for c: Dictionary in cand:
+				var p: Vector3 = c["p"]
+				if not mid_clear(p, pts, rows):
+					continue
+				var spots: Array[Vector3] = mid_spots(p, c["dir"], skip)
+				if spots.is_empty():
+					continue
+				for sp: Vector3 in spots:
+					_add_box(sp)
+				mid_counts[sg] += spots.size()
+				rows.append(p)
+				break
+
+
+## Far enough from every checkpoint lawn and from the other mid-course rows.
+func mid_clear(p: Vector3, pts: Array[Transform3D], rows: Array[Vector3]) -> bool:
+	for t: Transform3D in pts:
+		if Vector2(t.origin.x - p.x, t.origin.z - p.z).length() < MID_LAWN_CLEAR and absf(t.origin.y - p.y) < 6.0:
+			return false
+	for r: Vector3 in rows:
+		if r.distance_to(p) < MID_ROW_CLEAR:
+			return false
+	return true
+
+
+## The level's main route as ground points in order: [{p, cp, air}] where cp = checkpoints banked
+## so far and air = the leg into the point is a jump. Points that sit on a moving platform (their
+## step has no fixed spot) are left out.
+func route_points() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var cp: int = 0
+	for step: Dictionary in level.route:
+		var kind: String = str(step.get("kind", ""))
+		if kind == "checkpoint":
+			cp += 1
+			continue
+		var from_v: Variant = step.get("from", null)
+		var has_from: bool = typeof(from_v) == TYPE_VECTOR3 and (from_v as Vector3) != Vector3.ZERO
+		if has_from:
+			out.append({"p": from_v, "cp": cp, "air": false})
+		for k: String in ["to", "top"]:
+			var v: Variant = step.get(k, null)
+			if typeof(v) == TYPE_VECTOR3 and (v as Vector3) != Vector3.ZERO:
+				out.append({"p": v, "cp": cp, "air": has_from and kind != "walk"})
+				break
+	return out
+
+
+## A row of up to three boxes across the route at `p`: each needs flat static ground (a ray that
+## skips moving platforms) within a step of the route point's height. Empty = not a safe place.
+func mid_spots(p: Vector3, dir: Vector3, skip: Array[RID]) -> Array[Vector3]:
+	var space: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+	var fwd: Vector3 = dir.normalized() if dir.length() > 0.1 else Vector3(0, 0, -1)
+	var right: Vector3 = fwd.cross(Vector3.UP).normalized()
+	var base: Dictionary = mid_ground(space, p, skip)
+	if base.is_empty():
+		return []
+	var by: float = (base["position"] as Vector3).y
+	var out: Array[Vector3] = []
+	for l: float in [0.0, -1.5, 1.5]:
+		var q: Vector3 = p + right * l
+		var h: Dictionary = base if l == 0.0 else mid_ground(space, q, skip)
+		if h.is_empty() or absf((h["position"] as Vector3).y - by) > 0.35:
+			continue
+		var g: Vector3 = h["position"]
+		# headroom for the box and a racer's head
+		var up := PhysicsRayQueryParameters3D.create(g + Vector3(0, 0.3, 0), g + Vector3(0, 2.4, 0), 1)
+		up.exclude = skip
+		if not space.intersect_ray(up).is_empty():
+			continue
+		out.append(g)
+	return out
+
+
+func mid_ground(space: PhysicsDirectSpaceState3D, p: Vector3, skip: Array[RID]) -> Dictionary:
+	var rq := PhysicsRayQueryParameters3D.create(p + Vector3(0, 1.2, 0), p + Vector3(0, -2.2, 0), 1)
+	rq.exclude = skip
+	var h: Dictionary = space.intersect_ray(rq)
+	if h.is_empty() or (h["normal"] as Vector3).y < 0.9:
+		return {}
+	var c: Object = h["collider"]
+	if not (c is StaticBody3D) or c is AnimatableBody3D:
+		return {}
+	return h
+
+
+## The route ahead of `from` as waypoints for a Decoy: the points that follow the nearest route
+## point, up to `max_len` metres. {pts: Array[Vector3], air: Array[bool]}; empty if `from` is
+## nowhere near the route.
+func route_path(from: Vector3, max_len: float) -> Dictionary:
+	var seq: Array[Dictionary] = route_points()
+	var best_i: int = -1
+	var best_d: float = 30.0
+	for i: int in seq.size():
+		var d: float = (seq[i]["p"] as Vector3).distance_to(from)
+		if d < best_d:
+			best_d = d
+			best_i = i
+	var pts: Array = []
+	var air: Array = []
+	if best_i < 0:
+		return {"pts": pts, "air": air}
+	var prev: Vector3 = from
+	var total: float = 0.0
+	for i: int in range(best_i + 1, seq.size()):
+		var p: Vector3 = seq[i]["p"]
+		var d: float = p.distance_to(prev)
+		if d < 0.8:
+			continue
+		total += d
+		pts.append(p)
+		air.append(bool(seq[i]["air"]))
+		prev = p
+		if total >= max_len:
+			break
+	return {"pts": pts, "air": air}
 
 
 func place_dummies() -> void:
@@ -468,8 +673,8 @@ func roll_for(id: int) -> String:
 		place = order.size()
 	var frac: float = PartyItems.place_fraction(place, order.size())
 	var it: String = PartyItems.roll(frac, _rng.randf())
-	if place <= 1 and (it == "swap" or it == "thunder" or it == "jetpack"):
-		it = "balloon"
+	if place <= 1 and PartyItems.CATCH_UP.has(it):
+		it = "balloon"   # the leader never gets a catch-up tool (their weights are 0; this guards the edges)
 	return filter_item(it)
 
 
@@ -613,6 +818,14 @@ func targets() -> Array[Dictionary]:
 		if is_instance_valid(d) and not d.knocked_out:
 			out.append({"id": d.id, "node": d, "pos": d.global_position, "center": d.center(), "vel": d.vel,
 				"grounded": d.grounded, "dummy": true})
+	# decoys look like their owners: everyone but the owner and their team can hit them
+	for dc: PartyDecoy in decoys:
+		if not is_instance_valid(dc) or dc.popped:
+			continue
+		if not practice and not is_rival(dc.owner_id):
+			continue
+		out.append({"id": dc.id, "node": dc, "pos": dc.global_position, "center": dc.center(), "vel": dc.vel,
+			"grounded": dc.grounded, "dummy": false, "decoy": true, "owner": dc.owner_id})
 	for id: Variant in level._ghosts:
 		var pid: int = int(id)
 		if not Net.roster.has(pid) or float(Net.roster[pid].get("finished", -1.0)) >= 0.0 or is_out(pid):
@@ -694,7 +907,9 @@ func melee_dir(reach: float = 3.0) -> Vector3:
 func hit(t: Dictionary, kb: Vector3, o: Dictionary = {}) -> void:
 	var src: String = str(o.get("s", ""))
 	var c: Vector3 = t["center"]
-	if bool(t.get("dummy", false)):
+	if bool(t.get("decoy", false)):
+		(t["node"] as PartyDecoy).take_hit(kb, o)
+	elif bool(t.get("dummy", false)):
 		(t["node"] as PracticeDummy).take_hit(kb, o)
 	else:
 		var g: RemoteRacer = t["node"] as RemoteRacer
@@ -743,7 +958,15 @@ func is_rival(id: int) -> bool:
 
 ## Our own Player can be hurt right now (racing, not finished, round still on).
 func local_vulnerable() -> bool:
-	return player != null and not level.finished and not round_over and protect_left <= 0.0
+	return player != null and not level.finished and not round_over and protect_left <= 0.0 and not ghosted()
+
+
+## A Ghost is running on us: nothing touches us (see PowerUp "ghost").
+func ghosted() -> bool:
+	for pw: PowerUp in actives:
+		if not pw.ended and pw.item_id == "ghost":
+			return true
+	return false
 
 
 ## Remembers `id` as the last to mess with us (a fall in the next few seconds is their KO).
@@ -757,8 +980,13 @@ func mark_hit(id: int) -> void:
 func take_hazard(from_id: int, kb: Vector3, o: Dictionary = {}) -> void:
 	if not local_vulnerable():
 		return
-	_on_hit(from_id, {"kb": PowerUp.arr(kb), "st": float(o.get("st", 0.0)), "ko": bool(o.get("ko", false)),
-		"e": str(o.get("e", "")), "ed": float(o.get("ed", 0.0)), "s": str(o.get("s", "")), "add": bool(o.get("add", false))})
+	var src: String = str(o.get("s", ""))
+	var landed: bool = _on_hit(from_id, {"kb": PowerUp.arr(kb), "st": float(o.get("st", 0.0)), "ko": bool(o.get("ko", false)),
+		"e": str(o.get("e", "")), "ed": float(o.get("ed", 0.0)), "s": src, "add": bool(o.get("add", false))})
+	# a hazard has no attacker screen to report it: the victim says so ("Ana struck Bo!")
+	if landed and bool(o.get("feed", false)) and src != "" and from_id > 0:
+		hud.on_hit_event(from_id, Net.my_id(), src)
+		Net.send_party({"k": "hh", "a": from_id, "s": src})
 
 
 # ---- course progress -------------------------------------------------------------------------
@@ -809,7 +1037,7 @@ func targets_ahead() -> Array[Dictionary]:
 
 ## The nearest racer ahead of us by real course distance (Swap Warp), as a target entry, or {}.
 ## In Party Practice: the nearest dummy.
-func target_ahead() -> Dictionary:
+func target_ahead(include_decoys: bool = false, max_range: float = SWAP_RANGE) -> Dictionary:
 	var best: Dictionary = {}
 	if practice or not Net.active:
 		var bd: float = INF
@@ -821,12 +1049,53 @@ func target_ahead() -> Dictionary:
 		return best
 	var ahead: Dictionary = {}
 	for t: Dictionary in targets():
+		if bool(t.get("decoy", false)):
+			if include_decoys:
+				ahead[int(t["id"])] = progress_of(int(Net.roster.get(int(t["owner"]), {}).get("cp", 0)), t["pos"])
+			continue
 		ahead[int(t["id"])] = racer_progress(int(t["id"]))
-	var pick: int = PartyRules.swap_target(my_progress(), ahead, SWAP_RANGE)
+	var pick: int = PartyRules.swap_target(my_progress(), ahead, max_range)
 	for t: Dictionary in targets():
 		if int(t["id"]) == pick:
 			return t
 	return best
+
+
+## The racer in the lead (as a target entry) for the Leader Strike: the furthest-along rival, if
+## they are ahead of us - {} when we lead. In Party Practice: the nearest dummy.
+func leader_target() -> Dictionary:
+	if practice or not Net.active:
+		return target_ahead()
+	var best: Dictionary = {}
+	var best_p: float = my_progress()
+	for t: Dictionary in targets():
+		if bool(t.get("dummy", false)) or bool(t.get("decoy", false)):
+			continue
+		var pr: float = racer_progress(int(t["id"]))
+		if pr > best_p:
+			best_p = pr
+			best = t
+	return best
+
+
+## Where racer / dummy / decoy `id` is right now (their chest), or null if gone. Our own id = our Player.
+func target_center(id: int) -> Variant:
+	if id == Net.my_id() and player != null:
+		return player.global_position + Vector3(0, 0.8, 0)
+	if id <= -1000:
+		for dc: PartyDecoy in decoys:
+			if is_instance_valid(dc) and dc.id == id and not dc.popped:
+				return dc.center()
+		return null
+	if id < 0:
+		for d: PracticeDummy in dummies:
+			if is_instance_valid(d) and d.id == id and not d.knocked_out:
+				return d.center()
+		return null
+	var g: RemoteRacer = ghost(id)
+	if g != null:
+		return g.global_position + Vector3(0, 0.8, 0)
+	return null
 
 
 # ---- safe ground & respawn protection ---------------------------------------------------------
@@ -958,12 +1227,12 @@ static func _shove_dust(parent: Node, o: Vector3, dir: Vector3) -> void:
 
 # ---- being hit (victim side) ----------------------------------------------------------------
 
-func _on_hit(from_id: int, m: Dictionary) -> void:
+func _on_hit(from_id: int, m: Dictionary) -> bool:
 	if not local_vulnerable():
-		return
+		return false
 	for pw: PowerUp in actives:
 		if not pw.ended and pw.absorb_hit(from_id):
-			return
+			return false
 	last_hit_by = from_id
 	last_hit_at = clock
 	var src: String = str(m.get("s", ""))
@@ -979,7 +1248,7 @@ func _on_hit(from_id: int, m: Dictionary) -> void:
 		sfx.play("ko", 1.0)
 		PartyFx.shake(level, 0.8)
 		level.fail("hazard")
-		return
+		return true
 	if bool(m.get("add", false)):
 		player.add_impulse(kb)
 	elif kb.length() > 0.01:
@@ -996,6 +1265,7 @@ func _on_hit(from_id: int, m: Dictionary) -> void:
 		PartyFx.shake(level, clampf(kb.length() / 30.0, 0.2, 0.7))
 		PartyFx.burst(self, player.global_position + Vector3(0, 0.8, 0), Color(1, 0.9, 0.6), 16, 4.0)
 		PartyFx.star_ring(self, player.global_position + Vector3(0, 0.8, 0), Color(1.0, 0.9, 0.4), 6, 4.0, 0.32, kb.normalized())
+	return true
 
 
 ## Dizzy stars over our head for a plain stun (not when a status already shows its look).
@@ -1124,6 +1394,8 @@ func _apply_ko(by: int, victim: int) -> void:
 
 
 func racer_name(id: int) -> String:
+	if id <= -1000:
+		return "a Decoy"
 	if id < 0:
 		return "Dummy"
 	if Net.roster.has(id):
@@ -1181,6 +1453,21 @@ func _on_message(from_id: int, m: Dictionary) -> void:
 			_apply_bonus(int(m.get("id", 0)), int(m.get("cp", 0)))
 		"round_end":
 			apply_round_end(m)
+		"hh":
+			if from_id != Net.my_id():
+				hud.on_hit_event(int(m.get("a", 0)), from_id, str(m.get("s", "")))
+		"steal":
+			_on_steal(from_id, int(m.get("by", 0)))
+		"stolen", "steal_no":
+			var cpu: int = int(m.get("for", 0))
+			if cpu != 0:
+				# an answer for a CPU thief: the host (who simulates it) takes it from here
+				if Net.is_host() and CpuField.is_cpu_id(cpu):
+					Net.send_party(m, cpu)
+			elif k == "stolen":
+				_on_stolen(from_id, str(m.get("it", "")), bool(m.get("ret", false)), int(m.get("v", 0)))
+			else:
+				_on_steal_no(str(m.get("why", "")))
 		"hf":
 			hud.on_remote_hit(from_id, int(m.get("v", 0)), str(m.get("s", "")))
 		"use":
@@ -1223,6 +1510,109 @@ func _remote_fx(from_id: int, p: String, a: String, d: Dictionary) -> void:
 	var scr: GDScript = PartyItems.script_for(p)
 	if scr != null and PartyItems.has_remote_fx(p):
 		scr.call("remote_fx", self, from_id, a, d)
+
+
+# ---- the Ghost's theft -------------------------------------------------------------------------
+
+## A request is in flight (the Ghost waits for the answer before trying again).
+func steal_pending() -> bool:
+	return _steal_wait >= 0.0 and clock - _steal_wait < 2.5
+
+
+## Ghost, thief side: a rival `t` is within reach. A practice dummy "holds" the next item; a racer
+## is asked (their answer decides: empty hands, a Balloon Shield or respawn protection say no).
+func try_steal(t: Dictionary) -> void:
+	if bool(t.get("decoy", false)):
+		return
+	if bool(t.get("dummy", false)):
+		var d: PracticeDummy = t["node"] as PracticeDummy
+		if d == null or item != "":
+			return
+		d.take_hit(Vector3(0, 3.0, 0), {"s": "ghost", "add": true, "st": 0.4})
+		hit_landed.emit(d.id, "ghost")
+		_steal_done(_practice_item(), d.center())
+		return
+	_steal_wait = clock
+	Net.send_party({"k": "steal"}, int(t["id"]))
+
+
+## Victim side: a Ghost reaches into our pockets.
+## `thief` (0 = the sender): a CPU's request reaches a remote human from the host, so the thief is
+## named in the message; the answer carries it back ("for") and the host hands it to that CPU.
+func _on_steal(from_id: int, thief: int = 0) -> void:
+	if thief == 0:
+		thief = from_id
+	if not is_rival(thief) or not local_vulnerable():
+		_steal_reply(from_id, thief, {"k": "steal_no", "why": "safe"})
+		return
+	for pw: PowerUp in actives:
+		if not pw.ended and pw.absorb_hit(thief):
+			_steal_reply(from_id, thief, {"k": "steal_no", "why": "safe"})
+			return
+	if item == "":
+		_steal_reply(from_id, thief, {"k": "steal_no", "why": "empty"})
+		return
+	var it: String = item
+	slot_quiet = true
+	item = ""
+	item_changed.emit("")
+	slot_quiet = false
+	_steal_reply(from_id, thief, {"k": "stolen", "it": it})
+	from_id = thief
+	hit_taken.emit(from_id, "ghost")
+	hud.announce("%s stole your %s!" % [racer_name(from_id), PartyNames.item_name(it)], PartyNames.item_color("ghost"))
+	sfx.play("steal", 0.9, 0.8)
+	PartyFx.burst(self, player.global_position + Vector3(0, 0.9, 0), Color(0.7, 0.85, 1.0), 20, 4.0, 0.22, 0.5)
+
+
+func _steal_reply(to_id: int, thief: int, msg: Dictionary) -> void:
+	msg["v"] = Net.my_id()
+	if thief != to_id:
+		msg["for"] = thief
+	Net.send_party(msg, to_id)
+
+
+## Thief side: the item arrives (or comes back to us - `returned` - because the thief could not take it).
+## `victim` is who it came from (0 = the sender).
+func _on_stolen(from_id: int, it: String, returned: bool, victim: int = 0) -> void:
+	if not PartyItems.PRACTICE_ORDER.has(it):
+		return
+	if returned:
+		if item == "":
+			give_item(it)
+		return
+	if _steal_wait < 0.0 or clock - _steal_wait > 4.0 or item != "":
+		# too late, or the slot filled meanwhile: it goes back to where it came from
+		Net.send_party({"k": "stolen", "it": it, "ret": true}, from_id)
+		return
+	_steal_wait = -1.0
+	if victim == 0:
+		victim = from_id
+	var g: RemoteRacer = ghost(victim)
+	_steal_done(it, g.global_position + Vector3(0, 0.8, 0) if g != null else player.global_position)
+	hit_landed.emit(victim, "ghost")
+
+
+func _on_steal_no(why: String) -> void:
+	_steal_wait = -1.0
+	if why == "empty" and clock - _steal_hint_at > 2.5:
+		_steal_hint_at = clock
+		hud.announce("Empty pockets!", PartyNames.item_color("ghost"))
+		sfx.play("clank", 0.5, 1.4)
+	elif why == "safe" and clock - _steal_hint_at > 2.5:
+		_steal_hint_at = clock
+		hud.announce("Can't steal from them!", PartyNames.item_color("ghost"))
+		sfx.play("pop", 0.6, 0.8)
+
+
+## The loot lands in our slot with a flourish (and everybody sees the grab).
+func _steal_done(it: String, from_pos: Vector3) -> void:
+	var mine: Vector3 = player.global_position + Vector3(0, 0.8, 0)
+	PartyItems.script_for("ghost").call("steal_fx", self, from_pos, mine)
+	send_fx("ghost", "steal", {"b": PowerUp.arr(from_pos)})
+	sfx.play("steal", 1.0, 1.0)
+	give_item(it)
+	hud.announce("STOLE %s!" % PartyNames.item_name(it), PartyNames.item_color(it))
 
 
 ## Swap Warp, caster side: ask the racer `tg` to trade places. Nothing moves until they accept

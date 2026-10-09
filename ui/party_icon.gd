@@ -114,6 +114,69 @@ func _draw() -> void:
 				draw_line(c + d * 0.6, c + d * 0.6 + d.rotated(-0.8) * 0.3, w, 2.0 * k)
 				draw_line(c - d * 0.6, c - d * 0.6 - d.rotated(0.8) * 0.3, w, 2.0 * k)
 				draw_line(c - d * 0.6, c - d * 0.6 - d.rotated(-0.8) * 0.3, w, 2.0 * k)
+		"homing":
+			# a spiky shell with a curving seeker trail
+			var dome := PackedVector2Array()
+			for i: int in 13:
+				var a: float = PI + PI * float(i) / 12.0
+				dome.append(c + Vector2(cos(a) * 15.0, sin(a) * 13.0 + 4.0) * k)
+			draw_colored_polygon(dome, w)
+			draw_rect(Rect2(c + Vector2(-17, 4) * k, Vector2(34, 5) * k), Color(1.0, 0.97, 0.85))
+			for x: float in [-8.0, 0.0, 8.0]:
+				draw_colored_polygon(PackedVector2Array([c + Vector2(x - 3, -6) * k, c + Vector2(x, -15) * k, c + Vector2(x + 3, -6) * k]), Color(0.95, 1.0, 0.85))
+			draw_arc(c + Vector2(-4, 18) * k, 12.0 * k, PI * 0.1, PI * 0.9, 12, Color(1, 1, 1, 0.7), 2.5 * k)
+			draw_colored_polygon(PackedVector2Array([c + Vector2(10, 17) * k, c + Vector2(4, 12) * k, c + Vector2(4, 22) * k]), Color(1, 1, 1, 0.8))
+		"strike":
+			# a crosshair under a falling bolt
+			draw_arc(c + Vector2(0, 8) * k, 13.0 * k, 0.0, TAU, 28, w, 3.0 * k)
+			for a: float in [0.0, PI * 0.5, PI, PI * 1.5]:
+				var d := Vector2(cos(a), sin(a))
+				draw_line(c + Vector2(0, 8) * k + d * 9.0 * k, c + Vector2(0, 8) * k + d * 19.0 * k, w, 2.5 * k)
+			draw_colored_polygon(PackedVector2Array([c + Vector2(3, -26) * k, c + Vector2(-6, -8) * k, c + Vector2(0, -8) * k,
+				c + Vector2(-4, 6) * k, c + Vector2(8, -12) * k, c + Vector2(2, -12) * k, c + Vector2(8, -26) * k]), Color(1.0, 0.95, 0.4))
+			draw_circle(c + Vector2(0, 8) * k, 3.0 * k, Color(1.0, 0.3, 0.2))
+		"fakebox":
+			# an item box that is not quite right
+			draw_rect(Rect2(c + Vector2(-15, -13) * k, Vector2(30, 28) * k), w)
+			draw_rect(Rect2(c + Vector2(-15, -13) * k, Vector2(30, 28) * k), Color(0.3, 0.2, 0.0), false, 2.0 * k)
+			var f: Font = get_theme_default_font()
+			draw_string(f, c + Vector2(-7, 9) * k, "?", HORIZONTAL_ALIGNMENT_CENTER, -1, int(34.0 * k), Color(0.85, 0.5, 0.05))
+			draw_line(c + Vector2(-19, 19) * k, c + Vector2(19, -17) * k, Color(1.0, 0.25, 0.2), 4.0 * k)
+		"turbo":
+			# a flame with speed lines
+			draw_colored_polygon(PackedVector2Array([c + Vector2(6, -24) * k, c + Vector2(18, -2) * k, c + Vector2(10, 4) * k, c + Vector2(13, 22) * k,
+				c + Vector2(-2, 10) * k, c + Vector2(-12, 20) * k, c + Vector2(-8, -2) * k, c + Vector2(-16, -4) * k]), w)
+			draw_colored_polygon(PackedVector2Array([c + Vector2(3, -6) * k, c + Vector2(9, 8) * k, c + Vector2(1, 16) * k, c + Vector2(-6, 6) * k]), Color(1.0, 0.8, 0.3))
+			for yy: float in [-10.0, 2.0, 14.0]:
+				draw_line(c + Vector2(-24, yy) * k, c + Vector2(-17, yy) * k, Color(1, 1, 1, 0.65), 2.0 * k)
+		"ghost":
+			var body := PackedVector2Array()
+			for i: int in 13:
+				var a: float = PI + PI * float(i) / 12.0
+				body.append(c + Vector2(cos(a) * 15.0, sin(a) * 17.0 - 3.0) * k)
+			body.append(c + Vector2(15, 18) * k)
+			body.append(c + Vector2(9, 12) * k)
+			body.append(c + Vector2(3, 18) * k)
+			body.append(c + Vector2(-3, 12) * k)
+			body.append(c + Vector2(-9, 18) * k)
+			body.append(c + Vector2(-15, 12) * k)
+			draw_colored_polygon(body, w)
+			draw_circle(c + Vector2(-5.5, -4) * k, 3.2 * k, Color(0.15, 0.2, 0.4))
+			draw_circle(c + Vector2(5.5, -4) * k, 3.2 * k, Color(0.15, 0.2, 0.4))
+			draw_circle(c + Vector2(0, 5) * k, 2.4 * k, Color(0.15, 0.2, 0.4))
+		"decoy":
+			# a solid racer and its translucent double
+			draw_circle(c + Vector2(-7, -9) * k, 7.0 * k, w)
+			draw_colored_polygon(PackedVector2Array([c + Vector2(-16, 18) * k, c + Vector2(-14, 0) * k, c + Vector2(0, 0) * k, c + Vector2(2, 18) * k]), w)
+			draw_arc(c + Vector2(10, -9) * k, 7.0 * k, 0.0, TAU, 16, Color(1, 1, 1, 0.75), 2.5 * k)
+			draw_polyline(PackedVector2Array([c + Vector2(4, 18) * k, c + Vector2(6, 0) * k, c + Vector2(20, 0) * k, c + Vector2(22, 18) * k]), Color(1, 1, 1, 0.75), 2.5 * k)
+		"shock":
+			# a stomp: rings of force rolling out from the ground
+			draw_circle(c + Vector2(0, 12) * k, 5.0 * k, w)
+			for i: int in 3:
+				var rr: float = (9.0 + 7.0 * float(i)) * k
+				draw_arc(c + Vector2(0, 12) * k, rr, PI * 1.08, PI * 1.92, 16, Color(1, 1, 1, 0.95 - 0.25 * float(i)), (3.5 - 0.7 * float(i)) * k)
+			draw_line(c + Vector2(-22, 16) * k, c + Vector2(22, 16) * k, Color(1, 1, 1, 0.6), 2.5 * k)
 		_:
 			draw_circle(c, 10.0 * k, w)
 
