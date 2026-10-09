@@ -311,14 +311,14 @@ const THEMES: Dictionary = {
 		"decor": Color(0.22, 0.12, 0.08), "decor2": Color(0.45, 0.25, 0.65), "metal": Color(0.55, 0.55, 0.60),
 		"cloud_light": Color(0.24, 0.16, 0.30), "cloud_shade": Color(0.07, 0.04, 0.10),
 	},
-	"siege": {  # PLACEHOLDER palette - the level agent owns and retunes this entry
-		"sky_top": Color(0.30, 0.32, 0.40), "sky_horizon": Color(0.85, 0.55, 0.35), "sky_bottom": Color(0.25, 0.22, 0.20),
-		"sun": Color(1.00, 0.75, 0.50), "sun_energy": 1.0, "sun_rot": Vector3(-45, 150, 0),
-		"ambient": Color(0.60, 0.60, 0.65), "ambient_energy": 0.8, "fog": Color(0.55, 0.45, 0.40), "fog_density": 0.002,
-		"top": Color(0.60, 0.58, 0.54), "side": Color(0.38, 0.36, 0.34), "trim": Color(0.85, 0.20, 0.15),
-		"alt_top": Color(0.50, 0.38, 0.25), "accent": Color(0.95, 0.25, 0.15), "accent2": Color(0.25, 0.40, 0.85),
-		"decor": Color(0.32, 0.30, 0.28), "decor2": Color(0.55, 0.40, 0.20), "metal": Color(0.55, 0.55, 0.60),
-		"cloud_light": Color(0.63, 0.52, 0.47), "cloud_shade": Color(0.22, 0.18, 0.16),
+	"siege": {  # dusk under siege: bruised sky, burning horizon, warm ashlar, crimson and gold
+		"sky_top": Color(0.10, 0.08, 0.20), "sky_horizon": Color(1.00, 0.50, 0.16), "sky_bottom": Color(0.16, 0.085, 0.07),
+		"sun": Color(1.00, 0.62, 0.34), "sun_energy": 1.2, "sun_rot": Vector3(-12, 160, 0),
+		"ambient": Color(0.62, 0.42, 0.50), "ambient_energy": 0.8, "fog": Color(0.50, 0.26, 0.20), "fog_density": 0.0042,
+		"top": Color(0.64, 0.59, 0.53), "side": Color(0.36, 0.33, 0.32), "trim": Color(0.95, 0.72, 0.20),
+		"alt_top": Color(0.52, 0.37, 0.25), "accent": Color(0.80, 0.14, 0.12), "accent2": Color(0.95, 0.72, 0.20),
+		"decor": Color(0.30, 0.27, 0.26), "decor2": Color(0.74, 0.10, 0.12), "metal": Color(0.30, 0.30, 0.34),
+		"cloud_light": Color(0.80, 0.42, 0.25), "cloud_shade": Color(0.18, 0.10, 0.12),
 	},
 	"ascent": {
 		"sky_top": Color(0.02, 0.03, 0.10), "sky_horizon": Color(0.20, 0.30, 0.58), "sky_bottom": Color(0.05, 0.08, 0.20),
