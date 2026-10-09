@@ -3414,7 +3414,11 @@ const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_l
 	"siege_ram_thud", "siege_oil_tilt", "siege_oil_pour", "siege_volley_horn", "siege_volley_whoosh", "siege_volley_hit",
 	"siege_trebuchet_wind", "siege_trebuchet_throw", "siege_warning_horn", "siege_checkpoint", "siege_finish",
 	"fungal_cap_boing", "fungal_checkpoint", "fungal_finish", "fungal_drip_plink", "fungal_drip_splash",
-	"fungal_puff_swell", "fungal_puff_blow", "fungal_tell_tick", "fungal_frog_croak"]
+	"fungal_puff_swell", "fungal_puff_blow", "fungal_tell_tick", "fungal_frog_croak",
+	# Dino Valley (gen_dino)
+	"dino_checkpoint", "dino_finish", "dino_tell", "dino_trike_paw", "dino_foot_rumble", "dino_geyser_gurgle",
+	"dino_geyser_erupt", "dino_tar_glug", "dino_stampede_call", "dino_rex_roar", "dino_rex_step", "dino_rex_snarl",
+	"dino_rex_chomp"]
 const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
 	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
 	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz",
@@ -3432,7 +3436,9 @@ const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "
 	"toybox_car_whirr", "olympus_chariot_wind", "olympus_mirror_hum", "olympus_wind_loop", "arcade_chomper_loop",
 	"arcade_ball_hum", "arcade_scroll_rumble",
 	# Castle Siege and Mushroom Hollow (gen_siege / gen_fungal)
-	"siege_oil_loop", "fungal_puff_loop", "fungal_snail_squelch"]
+	"siege_oil_loop", "fungal_puff_loop", "fungal_snail_squelch",
+	# Dino Valley (gen_dino)
+	"dino_geyser_rumble", "dino_geyser_roar", "dino_stampede_thunder", "dino_volcano_rumble"]
 
 
 func test_z_world_sounds() -> void:

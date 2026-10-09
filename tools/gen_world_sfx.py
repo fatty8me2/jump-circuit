@@ -240,6 +240,15 @@ for _n, _d in (("siege_boulder_launch", 1.0), ("siege_boulder_whistle", 1.1), ("
     _reg(_n, _d)
 for _n, _d in (("siege_oil_loop", 2.0), ("fungal_puff_loop", 2.0), ("fungal_snail_squelch", 1.5)):
     _reg(_n, _d, True)
+# Dino Valley (gen_dino): the mechanics' clips (geysers, tar, stampede, rex) and the tells
+for _n, _d in (("dino_checkpoint", 1.2), ("dino_finish", 3.0), ("dino_tell", 0.6), ("dino_trike_paw", 1.0),
+               ("dino_foot_rumble", 1.4), ("dino_geyser_gurgle", 1.0), ("dino_geyser_erupt", 2.0),
+               ("dino_tar_glug", 0.6), ("dino_stampede_call", 2.0), ("dino_rex_roar", 3.0),
+               ("dino_rex_step", 0.9), ("dino_rex_snarl", 1.0), ("dino_rex_chomp", 0.4)):
+    _reg(_n, _d)
+for _n, _d in (("dino_geyser_rumble", 2.0), ("dino_geyser_roar", 1.5), ("dino_stampede_thunder", 2.0),
+               ("dino_volcano_rumble", 2.4)):
+    _reg(_n, _d, True)
 
 
 # ---------------------------------------------------------------------------
@@ -6703,6 +6712,203 @@ def gen_fungal():
     save_loop(name, unit(bed) + 0.8 * unit(sq))
 
 
+# ===========================================================================
+# Dino Valley (gen_dino): the mechanics' clips. Each is called by name from mechanics/dino_*.gd,
+# visual/dino_*.gd and levels/level_30_dino.gd.
+# ===========================================================================
+def gen_dino():
+    # the checkpoint: a marimba lick up three bars, and a bird's chirp over it
+    name = "dino_checkpoint"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for k, nt in enumerate((72, 76, 79)):
+        place(x, 0.06 * k, xylo(r, midi(nt), dur(name) - 0.06 * k), 0.7)
+    for t0, f0 in ((0.25, 2400.0), (0.45, 2700.0)):
+        ct = tv(0.14)
+        chirp = tone(glide(f0, f0 * 1.45, ct, 0.14)) * env(ct, 0.002, 0.05)
+        place(x, t0, taper(chirp, 0.01), 0.3)
+    save(name, x, fin=0.002, fout=0.15)
+
+    # the finish: a brood of hatchlings chirping over the nest, and a rex's bellow far off
+    name = "dino_finish"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    for k in range(7):
+        ct = tv(0.09)
+        f0 = r.uniform(2300.0, 3300.0)
+        chirp = tone(glide(f0, f0 * r.uniform(1.25, 1.5), ct, 0.09)) * env(ct, 0.002, 0.04)
+        place(x, 0.1 + 0.22 * k + r.uniform(0.0, 0.08), taper(chirp, 0.01), r.uniform(0.25, 0.45))
+    bellow = horn(r, 2.2, (31, 33), form=(260.0, 700.0), scoop=0.08, attack=0.25, release=0.9, harmonics=12)
+    bellow = space(r, uw(bellow, 900.0), 1.2, 0.35, 120.0, 2500.0)
+    place(x, 0.8, bellow, 0.5)
+    save(name, x, fin=0.002, fout=0.25)
+
+    # the warning pulse: a tribal drum tapped twice, the second softer
+    name = "dino_tell"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = thud(t, 170.0, 80.0, 0.08, 0.12, harm=(0.4, 0.15))
+    skin = 0.4 * noise(r, n, 600, 2500) * env(t, 0.0008, 0.012)
+    tap = thud(tv(0.25), 150.0, 75.0, 0.06, 0.09, harm=(0.35, 0.12))
+    place(x, 0.25, tap, 0.6)
+    save(name, x + skin, fin=0.001, fout=0.1)
+
+    # the trike's hoof scrapes the earth, then it snorts through its nostrils
+    name = "dino_trike_paw"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    scrape = unit(svf(r.standard_normal(n), glide(1600.0, 2400.0, t, dur(name)), 4.0))
+    x = 0.7 * scrape * env(t, 0.03, 0.28)
+    grit = np.zeros(n)
+    grains(r, grit, 24, 0.0, 0.5, 900.0, 4000.0, 0.002, 0.006, 1.0, decay=0.2)
+    x += 0.4 * unit(grit)
+    ts = tv(0.4)
+    snort = unit(svf(r.standard_normal(len(ts)), 320.0, 3.0)) * env(ts, 0.02, 0.12)
+    place(x, 0.55, snort, 0.8)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # the ground shakes under a heavy foot: a long low rumble and a sinking thump
+    name = "dino_foot_rumble"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    body = thud(t, 62.0, 30.0, 0.5, 0.35, harm=(0.2, 0.05))
+    ground = noise(r, n, 25, 140) * env(t, 0.02, 0.4)
+    save(name, 0.8 * body + 0.6 * ground, fin=0.002, fout=0.2)
+
+    # the geyser's pool gurgles: bubbles breaking one after another, rising in pitch
+    name = "dino_geyser_gurgle"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = np.zeros(n)
+    for _ in range(18):
+        place(x, r.uniform(0.0, 0.85), bubble(r.uniform(240.0, 560.0), 0.08, r.uniform(0.008, 0.02), 0.8),
+              r.uniform(0.2, 0.7))
+    x += 0.15 * noise(r, n, 300, 1500) * env(t, 0.1, 0.5)
+    save(name, x, fin=0.002, fout=0.15)
+
+    # the geyser erupts: a steam blast that rises and roars away, over a deep thump from below
+    name = "dino_geyser_erupt"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    blast = whoosh(r, dur(name), 300.0, 2200.0, 800.0, 0.25, 0.35, 1.0)
+    hiss = noise(r, n, 1500, 9000) * env(t, 0.005, 0.5)
+    rumble = thud(t, 90.0, 40.0, 0.2, 0.25, harm=(0.3,))
+    x = 0.8 * blast + 0.6 * hiss + 0.7 * rumble
+    save(name, x, fin=0.002, fout=0.2)
+
+    # the tar pit glugs: two thick, falling bubbles pushing up through the tar
+    name = "dino_tar_glug"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = np.zeros(n)
+    for t0, f0 in ((0.0, 260.0), (0.22, 200.0)):
+        ct = tv(0.2)
+        glug = tone(glide(f0 * 1.4, f0 * 0.6, ct, 0.2)) * env(ct, 0.001, 0.05)
+        place(x, t0, taper(glug, 0.01), 0.9)
+    x += 0.3 * noise(r, n, 150, 900) * env(t, 0.005, 0.1)
+    save(name, x, fin=0.001, fout=0.08)
+
+    # the herd bellows: three long voices, one after another, a rasp of breath under them
+    name = "dino_stampede_call"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = np.zeros(n)
+    for k, (m, t0, d) in enumerate(((40, 0.0, 1.5), (43, 0.25, 1.4), (38, 0.5, 1.5))):
+        place(x, t0, horn(r, d, (m,), form=(420.0 + 60.0 * k, 1100.0), scoop=0.1, attack=0.2, release=0.6,
+                          harmonics=14), 0.5)
+    x = space(r, uw(x, 2200.0), 0.9, 0.2, 120.0, 3000.0)
+    x += 0.2 * noise(r, n, 200, 1200) * env(t, 0.1, 0.6)
+    save(name, x, fin=0.002, fout=0.2)
+
+    # the rex's roar: a huge, falling voice through a throat's formants, with a breath of noise
+    name = "dino_rex_roar"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    v = voice(glide(78.0, 52.0, t, dur(name)), n, 40, 1.1, 0.006, 4.5, r)
+    growl = unit(svf(v, 420.0, 1.2) + 0.7 * svf(v, 1100.0, 2.0) + 0.4 * svf(v, 2400.0, 3.0))
+    swell = env(t, 0.25, 0.9) * (1.0 + 0.25 * np.sin(TAU * 5.0 * t))
+    x = growl * swell + 0.4 * noise(r, n, 200, 1500) * env(t, 0.05, 0.8)
+    x += 0.8 * thud(t, 70.0, 35.0, 0.4, 0.5, harm=(0.3,))
+    save(name, x, fin=0.002, fout=0.25)
+
+    # a rex's foot comes down: a heavy thud that sinks into the soil
+    name = "dino_rex_step"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    body = thud(t, 80.0, 28.0, 0.15, 0.2, harm=(0.35, 0.12))
+    ground = noise(r, n, 30, 300) * env(t, 0.002, 0.06)
+    x = body + 0.4 * ground + 0.3 * click(r, dur(name), 300, 1500, 0.01)
+    save(name, x, fin=0.001, fout=0.15)
+
+    # the rex snarls: a low, rasping growl that pulses as the lips curl back
+    name = "dino_rex_snarl"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    v = voice(glide(130.0, 90.0, t, dur(name)), n, 30, 1.0, 0.01, 9.0, r)
+    v *= 0.6 + 0.4 * np.abs(np.sin(TAU * 22.0 * t))
+    x = unit(svf(v, 600.0, 1.5) + 0.6 * svf(v, 1500.0, 2.5)) * env(t, 0.03, 0.4)
+    x += 0.3 * noise(r, n, 1200, 4000) * env(t, 0.01, 0.12)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the jaws snap shut: a hard click of teeth on a dry bone, a hollow knock under it
+    name = "dino_rex_chomp"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    jaw = modes(t, bar_modes(700.0, 0.03, (1.0, 0.5, 0.25), 0.7), r, 0.02, hard=3000)
+    x = click(r, dur(name), 1500, 7000, 0.002) + 0.6 * jaw + 0.5 * thud(t, 160.0, 70.0, 0.02, 0.04)
+    save(name, x, fin=0.0008, fout=0.08)
+
+    # the geyser's churn (loop): a low, heavy boil with slow bubbles rising through it
+    name = "dino_geyser_rumble"
+    r = rng(name)
+    n = ns(dur(name))
+    churn = cnoise(r, n, 40, 260) * (0.7 + 0.3 * crand(r, n, 4))
+    bub = np.zeros(n)
+    for _ in range(10):
+        cplace(bub, r.uniform(0.0, dur(name)), bubble(r.uniform(120.0, 260.0), 0.12, r.uniform(0.02, 0.04), 0.5),
+               r.uniform(0.2, 0.5))
+    save_loop(name, unit(churn) + 0.5 * unit(bub))
+
+    # the geyser's jet (loop): water rushing up and out, a broad hiss with slow surges
+    name = "dino_geyser_roar"
+    r = rng(name)
+    n = ns(dur(name))
+    jet = cnoise(r, n, 300, 4500) * (0.75 + 0.25 * crand(r, n, 6))
+    body = cnoise(r, n, 150, 900)
+    save_loop(name, unit(jet) + 0.5 * unit(body))
+
+    # the stampede (loop): a herd's hooves drumming the ground, eight to a loop, with dust under them
+    name = "dino_stampede_thunder"
+    r = rng(name)
+    n = ns(dur(name))
+    hoof = np.zeros(n)
+    for k in range(8):
+        t0 = (k + r.uniform(-0.06, 0.06)) * dur(name) / 8.0
+        cplace(hoof, t0, thud(tv(0.22), r.uniform(90.0, 120.0), 40.0, 0.1, 0.07, harm=(0.3, 0.1)), r.uniform(0.6, 1.0))
+    dust = cnoise(r, n, 60, 500) * (0.6 + 0.4 * crand(r, n, 3))
+    save_loop(name, unit(hoof) + 0.6 * unit(dust))
+
+    # the volcano's distant rumble (loop): a deep roll under the valley, with grit that comes and goes
+    name = "dino_volcano_rumble"
+    r = rng(name)
+    n = ns(dur(name))
+    deep = cnoise(r, n, 25, 130) * (0.6 + 0.4 * crand(r, n, 3))
+    grit = cnoise(r, n, 130, 500) * (0.3 + 0.3 * crand(r, n, 5))
+    save_loop(name, unit(deep) + 0.25 * unit(grit))
+
+
 def verify():
     ok = True
     total = 0
@@ -6761,7 +6967,7 @@ GENERATORS = (gen_steps, gen_wall, gen_movement_loops, gen_lasers, gen_crusher_p
               gen_foundry, gen_reef, gen_orbital, gen_clockwork, gen_balance, gen_gardens, gen_ascent, gen_xeno,
               gen_volcano, gen_glacier, gen_desert, gen_manor, gen_armada, gen_candy, gen_carrier,
               gen_sakura, gen_jungle, gen_frontier, gen_neon, gen_doom, gen_abyss, gen_tempest, gen_void, gen_kit, gen_emotes,
-              gen_toybox, gen_olympus, gen_arcade, gen_siege, gen_fungal)
+              gen_toybox, gen_olympus, gen_arcade, gen_siege, gen_fungal, gen_dino)
 
 
 def main():
