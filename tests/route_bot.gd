@@ -24,10 +24,6 @@ var _was_air: bool = false
 var _node_prev: Vector3 = Vector3.ZERO
 var _node_vel: Vector3 = Vector3.ZERO
 var _cur_deaths: int = 0
-# --- TEMP human-pause / trace hook (never committed) ---
-var _hook_pause: bool = OS.get_environment("BOT_PAUSE") == "1"
-var _hook_trace: bool = OS.get_environment("BOT_TRACE") == "1"
-var _hook_hold: float = 0.0
 
 
 func attach(lvl: LevelBase) -> void:
@@ -86,17 +82,8 @@ func _physics_process(dt: float) -> void:
 	if not keep_camera:
 		player.camera_yaw = 0.0
 	if level.finished:
-		if _hook_trace and not done and level.get("_rex") != null:
-			print("   [bot] finished t=%.2f rex min_gap %.2f" % [Game.course_time, float(level.get("_rex").get("min_gap"))])
 		done = true
 		player.cmd_move = Vector2.ZERO
-		return
-	if OS.get_environment("BOT_TRACE") == "2" and Engine.get_physics_frames() % 15 == 0 and step_index >= int(OS.get_environment("BOT_FROM")):
-		print("      pos %s v %s g=%s step %d t=%.2f" % [str(player.global_position.snapped(Vector3.ONE * 0.1)), str(player.velocity.snapped(Vector3.ONE * 0.1)), str(player.grounded), step_index, Game.course_time])
-	if _hook_hold > 0.0:
-		_hook_hold -= dt
-		player.cmd_move = Vector2.ZERO
-		player.cmd_jump = false
 		return
 	if step_index >= level.route.size():
 		# route exhausted: keep heading for the last walk target; give up (stuck) if the finish never triggers
@@ -155,6 +142,7 @@ func _physics_process(dt: float) -> void:
 		"desert_fly": _do_desert_fly(step)
 		"candy_board", "candy_ride": _do_candy(step)
 		"k_barrel", "k_zip": _do_kit(step)
+		"toybox_pick": _do_toybox(step)
 	# a bounce handed over by the previous step (_air_phase) is for the step that follows it: pad /
 	# x_pad / kick read it on their first tick. Left set, it made some LATER pad or kick skip its run-up.
 	if first_tick and step_index == index_before:
@@ -162,10 +150,6 @@ func _physics_process(dt: float) -> void:
 
 
 func _next() -> void:
-	if _hook_trace and step_index < level.route.size():
-		print("   [bot] t=%.2f step %d %s to=%s done at %s" % [Game.course_time, step_index, str(level.route[step_index]["kind"]), str(level.route[step_index].get("to", "")), str(player.global_position.snapped(Vector3.ONE * 0.1))])
-	if _hook_pause and step_index < level.route.size() and str(level.route[step_index]["kind"]) in ["checkpoint", "b_wait", "wait", "x_wait", "c_wait"]:
-		_hook_hold = 1.0
 	step_index += 1
 	_begin_step()
 
@@ -276,19 +260,7 @@ func _steer_ground(to: Vector3) -> void:
 
 
 func _time_to_reach(y_target: float) -> float:
-	var t: MovementTuning = player.tuning
-	var y: float = player.global_position.y
-	var vy: float = player.velocity.y
-	var time: float = 0.0
-	var step: float = 1.0 / 60.0
-	while time < 4.0:
-		var g: float = t.gravity_rise if vy > 0.0 else t.gravity_fall
-		vy = maxf(vy - g * step, -t.max_fall_speed)
-		y += vy * step
-		time += step
-		if vy <= 0.0 and y <= y_target:
-			break
-	return time
+	return RouteMath.time_to_reach(player.tuning, player.global_position.y, player.velocity.y, y_target)
 
 
 func _steer_air(to: Vector3) -> void:
@@ -317,22 +289,11 @@ var _pick_basis: Basis = Basis.IDENTITY
 
 
 func _future(n: Node3D, local: Vector3, lead: float) -> Vector3:
-	var now: float = Game.course_time
-	if n is MovingPlatform:
-		var m := n as MovingPlatform
-		return m.global_position - m.offset_at(now) + m.offset_at(now + lead) + local
-	if n is RotatingPlatform:
-		var r := n as RotatingPlatform
-		return r.global_position + Basis(Vector3.UP, r.angle_at(now + lead)) * local
-	return n.global_transform * local
+	return RouteMath.future(n, local, lead)
 
 
 func _arm_basis(local: Vector3) -> Basis:
-	var d: Vector3 = _flat(local)
-	if d.length() < 0.1:
-		return Basis.IDENTITY
-	d = d.normalized()
-	return Basis(d, Vector3.UP, d.cross(Vector3.UP))
+	return RouteMath.arm_basis(local)
 
 
 func _x_node(step: Dictionary, key: String) -> Node3D:
@@ -888,3 +849,27 @@ func _do_kit(step: Dictionary) -> void:
 					z.release_rider()
 			else:
 				_air_phase(step["to"])
+
+
+# ---- toybox (additive) -----------------------------------------------------------------------------------
+#   toybox_pick {cars, window, froms, exits, poses, jump, ride}   stand still until one of the shuttle cars sits at its
+#       near end and stays parked for `window` more seconds, then aim the two steps that follow at THAT car: `jump`
+#       (a jump onto the car) gets its takeoff `from`, `ride` (ride_jump) its far-end `point` and landing `to`.
+
+func _do_toybox(step: Dictionary) -> void:
+	player.cmd_move = Vector2.ZERO
+	if not player.grounded:
+		return
+	var cars: Array = step["cars"]
+	for i: int in cars.size():
+		var car: ToyboxCar = cars[i]
+		if car.offset_at(Game.course_time).length() < 0.05 and car.parked_over(Game.course_time, 0.0, float(step["window"])):
+			var j: Dictionary = step["jump"]
+			var r: Dictionary = step["ride"]
+			j["from"] = (step["froms"] as Array)[i]
+			j["to_node"] = car
+			r["node"] = car
+			r["point"] = (step["poses"] as Array)[i]
+			r["to"] = (step["exits"] as Array)[i]
+			_next()
+			return
