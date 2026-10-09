@@ -63,6 +63,7 @@ var _finish_pos: Vector3 = Vector3.ZERO
 var _floors: Array[Dictionary] = []
 ## Stage frames (origin, yaw) for the scenery.
 var _stage_frames: Array[Array] = []
+var deco: DinoDecor
 
 
 func _configure() -> void:
@@ -239,6 +240,7 @@ func _build() -> void:
 	_tuning = load("res://resources/default_tuning.tres") as MovementTuning
 	add_child(Ambience.make(theme_id))
 	_restyle_environment()
+	deco = DinoDecor.new(self, kit.rng)
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
 	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16]
@@ -297,6 +299,14 @@ func _stage_1() -> Vector3:
 	r_mantle(_w(Vector3(tc.x, tc.y, front + 0.35)), _w(rock_top + Vector3(0, 0, 0.2)))
 	_hop(rock, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
+	# the hatchery: a ring of twigs and a clutch of eggs behind the spawn, ferns and cycads round the island
+	for k: int in 7:
+		deco.egg(_w(Vector3(-3.6 + 0.9 * float(k % 4), 0.4, 4.2 + 0.7 * float(k / 4))), 0.42)
+	deco.cycad(_w(Vector3(-5.0, 0, -4.0)), 3.2)
+	deco.cycad(_w(Vector3(5.2, 0, 3.0)), 2.6)
+	deco.tree_fern(_w(Vector3(5.4, 0, -3.0)), 6.0)
+	deco.fern(_w(Vector3(-4.6, 0, 1.0)), 1.2)
+	deco.fern(_w(Vector3(4.0, 0, -5.0)), 1.0)
 	return cp["c"]
 
 
@@ -446,7 +456,7 @@ func _stage_4() -> Vector3:
 		r_wallrun(_w(Vector3(-1.4, 0, -2.65)), _w(Vector3(-2.5, 1.4, -7.4)), _w(Vector3(-2.5, 1.4, -15.6)), _w(Vector3(2.5, 3.8, -21.4)))
 		r_wallrun(Vector3.ZERO, _w(Vector3(2.5, 3.8, -21.4)), _w(Vector3(2.5, 3.8, -28.6)), _w(Vector3(0, 0.6, -36.6)), true, true)
 	else:
-		_hop(cp0, ledge)
+		_hop(cp0, ledge, Vector3(0, 0, 1.3))
 		r_zipline(z, _w(Vector3(lc.x, lc.y + 2.2 + 0.55, lc.z - 24.5)), 0.7, _w(Vector3(0, 0.6, fc.z + 1.0)))
 	_hop(far, f1)
 	_hop(f1, f2)
@@ -532,6 +542,9 @@ func _stage_5() -> Vector3:
 	_hop(merge, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	pb.clear()
+	deco.ribs(_w(Vector3(7.6, -0.6, f0 - 9.0)), deg_to_rad(_yaw), 1.3, 7)
+	deco.skull(_w(Vector3(lx - 2.1, 0.15, f0 - 4.0)), deg_to_rad(_yaw) + 0.5, 0.8)
+	deco.skull(_w(Vector3(lx + 2.1, 0.15, f0 - 14.0)), deg_to_rad(_yaw) - 0.7, 0.6)
 	t1.set_meta("n", 1)
 	t2.set_meta("n", 2)
 	return cp["c"]
@@ -745,6 +758,7 @@ func _stage_9() -> Vector3:
 	_hop(merge, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	pb.clear()
+	deco.ribs(_w(Vector3(7.6, -0.6, f0 - 9.0)), deg_to_rad(_yaw), 1.3, 7)
 	return cp["c"]
 
 
@@ -1150,6 +1164,15 @@ func _stage_17() -> void:
 	_hop(s3, nest, Vector3(0, 0, 0.6))
 	r_walk(_w(nc + Vector3(0, 0, -1.2)))
 	_nest_dress(nc)
+	# the canyon: strata cliffs either side of the run, a rock arch over the rex's den behind the start
+	var cz0: float = 6.0
+	var cz1: float = end_z
+	var len_c: float = cz0 - cz1
+	for sx: float in [-1.0, 1.0]:
+		deco.cliff(_w(Vector3(sx * 9.5, 5.0, (cz0 + cz1) * 0.5 - (6.0 if sx < 0.0 else 0.0))), _sz(Vector3(5.0, 22.0, len_c - (12.0 if sx < 0.0 else 0.0))))
+	deco.arch(_w(Vector3(-11.0, -0.5, 9.0)), deg_to_rad(_yaw) + PI * 0.5, 9.0, 12.0)
+	DinoFx.fumarole(self, _w(Vector3(-7.0, 0.1, -30.0)), 8.0)
+	DinoFx.fumarole(self, _w(Vector3(7.0, 0.1, -52.0)), 8.0)
 
 
 func _nest_dress(nc: Vector3) -> void:
@@ -1190,7 +1213,194 @@ func _restyle_environment() -> void:
 				_sun = n as DirectionalLight3D
 			else:
 				_fill = n as DirectionalLight3D
+	_env.background_mode = Environment.BG_SKY
+	_env.sky = DinoSky.make()
+	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	_env.ambient_light_color = Color(0.66, 0.74, 0.78)
+	_env.ambient_light_energy = 0.78
+	_env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	_env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	_env.tonemap_exposure = 1.05
+	_env.tonemap_white = 6.0
+	_env.fog_enabled = true
+	_env.fog_light_color = Color(0.8, 0.84, 0.68)
+	_env.fog_density = 0.0013
+	_env.fog_aerial_perspective = 0.3
+	_env.fog_sky_affect = 0.2
+	_env.fog_sun_scatter = 0.25
+	_env.glow_enabled = true
+	_env.glow_intensity = 0.55
+	_env.glow_bloom = 0.04
+	_env.glow_hdr_threshold = 1.3
+	_env.adjustment_enabled = true
+	_env.adjustment_saturation = 1.2
+	_env.adjustment_contrast = 1.06
+	# a warm morning sun low over the valley and a cool sky fill
+	_sun.light_color = Color(1.0, 0.92, 0.74)
+	_sun.light_energy = 1.3
+	_sun.rotation_degrees = Vector3(-36, 128, 0)
+	_fill.light_color = Color(0.7, 0.82, 1.0)
+	_fill.light_energy = 0.34
+	_fill.rotation_degrees = Vector3(-25, -52, 0)
+
+
+# ---- scenery --------------------------------------------------------------------------------------------
+
+## Every point the route passes (takeoffs, landings, walk targets) and every floor: far scenery keeps
+## clear of them.
+func _route_points() -> Array[Vector3]:
+	var pts: Array[Vector3] = []
+	for st: Dictionary in route:
+		for key: String in ["from", "to", "entry", "exit", "top", "jump_from"]:
+			if st.has(key) and st[key] is Vector3 and (st[key] as Vector3) != Vector3.ZERO:
+				pts.append(st[key])
+	for p: Vector3 in _cp_world:
+		pts.append(p)
+	for f: Dictionary in _floors:
+		pts.append(f["top"])
+	return pts
+
+
+func _clear_of(p: Vector3, pts: Array[Vector3], dist: float) -> bool:
+	for q: Vector3 in pts:
+		if Vector2(p.x - q.x, p.z - q.z).length() < dist and absf(p.y - q.y) < dist + 40.0:
+			return false
+	return true
+
+
+## How far a stack under floor `f` may run down before it meets another floor beneath it (m).
+func _depth_below(f: Dictionary, floor_y: float) -> float:
+	var t: Vector3 = f["top"]
+	var s: Vector3 = f["size"]
+	var bottom: float = t.y - float(f["drop"])
+	var stop: float = floor_y
+	for g: Dictionary in _floors:
+		if g == f:
+			continue
+		var gt: Vector3 = g["top"]
+		var gs: Vector3 = g["size"]
+		if gt.y > bottom - 0.2:
+			continue
+		if absf(gt.x - t.x) < (s.x + gs.x) * 0.5 + 1.0 and absf(gt.z - t.z) < (s.z + gs.z) * 0.5 + 1.0:
+			stop = maxf(stop, gt.y + 0.3)
+	return maxf(bottom - stop, 0.0)
 
 
 func _surroundings() -> void:
-	pass
+	var rng: RandomNumberGenerator = kit.rng
+	var pts: Array[Vector3] = _route_points()
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for p: Vector3 in pts:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	var mid: Vector3 = (lo + hi) * 0.5
+	var span: Vector3 = hi - lo
+	var floor_y: float = lo.y - 85.0
+	# the valley far below: meadow, forest, a river, with two thousand trees in two draw calls
+	deco.valley(mid, 3200.0, floor_y)
+	deco.forest(mid, 900.0, 1100, floor_y)
+	deco.forest(mid, 300.0, 500, floor_y)
+	# a sandstone stack under every landing, down to the valley (or to whatever lies beneath it)
+	for f: Dictionary in _floors:
+		var t: Vector3 = f["top"]
+		var s: Vector3 = f["size"]
+		var under: Vector3 = t - Vector3(0, float(f["drop"]), 0)
+		var depth: float = minf(_depth_below(f, floor_y), t.y - floor_y)
+		if depth < 1.0:
+			continue
+		var half := Vector2(s.x, s.z) * 0.5
+		if minf(s.x, s.z) >= 2.9 or maxf(s.x, s.z) > 5.0:
+			half = half * 0.8
+			deco.pillar(under, half, depth, 0.0)
+		else:
+			deco.pillar(under, half * 0.7, depth, 0.25)
+	# mesas near the course, capped with groves; a few with waterfalls and fumaroles
+	var placed: int = 0
+	var tries: int = 0
+	var fall_spots: int = 0
+	while placed < 34 and tries < 900:
+		tries += 1
+		var base_p: Vector3 = pts[rng.randi() % pts.size()]
+		var a: float = rng.randf() * TAU
+		var d: float = rng.randf_range(24.0, 80.0)
+		var p := Vector3(base_p.x + cos(a) * d, floor_y, base_p.z + sin(a) * d)
+		var top_y: float = base_p.y + rng.randf_range(-16.0, 10.0)
+		var r: float = rng.randf_range(6.0, 15.0)
+		if not _clear_of(Vector3(p.x, top_y, p.z), pts, r + 16.0):
+			continue
+		deco.mesa(p, r, top_y - floor_y, 4)
+		if fall_spots < 4 and rng.randf() < 0.3:
+			fall_spots += 1
+			var face := Vector3(cos(a + PI), 0, sin(a + PI))
+			deco.waterfall(Vector3(p.x + face.x * (r * 0.9), top_y, p.z + face.z * (r * 0.9)), face, top_y - floor_y - 6.0, 4.0)
+		if rng.randf() < 0.25:
+			DinoFx.fumarole(self, Vector3(p.x, top_y + 0.9, p.z), 7.0)
+		placed += 1
+	# far mesas and ridges round the whole horizon
+	for i: int in 30:
+		var a2: float = rng.randf() * TAU
+		var d2: float = rng.randf_range(140.0, 420.0)
+		var p2 := Vector3(mid.x + cos(a2) * (maxf(span.x, span.z) * 0.5 + d2), floor_y, mid.z + sin(a2) * (maxf(span.x, span.z) * 0.5 + d2))
+		deco.mesa(p2, rng.randf_range(20.0, 48.0), rng.randf_range(60.0, 150.0), 5)
+	# the smoking volcano beyond the finish and a lesser one off to the side of the start
+	DinoVolcano.make(self, Vector3(mid.x + 120.0, floor_y - 6.0, lo.z - 360.0), 230.0, 250.0)
+	DinoVolcano.make(self, Vector3(hi.x + 340.0, floor_y - 6.0, hi.z + 200.0), 150.0, 150.0)
+	# life in the valley: brontosaurus herds by the river, raptor packs on the meadow, pterosaurs aloft
+	for k: int in 4:
+		var c := Vector3(mid.x + rng.randf_range(-300.0, 300.0), floor_y + 2.0, mid.z + rng.randf_range(-span.z * 0.6, span.z * 0.6))
+		DinoHerd.make(self, c, "bronto", 4, 38.0, 3.2, 2.2)
+		DinoHerd.make(self, c + Vector3(120.0, 0, 60.0), "raptor", 6, 55.0, 3.0, 12.0)
+	for k2: int in 6:
+		var cf: Vector3 = pts[rng.randi() % pts.size()]
+		DinoHerd.make(self, Vector3(cf.x + rng.randf_range(-60.0, 60.0), cf.y + rng.randf_range(14.0, 40.0), cf.z + rng.randf_range(-60.0, 60.0)),
+			"ptero", 5, rng.randf_range(35.0, 70.0), 2.6, 9.0, true, 0.0)
+	# air along the route: pollen and insects in the light, leaves, ash from the volcano
+	for i2: int in _cp_world.size():
+		var here: Vector3 = _cp_world[i2]
+		var prev: Vector3 = _cp_world[i2 - 1] if i2 > 0 else Vector3.ZERO
+		var c3: Vector3 = (here + prev) * 0.5 + Vector3(0, 3.0, 0)
+		var ext := Vector3(absf(here.x - prev.x) * 0.5 + 10.0, 7.0, absf(here.z - prev.z) * 0.5 + 10.0)
+		DinoFx.pollen(self, c3, ext, 46)
+		DinoFx.insects(self, c3, ext * Vector3(0.8, 0.6, 0.8), 8)
+		DinoFx.leaves(self, c3 + Vector3(0, 8, 0), ext, 12)
+		if i2 >= 8:
+			DinoFx.ash(self, c3 + Vector3(0, 8, 0), ext, 22 + 3 * i2)
+	_dino_materials()
+	_checkpoint_fx()
+
+
+## Swap every walkable surface to the grass-and-strata shader (same colours and sizes).
+func _dino_materials() -> void:
+	for mi: Node in find_children("*", "MeshInstance3D", true, false):
+		var m: MeshInstance3D = mi as MeshInstance3D
+		var sm: ShaderMaterial = m.material_override as ShaderMaterial
+		if sm == null or sm.shader != Look.PLATFORM_SHADER:
+			continue
+		var r := ShaderMaterial.new()
+		r.shader = preload("res://visual/dino_ground.gdshader")
+		for key: String in ["top_color", "side_color", "trim_color", "half_size", "is_round", "trim_glow"]:
+			r.set_shader_parameter(key, sm.get_shader_parameter(key))
+		m.material_override = r
+
+
+var _cp_bursts: Dictionary = {}
+
+
+## Burst particles on every checkpoint, fired when it is first banked.
+func _checkpoint_fx() -> void:
+	for cp: Checkpoint in find_children("*", "Checkpoint", true, false):
+		var idx: int = _cp_world.find(cp.global_position)
+		var col: Color = ORANGE if idx % 2 == 0 else TEAL
+		var fx: Array[GPUParticles3D] = DinoFx.cp_burst(col)
+		for p: GPUParticles3D in fx:
+			p.position = cp.global_position + Vector3(0, 0.6, 0)
+			add_child(p)
+		_cp_bursts[cp] = fx
+		cp.reached.connect(func(which: Checkpoint) -> void:
+			if which.index > current_checkpoint:
+				# SOUND: dino_checkpoint - a stage banked: a bright marimba lick and a hatchling chirp
+				WorldAudio.at(self, "dino_checkpoint", which.global_position, 0.9, 40.0)
+				for p2: GPUParticles3D in _cp_bursts[which]:
+					p2.restart()
+					p2.emitting = true)
