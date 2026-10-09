@@ -40,6 +40,8 @@ var _warned: bool = false
 var _shake_t: float = 0.0
 var _jaw_target: float = 0.0
 var _bite_lamp: OmniLight3D
+## Closest the mouth has come to the local player this chase (m; tests read it).
+var min_gap: float = 999.0
 
 
 func _ready() -> void:
@@ -127,6 +129,7 @@ func reset_state() -> void:
 	_step_count = -1
 	_warned = false
 	_jaw_target = 0.0
+	min_gap = 999.0
 	if _rex != null:
 		_rex.visible = false
 		_dust.emitting = false
@@ -250,6 +253,8 @@ func _physics_process(dt: float) -> void:
 	var gap: float = 99.0
 	if pl != null:
 		gap = mouth.distance_to(pl.global_position + Vector3(0, 0.9, 0))
+	if moving:
+		min_gap = minf(min_gap, gap)
 	_jaw_target = clampf((14.0 - gap) / 8.0, 0.0, 1.0) if moving else 0.5
 	_rex.jaw = lerpf(_rex.jaw, _jaw_target, 1.0 - exp(-8.0 * dt))
 	_bite_lamp.global_position = mouth

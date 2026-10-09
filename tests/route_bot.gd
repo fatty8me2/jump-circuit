@@ -86,9 +86,13 @@ func _physics_process(dt: float) -> void:
 	if not keep_camera:
 		player.camera_yaw = 0.0
 	if level.finished:
+		if _hook_trace and not done and level.get("_rex") != null:
+			print("   [bot] finished t=%.2f rex min_gap %.2f" % [Game.course_time, float(level.get("_rex").get("min_gap"))])
 		done = true
 		player.cmd_move = Vector2.ZERO
 		return
+	if OS.get_environment("BOT_TRACE") == "2" and Engine.get_physics_frames() % 15 == 0 and step_index >= int(OS.get_environment("BOT_FROM")):
+		print("      pos %s v %s g=%s step %d t=%.2f" % [str(player.global_position.snapped(Vector3.ONE * 0.1)), str(player.velocity.snapped(Vector3.ONE * 0.1)), str(player.grounded), step_index, Game.course_time])
 	if _hook_hold > 0.0:
 		_hook_hold -= dt
 		player.cmd_move = Vector2.ZERO
@@ -159,7 +163,7 @@ func _physics_process(dt: float) -> void:
 
 func _next() -> void:
 	if _hook_trace and step_index < level.route.size():
-		print("   [bot] t=%.2f step %d %s done at %s" % [Game.course_time, step_index, str(level.route[step_index]["kind"]), str(player.global_position.snapped(Vector3.ONE * 0.1))])
+		print("   [bot] t=%.2f step %d %s to=%s done at %s" % [Game.course_time, step_index, str(level.route[step_index]["kind"]), str(level.route[step_index].get("to", "")), str(player.global_position.snapped(Vector3.ONE * 0.1))])
 	if _hook_pause and step_index < level.route.size() and str(level.route[step_index]["kind"]) in ["checkpoint", "b_wait", "wait", "x_wait", "c_wait"]:
 		_hook_hold = 1.0
 	step_index += 1

@@ -241,7 +241,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -558,8 +558,9 @@ func _lane_wait(s: DinoStampede, x: float, b: float, hold: Vector3) -> void:
 	_wait(func() -> bool: return s.clear_for(x, 0.0, b), hold)
 
 
-func _stampede(center: Vector3, width: float, per: float, ph: float, dir: float) -> DinoStampede:
+func _stampede(center: Vector3, width: float, per: float, ph: float, dir: float, span: float = 26.0) -> DinoStampede:
 	var s := DinoStampede.new()
+	s.span = span
 	s.width = width
 	s.period = per
 	s.phase = ph
@@ -783,6 +784,397 @@ func _stage_10() -> Vector3:
 	r_checkpoint()
 	saw.set_meta("n", 1)
 	return cp["c"]
+
+
+# ---- stage 11: Boulder Slope - boulders rolled off the volcano drop on the decks, then a wall run ------------
+
+## A boulder hung over a deck: the kit's falling block in a skin. Safe while it hangs and while its
+## shadow swells (1 s); then it drops. Period 7 leaves 3.9 s of safe time.
+func _boulder(floor_top: Vector3, per: float, ph: float) -> FallingBlock:
+	var b: FallingBlock = kit.falling_block(_w(floor_top), Vector3(3.0, 1.6, 3.0), 7.0, per, ph, false)
+	DinoDress.boulder(b)
+	return b
+
+
+func _stage_11() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var decks: Array[Dictionary] = []
+	var boulders: Array[FallingBlock] = []
+	var prev: Dictionary = cp0
+	var dys: Array[float] = [0.0, 0.5, 0.5]
+	var pcts: Array[float] = [0.87, 0.88, 0.88]
+	for i: int in 3:
+		var d: Dictionary = _blk(_ahead(prev, pcts[i], dys[i], 7.0), 3.4, 7.0, "alt" if i % 2 == 0 else "main")
+		var dc: Vector3 = d["c"]
+		boulders.append(_boulder(dc, 7.0, 0.31 * float(i)))
+		decks.append(d)
+		prev = d
+	var post: Dictionary = _post(_ahead(prev, 0.88, 0.0, 1.4))
+	var land: Dictionary = _wall_geo(post)
+	var cp: Dictionary = _cp(_ahead(land, 0.86, 0.0, 5.0, -(land["c"] as Vector3).x))
+	prev = cp0
+	for i: int in 3:
+		var d2: Dictionary = decks[i]
+		var dc2: Vector3 = d2["c"]
+		_hop(prev, d2, Vector3(0, 0, 2.6))
+		var spot: Vector3 = _w(Vector3(dc2.x, dc2.y, dc2.z + 2.7))
+		r_walk(spot)
+		var b: FallingBlock = boulders[i]
+		_wait(func() -> bool: return b.is_clear_for(Game.course_time, 0.95 + 1.5), spot)
+		r_walk(_w(Vector3(dc2.x, dc2.y, dc2.z - 2.9)))
+		prev = d2
+	_hop(prev, post)
+	_wall_steps(post)
+	_hop(land, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 12: Burrow Maze (BRANCH) - the burrow (portal) up to the ledge | the flame vents --------------
+# [shortcut: five stakes straight across the middle at 91-92%]
+
+## Stakes down a line from `a` until the merge (whose near edge is at local z `near_z`) can be reached at
+## 89% or less. Returns the stakes in order.
+func _stakes_toward(a: Dictionary, near_z: float, pct: float = 0.87, size: float = 1.3, style: String = "accent") -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var cur: Dictionary = a
+	for i: int in 8:
+		var front: float = (cur["c"] as Vector3).z - float(cur["hz"])
+		var need: float = front + 0.35 - near_z + 0.4
+		if need / _reach(0.0) <= 0.89:
+			break
+		cur = _post(_ahead(cur, pct, 0.0, size), size, size, style)
+		out.append(cur)
+	return out
+
+
+func _stage_12() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.80, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	# LEFT (main): the burrow's mouth on the fork leads out of a root on the lintel beam high ahead
+	var hi: Dictionary = _blk(Vector3(-3.5, 4.5, f0 - 9.0), 1.4, 5.0, "alt", 0.6)
+	var door: WarpPortal = kit.portal(_w(Vector3(-3.5, 0, fc.z - 0.6)), _yaw, _w(Vector3(-3.5, 4.5, f0 - 7.2)), _yaw, 7.0)
+	DinoDress.hollow_log(self, _w(Vector3(-3.5, 0, fc.z - 0.6)), _yaw)
+	DinoDress.hollow_log(self, _w(Vector3(-3.5, 4.5, f0 - 7.2)), _yaw)
+	var la: Dictionary = _post(_ahead(hi, 0.86, -1.5, 1.3, 0.3))
+	var la2: Dictionary = _post(_ahead(la, 0.86, -1.5, 1.3, -0.3))
+	var merge: Dictionary = _blk(_ahead(la2, 0.86, -1.5, 8.0, -(la2["c"] as Vector3).x), 11.0, 8.0)
+	var mc: Vector3 = merge["c"]
+	var near_z: float = mc.z + 4.0
+	# RIGHT: a beam through two flame vents, then stakes to the merge
+	var rl: Dictionary = _area(Vector3(4.0, 0, fc.z), 1.5, 1.5)
+	var rbeam: Dictionary = _blk(_ahead(rl, 0.86, 0.0, 12.0), 1.4, 12.0, "alt", 0.6)
+	var rb: Vector3 = rbeam["c"]
+	var period: float = 5.4
+	var ts: Array[float] = [0.7, 1.35]
+	var flames: Array[LaserGate] = []
+	for i: int in 2:
+		var ph: float = fposmod(0.44 - (ts[i] - 0.35) / period, 1.0)
+		flames.append(_flame(Vector3(rb.x, rb.y + 1.2, rb.z + 2.5 - 5.0 * float(i)), 3.2, period, 0.42, ph))
+	var rstakes: Array[Dictionary] = _stakes_toward(rbeam, near_z)
+	# SHORTCUT: stakes straight across the middle of the fork
+	var sstakes: Array[Dictionary] = _stakes_toward(_area(fc, 5.5, 1.5), near_z, 0.91, 1.2)
+	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 2:
+		r_walk(_w(Vector3(0, 0, fc.z)))
+		var prev: Dictionary = _area(fc, 5.5, 1.5)
+		for h: Dictionary in sstakes:
+			_hop(prev, h)
+			prev = h
+		_hop(prev, merge, Vector3(0, 0, 0.4))
+	elif route_variant == 1:
+		r_walk(_w(Vector3(4.0, 0, fc.z + 0.6)))
+		_hop(rl, rbeam, Vector3(0, 0, 4.5))
+		var spot: Vector3 = _w(Vector3(rb.x, rb.y, rb.z + 5.6))
+		r_walk(spot)
+		_wait(func() -> bool: return _flames_dark(flames, ts), spot)
+		r_walk(_w(Vector3(rb.x, rb.y, rb.z - 5.4)))
+		var prev2: Dictionary = rbeam
+		for h2: Dictionary in rstakes:
+			_hop(prev2, h2)
+			prev2 = h2
+		_hop(prev2, merge, Vector3((prev2["c"] as Vector3).x, 0, 0.6))
+	else:
+		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
+		r_portal(_w(Vector3(-3.5, 0, fc.z - 0.9)), door.exit_point())
+		r_walk(_w(Vector3(-3.5, 4.5, f0 - 10.0)))
+		_hop(hi, la)
+		_hop(la, la2)
+		_hop(la2, merge, Vector3((la2["c"] as Vector3).x, 0, 0.6))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+static func _flames_dark(flames: Array[LaserGate], ts: Array[float]) -> bool:
+	for i: int in flames.size():
+		if not _dark(flames[i], ts[i] - 0.35, ts[i] + 0.35 + 1.5):
+			return false
+	return true
+
+
+# ---- stage 13: Club Tail - an ankylosaur's spinning tail on the round rock, mantle out ---------------------
+
+func _stage_13() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _post(_ahead(cp0, 0.87, 0.0, 1.6), 1.6, 1.6)
+	var rock: Dictionary = _blk(_ahead(p1, 0.87, 0.0, 14.0), 14.0, 14.0)
+	var rc: Vector3 = rock["c"]
+	var ham: SpinHammer = kit.hammer(_w(rc), 5.0, 7.2, 0.0, 180.0, 1.0)
+	DinoDress.club_tail(ham)
+	var front: float = rc.z - 7.0
+	var ledge_top := Vector3(2.0, rc.y + 3.3, front - 1.6 - 0.8)
+	var ledge: Dictionary = _ledge(ledge_top, Vector3(3.2, 9.0, 1.6))
+	var cp: Dictionary = _cp(_ahead(ledge, 0.85, 0.0, 5.0, -2.0))
+	_hop(cp0, p1)
+	_hop(p1, rock, Vector3(0, 0, 6.2))
+	var spot: Vector3 = _w(Vector3(2.0, rc.y, rc.z + 5.9))
+	r_walk(spot)
+	_wait(func() -> bool: return ham.is_parked_for(Game.course_time, 3.3), spot)
+	r_walk(_w(Vector3(2.0, rc.y, front + 0.9)))
+	r_mantle(_w(Vector3(2.0, rc.y, front + 0.35)), _w(ledge_top + Vector3(0, 0, 0.2)))
+	_hop(ledge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 14: Second Springs - a pterodactyl over the gorge, a geyser up the cliff ------------------------
+# [shortcut: five stakes straight over the gorge at 91-92%]
+
+func _stage_14() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var a: Dictionary = _blk(_ahead(cp0, 0.87, 0.0, 3.4), 3.4, 3.4, "alt")
+	var ac: Vector3 = a["c"]
+	var travel := Vector3(0, 1.0, -19.0)
+	var r1: MovingPlatform = _ptero(Vector3(ac.x, ac.y, ac.z - 1.7 - 1.4 - 1.8), travel, 13.0, 0.0)
+	var home_z: float = ac.z - 1.7 - 1.4 - 1.8
+	var g_slab: Dictionary = _blk(Vector3(ac.x, ac.y + 1.0, home_z - 19.0 - 1.8 - 2.2 - 2.2), 4.4, 4.4)
+	var gc: Vector3 = g_slab["c"]
+	var geyser: DinoGeyser = _geyser(g_slab, 8.4, 0.2)
+	var terr: Dictionary = _blk(gc + Vector3(0, 3.4, -5.8), 4.4, 4.4, "alt")
+	var s1: Dictionary = _post(_ahead(terr, 0.87, 0.0, 1.3, 0.4))
+	var s2: Dictionary = _post(_ahead(s1, 0.88, 0.4, 1.3, -0.4))
+	var s3: Dictionary = _post(_ahead(s2, 0.88, 0.0, 1.3, 0.4))
+	var cp: Dictionary = _cp(_ahead(s3, 0.86, 0.0, 5.0, -(s3["c"] as Vector3).x))
+	var stakes: Array[Dictionary] = _stakes_toward(a, gc.z + 2.2, 0.91, 1.2)
+	_hop(cp0, a)
+	if route_variant == 2:
+		var prev: Dictionary = a
+		for h: Dictionary in stakes:
+			_hop(prev, h)
+			prev = h
+		_hop(prev, g_slab, Vector3(0, 0, 1.0))
+	else:
+		_ride(_w(_edge(a, Vector3(ac.x, ac.y, home_z))), r1, travel, _w(Vector3(gc.x, gc.y, gc.z + 1.0)))
+	_ride_geyser(geyser, _w(terr["c"] as Vector3))
+	_hop(terr, s1)
+	_hop(s1, s2)
+	_hop(s2, s3)
+	_hop(s3, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 15: Canyon Rim - a long chain of stacks, a stampede across the rim, a chimney of wall runs ------
+
+func _stage_15() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var c1: Dictionary = _post(_ahead(cp0, 0.87, 0.0, 1.4), 1.4, 1.4)
+	var c2: Dictionary = _post(_ahead(c1, 0.88, 0.5, 1.3, 0.4))
+	var c3: Dictionary = _post(_ahead(c2, 0.87, -0.4, 1.3, -0.4))
+	var deck: Dictionary = _blk(_ahead(c3, 0.87, 0.0, 14.0), 5.0, 14.0)
+	var dc: Vector3 = deck["c"]
+	var lane: DinoStampede = _stampede(Vector3(dc.x, dc.y, dc.z), 4.0, 7.0, 0.2, 1.0, 8.0)
+	var d1: Dictionary = _post(_ahead(deck, 0.88, 0.0, 1.3, 0.3))
+	var d2: Dictionary = _post(_ahead(d1, 0.87, 0.4, 1.3, -0.3))
+	# the chimney: two wall runs between the canyon walls, from the last stake
+	var z0: float = (d2["c"] as Vector3).z + 2.35
+	var x0: float = (d2["c"] as Vector3).x
+	var y0: float = (d2["c"] as Vector3).y
+	kit.wallrun(_w(Vector3(x0 - 3.0, y0 + 1.2, z0 - 13.0)), Vector3(14.0, 6.5, 0.5), _yaw + 90.0)
+	kit.wallrun(_w(Vector3(x0 + 3.0, y0 + 3.6, z0 - 26.0)), Vector3(12.0, 7.0, 0.5), _yaw + 90.0)
+	var far: Dictionary = _blk(Vector3(x0, y0 + 0.6, z0 - 37.0), 6.0, 8.0)
+	var cp: Dictionary = _cp(_ahead(far, 0.86, 0.0, 5.0, -x0))
+	_hop(cp0, c1)
+	_hop(c1, c2)
+	_hop(c2, c3)
+	_hop(c3, deck, Vector3(0, 0, 6.0))
+	var spot: Vector3 = _w(Vector3(dc.x, dc.y, dc.z + 3.6))
+	r_walk(spot)
+	_lane_wait(lane, 0.0, 2.6, spot)
+	r_walk(_w(Vector3(dc.x, dc.y, dc.z - 6.0)))
+	_hop(deck, d1)
+	_hop(d1, d2)
+	var dcz: Vector3 = d2["c"]
+	r_wallrun(_w(Vector3(x0, y0, dcz.z - 0.3)), _w(Vector3(x0 - 2.5, y0 + 1.4, z0 - 7.4)), _w(Vector3(x0 - 2.5, y0 + 1.4, z0 - 15.6)), _w(Vector3(x0 + 2.5, y0 + 3.8, z0 - 21.4)))
+	r_wallrun(Vector3.ZERO, _w(Vector3(x0 + 2.5, y0 + 3.8, z0 - 21.4)), _w(Vector3(x0 + 2.5, y0 + 3.8, z0 - 28.6)), _w(Vector3(x0, y0 + 0.6, z0 - 36.6)), true, true)
+	_hop(far, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	return cp["c"]
+
+
+# ---- stage 16: The Egg Gate - tar stones, a leap, a geyser up to the canyon mouth ---------------------------
+
+func _stage_16() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var i1: Dictionary = _blk(_ahead(cp0, 0.87, 0.0, 2.4), 3.0, 2.4, "alt")
+	var i1c: Vector3 = i1["c"]
+	var tar_len: float = 8.0
+	var t: DinoTar = _tar(Vector3(i1c.x, i1c.y, i1c.z - 1.2 - tar_len * 0.5), 3.4, tar_len)
+	var i2: Dictionary = _blk(Vector3(i1c.x, i1c.y, i1c.z - 1.2 - tar_len - 1.2), 3.0, 2.4, "alt")
+	var p: Dictionary = _post(_ahead(i2, 0.88, 0.0, 1.4))
+	var g_slab: Dictionary = _blk(_ahead(p, 0.87, 0.0, 4.4), 4.4, 4.4)
+	var gc: Vector3 = g_slab["c"]
+	var geyser: DinoGeyser = _geyser(g_slab, 8.2, 0.6)
+	var cp: Dictionary = _cp(gc + Vector3(0, 3.4, -6.2), 6.0)
+	_hop(cp0, i1)
+	r_walk(_w(Vector3(i1c.x, i1c.y, i1c.z - 1.0)))
+	r_walk(_w(Vector3(i1c.x, i1c.y, i1c.z - 1.2 - tar_len + 1.0)))
+	r_jump(_w(Vector3(i1c.x, i1c.y, i1c.z - 1.2 - tar_len + 0.3)), _w(Vector3(i1c.x, i1c.y, i1c.z - 1.2 - tar_len - 1.3)))
+	_hop(i2, p)
+	_hop(p, g_slab, Vector3(0, 0, 0.6))
+	_ride_geyser(geyser, _w(cp["c"] as Vector3))
+	r_checkpoint()
+	t.set_meta("n", 3)
+	return cp["c"]
+
+
+# ---- stage 17: THE CHASE - step over the line and the T-rex comes out of the canyon behind you --------------
+
+var _rex: DinoRex
+var _nest_pos: Vector3 = Vector3.ZERO
+
+const CHASE_RUN: Array = [
+	# [gap before, length, width, hurdle height (0 = none)]
+	[0.0, 12.0, 6.0, 0.0],
+	[2.2, 10.0, 5.0, 0.9],
+	[3.0, 12.0, 4.6, 1.1],
+	[2.0, 16.0, 1.8, 0.0],
+	[4.4, 9.0, 4.0, 0.0],
+]
+
+
+## A fallen tree across the canyon floor: hop it.
+func _hurdle(z: float, width: float, h: float) -> void:
+	var body := StaticBody3D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(width, h, 0.9)
+	var cs := CollisionShape3D.new()
+	cs.shape = shape
+	body.add_child(cs)
+	var bark: StandardMaterial3D = Look.flat(Color(0.4, 0.28, 0.17), 0.95)
+	var lg: MeshInstance3D = Look.cylinder(h * 0.52, width + 0.4, bark, Vector3.ZERO, -1.0, 12)
+	lg.rotation.z = PI * 0.5
+	body.add_child(lg)
+	body.add_child(Look.cylinder(h * 0.5, 0.04, Look.flat(Color(0.7, 0.55, 0.38), 0.8), Vector3(width * 0.5 + 0.2, 0, 0), -1.0, 12))
+	(body.get_child(body.get_child_count() - 1) as MeshInstance3D).rotation.z = PI * 0.5
+	body.rotation_degrees.y = _yaw
+	body.position = _w(Vector3(0, h * 0.5, z))
+	add_child(body)
+
+
+func _stage_17() -> void:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var z: float = -2.5
+	var segs: Array[Dictionary] = []
+	var prev: Dictionary = cp0
+	for spec: Array in CHASE_RUN:
+		var gap: float = float(spec[0])
+		var len: float = float(spec[1])
+		var w: float = float(spec[2])
+		var h: float = float(spec[3])
+		var zc: float = z - gap - len * 0.5
+		var seg: Dictionary = _blk(Vector3(0, 0, zc), w, len, "alt" if w < 2.0 else "main", 0.9)
+		if h > 0.0:
+			_hurdle(zc, w, h)
+		segs.append({"a": seg, "gap": gap, "len": len, "h": h, "zc": zc, "near": z - gap})
+		z = z - gap - len
+	var end_z: float = z
+	# the nest cliff: a 3.3 m rock across a short gap (the rex cannot climb it), a ledge top, then stacks
+	var rock_top := Vector3(0, 3.3, end_z - 1.6 - 0.8)
+	var rock: Dictionary = _ledge(rock_top, Vector3(4.2, 9.0, 1.6))
+	var top: Dictionary = _blk(Vector3(0, 3.3, rock_top.z - 0.8 - 3.0), 4.2, 6.0, "main", 0.9)
+	var s1: Dictionary = _post(_ahead(top, 0.84, 0.0, 1.8), 1.8, 1.8)
+	var s2: Dictionary = _post(_ahead(s1, 0.85, 0.4, 1.7, 0.4), 1.7, 1.7)
+	var s3: Dictionary = _post(_ahead(s2, 0.85, 0.0, 1.7, -0.4), 1.7, 1.7)
+	var nest: Dictionary = _blk(_ahead(s3, 0.85, 0.0, 7.0, -(s3["c"] as Vector3).x), 7.0, 7.0, "main", 1.2)
+	var nc: Vector3 = nest["c"]
+	_nest_pos = _w(nc)
+	kit.finish(_w(nc + Vector3(0, 0, -1.0)), _yaw)
+	_finish_pos = _w(nc + Vector3(0, 0, -1.0))
+	# the rex: out of the canyon wall to the left, onto the floor behind the start, then along the run
+	var pts_local: Array[Vector3] = [Vector3(-21, 0, 14), Vector3(-9, 0, 10), Vector3(-3, 0, 4), Vector3(0, 0, -2.0),
+		Vector3(0, 0, end_z + 2.0)]
+	var origin: Vector3 = _w(pts_local[0])
+	var rex := DinoRex.new()
+	var tr: Array[Vector3] = []
+	for p: Vector3 in pts_local:
+		tr.append(_w(p) - origin)
+	rex.track = tr
+	rex.position = origin
+	rex.trigger_pos = _w(Vector3(0, 1.5, -3.4)) - origin
+	rex.trigger_size = _sz(Vector3(6.0, 3.0, 1.2))
+	add_child(rex)
+	_rex = rex
+	# the run: step over the line, then sprint, hop the trunks, leap the gaps, climb the nest cliff
+	for i: int in segs.size():
+		var sd: Dictionary = segs[i]
+		var h: float = float(sd["h"])
+		var zc: float = float(sd["zc"])
+		if i == 0:
+			r_walk(_w(Vector3(0, 0, -4.0)))
+		else:
+			var pv: Dictionary = segs[i - 1]
+			r_jump(_w(Vector3(0, 0, float(pv["near"]) - float(pv["len"]) + 0.35)), _w(Vector3(0, 0, float(sd["near"]) - 1.4)), true)
+		if h > 0.0:
+			r_jump(_w(Vector3(0, 0, zc + 1.9)), _w(Vector3(0, 0, zc - 2.6)), true)
+		if i == 3:
+			r_walk(_w(Vector3(0, 0, zc - float(sd["len"]) * 0.5 + 1.0)))
+	r_walk(_w(Vector3(0, 0, end_z + 0.9)))
+	r_mantle(_w(Vector3(0, 0, end_z + 0.35)), _w(rock_top + Vector3(0, 0, 0.2)))
+	r_walk(_w(Vector3(0, 3.3, (top["c"] as Vector3).z - 1.0)))
+	_hop(top, s1)
+	_hop(s1, s2)
+	_hop(s2, s3)
+	_hop(s3, nest, Vector3(0, 0, 0.6))
+	r_walk(_w(nc + Vector3(0, 0, -1.2)))
+	_nest_dress(nc)
+
+
+func _nest_dress(nc: Vector3) -> void:
+	var twig: StandardMaterial3D = Look.flat(Color(0.45, 0.32, 0.2), 0.95)
+	var egg: StandardMaterial3D = Look.flat(Color(0.95, 0.93, 0.82), 0.5)
+	var spot: StandardMaterial3D = Look.flat(Color(0.45, 0.6, 0.25), 0.6)
+	for k: int in 22:
+		var a: float = TAU * float(k) / 22.0
+		var tw: MeshInstance3D = Look.cylinder(0.09, 2.2, twig, _w(nc + Vector3(cos(a) * 2.9, 0.25, sin(a) * 2.9 + 1.0)), -1.0, 5)
+		tw.rotation = Vector3(sin(a) * 1.2, a, PI * 0.5 + cos(a) * 0.3)
+		add_child(tw)
+	for k2: int in 5:
+		var e: MeshInstance3D = Look.sphere(0.42, egg if k2 % 2 == 0 else spot, _w(nc + Vector3((float(k2) - 2.0) * 0.55, 0.45, 2.1 + float(k2 % 2) * 0.3)))
+		e.scale = Vector3(0.8, 1.15, 0.8)
+		add_child(e)
+
+
+func _finish_sequence() -> void:
+	# the eggs glow, the rex roars from far below and a flock of pterodactyls wheels over the nest
+	if _rex != null:
+		_rex.reset_state()
+	var fw: GPUParticles3D = Fx.sparks({"amount": 90, "lifetime": 1.4, "one_shot": true, "explosiveness": 0.9, "shape": "sphere",
+		"radius": 0.6, "dir": Vector3.UP, "spread": 35.0, "speed": Vector2(8.0, 14.0), "gravity": Vector3(0, -9, 0),
+		"color": Fx.hot(GOLD, 2.2), "size": Vector2(0.08, 0.6), "aabb": AABB(Vector3(-20, -5, -20), Vector3(40, 40, 40))})
+	fw.position = _nest_pos + Vector3(0, 1.5, 0)
+	add_child(fw)
+	fw.restart()
+	fw.emitting = true
+	# SOUND: dino_finish - hatchlings chirp as the eggs crack and a far-off rex bellows in defeat
+	WorldAudio.at(self, "dino_finish", _nest_pos + Vector3(0, 2.0, 0), 1.0, 120.0)
+	await get_tree().create_timer(0.9).timeout
 # ---- environment ----------------------------------------------------------------------------------
 
 func _restyle_environment() -> void:
