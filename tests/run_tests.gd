@@ -7722,6 +7722,7 @@ func test_zcpu_route_coverage() -> void:
 
 ## Early, mid and late course: a CPU drives the course's own route to the finish.
 func test_zcpu_finishes_early_mid_late() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var picks: Array[int] = [0, 13, 24]
 	if only_level >= 0:
 		picks = [only_level]
@@ -7737,6 +7738,7 @@ func test_zcpu_finishes_early_mid_late() -> void:
 
 ## Easy botches more jumps than Hard and is slower; the skill table orders the three levels.
 func test_zcpu_skill_levels() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var easy: Dictionary = CpuSkill.TABLE[CpuSkill.EASY]
 	var norm: Dictionary = CpuSkill.TABLE[CpuSkill.NORMAL]
 	var hard: Dictionary = CpuSkill.TABLE[CpuSkill.HARD]
@@ -7896,6 +7898,7 @@ func test_zcpu_menu_pad() -> void:
 
 ## The online lobby: the host's "Fill with CPUs" option, and how it tops the roster up.
 func test_zcpu_online_fill() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	if world != null:
 		world.queue_free()
 		world = null
@@ -7938,6 +7941,7 @@ func test_zcpu_online_fill() -> void:
 ## A solo round with 3 CPUs: they race (poses, checkpoints, finish), item boxes feed them, the round ends
 ## and the cup scores everyone.
 func test_zcpu_solo_round_scores() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	CpuField.test_seed = 4242   # repeatable CPU randomness: the same race every run
 	var lvl: LevelBase = await _cpu_round(0, 3, "hard")
 	var p: PartyLayer = lvl.party
@@ -8016,6 +8020,7 @@ func test_zcpu_solo_round_scores() -> void:
 
 ## Being hit, KO credit, hitting back, pick-ups and the items, on a live CPU.
 func test_zcpu_hits_items_ko() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var lvl: LevelBase = await _cpu_round(0, 3, "normal", "party", 0.5)
 	var p: PartyLayer = lvl.party
 	var f: CpuField = _cpu_field(lvl)
@@ -8113,6 +8118,7 @@ func test_zcpu_main_mode_pure() -> void:
 
 ## A solo Party vs CPU round really pauses (the CPUs and the course clock stand still).
 func test_zcpu_pause_local() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var lvl: LevelBase = await _cpu_round(0, 2, "normal", "party", 0.5)
 	var f: CpuField = _cpu_field(lvl)
 	await wait_until(func() -> bool: return Game.course_time > 4.0, 60.0, "the round to get going")
@@ -8142,6 +8148,7 @@ func test_zcpu_pause_local() -> void:
 
 ## Team Party with CPUs: even teams, CPUs never hit teammates, nor do the human's attacks.
 func test_zcpu_team_round() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var lvl: LevelBase = await _cpu_round(0, 3, "team", "team", 0.5)
 	var p: PartyLayer = lvl.party
 	var f: CpuField = _cpu_field(lvl)
@@ -8176,6 +8183,7 @@ func test_zcpu_team_round() -> void:
 
 ## Swap Warp handshake with CPUs (accept / refuse / keep the item), respawn protection, HUD feed.
 func test_zcpu_swap_and_hud() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var lvl: LevelBase = await _cpu_round(0, 2, "normal", "party", 0.5)
 	var p: PartyLayer = lvl.party
 	var f: CpuField = _cpu_field(lvl)
@@ -8249,6 +8257,7 @@ func test_zcpu_swap_and_hud() -> void:
 ## The CPUs roll and use Homing Shell, Leader Strike, Fake Box, Turbo Boost, Ghost, Decoy and Shockwave,
 ## can be hit / robbed / struck by them, and pick up the mid-course rows.
 func test_zcpu_new_items() -> void:
+	_pm_reset()   # (the host's saved rules live in the shared settings file: start from the defaults)
 	var lvl: LevelBase = await _cpu_round(0, 3, "normal", "party", 0.5)
 	var p: PartyLayer = lvl.party
 	var f: CpuField = _cpu_field(lvl)
@@ -8316,8 +8325,35 @@ func test_zcpu_new_items() -> void:
 				return false
 		return true
 	await wait_until(settled, 30.0, "the CPUs to land")
+	# every scenario starts from a clean slate: the three CPUs on the start lawn, no stun, shield, ghost,
+	# protection or item, no leftover hazards or decoys, and no box pick-ups (they keep racing meanwhile)
+	var prep := func() -> void:
+		for h: Variant in p.hazards.values():
+			if is_instance_valid(h):
+				(h as Node).queue_free()
+		p.hazards.clear()
+		for dc: PartyDecoy in p.decoys.duplicate():
+			if is_instance_valid(dc):
+				dc.consume(false, false)
+		# (the idle human stands well away: a fake box or blast on the lawn must not be theirs to take)
+		lvl.player.teleport(Transform3D(Basis(), lvl.checkpoints[mini(3, lvl.checkpoints.size() - 1)].respawn_transform().origin + Vector3(0, 0.1, 0)))
+		var k: int = 0
+		for r: CpuRacer in [a, b, c]:
+			r.protect_left = 0.0
+			r.shield_left = 0.0
+			r.ghost_left = 0.0
+			r.item = ""
+			r.last_hit_by = 0
+			r.walker.hold = 0.0
+			r.p["greed"] = 0.0
+			r.walker.teleport(lvl._spawn.origin + Vector3(float(k) * 3.0 - 3.0, 0.1, 0.0))
+			k += 1
+		await wait_until(settled, 30.0, "the CPUs to land on the lawn")
 
+	await prep.call()
 	# Fake Box: a leading CPU sets one down; the next racer to touch it is blown up
+	a.walker.teleport(lvl._spawn.origin + Vector3(0, 0.1, 0))   # (the start lawn has ground behind it; a ledge might not)
+	await wait_until(settled, 30.0, "the CPU to land on the lawn")
 	var dropped: bool = use.call(a, "fakebox")
 	check(dropped, "a CPU in front sets down a Fake Box (rank %d, item '%s', ground %s, pos %s, standing %s)" % [f.rank_of(a.id), a.item, str(not f.layer.ground_at(a.walker.pos - RouteMath.flat(a.walker.facing).normalized() * 2.2, 4.0).is_empty()), str(a.walker.pos), str(f._standing)])
 	var fb: FakeBox = _zp_hazard(p, "fake") as FakeBox
@@ -8329,7 +8365,8 @@ func test_zcpu_new_items() -> void:
 		while not fb.used and w2 < 3.0:
 			await seconds(0.1)
 			w2 += 0.1
-		check(fb.used and b.last_hit_by == a.id and b.walker.hold > 0.0, "a CPU that runs into it is stunned and the hit is credited (by %d)" % b.last_hit_by)
+		var victim: CpuRacer = b if b.last_hit_by == a.id else c   # (another CPU may have got there first)
+		check(fb.used and victim.last_hit_by == a.id and (victim.walker.hold > 0.0 or victim.walker.mode != RouteWalker.Mode.STEP), "a CPU that runs into it is stunned and the hit is credited (by %d)" % victim.last_hit_by)
 	b.protect_left = 6.0
 	var fb2: FakeBox = PartyItems.script_for("fakebox").call("drop", p, "1_77", 1, b.walker.pos) as FakeBox
 	await seconds(1.0)
@@ -8337,6 +8374,7 @@ func test_zcpu_new_items() -> void:
 	fb2.consume(false, false)
 	b.protect_left = 0.0
 
+	await prep.call()
 	# Decoy: a leading CPU with a rival close by drops one; other CPUs see it as a racer
 	a.walker.teleport(b.walker.pos + Vector3(4, 0, 0))
 	check(use.call(a, "decoy"), "a CPU in front drops a Decoy")
@@ -8357,6 +8395,7 @@ func test_zcpu_new_items() -> void:
 			tgt_found = true
 	check(not tgt_found, "(the popped decoy is gone for humans too)")
 
+	await prep.call()
 	# Shockwave: rivals close to a CPU are hurled away
 	a.protect_left = 0.0
 	b.walker.teleport(a.walker.pos + Vector3(2.5, 0, 0))
@@ -8389,6 +8428,7 @@ func test_zcpu_new_items() -> void:
 	check(lit and lit_left > 0.0 and lit_boost >= 1.4, "a CPU lights a Turbo Boost on a straight (boost x%.1f for %.1f s)" % [lit_boost, lit_left])
 	c.clear_buffs(f)
 
+	await prep.call()
 	# Ghost: untouchable, and robs a rival with an item who comes close
 	b.protect_left = 0.0
 	b.p["greed"] = 0.0   # (no box may fill the ghost's hands while it waits)
@@ -8412,6 +8452,7 @@ func test_zcpu_new_items() -> void:
 	b.clear_buffs(f)
 	await ticks(2)
 
+	await prep.call()
 	# a human's Ghost robs a CPU
 	a.item = "ice"
 	a.protect_left = 0.0
@@ -9066,4 +9107,38 @@ func test_zpm_main_mode_stays_pure() -> void:
 	check(CpuField.wanted_count() == 0 and not Net.cup_complete(), "Race mode has no CPUs and no cup")
 	Net.leave()
 	check(PartyModes.create("classic") == null and PartyModes.create("nonsense") == null, "classic (and unknown ids) have no game type object")
+	_pm_reset()
+
+
+## The host's rules (P3) cover the new items: they are on the Items screen, toggle off, and thin with the frequency.
+func test_zp_items_respect_ruleset() -> void:
+	_pm_reset()
+	var lvl: LevelBase = await _party_race_level(0)
+	var p: PartyLayer = lvl.party
+	var screen: Dictionary = PartyRulesMenu.build_items_screen(self)
+	var missing: Array[String] = []
+	for id: String in ZP_NEW_ITEMS:
+		if (screen["content"] as Node).find_child("Item_" + id, true, false) == null:
+			missing.append(id)
+	check(missing.is_empty(), "every new item has a toggle on the Items rules screen (missing: %s)" % str(missing))
+	(screen["content"] as Node).queue_free()
+	PartyRuleset.set_value("off", ZP_NEW_ITEMS.duplicate())
+	var seen: Dictionary = {}
+	for i: int in 300:
+		seen[p.filter_item(PartyItems.roll(1.0, (float(i) + 0.5) / 300.0))] = true
+	var leaked: Array[String] = []
+	for id: String in ZP_NEW_ITEMS:
+		if seen.has(id):
+			leaked.append(id)
+	check(leaked.is_empty() and PartyRuleset.boxes_on(), "switched-off new items never roll (leaked: %s)" % str(leaked))
+	PartyRuleset.set_value("off", [])
+	check(PartyRuleset.item_enabled("ghost") and PartyRuleset.enabled_items().size() == PartyItems.ids().size(), "...and come back when toggled on")
+	# Low frequency thins the mid-course rows along with the lawns
+	var full: int = p.boxes.size()
+	_party_race_done()
+	_pm_reset()
+	Settings.party_ruleset = PartyRuleset.sanitize({"freq": "low"})
+	var low: LevelBase = await _party_race_level(0)
+	check(low.party.boxes.size() < full and low.party.boxes.size() > 0, "Low item frequency thins the boxes, mid-course rows included (%d of %d)" % [low.party.boxes.size(), full])
+	_party_race_done()
 	_pm_reset()
