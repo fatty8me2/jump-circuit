@@ -6,25 +6,29 @@ extends LevelBase
 ## midway between rolling balls, and finish by being fired out of the human-cannonball cannon to the big top.
 ## Eighteen stages, seventeen checkpoints.
 ##
-##  1 Ticket Gate     three posts and a beam, MANTLE the ticket booth
-##  2 Mole Row        four WHACK-A-MOLE pistons pop up in a wave
-##  3 Carousel        board the turning CAROUSEL and leap off to the far post
-##  4 Strongman       the SPINNING HAMMER on a round deck, then WALL RUN the striped tent wall
-##  5 Pinball Pier    BRANCH: five hops (84%) | the FLIPPER swats you across [shortcut: 90% leap to the merge]
-##  6 Coaster Station BRANCH: ride the COASTER CAR over the chasm | the SEESAW planks
-##  7 Mallet Alley    ring-toss CANNONBALL lane, then MALLET PISTONS punch across a beam
-##  8 Ferris Wheel    board the turning WHEEL's gondolas, ride up, MANTLE out at the top [shortcut: wall run]
-##  9 Zipline         BRANCH: the ZIPLINE over the midway | the mole stepping stones
-## 10 Funhouse Doors  GAP WALLS slide shut, then the MIRROR BEAMS (lasers)
-## 11 Hall of Mirrors BRANCH: the funhouse DOOR (portal) | MANTLE route [shortcut]
-## 12 Drop Tower      FALLING BLOCKS and the dropping weights (crusher), WALL RUN onto the tower
-## 13 Barrel Rollers  the ROLLING LOG, moles, WALL RUN [shortcut]
-## 14 Big Dipper      the second COASTER, a long hill ride up [shortcut]
-## 15 Twin Carousels  two counter-turning carousels, mole stones between
-## 16 Midnight Wheel  the great wheel's gondolas to the big top roof [shortcut]
-## 17 Big Top Climb   the tent climb: mantles, mallets, a wall run
-## 18 THE HUMAN CANNONBALL (set piece): load into the great cannon, sit out the fuse, and be fired across
-##                    the fairground to the finish under the big top
+##  1 Ticket Gate      three posts and a beam, MANTLE the ticket booth
+##  2 Mole Row         four WHACK-A-MOLE pistons pop up in a wave
+##  3 Carousel         board the turning CAROUSEL and leap off to the far post
+##  4 Strongman        the kit SPINNING HAMMER on a round deck, then WALL RUN the striped tent wall
+##  5 Pinball Pier     BRANCH: the kit FLIPPER swats you across | a plain leap across the gap
+##  6 Coaster Station  BRANCH: ride the COASTER CAR over the chasm | the kit SEESAW planks
+##  7 Mallet Alley     kit CANNONBALL lane rolling across the deck, then MALLET PISTONS punch across a beam
+##  8 Ferris Wheel     board a turning WHEEL's gondola, ride up its front, MANTLE out at the top
+##  9 Zipline Gorge    BRANCH: the kit ZIPLINE over the gorge | five whack-a-mole stepping stones
+## 10 Funhouse Doors   kit GAP WALLS slide shut, then the mirror-beam LASERS [shortcut: the side catwalk]
+## 11 Hall of Mirrors  BRANCH: the funhouse DOOR (portal) | MANTLE crate and posts [shortcut: the mirror WALL RUN]
+## 12 Drop Tower      kit FALLING BLOCKS, the dropping weight (CRUSHER), WALL RUN onto the tower [shortcut: the catwalk]
+## 13 Barrel Rollers  two kit ROLLING LOGS with a pair of moles between
+## 14 Big Dipper      the second COASTER, a long hill ride up [shortcut: a line of posts beside the rails]
+## 15 Twin Carousels  two counter-turning CAROUSELS
+## 16 Midnight Wheel  the great WHEEL's gondolas to the big top's roof, MANTLE out
+## 17 Big Top Climb   MANTLE the canvas, a posts-and-WALL RUN, MALLETS across the ridge, MANTLE again
+## 18 THE HUMAN CANNONBALL (set piece): walk into the great cannon, sit out the fuse and be fired across the
+##                    fairground to the finish under the big top
+##
+## Kit obstacles used: hammer, flipper, seesaw, battery, zipline, gap_wall, falling_block, log_roller and the
+## launch barrel (dressed as the cannon). The four machines: laser (10), piston (the mallets, 7 and 17), crusher (12),
+## portal (11).
 ##
 ## Carnival mechanics (own scripts): CarnivalMole (whack-a-mole pistons), CarnivalCarousel, CarnivalCoaster
 ## (rideable car on a rail), CarnivalWheel (+ its Gondola platforms), CarnivalCannon (the cannon set piece).
@@ -260,15 +264,11 @@ func _build() -> void:
 		_finish_pos = _w(Vector3(0, 0, -9.5))
 		_hop(cp0, fin)
 		r_walk(_w(Vector3(0, 0, -9.8)))
-	player_failed.connect(func(c: String) -> void: print("FAILCAUSE ", c, " ", player.global_position, " t=", Game.course_time))  # DEBUG-HOOK
 	_surroundings()
 	_carnival_materials()
 	if DEV_START > 1:
 		set_spawn(origins[DEV_START - 1] + Vector3(0, 0.1, 0), yaws[DEV_START - 1])
 		route = route.slice(starts[DEV_START - 1])
-		if OS.get_environment("BOT_WAIT_UNTIL") != "":  # DEBUG-HOOK
-			var until_t: float = float(OS.get_environment("BOT_WAIT_UNTIL"))  # DEBUG-HOOK
-			route.insert(0, {"kind": "b_wait", "test": func() -> bool: return Game.course_time >= until_t})  # DEBUG-HOOK
 
 
 # ---- stage 1: Ticket Gate - three posts and a beam, mantle the ticket booth -----------------------
@@ -472,17 +472,17 @@ func _stage_4() -> Vector3:
 	kit.disc(_w(dc), radius, 0.8, "main", 0.0)
 	_floors.append({"top": _w(dc), "size": Vector3(radius * 2.0, 0, radius * 2.0), "drop": 0.8, "stage": _stage_no})
 	# the hammer: parked toward local -x; the path hugs local +x
-	var ham: SpinHammer = kit.hammer(_w(dc), 5.0, 7.0, 0.0, _yaw + 180.0)
+	var ham: SpinHammer = kit.hammer(_w(dc), 4.4, 7.0, 0.0, _yaw + 180.0)
 	var px: float = 2.2
 	var half: float = sqrt(radius * radius - px * px)
-	var enter := Vector3(px, 0, dc.z + half - 0.9)
+	var enter := Vector3(px, 0, dc.z + half - 0.5)
 	var leave := Vector3(px, 0, dc.z - half + 0.9)
 	var exit_area: Dictionary = _area(Vector3(px, 0, dc.z - half), 1.0, 0.0)
 	var w2: Dictionary = _post(_ahead(exit_area, 0.76, 0.0, 1.8), 1.8, 1.8)
 	var land: Dictionary = _wall_geometry(w2)
 	var cp: Dictionary = _cp(_ahead(land, 0.76, 0.0, 5.0, -(land["c"] as Vector3).x))
 	_hop(cp0, p1)
-	_hop(p1, _area(Vector3(px, 0, dc.z + half - 1.5), 3.0, 1.5))
+	_hop(p1, _area(Vector3(px, 0, dc.z + half - 0.9), 2.0, 0.5))
 	r_walk(_w(enter))
 	_wait(func() -> bool: return ham.is_parked_for(Game.course_time, 3.4), _w(enter))
 	r_walk(_w(leave))

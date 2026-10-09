@@ -41,6 +41,8 @@ func _ready() -> void:
 		# platform's absolute orbit centre is that point
 		get_parent().add_child.call_deferred(g)
 	_build()
+	# SOUND: carnival_wheel_creak - a loop of slow iron creaking and a distant calliope, quiet, close up only
+	WorldAudio.loop("carnival_wheel_creak", self, -18.0, 34.0, 6.0)
 
 
 ## Where gondola `i`'s floor centre (its top surface) is at course time `time`.

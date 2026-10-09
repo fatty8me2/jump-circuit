@@ -79,11 +79,6 @@ func _begin_step() -> void:
 func _physics_process(dt: float) -> void:
 	if level == null or done or stuck:
 		return
-	if _pause_left > 0.0:  # PAUSE-HOOK
-		_pause_left -= dt  # PAUSE-HOOK
-		player.cmd_move = Vector2.ZERO  # PAUSE-HOOK
-		player.cmd_jump = false  # PAUSE-HOOK
-		return  # PAUSE-HOOK
 	if not keep_camera:
 		player.camera_yaw = 0.0
 	if level.finished:
@@ -103,8 +98,6 @@ func _physics_process(dt: float) -> void:
 			stuck = true
 		return
 	var step: Dictionary = level.route[step_index]
-	if OS.get_environment("BOT_TRACE") == "2" and Engine.get_physics_frames() % 6 == 0:  # PAUSE-HOOK
-		print("POS %d %s t=%.2f p=%s v=%s g=%s" % [step_index, str(step["kind"]), Game.course_time, str(player.global_position.snapped(Vector3.ONE * 0.1)), str(player.velocity.snapped(Vector3.ONE * 0.1)), str(player.grounded)])  # PAUSE-HOOK
 	var first_tick: bool = _step_time == 0.0
 	var index_before: int = step_index
 	_step_time += dt
@@ -149,20 +142,16 @@ func _physics_process(dt: float) -> void:
 		"desert_fly": _do_desert_fly(step)
 		"candy_board", "candy_ride": _do_candy(step)
 		"k_barrel", "k_zip": _do_kit(step)
+		"carnival_board": _do_carnival_board(step)
 	# a bounce handed over by the previous step (_air_phase) is for the step that follows it: pad /
 	# x_pad / kick read it on their first tick. Left set, it made some LATER pad or kick skip its run-up.
 	if first_tick and step_index == index_before:
 		_pending_bounce = false
 
 
-var _pause_left: float = 0.0  # PAUSE-HOOK
 
 
 func _next() -> void:
-	if OS.get_environment("BOT_TRACE") != "" and step_index < level.route.size():  # PAUSE-HOOK
-		print("TRACE step %d %s t=%.2f pos=%s" % [step_index, str(level.route[step_index]["kind"]), Game.course_time, str(player.global_position.snapped(Vector3.ONE * 0.1))])  # PAUSE-HOOK
-	if OS.get_environment("BOT_PAUSE") != "" and step_index < level.route.size() and str(level.route[step_index]["kind"]) in ["checkpoint", "b_wait", "wait", "x_wait", "c_wait", "candy_board"]:  # PAUSE-HOOK
-		_pause_left = float(OS.get_environment("BOT_PAUSE"))  # PAUSE-HOOK
 	step_index += 1
 	_begin_step()
 
@@ -885,3 +874,34 @@ func _do_kit(step: Dictionary) -> void:
 					z.release_rider()
 			else:
 				_air_phase(step["to"])
+
+
+
+# ---- carnival chaos (additive) --------------------------------------------------------------------
+#   carnival_board {from, cars: Array, fwd: Vector3, local?, lead?, lateral?}   stand at `from` (a platform edge beside a
+#       turning wheel) and jump when a car (a CarnivalWheel gondola) will be level with us along `fwd` (the direction it
+#       travels at the bottom of the wheel) `lead` s from now, close enough sideways and in height; then chase it in the air
+#       exactly like candy_board. Done on landing.
+
+func _do_carnival_board(step: Dictionary) -> void:
+	if _phase == 0:
+		var from: Vector3 = step["from"]
+		_steer_ground(from)
+		if not player.grounded or _flat_dist(from) > 0.35:
+			return
+		player.cmd_move = Vector2.ZERO
+		var local: Vector3 = step.get("local", Vector3(0, 0.3, 0))
+		var lead: float = float(step.get("lead", 0.5))
+		var fwd: Vector3 = (step["fwd"] as Vector3).normalized()
+		for c: Node3D in (step["cars"] as Array):
+			var d: Vector3 = _future(c, local, lead) - player.global_position
+			var along: float = d.dot(fwd)
+			var lateral: float = sqrt(maxf(_flat(d).length_squared() - along * along, 0.0))
+			if absf(along) < 0.3 and lateral < float(step.get("lateral", 4.6)) and absf(d.y) < 1.6:
+				_candy_pick = c
+				player.press_jump()
+				player.cmd_jump = true
+				_phase = 1
+				return
+		return
+	_do_candy({"kind": "candy_board", "local": step.get("local", Vector3(0, 0.3, 0)), "cars": step["cars"], "to": step.get("to", Vector3.ZERO)})
