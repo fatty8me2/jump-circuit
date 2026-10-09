@@ -256,7 +256,7 @@ func _build() -> void:
 	starts.append(route.size())
 	origins.append(_o)
 	if last == stages.size():
-		_dev_finish()
+		_stage_17()
 	else:
 		_dev_finish()
 	_surroundings()
@@ -339,7 +339,7 @@ func _stage_2() -> Vector3:
 
 # ---- stage 3: Geyser Terraces - a geyser holds you up to each terrace -----------------------------
 
-const GEYSER_HEIGHT: float = 5.2
+const GEYSER_HEIGHT: float = 5.6
 
 ## A geyser on the vent slab `slab` (the floor point under it is the slab's top centre).
 func _geyser(slab: Dictionary, period: float, phase: float) -> DinoGeyser:
@@ -356,6 +356,8 @@ func _geyser(slab: Dictionary, period: float, phase: float) -> DinoGeyser:
 func _ride_geyser(g: DinoGeyser, to: Vector3) -> void:
 	var vent: Vector3 = g.position
 	r_walk(vent)
+	# arriving mid-eruption: let this one die down and take the next from the start
+	_wait(func() -> bool: return not g.is_erupting_at(Game.course_time), vent)
 	var top_y: float = vent.y + GEYSER_HEIGHT - 0.7
 	route.append({"kind": "desert_fly", "to": vent, "until": func() -> bool: return player.global_position.y > top_y})
 	route.append({"kind": "desert_fly", "to": to})
@@ -365,10 +367,10 @@ func _stage_3() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
 	var g1s: Dictionary = _blk(_ahead(cp0, 0.86, 0.0, 4.0), 4.0, 4.0)
 	var g1c: Vector3 = g1s["c"]
-	var t1: Dictionary = _blk(g1c + Vector3(0, 3.4, -5.8), 4.4, 4.4, "alt")
+	var t1: Dictionary = _blk(g1c + Vector3(0, 3.4, -5.4), 4.4, 4.4, "alt")
 	var t2: Dictionary = _blk(_ahead(t1, 0.87, 0.4, 4.0), 4.4, 4.4)
 	var t2c: Vector3 = t2["c"]
-	var cp: Dictionary = _cp(t2c + Vector3(0, 3.4, -6.4))
+	var cp: Dictionary = _cp(t2c + Vector3(0, 3.4, -6.0))
 	var g1: DinoGeyser = _geyser(g1s, 8.0, 0.0)
 	var g2: DinoGeyser = _geyser(t2, 8.6, 0.35)
 	# SHORTCUT: a shelf to the right of the vent and a 3.4 m mantle up onto the first terrace's side
@@ -921,17 +923,17 @@ static func _flames_dark(flames: Array[LaserGate], ts: Array[float]) -> bool:
 func _stage_13() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
 	var p1: Dictionary = _post(_ahead(cp0, 0.87, 0.0, 1.6), 1.6, 1.6)
-	var rock: Dictionary = _blk(_ahead(p1, 0.87, 0.0, 14.0), 14.0, 14.0)
+	var rock: Dictionary = _blk(_ahead(p1, 0.87, 0.0, 16.0), 16.0, 16.0)
 	var rc: Vector3 = rock["c"]
 	var ham: SpinHammer = kit.hammer(_w(rc), 5.0, 7.2, 0.0, 180.0, 1.0)
 	DinoDress.club_tail(ham)
-	var front: float = rc.z - 7.0
+	var front: float = rc.z - 8.0
 	var ledge_top := Vector3(2.0, rc.y + 3.3, front - 1.6 - 0.8)
 	var ledge: Dictionary = _ledge(ledge_top, Vector3(3.2, 9.0, 1.6))
 	var cp: Dictionary = _cp(_ahead(ledge, 0.85, 0.0, 5.0, -2.0))
 	_hop(cp0, p1)
-	_hop(p1, rock, Vector3(0, 0, 6.2))
-	var spot: Vector3 = _w(Vector3(2.0, rc.y, rc.z + 5.9))
+	_hop(p1, rock, Vector3(0, 0, 7.2))
+	var spot: Vector3 = _w(Vector3(2.0, rc.y, rc.z + 7.3))
 	r_walk(spot)
 	_wait(func() -> bool: return ham.is_parked_for(Game.course_time, 3.3), spot)
 	r_walk(_w(Vector3(2.0, rc.y, front + 0.9)))
@@ -954,7 +956,7 @@ func _stage_14() -> Vector3:
 	var g_slab: Dictionary = _blk(Vector3(ac.x, ac.y + 1.0, home_z - 19.0 - 1.8 - 2.2 - 2.2), 4.4, 4.4)
 	var gc: Vector3 = g_slab["c"]
 	var geyser: DinoGeyser = _geyser(g_slab, 8.4, 0.2)
-	var terr: Dictionary = _blk(gc + Vector3(0, 3.4, -5.8), 4.4, 4.4, "alt")
+	var terr: Dictionary = _blk(gc + Vector3(0, 3.4, -5.4), 4.4, 4.4, "alt")
 	var s1: Dictionary = _post(_ahead(terr, 0.87, 0.0, 1.3, 0.4))
 	var s2: Dictionary = _post(_ahead(s1, 0.88, 0.4, 1.3, -0.4))
 	var s3: Dictionary = _post(_ahead(s2, 0.88, 0.0, 1.3, 0.4))
@@ -1029,7 +1031,7 @@ func _stage_16() -> Vector3:
 	var g_slab: Dictionary = _blk(_ahead(p, 0.87, 0.0, 4.4), 4.4, 4.4)
 	var gc: Vector3 = g_slab["c"]
 	var geyser: DinoGeyser = _geyser(g_slab, 8.2, 0.6)
-	var cp: Dictionary = _cp(gc + Vector3(0, 3.4, -6.2), 6.0)
+	var cp: Dictionary = _cp(gc + Vector3(0, 3.4, -5.6), 6.0)
 	_hop(cp0, i1)
 	r_walk(_w(Vector3(i1c.x, i1c.y, i1c.z - 1.0)))
 	r_walk(_w(Vector3(i1c.x, i1c.y, i1c.z - 1.2 - tar_len + 1.0)))
@@ -1108,7 +1110,7 @@ func _stage_17() -> void:
 	kit.finish(_w(nc + Vector3(0, 0, -1.0)), _yaw)
 	_finish_pos = _w(nc + Vector3(0, 0, -1.0))
 	# the rex: out of the canyon wall to the left, onto the floor behind the start, then along the run
-	var pts_local: Array[Vector3] = [Vector3(-21, 0, 14), Vector3(-9, 0, 10), Vector3(-3, 0, 4), Vector3(0, 0, -2.0),
+	var pts_local: Array[Vector3] = [Vector3(-11, 0, 9), Vector3(-6, 0, 6), Vector3(-2, 0, 2.5), Vector3(0, 0, -2.0),
 		Vector3(0, 0, end_z + 2.0)]
 	var origin: Vector3 = _w(pts_local[0])
 	var rex := DinoRex.new()
@@ -1116,6 +1118,10 @@ func _stage_17() -> void:
 	for p: Vector3 in pts_local:
 		tr.append(_w(p) - origin)
 	rex.track = tr
+	rex.delay = 2.6
+	rex.v_start = 5.8
+	rex.accel = 0.8
+	rex.v_max = 8.4
 	rex.position = origin
 	rex.trigger_pos = _w(Vector3(0, 1.5, -3.4)) - origin
 	rex.trigger_size = _sz(Vector3(6.0, 3.0, 1.2))
@@ -1163,8 +1169,6 @@ func _nest_dress(nc: Vector3) -> void:
 
 func _finish_sequence() -> void:
 	# the eggs glow, the rex roars from far below and a flock of pterodactyls wheels over the nest
-	if _rex != null:
-		_rex.reset_state()
 	var fw: GPUParticles3D = Fx.sparks({"amount": 90, "lifetime": 1.4, "one_shot": true, "explosiveness": 0.9, "shape": "sphere",
 		"radius": 0.6, "dir": Vector3.UP, "spread": 35.0, "speed": Vector2(8.0, 14.0), "gravity": Vector3(0, -9, 0),
 		"color": Fx.hot(GOLD, 2.2), "size": Vector2(0.08, 0.6), "aabb": AABB(Vector3(-20, -5, -20), Vector3(40, 40, 40))})
