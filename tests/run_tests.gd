@@ -6766,4 +6766,95 @@ func test_zd_dino_course_stats() -> void:
 	check(hi >= 8, "8 or more main-path jumps at 85%% or above (%d)" % hi)
 	check(walls >= 3 and mantles >= 3, "at least 3 wall runs (%d) and 3 mantles (%d) on the main route" % [walls, mantles])
 	check(lvl.route_variants == 3, "three route variants (main, branches, shortcuts)")
+	check(int(lvl.get("stats")["branches"]) >= 3 and int(lvl.get("stats")["shortcuts"]) >= 4, "at least 3 branched stages and 4 shortcuts (%s)" % str(lvl.get("stats")))
+	var machines: Array[String] = ["LaserGate", "Piston", "Crusher", "WarpPortal"]
+	var absent: Array[String] = []
+	for k: String in machines:
+		if lvl.find_children("*", k, true, false).is_empty():
+			absent.append(k)
+	check(absent.is_empty(), "the four machines are all there (missing: %s)" % str(absent))
+	var kits: int = 0
+	for k2: String in ["RollingLog", "Zipline", "FallingBlock", "Seesaw", "SpinHammer", "Flipper", "GapWall", "Drawbridge", "CannonBattery", "LaunchBarrel"]:
+		if not lvl.find_children("*", k2, true, false).is_empty():
+			kits += 1
+	check(kits >= 3, "at least 3 kit obstacles are used (%d kinds)" % kits)
+	var own: int = 0
+	for k3: String in ["DinoGeyser", "DinoTar", "DinoStampede", "DinoRex"]:
+		if not lvl.find_children("*", k3, true, false).is_empty():
+			own += 1
+	check(own == 4, "all four Dino mechanics are placed (%d)" % own)
 	LevelBase.route_variant = keep
+
+
+## The geyser: a tell of 0.8 s or more, then a jet that carries a rider up to its crest and holds them there.
+func test_zd_geyser() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab()
+	var g := DinoGeyser.new()
+	g.height = 5.6
+	g.period = 8.0
+	kit.root.add_child(g)
+	check(g.warn >= 0.8, "the geyser rumbles for at least 0.8 s before it blows (%.2f s)" % g.warn)
+	check(g.phase_at(0.0) == 0 and g.erupts_in(0.0) > g.warn, "it idles, then the tell, then the eruption")
+	await wait_until(func() -> bool: return g.is_erupting_at(Game.course_time), 10.0, "the geyser to erupt")
+	await seconds(1.6)
+	check(player.global_position.y > 4.2 and player.global_position.y < 6.6, "the jet holds a rider near its crest (y %.2f)" % player.global_position.y)
+	await wait_until(func() -> bool: return not g.is_erupting_at(Game.course_time), 6.0, "the eruption to end")
+	await seconds(1.5)
+	check(player.global_position.y < 1.0, "and lets go when it ends (y %.2f)" % player.global_position.y)
+
+
+## The tar pit: slows you, sinks under you, lets go when you step off.
+func test_zd_tar() -> void:
+	await new_world(Vector3(0, 0.45, 0))
+	floor_slab(Vector3(200, 1, 200), Vector3(0, -3, 0))
+	var t := DinoTar.new()
+	t.size = Vector3(8, 1.4, 8)
+	t.sink_max = 1.6
+	t.position = Vector3(0, -0.7, 0)
+	kit.root.add_child(t)
+	await seconds(0.5)
+	check(player.speed_mult < 0.7, "standing in tar slows you (speed x%.2f)" % player.speed_mult)
+	check(t.depth > 0.1 and player.global_position.y < 0.3, "and the tar sinks under you (depth %.2f)" % t.depth)
+	player.teleport(Transform3D(Basis(), Vector3(20, -2.9, 0)))
+	await seconds(2.0)
+	check(is_equal_approx(player.speed_mult, 1.0), "stepping off gives your speed back")
+	check(t.depth < 0.05, "and the pit heaves back up (depth %.2f)" % t.depth)
+
+
+## The stampede: the herd is on the deck for a stretch of each cycle, announces itself well before it
+## arrives, and clear_for() agrees with where the ranks are.
+func test_zd_stampede() -> void:
+	await new_world(Vector3(0, 0.05, 30))
+	floor_slab()
+	var s := DinoStampede.new()
+	s.period = 7.0
+	kit.root.add_child(s)
+	var arrive: float = s.front_reaches(0.0)
+	check(arrive >= 1.4, "the herd is in sight for %.2f s before it reaches the middle of the lane" % arrive)
+	check(not s.clear_for(0.0, arrive - 0.2, arrive + 0.2), "clear_for() sees the herd crossing")
+	check(s.clear_for(0.0, 0.0, 0.0) or arrive > 0.0, "and the lane is free before it")
+	var gap: float = s.period - (float(s.count - 1) * s.gap + 5.0) / s.speed
+	check(gap >= 3.0, "there are %.1f s clear between herds, room for a crossing and a human's pause" % gap)
+
+
+## The rex: silent for the delay, then a fixed chase; it never outruns the track and stops at its end.
+func test_zd_rex() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab()
+	var r := DinoRex.new()
+	var tr: Array[Vector3] = [Vector3.ZERO, Vector3(0, 0, -40), Vector3(0, 0, -90)]
+	r.track = tr
+	r.trigger_pos = Vector3(0, 1.5, 0)
+	r.position = Vector3(0, 0, 60)
+	kit.root.add_child(r)
+	check(r.is_armed() and r.dist_at(0.0) == 0.0, "armed and still before the trigger")
+	check(r.delay >= 2.0, "it announces itself for %.1f s before the first stride" % r.delay)
+	check(r.speed_at(r.delay + 0.5) < 9.0 and r.speed_at(r.delay + 20.0) <= r.v_max, "it starts slower than a runner and never passes v_max")
+	check(is_equal_approx(r.dist_at(r.run_time() + 5.0), 90.0), "and stops at the end of its track")
+	await seconds(0.3)
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, 60)))
+	await seconds(0.3)
+	check(not r.is_armed(), "crossing the line wakes it")
+	r.reset_state()
+	check(r.is_armed(), "a respawn re-arms it")

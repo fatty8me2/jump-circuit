@@ -46,7 +46,7 @@ func _rod(parent: Node3D, a: Vector3, b: Vector3, r0: float, r1: float, mat: Mat
 func pillar(top: Vector3, half: Vector2, depth: float, tint: float = 0.0) -> void:
 	var n := Node3D.new()
 	_add(n, top)
-	var bands: int = clampi(int(depth / 3.2), 1, 14)
+	var bands: int = clampi(int(depth / 6.0), 1, 8)
 	var y: float = 0.0
 	var r0: float = maxf(half.x, half.y) * 0.9
 	for i: int in bands:
@@ -55,6 +55,7 @@ func pillar(top: Vector3, half: Vector2, depth: float, tint: float = 0.0) -> voi
 		var c: Color = (STRATA[(i + rng.randi() % 2) % STRATA.size()] as Color).lerp(Color(0.4, 0.34, 0.26), tint)
 		var seg: MeshInstance3D = Look.cylinder(r0, h, Look.flat(c, 0.95), Vector3(0, y - h * 0.5, 0), r1, 8)
 		seg.rotation.y = rng.randf() * TAU
+		seg.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		n.add_child(seg)
 		y -= h
 		r0 = r1
@@ -65,7 +66,7 @@ func pillar(top: Vector3, half: Vector2, depth: float, tint: float = 0.0) -> voi
 func mesa(base: Vector3, r: float, h: float, trees: int = 6) -> void:
 	var n := Node3D.new()
 	_add(n, base)
-	var bands: int = clampi(int(h / 6.0), 2, 12)
+	var bands: int = clampi(int(h / 9.0), 2, 8)
 	var y: float = 0.0
 	var rr: float = r
 	for i: int in bands:
@@ -74,6 +75,7 @@ func mesa(base: Vector3, r: float, h: float, trees: int = 6) -> void:
 		var c: Color = STRATA[i % STRATA.size()]
 		var seg: MeshInstance3D = Look.cylinder(r1, bh, Look.flat(c, 0.95), Vector3(0, y + bh * 0.5, 0), rr, 10)
 		seg.rotation.y = rng.randf() * TAU
+		seg.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		n.add_child(seg)
 		y += bh
 		rr = r1

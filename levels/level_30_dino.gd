@@ -64,6 +64,8 @@ var _floors: Array[Dictionary] = []
 ## Stage frames (origin, yaw) for the scenery.
 var _stage_frames: Array[Array] = []
 var deco: DinoDecor
+## What the course offers, counted as it is built (tests read it): branched stages, optional shortcuts.
+var stats: Dictionary = {"branches": 0, "shortcuts": 0}
 
 
 func _configure() -> void:
@@ -388,6 +390,7 @@ func _stage_3() -> Vector3:
 	var mtop: Vector3 = (sh["c"] as Vector3) + Vector3(0, 3.4, -1.5 - 1.6 - 0.8)
 	var m: Dictionary = _ledge(mtop, Vector3(3.0, 9.0, 1.6))
 	_hop(cp0, g1s)
+	stats["shortcuts"] += 1
 	if route_variant == 2:
 		_hop(g1s, sh)
 		r_mantle(_w(Vector3((sh["c"] as Vector3).x, (sh["c"] as Vector3).y, (sh["c"] as Vector3).z - 0.9 - 0.4)), _w(mtop + Vector3(0, 0, 0.2)))
@@ -451,6 +454,7 @@ func _stage_4() -> Vector3:
 	# SHORTCUT: the gorge's two walls, run one and kick across to the other onto the far ledge
 	kit.wallrun(_w(Vector3(-3.0, 1.2, -13.0)), Vector3(14.0, 6.5, 0.5), _yaw + 90.0)
 	kit.wallrun(_w(Vector3(3.0, 3.6, -26.0)), Vector3(12.0, 7.0, 0.5), _yaw + 90.0)
+	stats["shortcuts"] += 1
 	if route_variant == 2:
 		r_walk(_w(Vector3(-1.4, 0, -1.6)))
 		r_wallrun(_w(Vector3(-1.4, 0, -2.65)), _w(Vector3(-2.5, 1.4, -7.4)), _w(Vector3(-2.5, 1.4, -15.6)), _w(Vector3(2.5, 3.8, -21.4)))
@@ -516,6 +520,8 @@ func _stage_5() -> Vector3:
 		hids.append(hp)
 	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
 	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	stats["shortcuts"] += 1
+	stats["branches"] += 1
 	if route_variant == 2:
 		r_walk(_w(Vector3(0, 0, fc.z)))
 		var prev: Dictionary = _area(fc, 5.5, 1.5)
@@ -742,6 +748,8 @@ func _stage_9() -> Vector3:
 	DinoDress.hollow_log(self, _w(Vector3(0.5, 0, mc.z + 2.0)), _yaw)
 	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
 	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	stats["shortcuts"] += 1
+	stats["branches"] += 1
 	if route_variant == 2:
 		r_walk(_w(Vector3(0.6, 0, fc.z)))
 		_hop(_area(fc, 5.5, 1.5), sp, Vector3(0, 0, 0.3))
@@ -894,6 +902,8 @@ func _stage_12() -> Vector3:
 	var sstakes: Array[Dictionary] = _stakes_toward(_area(fc, 5.5, 1.5), near_z, 0.91, 1.2)
 	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
 	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	stats["shortcuts"] += 1
+	stats["branches"] += 1
 	if route_variant == 2:
 		r_walk(_w(Vector3(0, 0, fc.z)))
 		var prev: Dictionary = _area(fc, 5.5, 1.5)
@@ -977,6 +987,7 @@ func _stage_14() -> Vector3:
 	var cp: Dictionary = _cp(_ahead(s3, 0.86, 0.0, 5.0, -(s3["c"] as Vector3).x))
 	var stakes: Array[Dictionary] = _stakes_toward(a, gc.z + 2.2, 0.91, 1.2)
 	_hop(cp0, a)
+	stats["shortcuts"] += 1
 	if route_variant == 2:
 		var prev: Dictionary = a
 		for h: Dictionary in stakes:
