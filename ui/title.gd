@@ -352,9 +352,29 @@ func _main_screen() -> Control:
 		box.add_child(note)
 		box.move_child(note, 1)
 		spacer.queue_free()
+	# Godot's geometric focus search skips the half-width Challenges button (Down from Level Select lands on
+	# Stats and Left from Stats jumps up to Level Select), so wire the Challenges / Stats row explicitly.
+	_wire_extras_row.call_deferred(levels_btn, challenges_btn, stats_btn, race_btn)
 	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn, "practice": practice_btn, "locker": locker_btn, "challenges": challenges_btn, "stats": stats_btn, "partycpu": partycpu_btn}
 	_focus_pref = openers.get(_prev_screen, play)
 	return _left_column(box)
+
+
+## Pad / keyboard focus links for the main menu's Challenges + Stats row (runs once the screen is in the tree).
+func _wire_extras_row(levels_btn: Button, challenges_btn: Button, stats_btn: Button, below_btn: Button) -> void:
+	for b: Button in [levels_btn, challenges_btn, stats_btn, below_btn]:
+		if not is_instance_valid(b) or not b.is_inside_tree():
+			return
+	levels_btn.focus_neighbor_bottom = levels_btn.get_path_to(challenges_btn)
+	challenges_btn.focus_neighbor_top = challenges_btn.get_path_to(levels_btn)
+	stats_btn.focus_neighbor_top = stats_btn.get_path_to(levels_btn)
+	challenges_btn.focus_neighbor_right = challenges_btn.get_path_to(stats_btn)
+	stats_btn.focus_neighbor_left = stats_btn.get_path_to(challenges_btn)
+	challenges_btn.focus_neighbor_left = challenges_btn.get_path_to(challenges_btn)
+	stats_btn.focus_neighbor_right = stats_btn.get_path_to(stats_btn)
+	challenges_btn.focus_neighbor_bottom = challenges_btn.get_path_to(below_btn)
+	stats_btn.focus_neighbor_bottom = stats_btn.get_path_to(below_btn)
+	below_btn.focus_neighbor_top = below_btn.get_path_to(challenges_btn)
 
 
 ## Newer release: what's new and a direct download/install action.

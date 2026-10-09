@@ -53,7 +53,8 @@ func _ready() -> void:
 	var tests: Array[String] = []
 	for m: Dictionary in get_method_list():
 		var n: String = m["name"]
-		if n.begins_with("test_") and (only == "" or n.contains(only)) and (skip == "" or not n.contains(skip)):
+		# --only= and --skip= take several substrings separated by commas
+		if n.begins_with("test_") and (only == "" or _name_has_any(n, only)) and (skip == "" or not _name_has_any(n, skip)):
 			tests.append(n)
 	if tests.is_empty():
 		_usage_error("--only=%s matched no test_ method" % only)
@@ -80,6 +81,13 @@ func _ready() -> void:
 		if got != trap.expected:
 			check(false, "%s logged %d engine/script error(s) (expected %d): %s" % [n, got, trap.expected, trap.since(before)])
 	_finish()
+
+
+func _name_has_any(test_name: String, patterns: String) -> bool:
+	for p: String in patterns.split(",", false):
+		if test_name.contains(p):
+			return true
+	return false
 
 
 func _finish(note: String = "") -> void:
