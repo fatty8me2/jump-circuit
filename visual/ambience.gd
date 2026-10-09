@@ -749,10 +749,27 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 			]
 		"carnival":
 			return [
-				# PLACEHOLDER - the Carnival Chaos level agent replaces this case (near / mid / far layers)
-				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
-					"color": Color(1.00, 0.82, 0.20), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+				# near: warm sparks of string-light glow drifting up, and bits of paper confetti tumbling past
+				{"depth": "near", "amount": 70, "lifetime": 3.0, "tex": Fx.Tex.STAR, "size": 0.16,
+					"pick": PackedColorArray([Color(2.6, 1.9, 0.7), Color(2.6, 0.8, 1.1), Color(2.4, 1.5, 0.5)]),
+					"dir": Vector3.UP, "spread": 60.0, "speed": Vector2(0.2, 0.9), "turbulence": 0.6, "curve": "pop"},
+				{"depth": "near", "amount": 40, "lifetime": 5.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.14,
+					"pick": PackedColorArray([Color(1.0, 0.35, 0.45), Color(1.0, 0.85, 0.3), Color(0.35, 0.8, 1.0), Color(0.5, 0.95, 0.55)]),
+					"dir": Vector3.DOWN, "spread": 40.0, "speed": Vector2(0.3, 0.9), "angle": Vector2(0, 360), "spin": Vector2(-200, 200),
+					"turbulence": 0.9, "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# mid: drifting balloons-and-bokeh: big soft coloured lights out in the dusk haze
+				{"depth": "mid", "amount": 26, "lifetime": 8.0, "tex": Fx.Tex.DOT, "size": 1.1, "radius": 45.0,
+					"pick": PackedColorArray([Color(1.8, 0.9, 0.35, 0.5), Color(1.8, 0.4, 0.7, 0.45), Color(0.6, 1.3, 1.8, 0.4)]),
+					"dir": Vector3.UP, "spread": 30.0, "speed": Vector2(0.3, 0.9), "turbulence": 0.3,
 					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# far: warm haze veils drifting over the fairground, and long glints of rocket sparks
+				{"depth": "far", "amount": 30, "lifetime": 10.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 22.0,
+					"radius": 85.0, "pick": PackedColorArray([Color(1.0, 0.55, 0.4, 0.2), Color(0.8, 0.4, 0.6, 0.18)]),
+					"speed": Vector2(0.5, 1.5), "dir": Vector3(0.3, 0.2, 0.1), "spread": 40.0, "angle": Vector2(0, 360),
+					"spin": Vector2(-6, 6), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 10, "lifetime": 2.4, "facing": "velocity", "tex": Fx.Tex.SPARK,
+					"size": Vector2(0.25, 5.0), "radius": 100.0, "pick": PackedColorArray([Color(2.6, 1.9, 0.7), Color(2.4, 0.8, 1.4)]),
+					"dir": Vector3.UP, "spread": 6.0, "speed": Vector2(18.0, 30.0), "fade": PackedFloat32Array([0.0, 1.0, 0.0])},
 			]
 		"dino":
 			return [

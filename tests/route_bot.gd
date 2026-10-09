@@ -143,10 +143,13 @@ func _physics_process(dt: float) -> void:
 		"candy_board", "candy_ride": _do_candy(step)
 		"k_barrel", "k_zip": _do_kit(step)
 		"toybox_pick": _do_toybox(step)
+		"carnival_board": _do_carnival_board(step)
 	# a bounce handed over by the previous step (_air_phase) is for the step that follows it: pad /
 	# x_pad / kick read it on their first tick. Left set, it made some LATER pad or kick skip its run-up.
 	if first_tick and step_index == index_before:
 		_pending_bounce = false
+
+
 
 
 func _next() -> void:
@@ -873,3 +876,32 @@ func _do_toybox(step: Dictionary) -> void:
 			r["to"] = (step["exits"] as Array)[i]
 			_next()
 			return
+
+# ---- carnival chaos (additive) --------------------------------------------------------------------
+#   carnival_board {from, cars: Array, fwd: Vector3, local?, lead?, lateral?}   stand at `from` (a platform edge beside a
+#       turning wheel) and jump when a car (a CarnivalWheel gondola) will be level with us along `fwd` (the direction it
+#       travels at the bottom of the wheel) `lead` s from now, close enough sideways and in height; then chase it in the air
+#       exactly like candy_board. Done on landing.
+
+func _do_carnival_board(step: Dictionary) -> void:
+	if _phase == 0:
+		var from: Vector3 = step["from"]
+		_steer_ground(from)
+		if not player.grounded or _flat_dist(from) > 0.35:
+			return
+		player.cmd_move = Vector2.ZERO
+		var local: Vector3 = step.get("local", Vector3(0, 0.3, 0))
+		var lead: float = float(step.get("lead", 0.5))
+		var fwd: Vector3 = (step["fwd"] as Vector3).normalized()
+		for c: Node3D in (step["cars"] as Array):
+			var d: Vector3 = _future(c, local, lead) - player.global_position
+			var along: float = d.dot(fwd)
+			var lateral: float = sqrt(maxf(_flat(d).length_squared() - along * along, 0.0))
+			if absf(along) < 0.3 and lateral < float(step.get("lateral", 4.6)) and absf(d.y) < 1.6:
+				_candy_pick = c
+				player.press_jump()
+				player.cmd_jump = true
+				_phase = 1
+				return
+		return
+	_do_candy({"kind": "candy_board", "local": step.get("local", Vector3(0, 0.3, 0)), "cars": step["cars"], "to": step.get("to", Vector3.ZERO)})
