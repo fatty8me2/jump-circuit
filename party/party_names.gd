@@ -42,7 +42,7 @@ const TEAM_COLORS: Array[Color] = [Color(1.0, 0.38, 0.28), Color(0.3, 0.62, 1.0)
 
 ## id -> display name, one-line description (HUD / practice), icon colour.
 const ITEMS: Dictionary = {
-	"fox": {"name": "Nine-Tailed Fox", "desc": "Blazing speed and huge jumps. Tap Attack: Claw (KO). Hold: Tailed Beast Bomb.", "color": Color(1.0, 0.5, 0.1)},
+	"fox": {"name": "Nine-Tailed Fox", "desc": "Blazing speed and huge jumps. Tap Attack: Claw (big knockback). Hold: Tailed Beast Bomb.", "color": Color(1.0, 0.5, 0.1)},
 	"tunic": {"name": "Hero's Tunic", "desc": "Attack: Legend Blade (hold to spin). Use: throw the current tool. Cycle: next tool.", "color": Color(0.25, 0.8, 0.3)},
 	"surge": {"name": "Golden Surge Hair", "desc": "Faster, double jump. Tap Attack: Dash Punch. Hold: charge the Energy Wave.", "color": Color(1.0, 0.86, 0.2)},
 	"thunder": {"name": "Thunder Cloud", "desc": "Zaps every rival ahead of you: stunned and slowed.", "color": Color(0.6, 0.65, 1.0)},
