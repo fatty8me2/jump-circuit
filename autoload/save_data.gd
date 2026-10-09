@@ -245,6 +245,8 @@ func set_game_completed() -> void:
 func wipe() -> void:
 	delete_files()
 	data = {"levels": {}, "game_completed": false}
+	_play_acc = 0.0   # a fresh save must not inherit a part-second of play time from the old one
+	_stats_dirty = false
 	save_data()
 
 
