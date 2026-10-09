@@ -3421,7 +3421,10 @@ const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_l
 	"dino_rex_chomp",
 	# Carnival Chaos (gen_carnival)
 	"carnival_checkpoint", "carnival_finish", "carnival_cannon_fanfare", "carnival_coaster_bell",
-	"carnival_mole_rumble", "carnival_mole_whistle", "carnival_mole_pop"]
+	"carnival_mole_rumble", "carnival_mole_whistle", "carnival_mole_pop",
+	# the Arcane Library (gen_arcane)
+	"arcane_checkpoint", "arcane_finish", "arcane_ink_bubble", "arcane_ink_surge", "arcane_circle_charge",
+	"arcane_circle_cast", "arcane_hourglass_warn", "arcane_hourglass_shut", "arcane_hourglass_open"]
 const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
 	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
 	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz",
@@ -3443,7 +3446,9 @@ const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "
 	# Dino Valley (gen_dino)
 	"dino_geyser_rumble", "dino_geyser_roar", "dino_stampede_thunder", "dino_volcano_rumble",
 	# Carnival Chaos (gen_carnival)
-	"carnival_coaster_rumble", "carnival_carousel_loop", "carnival_wheel_creak"]
+	"carnival_coaster_rumble", "carnival_carousel_loop", "carnival_wheel_creak",
+	# the Arcane Library (gen_arcane)
+	"arcane_book_flap", "arcane_ink_flow"]
 
 
 func test_z_world_sounds() -> void:

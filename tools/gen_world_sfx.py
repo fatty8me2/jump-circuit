@@ -256,6 +256,13 @@ for _n, _d in (("carnival_checkpoint", 1.6), ("carnival_finish", 3.0), ("carniva
     _reg(_n, _d)
 for _n, _d in (("carnival_coaster_rumble", 2.0), ("carnival_carousel_loop", 3.6), ("carnival_wheel_creak", 2.0)):
     _reg(_n, _d, True)
+# Arcane Library (gen_arcane): the mechanics' clips (checkpoint, finish, book, ink, circle, hourglass)
+for _n, _d in (("arcane_checkpoint", 2.4), ("arcane_finish", 3.0), ("arcane_ink_bubble", 1.2),
+               ("arcane_ink_surge", 1.2), ("arcane_circle_charge", 1.0), ("arcane_circle_cast", 1.0),
+               ("arcane_hourglass_warn", 1.1), ("arcane_hourglass_shut", 1.0), ("arcane_hourglass_open", 1.0)):
+    _reg(_n, _d)
+for _n, _d in (("arcane_book_flap", 2.0), ("arcane_ink_flow", 2.0)):
+    _reg(_n, _d, True)
 
 
 # ---------------------------------------------------------------------------
@@ -7045,6 +7052,145 @@ def gen_carnival():
     save_loop(name, unit(creak_sig) + 0.6 * unit(far) + 0.2 * rub)
 
 
+# ===========================================================================
+# The Arcane Library (a candlelit wizard's stacks): celesta, choir, pages and ink.
+# ===========================================================================
+def gen_arcane():
+    # the checkpoint: a celesta runs up a scale in glassy strikes, and a flutter of pages turns over
+    name = "arcane_checkpoint"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    for k, m in enumerate((72, 74, 76, 79, 81, 84, 86, 88, 91, 96)):
+        place(x, 0.02 + 0.045 * k, fm_glass(midi(m), 0.9, 0.35, 0.9, 4.0, 0.002), 0.5 * (0.7 + 0.3 * k / 9.0))
+    grains(r, x, 60, 0.15, 1.5, 1800.0, 7000.0, 0.002, 0.006, gain=0.3, decay=0.8)
+    save(name, x, fin=0.002, fout=0.15)
+
+    # the finish: a choir rises a few semitones under the candles, a celesta runs up to meet it, and the pages rush
+    name = "arcane_finish"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = np.zeros(n)
+    rise = np.clip(t / 2.2, 0.0, 1.0)
+    choir = np.zeros(n)
+    for m, g in ((60, 1.0), (67, 0.7), (72, 0.45)):
+        choir += g * voice(midi(m) * 2.0 ** (4.0 * rise / 12.0), n, 16, 1.3, 0.004, 5.0, r)
+    choir = unit(svf(choir, 700.0, 1.6) + 0.5 * svf(choir, 1800.0, 2.5))
+    swell = np.minimum(t / 0.5, 1.0) * np.clip((dur(name) - t) / 0.6, 0.0, 1.0)
+    x += 0.6 * taper(choir * swell, 0.02)
+    for k, m in enumerate((72, 76, 79, 84, 88, 91, 96, 100)):
+        place(x, 1.1 + 0.075 * k, fm_glass(midi(m), 1.0, 0.45, 0.8, 4.0, 0.002), 0.45)
+    x += 0.5 * whoosh(r, dur(name), 1500.0, 6500.0, 3000.0, 1.9, 0.35, 1.2)
+    grains(r, x, 40, 1.2, 2.8, 2000.0, 7000.0, 0.002, 0.005, gain=0.2)
+    save(name, x, fin=0.005, fout=0.25)
+
+    # the book (loop): four soft page-wing flaps a half second apart over a faint rustle of paper
+    name = "arcane_book_flap"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    flap_n = ns(0.24)
+    for k in range(4):
+        flap = noise(r, flap_n, 500.0, 3500.0) * np.hanning(flap_n) ** 1.5
+        cplace(x, k * dur(name) / 4.0 + 0.04, flap, r.uniform(0.7, 1.0))
+    save_loop(name, unit(x) + 0.25 * unit(cnoise(r, n, 180, 1000)))
+
+    # the ink gurgles: a run of bubbles, each rising in pitch as it forms, over a churning bed
+    name = "arcane_ink_bubble"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = np.zeros(n)
+    for k in range(9):
+        t0 = 0.05 + k * 0.11 + r.uniform(-0.02, 0.02)
+        place(x, t0, bubble(r.uniform(170.0, 420.0), 0.12, r.uniform(0.012, 0.022), rise=0.8), r.uniform(0.5, 1.0))
+    churn = noise(r, n, 90.0, 700.0) * np.minimum(t / 0.3, 1.0)
+    save(name, x + 0.6 * churn, fin=0.002, fout=0.08)
+
+    # the ink surges over the bridge: a heavy liquid rush that climbs fast and drains away, a slosh underneath
+    name = "arcane_ink_surge"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    rush = noise(r, n, 220.0, 3200.0) * np.minimum(t / 0.3, 1.0) ** 1.5 * np.exp(-np.maximum(t - 0.45, 0.0) / 0.35)
+    slosh = thud(t, 110.0, 55.0, 0.5, 0.25, harm=(0.25,), attack=0.01)
+    x = rush + 0.6 * slosh
+    for k in range(10):
+        place(x, r.uniform(0.2, 0.9), bubble(r.uniform(200.0, 500.0), 0.1, 0.015, 0.8), 0.25)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # the ink (loop): a quiet, thick river - broad low noise that swells slowly, with a gurgle rising through it
+    name = "arcane_ink_flow"
+    r = rng(name)
+    n = ns(dur(name))
+    flow = cnoise(r, n, 150, 900) * (0.75 + 0.25 * crand(r, n, 3))
+    deep = cnoise(r, n, 60, 260) * (0.7 + 0.3 * clfo(n, 2))
+    gurgle = np.zeros(n)
+    for t0 in (0.3, 1.1, 1.6):
+        cplace(gurgle, t0, bubble(r.uniform(200.0, 350.0), 0.1, 0.014, 0.8), r.uniform(0.4, 0.7))
+    save_loop(name, unit(flow) + 0.6 * unit(deep) + 0.3 * unit(gurgle))
+
+    # the circle gathers: a glassy chord climbing a whole tone as it builds, whispers rising out of it
+    name = "arcane_circle_charge"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    u = np.clip(t / dur(name), 0.0, 1.0)
+    chord = np.zeros(n)
+    for m, g in ((60, 1.0), (64, 0.7), (67, 0.6), (72, 0.45)):
+        f = midi(m) * 2.0 ** (2.0 * u / 12.0)
+        chord += g * (tone(f) + 0.25 * tone(2.0 * f))
+    chord = unit(chord) * np.minimum(t / 0.2, 1.0) * (0.4 + 0.6 * u)
+    whisper = svf(r.standard_normal(n), 1200.0 + 2800.0 * u, 4.0) * u ** 2
+    save(name, 0.8 * chord + 0.5 * unit(whisper), fin=0.005, fout=0.1)
+
+    # the spell breaks: a bright bell struck at once, and a whoosh as the rider is thrown
+    name = "arcane_circle_cast"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    bell = modes(t, bell_modes(midi(84), 0.7), r, 0.002, hard=9000.0)
+    shine = 0.5 * fm_glass(midi(96), dur(name), 0.5, 0.8, 2.76, 0.002)
+    x = bell + shine + 0.8 * whoosh(r, dur(name), 700.0, 3800.0, 1200.0, 0.22, 0.2, 1.4)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # the hourglass is nearly out: ticks that speed up, and a shimmer that climbs as the last sand thins
+    name = "arcane_hourglass_warn"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    u = np.clip(t / dur(name), 0.0, 1.0)
+    ticks = np.zeros(n)
+    for k, t0 in enumerate((0.0, 0.2, 0.35, 0.47, 0.57, 0.66, 0.74, 0.81, 0.87, 0.92, 0.96, 1.0)):
+        place(ticks, t0, click(r, 0.02, 2500, 7000, 0.0015), 0.4 + 0.6 * k / 11.0)
+    shimmer = svf(r.standard_normal(n), 2000.0 + 6000.0 * u, 7.0) * u ** 2
+    glint = tone(midi(84) * 2.0 ** (0.9 * u)) * (0.5 + 0.5 * np.sin(TAU * 22.0 * t)) * u ** 2
+    save(name, 0.7 * unit(ticks) + 0.5 * unit(shimmer) + 0.3 * unit(glint), fin=0.002, fout=0.05)
+
+    # the sand curtain slams into the doorway: a hiss of sand falling away, grit ticking down, and a heavy thud
+    name = "arcane_hourglass_shut"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    sand = noise(r, n, 1200.0, 7000.0) * np.minimum(t / 0.15, 1.0) * np.exp(-np.maximum(t - 0.12, 0.0) / 0.35)
+    grit = np.zeros(n)
+    grains(r, grit, 50, 0.0, 0.7, 1500.0, 6000.0, 0.002, 0.008, gain=0.35, decay=0.5)
+    slam = np.zeros(n)
+    place(slam, 0.1, thud(tv(0.5), 160.0, 55.0, 0.12, 0.09, harm=(0.35, 0.12), attack=0.001), 1.0)
+    place(slam, 0.1, click(r, 0.08, 600, 3500, 0.01), 0.6)
+    save(name, 0.6 * sand + grit + slam, fin=0.002, fout=0.1)
+
+    # the sand starts to run: a soft glassy chime, two struck notes a fourth apart
+    name = "arcane_hourglass_open"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    place(x, 0.0, fm_glass(midi(88), 1.0, 0.45, 0.6, 2.76, 0.003), 0.8)
+    place(x, 0.16, fm_glass(midi(93), 0.9, 0.4, 0.6, 2.76, 0.003), 0.5)
+    save(name, x, fin=0.002, fout=0.25)
+
+
 def verify():
     ok = True
     total = 0
@@ -7103,7 +7249,7 @@ GENERATORS = (gen_steps, gen_wall, gen_movement_loops, gen_lasers, gen_crusher_p
               gen_foundry, gen_reef, gen_orbital, gen_clockwork, gen_balance, gen_gardens, gen_ascent, gen_xeno,
               gen_volcano, gen_glacier, gen_desert, gen_manor, gen_armada, gen_candy, gen_carrier,
               gen_sakura, gen_jungle, gen_frontier, gen_neon, gen_doom, gen_abyss, gen_tempest, gen_void, gen_kit, gen_emotes,
-              gen_toybox, gen_olympus, gen_arcade, gen_siege, gen_fungal, gen_dino, gen_carnival)
+              gen_toybox, gen_olympus, gen_arcade, gen_siege, gen_fungal, gen_dino, gen_carnival, gen_arcane)
 
 
 def main():
