@@ -679,7 +679,7 @@ func _side_chain(from: Dictionary, n: int, dx: float, pct: float) -> Array[Dicti
 	var out: Array[Dictionary] = []
 	var prev: Dictionary = from
 	for i: int in n:
-		prev = _post(_ahead(prev, pct - (0.08 if i == 0 else 0.0), 0.0, 1.8, dx if i == 0 else 0.0), 1.8, 1.8, "accent")
+		prev = _post(_ahead(prev, pct - (0.14 if i == 0 else 0.0), 0.0, 1.8, dx if i == 0 else 0.0), 1.8, 1.8, "accent")
 		out.append(prev)
 	return out
 
@@ -930,9 +930,9 @@ func _stage_16() -> Vector3:
 	var f0: float = fc.z - 1.6
 	# RIGHT (yellow): two blocks over the gap
 	var right: Dictionary = _area(Vector3(3.5, 0, fc.z), 1.5, 1.6)
-	var b1: Dictionary = _post(_ahead(right, 0.80, 0.0, 2.0), 2.0, 2.0)
-	var b2: Dictionary = _post(_ahead(b1, 0.82, 0.0, 2.0), 2.0, 2.0)
-	var mn: float = (b2["c"] as Vector3).z - 1.0 + 0.35 - _e(0.82, 0.0)
+	var b1: Dictionary = _post(_ahead(right, 0.72, 0.0, 2.0), 2.0, 2.0)
+	var b2: Dictionary = _post(_ahead(b1, 0.78, 0.0, 2.0), 2.0, 2.0)
+	var mn: float = (b2["c"] as Vector3).z - 1.0 + 0.35 - _e(0.78, 0.0)
 	var merge: Dictionary = _blk(Vector3(0, 0, mn - 1.6), 11.0, 3.2)
 	# LEFT (red): two tin cars shuttle between the fork and the merge
 	var clen: float = 5.0
@@ -1053,7 +1053,7 @@ func _stage_18() -> void:
 	r_mantle(_w(Vector3(pcc.x, pcc.y, pcc.z - 1.0 + 0.35)), _w(be_top + Vector3(0, 0, 0.2)))
 	_hop(bookend, s2, Vector3(0, 0, 1.2))
 	# SHORTCUT: a stepping block beside the tower
-	var sbk: Dictionary = _post(Vector3(3.2, s2c.y, tfront - 5.4), 1.8, 1.8, "accent")
+	var sbk: Dictionary = _post(Vector3(3.0, s2c.y, tfront - 4.6), 2.4, 2.4, "accent")
 	if route_variant == 2:
 		_hop(s2, sbk)
 		_hop(sbk, dock)
