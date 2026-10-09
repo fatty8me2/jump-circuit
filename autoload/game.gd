@@ -32,7 +32,7 @@ const LEVELS: Array[Dictionary] = [
 	{"id": "tempest", "name": "Tempest Tower", "scene": "res://levels/level_22_tempest.tscn", "blurb": "Climb the outside of a mile-high tower in a hurricane. Lightning picks the tallest thing.", "medals": {"gold": 180, "silver": 220, "bronze": 275}},
 	{"id": "void", "name": "The Void", "scene": "res://levels/level_23_void.tscn", "blurb": "Impossible geometry in a dream that is coming apart. Up is a suggestion.", "medals": {"gold": 120, "silver": 145, "bronze": 180}},
 	{"id": "arcade", "name": "Pixel Panic", "scene": "res://levels/level_28_arcade.tscn", "blurb": "Inside a retro arcade cabinet. Blocks fall, chompers chase, and the screen keeps scrolling.", "medals": {"gold": 145, "silver": 175, "bronze": 220}},
-	{"id": "siege", "name": "Castle Siege", "scene": "res://levels/level_32_siege.tscn", "blurb": "Storm a castle mid-siege. Boulders fall, rams swing, oil pours - and the trebuchet is your ride in.", "medals": {"gold": 155, "silver": 185, "bronze": 235}},
+	{"id": "siege", "name": "Castle Siege", "scene": "res://levels/level_32_siege.tscn", "blurb": "Storm a castle mid-siege. Boulders fall, rams swing, oil pours - and the trebuchet is your ride in.", "medals": {"gold": 135, "silver": 165, "bronze": 205}},
 	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_24_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon.", "medals": {"gold": 180, "silver": 215, "bronze": 270}},
 ]
 ## Medal targets ("medals" in each LEVELS entry, whole seconds) come from the route bot:
@@ -72,7 +72,7 @@ const BOT_TIMES: Dictionary = {
 	"dino": 163.6,
 	"arcane": 149.6,
 	"arcade": 127.6,
-	"siege": 135.8,
+	"siege": 119.8,
 	"ascent": 158.7,
 }
 const MEDAL_MULT: Dictionary = {"gold": 1.12, "silver": 1.35, "bronze": 1.7}
