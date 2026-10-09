@@ -630,17 +630,28 @@ func _stage_9() -> Vector3:
 	var ledge_top := Vector3(wc.x, wc.y + 3.3, front - 1.6 - 0.7)
 	var ld: Dictionary = _ledge(ledge_top, Vector3(2.8, 9.0, 1.4))
 	var cp: Dictionary = _cp(_ahead(ld, 0.85, 0.0, 5.0, -wc.x))
-	_hop(cp0, p1)
-	_hop(p1, aisle, Vector3(0, 0, 0.6))
-	r_walk(_w(Vector3(wc.x, wc.y, back - 2.0)))
-	var tA: float = 0.65
-	var tB: float = 1.2
-	var tG: float = 1.75
-	_wait(func() -> bool: return _ram_clear(ra, tA - 0.3, tA + 0.4 + 1.5) and _ram_clear(rb, tB - 0.3, tB + 0.4 + 1.5) \
-		and _gates_ok([[gate, tG - 0.2, tG + 0.6 + 1.5]]), _w(Vector3(wc.x, wc.y, back - 2.0)))
-	r_walk(_w(Vector3(wc.x, wc.y, front + 0.9)))
-	r_mantle(_w(Vector3(wc.x, wc.y, front + 0.35)), _w(ledge_top + Vector3(0, 0, 0.3)))
-	_hop(ld, cp, Vector3(0, 0, 1.2))
+	# SHORTCUT: a mantle up the column beside the checkpoint and a narrow cornice over the whole aisle
+	var sc_x: float = 2.95
+	var col: Dictionary = _ledge(Vector3(sc_x, 4.1, -3.4), Vector3(1.5, 12.0, 1.8), "accent")
+	var cz_end: float = (cp["c"] as Vector3).z + 2.5 + 3.8
+	var cornice: Dictionary = _blk(Vector3(sc_x, 4.1, (-4.7 + cz_end) * 0.5), 1.0, -4.7 - cz_end, "accent", 0.5)
+	if route_variant == 2:
+		r_walk(_w(Vector3(2.35, 0, 2.0)))
+		r_mantle(_w(Vector3(2.35, 0, -0.35)), _w(Vector3(sc_x, 4.1, -3.6)))
+		_hop(col, cornice, Vector3(0, 0, 5.0))
+		r_walk(_w(Vector3(sc_x, 4.1, cz_end + 1.2)))
+		r_jump(_w(Vector3(sc_x, 4.1, cz_end + 0.35)), _w((cp["c"] as Vector3) + Vector3(1.4, 0, 0.6)))
+	else:
+		_hop(cp0, p1)
+		_hop(p1, aisle, Vector3(0, 0, 0.6))
+		r_walk(_w(Vector3(wc.x, wc.y, back - 2.0)))
+		var tA: float = 0.65
+		var tB: float = 1.2
+		var tG: float = 1.75
+		_wait(func() -> bool: return _ram_clear(ra, tA - 0.3, tA + 0.4 + 1.5) and _ram_clear(rb, tB - 0.3, tB + 0.4 + 1.5) 			and _gates_ok([[gate, tG - 0.2, tG + 0.6 + 1.5]]), _w(Vector3(wc.x, wc.y, back - 2.0)))
+		r_walk(_w(Vector3(wc.x, wc.y, front + 0.9)))
+		r_mantle(_w(Vector3(wc.x, wc.y, front + 0.35)), _w(ledge_top + Vector3(0, 0, 0.3)))
+		_hop(ld, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	return cp["c"]
 
@@ -776,6 +787,7 @@ func _stage_12() -> Vector3:
 		push_warning("arcane stage 12: lintel beam too short (%.1f)" % hi_len)
 	var hi: Dictionary = _blk(Vector3(-3.5, 4.5, (f0 - 6.5) - hi_len * 0.5), 1.2, hi_len, "alt", 0.6)
 	var door: WarpPortal = kit.portal(_w(Vector3(-3.5, 0, fc.z - 0.6)), _yaw, _w(Vector3(-3.5, 4.5, f0 - 7.2)), _yaw, 7.0)
+	var lgate: ArcaneHourglass = _gate(Vector3(-3.5, 4.5, f0 - 10.2), 7.0, 0.3, 3.6)
 	var la: Dictionary = _post(_ahead(hi, 0.90, -1.5, 1.2, 0.3))
 	var la2: Dictionary = _post(_ahead(la, 0.90, -1.5, 1.2, -0.3))
 	# SHORTCUT: the broken column (a 4.1 m mantle) and its cornices
@@ -796,7 +808,9 @@ func _stage_12() -> Vector3:
 	elif route_variant != 1:
 		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
 		r_portal(_w(Vector3(-3.5, 0, fc.z - 0.9)), door.exit_point())
-		r_walk(_w(Vector3(-3.5, 4.5, f0 - 8.5)))
+		r_walk(_w(Vector3(-3.5, 4.5, f0 - 8.3)))
+		_wait(func() -> bool: return _gates_ok([[lgate, 0.0, 1.8 + 1.5]]), _w(Vector3(-3.5, 4.5, f0 - 8.3)))
+		r_walk(_w(Vector3(-3.5, 4.5, f0 - hi_len + 1.5)))
 		_hop(hi, la)
 		_hop(la, la2)
 		_hop(la2, merge, Vector3(-3.5, 0, 0.6))
