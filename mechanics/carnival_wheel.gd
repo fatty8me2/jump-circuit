@@ -30,7 +30,7 @@ func _ready() -> void:
 		g.orbit_axis = Basis(Vector3.UP, rotation.y) * Vector3.RIGHT
 		g.period = period
 		g.phase = phase + float(i) / float(count)
-		g.size = Vector3(3.0, 0.5, 2.6)
+		g.size = Vector3(3.2, 0.5, 3.8)
 		g.is_round = false
 		g.hang = hang
 		g.position = position - Vector3(0, g.size.y * 0.5, 0)

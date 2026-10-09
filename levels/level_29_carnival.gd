@@ -266,6 +266,9 @@ func _build() -> void:
 	if DEV_START > 1:
 		set_spawn(origins[DEV_START - 1] + Vector3(0, 0.1, 0), yaws[DEV_START - 1])
 		route = route.slice(starts[DEV_START - 1])
+		if OS.get_environment("BOT_WAIT_UNTIL") != "":  # DEBUG-HOOK
+			var until_t: float = float(OS.get_environment("BOT_WAIT_UNTIL"))  # DEBUG-HOOK
+			route.insert(0, {"kind": "b_wait", "test": func() -> bool: return Game.course_time >= until_t})  # DEBUG-HOOK
 
 
 # ---- stage 1: Ticket Gate - three posts and a beam, mantle the ticket booth -----------------------
@@ -680,7 +683,7 @@ func _stage_8() -> Vector3:
 	_hop(cp0, lp)
 	var stand: Vector3 = _w(Vector3(-2.15, 0, zc))
 	r_walk(stand)
-	route.append({"kind": "candy_board", "from": stand, "cars": wheel.gondolas, "reach": 3.1, "lead": 0.35, "local": Vector3(0, 0.3, 0)})
+	route.append({"kind": "carnival_board", "from": stand, "cars": wheel.gondolas, "fwd": _b * Vector3(0, 0, -1), "lead": 0.5, "local": Vector3(0, 0.3, 0)})
 	route.append({"kind": "candy_ride", "stand": Vector3(0, 0.3, 0), "to": _w(Vector3(-0.5, ed_y, zc - 6.1)),
 		"until": func() -> bool:
 			var fb: Object = player.floor_body
@@ -761,7 +764,7 @@ func _stage_10() -> Vector3:
 	var l1: LaserGate = kit.laser(_w(Vector3(0, y + 1.2, lz)), Vector3(7.0, 2.4, 0.2), 5.0, 0.3, 0.0, _yaw)
 	var l2: LaserGate = kit.laser(_w(Vector3(0, y + 1.2, lz - 3.5)), Vector3(7.0, 2.4, 0.2), 5.0, 0.3, fposmod(-0.07, 1.0), _yaw)
 	# SHORTCUT: a catwalk outside the laser posts
-	var walk: Dictionary = _blk(Vector3(5.6, y, lz - 1.75), 1.6, 10.0, "accent", 0.6)
+	_blk(Vector3(5.6, y, lz - 1.5), 1.6, 12.0, "accent", 0.6)
 	var pb: Dictionary = _post(_ahead(deck, 0.76, 0.0, 2.0), 2.0, 2.0)
 	var cp: Dictionary = _cp(_ahead(pb, 0.76, 0.0, 5.0, -(pb["c"] as Vector3).x))
 	_hop(cp0, deck, Vector3(0, 0, 15.0))
@@ -771,10 +774,10 @@ func _stage_10() -> Vector3:
 	_wait(func() -> bool: return gw2.is_open_for(Game.course_time, 0.8 + 1.5), _w(Vector3(0, y, z0 - 11.0)))
 	r_walk(_w(Vector3(0, y, lz + 2.5)))
 	if route_variant == 2:
-		r_walk(_w(Vector3(3.0, y, lz + 0.5)))
-		r_jump(_w(Vector3(3.1, y, lz + 0.5)), _w(Vector3(5.6, y, lz + 0.5)))
-		r_walk(_w(Vector3(5.6, y, lz - 5.0)))
-		r_jump(_w(Vector3(5.6, y, lz - 5.5)), _w(Vector3(2.4, y, lz - 5.5)))
+		r_walk(_w(Vector3(3.0, y, lz + 2.3)))
+		r_jump(_w(Vector3(3.1, y, lz + 2.3)), _w(Vector3(5.6, y, lz + 2.3)))
+		r_walk(_w(Vector3(5.6, y, lz - 6.0)))
+		r_jump(_w(Vector3(5.6, y, lz - 6.5)), _w(Vector3(2.4, y, lz - 6.5)))
 	else:
 		_wait(func() -> bool: return _dark(l1, 0.0, 0.5 + 1.5) and _dark(l2, 0.3, 1.1 + 1.5), _w(Vector3(0, y, lz + 2.5)))
 		r_walk(_w(Vector3(0, y, lz - 5.0)))
@@ -882,6 +885,7 @@ func _stage_12() -> Vector3:
 	var z0: float = dc.z + 11.0
 	var b1: FallingBlock = kit.falling_block(_w(Vector3(0, y, z0 - 5.0)), _sz(Vector3(6.4, 1.6, 3.0)), 7.0, 6.0, 0.0)
 	var b2: FallingBlock = kit.falling_block(_w(Vector3(0, y, z0 - 14.0)), _sz(Vector3(6.4, 1.6, 3.0)), 7.0, 6.0, 0.5)
+	_blk(Vector3(5.4, y, z0 - 11.0), 1.6, 18.0, "accent", 0.6)
 	var beam: Dictionary = _blk(_ahead(deck, 0.76, 0.0, 10.0), 1.8, 10.0, "alt", 0.6)
 	var bc: Vector3 = beam["c"]
 	var press: Crusher = kit.crusher(_w(Vector3(bc.x, bc.y, bc.z)), Vector3(2.4, 1.2, 2.0), 3.2, 6.0, 0.0, _yaw)
@@ -889,10 +893,17 @@ func _stage_12() -> Vector3:
 	var land: Dictionary = _wall_geometry(w2)
 	var cp: Dictionary = _cp(_ahead(land, 0.76, 0.0, 5.0, -(land["c"] as Vector3).x))
 	_hop(cp0, deck, Vector3(0, 0, 9.0))
-	r_walk(_w(Vector3(0, y, z0 - 1.5)))
-	_wait(func() -> bool: return b1.is_clear_for(Game.course_time, 0.9 + 1.5), _w(Vector3(0, y, z0 - 1.5)))
-	r_walk(_w(Vector3(0, y, z0 - 10.0)))
-	_wait(func() -> bool: return b2.is_clear_for(Game.course_time, 0.9 + 1.5), _w(Vector3(0, y, z0 - 10.0)))
+	if route_variant == 2:
+		# SHORTCUT: step out onto the catwalk beside the deck and walk past both blocks
+		r_walk(_w(Vector3(3.0, y, z0 - 2.0)))
+		r_jump(_w(Vector3(3.0, y, z0 - 2.0)), _w(Vector3(5.4, y, z0 - 2.0)))
+		r_walk(_w(Vector3(5.4, y, z0 - 19.0)))
+		r_jump(_w(Vector3(5.4, y, z0 - 19.3)), _w(Vector3(2.4, y, z0 - 19.3)))
+	else:
+		r_walk(_w(Vector3(0, y, z0 - 1.5)))
+		_wait(func() -> bool: return b1.is_clear_for(Game.course_time, 0.9 + 1.5), _w(Vector3(0, y, z0 - 1.5)))
+		r_walk(_w(Vector3(0, y, z0 - 10.0)))
+		_wait(func() -> bool: return b2.is_clear_for(Game.course_time, 0.9 + 1.5), _w(Vector3(0, y, z0 - 10.0)))
 	r_walk(_w(Vector3(0, y, dc.z - 10.0)))
 	var tp: float = 1.4
 	_wait(func() -> bool: return _press_ok(press, tp - 0.3, tp + 0.8 + 1.5), _w(Vector3(0, y, dc.z - 10.0)))
@@ -918,8 +929,8 @@ func _stage_13() -> Vector3:
 	var y: float = dc.y
 	var f: float = dc.z - 3.0
 	var log_len: float = 12.0
-	kit.log_roller(_w(Vector3(0, y, f - 0.8 - log_len * 0.5)), log_len, 2.6, _yaw + 90.0, 3.0, 6.0, 0.0)
-	var isl: Dictionary = _blk(Vector3(0, y, f - 0.8 - log_len - 0.8 - 1.6), 3.2, 3.2, "alt", 0.8)
+	kit.log_roller(_w(Vector3(0, y, f - 0.4 - log_len * 0.5)), log_len, 2.6, _yaw + 90.0, 3.0, 6.0, 0.0)
+	var isl: Dictionary = _blk(Vector3(0, y, f - 0.4 - log_len - 0.4 - 1.8), 6.0, 3.6, "alt", 0.8)
 	var period: float = 7.4
 	var c1: Vector3 = _ahead(isl, 0.74, 0.0, 1.9, 0.5)
 	var mo1: CarnivalMole = _mole(c1, period, 0.0)
@@ -927,23 +938,23 @@ func _stage_13() -> Vector3:
 	var c2: Vector3 = _ahead(a1, 0.74, 0.0, 1.9, -0.5)
 	var mo2: CarnivalMole = _mole(c2, period, fposmod(-0.6 / period, 1.0))
 	var a2: Dictionary = _area(c2, 0.95, 0.95)
-	var isl2: Dictionary = _blk(_ahead(a2, 0.74, 0.0, 3.2, -c2.x), 3.2, 3.2, "alt", 0.8)
+	var isl2: Dictionary = _blk(_ahead(a2, 0.74, 0.0, 3.6, -c2.x), 6.0, 3.6, "alt", 0.8)
 	var ic2: Vector3 = isl2["c"]
-	var f2: float = ic2.z - 1.6
-	kit.log_roller(_w(Vector3(0, y, f2 - 0.8 - log_len * 0.5)), log_len, 2.6, _yaw + 90.0, 3.0, 6.0, 0.5)
-	var cp: Dictionary = _cp(Vector3(0, y, f2 - 0.8 - log_len - 0.8 - 2.5))
+	var f2: float = ic2.z - 1.8
+	kit.log_roller(_w(Vector3(0, y, f2 - 0.4 - log_len * 0.5)), log_len, 2.6, _yaw + 90.0, 3.0, 6.0, 0.5)
+	var cp: Dictionary = _cp(Vector3(0, y, f2 - 0.4 - log_len - 0.4 - 2.5))
 	_hop(cp0, deck, Vector3(0, 0, 1.0))
 	r_walk(_w(Vector3(0, y, f + 0.8)))
 	r_walk(_w(Vector3(0, y, f - 1.6)))
-	r_walk(_w(Vector3(0, y, f - 0.8 - log_len + 0.8)))
+	r_walk(_w(Vector3(0, y, f - 0.4 - log_len + 0.8)))
 	r_walk(_w(Vector3(0, y, (isl["c"] as Vector3).z)))
 	_wait(func() -> bool: return _moles_ok([[mo1, 0.8, 2.0 + 1.5], [mo2, 1.65, 2.85 + 1.5]]), _w(Vector3(0, y, (isl["c"] as Vector3).z)))
 	_hop(isl, a1)
 	_hop(a1, a2)
 	_hop(a2, isl2)
 	r_walk(_w(Vector3(0, y, f2 - 1.6)))
-	r_walk(_w(Vector3(0, y, f2 - 0.8 - log_len + 0.8)))
-	r_walk(_w(Vector3(0, y, f2 - 0.8 - log_len - 0.8 - 2.0)))
+	r_walk(_w(Vector3(0, y, f2 - 0.4 - log_len + 0.8)))
+	r_walk(_w(Vector3(0, y, f2 - 0.4 - log_len - 0.4 - 2.0)))
 	r_checkpoint()
 	for k: int in 5:
 		var bz: float = f - 3.0 - 6.0 * float(k)
@@ -1081,7 +1092,7 @@ func _stage_16() -> Vector3:
 	_hop(cp0, lp)
 	var stand: Vector3 = _w(Vector3(-2.15, 0, zc))
 	r_walk(stand)
-	route.append({"kind": "candy_board", "from": stand, "cars": wheel.gondolas, "reach": 3.1, "lead": 0.35, "local": Vector3(0, 0.3, 0)})
+	route.append({"kind": "carnival_board", "from": stand, "cars": wheel.gondolas, "fwd": _b * Vector3(0, 0, -1), "lead": 0.5, "local": Vector3(0, 0.3, 0)})
 	route.append({"kind": "candy_ride", "stand": Vector3(0, 0.3, 0), "to": _w(Vector3(-0.5, ed_y, zc - 3.1)),
 		"until": func() -> bool:
 			var fb: Object = player.floor_body
