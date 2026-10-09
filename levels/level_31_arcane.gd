@@ -39,7 +39,7 @@ const PARCHMENT := Color(0.96, 0.9, 0.74)
 const OXBLOOD := Color(0.5, 0.1, 0.22)
 
 ## Testing aid: build every stage but start the player (and the bot's route) at stage N. 0 = off.
-const DEV_START: int = 11
+const DEV_START: int = 15
 ## Testing aid: stop building after stage N (a finish gate goes at its end). 0 = build them all.
 const DEV_LAST: int = 0
 
@@ -312,7 +312,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -325,8 +325,8 @@ func _build() -> void:
 		_frame(_w(end), yaws[i + 1])
 	starts.append(route.size())
 	origins.append(_o)
-	if last == stages.size() and false:
-		pass
+	if last == stages.size():
+		_stage_17()
 	else:
 		# (dev) the finish right after the last stage built
 		var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
@@ -892,6 +892,119 @@ func _crumble(top: Vector3, edge: float = 1.4, delay: float = 0.6) -> Dictionary
 	add_child(cp)
 	_floors.append({"top": _w(top), "size": Vector3(edge, 0, edge), "drop": 0.4})
 	return {"c": top, "hx": edge * 0.5, "hz": edge * 0.5}
+
+
+# ---- stage 15: The Great Shelf - thrown to the foot of the stacks, three chained wall runs up the shelves --------
+
+func _chimney_panel(x: float, y: float, z0: float, z1: float, height: float = 7.0) -> void:
+	kit.wallrun(_w(Vector3(x, y, (z0 + z1) * 0.5)), Vector3(absf(z0 - z1), height, 0.5), _yaw + 90.0)
+
+
+func _stage_15() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var disc_c: Vector3 = _ahead(cp0, 0.86, 0.0, 3.2)
+	disc_c.x = 0.0
+	var landing_c := Vector3(0, 6.0, -15.2)
+	var circ: ArcaneCircle = _circle(disc_c, landing_c, 2.4, 1.6)
+	var landing: Dictionary = _blk(landing_c, 2.4, 2.4, "main", 0.8)
+	_chimney_panel(2.3, 7.2, -19.5, -26.0)
+	_chimney_panel(-2.3, 12.0, -24.5, -32.5)
+	_chimney_panel(2.3, 15.0, -30.5, -38.5)
+	var top_c := Vector3(-0.75, 17.9, -42.0)
+	var top: Dictionary = _ledge(top_c, Vector3(4.5, 14.0, 4.0), "alt")
+	var gap: float = 4.0
+	var cp_c := Vector3(-0.75, 17.9, top_c.z - 2.0 - gap - 2.5)
+	var cp: Dictionary = _cp(cp_c)
+	_blk(Vector3(-0.75, 17.9, top_c.z - 2.0 - gap * 0.5), 1.6, gap + 0.04, "alt", 0.3, 0.0)
+	var ink: ArcaneInk = _ink(Vector3(-0.75, 17.9, top_c.z - 2.0 - gap * 0.5), gap, 8.0, 0.6)
+	_hop(cp0, _area(disc_c, 1.6, 1.6))
+	r_walk(_w(disc_c + Vector3(0, 0, -0.2)))
+	route.append({"kind": "kick", "from": _w(disc_c + Vector3(0, 0, -0.2)), "to": _w(landing_c)})
+	r_walk(_w(Vector3(0, 6.0, -14.4)))
+	r_wallrun(_w(Vector3(0.5, 6.0, -15.95)), _w(Vector3(1.7, 7.4, -20.6)), _w(Vector3(1.7, 7.4, -23.5)), _w(Vector3(-1.7, 11.5, -27.4)))
+	r_wallrun(Vector3.ZERO, _w(Vector3(-1.7, 11.5, -27.4)), _w(Vector3(-1.7, 11.5, -30.4)), _w(Vector3(1.7, 14.5, -34.0)), true, true)
+	r_wallrun(Vector3.ZERO, _w(Vector3(1.7, 14.5, -34.0)), _w(Vector3(1.7, 14.5, -35.4)), _w(Vector3(-0.75, 17.9, -40.6)), true, true)
+	r_walk(_w(Vector3(top_c.x, top_c.y, top_c.z - 0.6)))
+	_wait(func() -> bool: return _inks_ok([[ink, 0.0, 2.6 + 1.5]]), _w(Vector3(top_c.x, top_c.y, top_c.z - 0.6)))
+	r_walk(_w(Vector3(cp_c.x, cp_c.y, cp_c.z + 0.5)))
+	r_walk(_w(cp_c))
+	r_checkpoint()
+	landing.clear()
+	top.clear()
+	circ.get_index()
+	return cp["c"]
+
+
+# ---- stage 16: The Observatory - a sliding shelf, an hourglass gate, the drawbridge to the tower's foot ------
+
+func _stage_16() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.3))
+	var beam: Dictionary = _blk(_ahead(p1, 0.86, 0.0, 18.0), 1.4, 18.0, "alt", 0.6)
+	var wc: Vector3 = beam["c"]
+	var back: float = wc.z + 9.0
+	var front: float = wc.z - 9.0
+	var wall: GapWall = kit.gap_wall(_w(Vector3(wc.x, wc.y, back - 5.0)), _yaw, 3.4, 9.0, 0.0, {"open_time": 3.6, "move_time": 1.2, "warn": 1.1})
+	var gate: ArcaneHourglass = _gate(Vector3(wc.x, wc.y, back - 11.0), 8.0, 0.0, 4.4)
+	var deck: Dictionary = _blk(Vector3(wc.x, wc.y, front - 1.5 + 0.02), 4.0, 3.0, "main", 0.8)
+	var hinge_z: float = front - 3.0 + 0.02
+	var br: Drawbridge = kit.drawbridge(_w(Vector3(wc.x, wc.y, hinge_z)), 8.0, 3.4, _yaw, 12.0, 0.0)
+	var cp_c := Vector3(wc.x, wc.y, hinge_z - 8.0 - 2.5 + 0.1)
+	var cp: Dictionary = _cp(cp_c)
+	_hop(cp0, p1)
+	_hop(p1, beam, Vector3(0, 0, 0.6))
+	r_walk(_w(Vector3(wc.x, wc.y, back - 1.8)))
+	_wait(func() -> bool: return _walls_ok([[wall, 0.0, 2.2 + 0.9]]) and _gates_ok([[gate, 0.7, 2.0 + 1.5]]), _w(Vector3(wc.x, wc.y, back - 1.8)))
+	r_walk(_w(Vector3(wc.x, wc.y, front + 0.5)))
+	r_walk(_w(Vector3(wc.x, wc.y, hinge_z + 0.5)))
+	_wait(func() -> bool: return br.is_down_for(Game.course_time, 2.4 + 1.5), _w(Vector3(wc.x, wc.y, hinge_z + 0.5)))
+	r_walk(_w(Vector3(cp_c.x, cp_c.y, cp_c.z + 1.0)))
+	r_walk(_w(cp_c))
+	r_checkpoint()
+	deck.clear()
+	return cp["c"]
+
+
+# ---- stage 17: THE ORRERY TOWER (set piece) - ride the rotating rings up to the open grimoire ---------------
+
+var _orrery: Array[RotatingPlatform] = []
+var _podium_pos: Vector3 = Vector3.ZERO
+var _finish_light: OmniLight3D
+
+
+func _stage_17() -> void:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var radii: Array[float] = [13.6, 9.0, 4.4]
+	var periods: Array[float] = [24.0, -20.0, 18.0]
+	var tc := Vector3(0, 0, -(2.5 + 3.2 + radii[0] + 1.5))
+	var pad := Vector3(3.0, 0.5, 3.0)
+	var locals: Array = []
+	for i: int in 3:
+		var arms: Array[Dictionary] = []
+		var ls: Array = []
+		for k: int in 3:
+			var a: float = TAU * float(k) / 3.0 + 0.4 * float(i)
+			var pos := Vector3(radii[i] * cos(a), 0.0, -radii[i] * sin(a))
+			arms.append({"pos": pos, "size": pad})
+			ls.append(pos + Vector3(0, 0.25, 0))
+		var ring: RotatingPlatform = kit.spinner(_w(tc + Vector3(0, 1.4 * float(i + 1), 0)), periods[i], arms, 0.0, float(i) * 0.17, 0.5)
+		_orrery.append(ring)
+		locals.append(ls)
+	var pod_y: float = 1.4 * 4.0
+	var podium_c := Vector3(tc.x, pod_y, tc.z)
+	kit.disc(_w(podium_c), 1.9, 0.8, "main", 1.5)
+	_floors.append({"top": _w(podium_c), "size": Vector3(3.8, 0, 3.8), "drop": 0.8})
+	_podium_pos = _w(podium_c)
+	kit.finish(_w(podium_c + Vector3(0, 0, -0.2)), _yaw)
+	_finish_pos = _w(podium_c + Vector3(0, 0, -0.2))
+	# aboard ring 1 from the checkpoint's edge, then up ring by ring
+	var edge := Vector3(0, 0, -2.15)
+	route.append({"kind": "x_jump", "from": _w(edge), "to_node": _orrery[0], "to_locals": locals[0], "reach": 5.4, "lead": 0.55})
+	route.append({"kind": "x_jump", "to_node": _orrery[1], "to_locals": locals[1], "reach": 5.4, "lead": 0.55})
+	route.append({"kind": "x_jump", "to_node": _orrery[2], "to_locals": locals[2], "reach": 5.4, "lead": 0.55})
+	route.append({"kind": "x_jump", "to": _w(podium_c)})
+	r_walk(_w(podium_c + Vector3(0, 0, -0.2)))
+	cp0.clear()
 
 
 # ---- environment ----------------------------------------------------------------------------------

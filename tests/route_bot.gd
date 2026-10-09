@@ -76,8 +76,16 @@ func _begin_step() -> void:
 	player.cmd_jump = false
 
 
+var _hold: float = 0.0
+
+
 func _physics_process(dt: float) -> void:
 	if level == null or done or stuck:
+		return
+	if _hold > 0.0:
+		_hold -= dt
+		player.cmd_move = Vector2.ZERO
+		player.cmd_jump = false
 		return
 	if not keep_camera:
 		player.camera_yaw = 0.0
@@ -149,6 +157,10 @@ func _physics_process(dt: float) -> void:
 
 
 func _next() -> void:
+	if OS.get_environment("ARC_DBG") != "":
+		print("  step %d (%s) done at %.1fs t=%.1f pos=%s" % [step_index, str(level.route[step_index]["kind"]), level.run_time, Game.course_time, str(player.global_position.snapped(Vector3.ONE * 0.1))])
+	if OS.get_environment("ARC_PAUSE") != "" and step_index < level.route.size() and str(level.route[step_index]["kind"]) in ["checkpoint", "b_wait", "wait", "x_wait", "c_wait"]:
+		_hold = 1.0
 	step_index += 1
 	_begin_step()
 
@@ -349,6 +361,8 @@ func _x_trigger(step: Dictionary) -> bool:
 		var me: Vector3 = player.global_position + player.platform_velocity * lead
 		var n: Node3D = step["to_node"]
 		for l: Vector3 in (step["to_locals"] as Array):
+			if OS.get_environment("ARC_DBG2") != "" and Engine.get_physics_frames() % 30 == 0:
+				print("   trig me=%s tip=%s d=%.2f" % [str(me.snapped(Vector3.ONE * 0.1)), str(_future(n, l, lead).snapped(Vector3.ONE * 0.1)), _flat(_future(n, l, lead) - me).length()])
 			if _flat(_future(n, l, lead) - me).length() <= float(step["reach"]):
 				_pick_node = n
 				_pick_basis = _arm_basis(l)
@@ -386,6 +400,8 @@ func _do_ext(step: Dictionary) -> void:
 				if step.has("from") or step.has("from_local"):
 					var from: Vector3 = step["from"] if step.has("from") else _future(_x_node(step, "from_node"), _x_local(step, "from_local"), 0.05)
 					_steer_ground(from)
+					if OS.get_environment("ARC_DBG2") != "" and Engine.get_physics_frames() % 30 == 0:
+						print("   xj from=%s me=%s grounded=%s" % [str(from.snapped(Vector3.ONE * 0.1)), str(player.global_position.snapped(Vector3.ONE * 0.1)), str(player.grounded)])
 					var to0: Vector3 = _x_target(step, 0.0) if not step.has("to_locals") else from
 					var dir: Vector3 = _flat(to0 - from).normalized()
 					var passed: bool = _flat(from - player.global_position).dot(dir) < 0.0 and _flat_dist(from) < 1.5
