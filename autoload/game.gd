@@ -68,7 +68,7 @@ const BOT_TIMES: Dictionary = {
 	"toybox": 141.5,
 	"fungal": 142.5,
 	"carnival": 190.6,
-	"olympus": 152.8,
+	"olympus": 152.7,
 	"dino": 163.6,
 	"arcane": 149.6,
 	"arcade": 127.6,
