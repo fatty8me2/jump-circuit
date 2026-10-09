@@ -79,15 +79,13 @@ static func _strikes(layer_ref: PartyLayer, pts: Array, seed_value: int) -> void
 			PartyFx.embers(layer_ref, c, 0.7, Color(1.2, 1.5, 2.6), 18, 1.1, 0.8)
 			for k: int in 3:
 				var cc: Vector3 = c
-				layer_ref.get_tree().create_timer(0.2 + 0.18 * float(k), false).timeout.connect(func() -> void:
-					if is_instance_valid(layer_ref) and layer_ref.is_inside_tree():
-						PartyFx.crackle(layer_ref, cc, 0.7, Color(0.8, 0.9, 1.4), 4, 0.08))
+				layer_ref.create_tween().tween_callback(func() -> void:
+					PartyFx.crackle(layer_ref, cc, 0.7, Color(0.8, 0.9, 1.4), 4, 0.08)).set_delay(0.2 + 0.18 * float(k))
 		layer_ref.sfx.play_at("zap", c, 1.0, 0.8 + 0.1 * float(i % 3))
 		# the afterflash: a second, thinner fork a blink later
 		var s2: int = seed_value + i + 7
-		layer_ref.get_tree().create_timer(0.11, false).timeout.connect(func() -> void:
-			if is_instance_valid(layer_ref) and layer_ref.is_inside_tree():
-				PartyFx.forked_bolt(layer_ref, sky + Vector3(0.5, 0, -0.4), c, Color(0.9, 0.95, 1.0), s2, 0.18, 1))
+		layer_ref.create_tween().tween_callback(func() -> void:
+			PartyFx.forked_bolt(layer_ref, sky + Vector3(0.5, 0, -0.4), c, Color(0.9, 0.95, 1.0), s2, 0.18, 1)).set_delay(0.11)
 		i += 1
 
 

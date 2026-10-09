@@ -120,9 +120,10 @@ static func confirm_button(text: String, armed_text: String, on_press: Callable,
 		b.text = armed_text
 		for c: String in colors:
 			b.add_theme_color_override(c, GOLD)
-		b.get_tree().create_timer(3.0).timeout.connect(func() -> void:
+		# tween on the button: it dies with it (disarm captured the button, and calling a lambda whose capture was freed errors)
+		b.create_tween().tween_callback(func() -> void:
 			if armed_at[0] == now:
-				disarm.call()))
+				disarm.call()).set_delay(3.0))
 	b.focus_exited.connect(disarm)
 	return b
 
