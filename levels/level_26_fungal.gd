@@ -30,9 +30,9 @@ const SLIDE_SPEED: float = 14.0
 const GROUND_Y: float = -13.0
 
 ## Testing aid: build every stage but start the player (and the bot's route) at stage N. 0 = off.
-const DEV_START: int = 17
+const DEV_START: int = 0
 ## Testing aid: stop building after stage N (a finish gate goes at its end). 0 = build them all.
-const DEV_LAST: int = 17
+const DEV_LAST: int = 0
 
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
@@ -986,7 +986,7 @@ func _stage_10() -> Vector3:
 	var fcen: Vector3 = foot["c"]
 	# the chimney, in the proven geometry: three bark panels up the inside of the trunk
 	var o := Vector3(fcen.x, fcen.y - 6.0, fcen.z + 15.2)
-	_chimney_panel(o.x + 2.3, o.y + 7.2, o.z - 19.5, o.z - 26.0)
+	_chimney_panel(o.x + 2.3, o.y + 7.2, o.z - 17.0, o.z - 26.0)
 	_chimney_panel(o.x - 2.3, o.y + 12.0, o.z - 24.5, o.z - 32.5)
 	_chimney_panel(o.x + 2.3, o.y + 15.0, o.z - 30.5, o.z - 38.5)
 	var top: Dictionary = _ledge(Vector3(o.x - 0.75, o.y + 16.4, o.z - 42.0), Vector3(4.5, 14.0, 4.0), "alt")
@@ -1675,6 +1675,6 @@ var _dbg_acc: float = 0.0
 func _physics_process(dt: float) -> void:
 	super._physics_process(dt)
 	_dbg_acc += dt
-	if DEBUG_JUMPS and player != null and _dbg_acc > 0.1 and Game.course_time > 0.0 and Game.course_time < 3.0:
+	if DEBUG_JUMPS and player != null and _dbg_acc > 0.1 and Game.course_time > 50.5 and Game.course_time < 53.0:
 		_dbg_acc = 0.0
 		var lbn: Array = find_children("*", "FungalSnail", true, false); print("LB ", (lbn[lbn.size() - 1] as Node3D).global_position.snapped(Vector3.ONE * 0.01) if lbn.size() > 0 else "-"); print("TR t=", snappedf(Game.course_time, 0.1), " ", player.global_position.snapped(Vector3.ONE * 0.01), " v ", player.velocity.snapped(Vector3.ONE * 0.1), " wall ", player.is_wall_running(), " gr ", player.grounded)
