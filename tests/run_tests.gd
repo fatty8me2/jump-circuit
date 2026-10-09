@@ -3408,7 +3408,13 @@ const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_l
 	"olympus_spirit_gust", "olympus_tell_tick", "arcade_checkpoint", "arcade_finish", "arcade_boss_defeat",
 	"arcade_block_tick", "arcade_block_land", "arcade_block_clear_warn", "arcade_block_clear", "arcade_block_drop",
 	"arcade_paddle_ping", "arcade_ball_ping", "arcade_glitch_warn", "arcade_glitch_hop", "arcade_scroll_start",
-	"arcade_boss_charge", "arcade_boss_blast"]
+	"arcade_boss_charge", "arcade_boss_blast",
+	# Castle Siege and Mushroom Hollow (gen_siege / gen_fungal)
+	"siege_boulder_launch", "siege_boulder_whistle", "siege_boulder_impact", "siege_ram_creak", "siege_ram_whoosh",
+	"siege_ram_thud", "siege_oil_tilt", "siege_oil_pour", "siege_volley_horn", "siege_volley_whoosh", "siege_volley_hit",
+	"siege_trebuchet_wind", "siege_trebuchet_throw", "siege_warning_horn", "siege_checkpoint", "siege_finish",
+	"fungal_cap_boing", "fungal_checkpoint", "fungal_finish", "fungal_drip_plink", "fungal_drip_splash",
+	"fungal_puff_swell", "fungal_puff_blow", "fungal_tell_tick", "fungal_frog_croak"]
 const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
 	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
 	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz",
@@ -3424,7 +3430,9 @@ const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "
 	"kit_zipline_whirr", "kit_log_roll",
 	# the Big Update: the three new worlds' loops
 	"toybox_car_whirr", "olympus_chariot_wind", "olympus_mirror_hum", "olympus_wind_loop", "arcade_chomper_loop",
-	"arcade_ball_hum", "arcade_scroll_rumble"]
+	"arcade_ball_hum", "arcade_scroll_rumble",
+	# Castle Siege and Mushroom Hollow (gen_siege / gen_fungal)
+	"siege_oil_loop", "fungal_puff_loop", "fungal_snail_squelch"]
 
 
 func test_z_world_sounds() -> void:
