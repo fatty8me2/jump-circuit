@@ -756,10 +756,30 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 			]
 		"dino":
 			return [
-				# PLACEHOLDER - the Dino Valley level agent replaces this case (near / mid / far layers)
-				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
-					"color": Color(0.95, 0.70, 0.30), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+				# near: pollen and gnats glittering in the morning sun, and seed fluff drifting on the breeze
+				{"depth": "near", "amount": 120, "lifetime": 3.2, "tex": Fx.Tex.DOT, "size": 0.07,
+					"color": Color(2.3, 2.0, 1.1), "speed": Vector2(0.05, 0.3), "spread": 180.0, "gravity": Vector3(0.12, 0.04, 0.0),
+					"turbulence": 0.8, "curve": "pop", "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 30, "lifetime": 4.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.11,
+					"color": Color(1.0, 0.98, 0.9, 0.8), "speed": Vector2(0.1, 0.4), "dir": Vector3(1, 0.2, 0.3), "spread": 60.0,
+					"turbulence": 1.2, "angle": Vector2(0, 360), "spin": Vector2(-120, 120),
 					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# mid: leaves and ferny spores tumbling down, dragonflies darting, a little grey ash from the volcano
+				{"depth": "mid", "amount": 70, "lifetime": 6.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.24,
+					"pick": PackedColorArray([Color(0.3, 0.55, 0.16), Color(0.5, 0.62, 0.2), Color(0.64, 0.5, 0.16)]),
+					"speed": Vector2(0.5, 1.3), "dir": Vector3(1, -0.4, 0.3), "spread": 35.0, "gravity": Vector3(0.3, -0.35, 0.1),
+					"turbulence": 1.1, "angle": Vector2(0, 360), "spin": Vector2(-200, 200),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 45, "lifetime": 5.0, "tex": Fx.Tex.DOT, "additive": false, "size": 0.14,
+					"color": Color(0.58, 0.56, 0.54, 0.7), "speed": Vector2(0.3, 0.8), "dir": Vector3(0.6, -0.5, 0.2), "spread": 40.0,
+					"turbulence": 0.8, "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# far: veils of valley mist, and pterosaurs soaring on the thermals far out over the valley
+				{"depth": "far", "amount": 40, "lifetime": 10.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 18.0,
+					"radius": 80.0, "color": Color(0.94, 0.9, 0.7, 0.2), "speed": Vector2(0.8, 2.0), "dir": Vector3(1, 0.03, 0.3),
+					"spread": 14.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 12, "lifetime": 9.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 1.3, "radius": 70.0,
+					"color": Color(0.14, 0.09, 0.07, 0.9), "speed": Vector2(2.0, 4.0), "dir": Vector3(1, 0.04, 0.3), "spread": 60.0,
+					"turbulence": 1.0, "angle": Vector2(80, 100), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
 			]
 		"arcane":
 			return [

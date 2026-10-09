@@ -295,14 +295,17 @@ const THEMES: Dictionary = {
 		"decor": Color(0.40, 0.18, 0.30), "decor2": Color(1.00, 0.45, 0.75), "metal": Color(0.55, 0.55, 0.60),
 		"cloud_light": Color(0.94, 0.63, 0.58), "cloud_shade": Color(0.34, 0.22, 0.20),
 	},
-	"dino": {  # PLACEHOLDER palette - the level agent owns and retunes this entry
-		"sky_top": Color(0.40, 0.62, 0.85), "sky_horizon": Color(0.95, 0.85, 0.60), "sky_bottom": Color(0.30, 0.32, 0.20),
-		"sun": Color(1.00, 0.90, 0.70), "sun_energy": 1.0, "sun_rot": Vector3(-45, 150, 0),
-		"ambient": Color(0.60, 0.60, 0.65), "ambient_energy": 0.8, "fog": Color(0.70, 0.75, 0.60), "fog_density": 0.002,
-		"top": Color(0.55, 0.62, 0.30), "side": Color(0.45, 0.36, 0.26), "trim": Color(0.95, 0.70, 0.30),
-		"alt_top": Color(0.70, 0.58, 0.40), "accent": Color(1.00, 0.55, 0.15), "accent2": Color(0.30, 0.75, 0.55),
-		"decor": Color(0.28, 0.36, 0.18), "decor2": Color(0.60, 0.30, 0.20), "metal": Color(0.55, 0.55, 0.60),
-		"cloud_light": Color(0.79, 0.84, 0.68), "cloud_shade": Color(0.28, 0.30, 0.24),
+	# Dino Valley: a lush prehistoric valley in warm morning sun. Grass-topped sandstone stacks, ferns,
+	# a big blue-gold sky and a smoking volcano far off (levels/level_30_dino.gd swaps in its own sky,
+	# valley floor and volcano). Orange is the only hot accent, turquoise the water.
+	"dino": {
+		"sky_top": Color(0.28, 0.52, 0.86), "sky_horizon": Color(0.98, 0.86, 0.6), "sky_bottom": Color(0.32, 0.4, 0.24),
+		"sun": Color(1.0, 0.9, 0.7), "sun_energy": 1.05, "sun_rot": Vector3(-38, 128, 0),
+		"ambient": Color(0.62, 0.7, 0.72), "ambient_energy": 0.9, "fog": Color(0.78, 0.82, 0.66), "fog_density": 0.0016,
+		"top": Color(0.46, 0.64, 0.22), "side": Color(0.66, 0.46, 0.28), "trim": Color(1.0, 0.74, 0.28),
+		"alt_top": Color(0.8, 0.66, 0.42), "accent": Color(1.0, 0.5, 0.12), "accent2": Color(0.25, 0.82, 0.72),
+		"decor": Color(0.38, 0.27, 0.17), "decor2": Color(0.7, 0.3, 0.16), "metal": Color(0.74, 0.7, 0.6),
+		"cloud_light": Color(1.0, 0.97, 0.86), "cloud_shade": Color(0.48, 0.52, 0.55),
 	},
 	"arcane": {  # PLACEHOLDER palette - the level agent owns and retunes this entry
 		"sky_top": Color(0.08, 0.05, 0.16), "sky_horizon": Color(0.35, 0.20, 0.45), "sky_bottom": Color(0.06, 0.04, 0.10),
