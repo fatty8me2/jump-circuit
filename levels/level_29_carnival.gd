@@ -39,7 +39,7 @@ const TEAL := Color(0.2, 0.75, 0.8)
 const PINK := Color(1.0, 0.42, 0.62)
 
 ## Testing aid: build every stage but start the player (and the bot's route) at stage N. 0 = off.
-const DEV_START: int = 13
+const DEV_START: int = 0
 ## Testing aid: stop building after stage N (a finish gate goes at its end). 0 = build them all.
 const DEV_LAST: int = 0
 
@@ -680,7 +680,7 @@ func _stage_8() -> Vector3:
 	_hop(cp0, lp)
 	var stand: Vector3 = _w(Vector3(-2.15, 0, zc))
 	r_walk(stand)
-	route.append({"kind": "candy_board", "from": stand, "cars": wheel.gondolas, "reach": 3.4, "lead": 0.45, "local": Vector3(0, 0.3, 0)})
+	route.append({"kind": "candy_board", "from": stand, "cars": wheel.gondolas, "reach": 3.1, "lead": 0.35, "local": Vector3(0, 0.3, 0)})
 	route.append({"kind": "candy_ride", "stand": Vector3(0, 0.3, 0), "to": _w(Vector3(-0.5, ed_y, zc - 6.1)),
 		"until": func() -> bool:
 			var fb: Object = player.floor_body
@@ -1081,7 +1081,7 @@ func _stage_16() -> Vector3:
 	_hop(cp0, lp)
 	var stand: Vector3 = _w(Vector3(-2.15, 0, zc))
 	r_walk(stand)
-	route.append({"kind": "candy_board", "from": stand, "cars": wheel.gondolas, "reach": 3.4, "lead": 0.45, "local": Vector3(0, 0.3, 0)})
+	route.append({"kind": "candy_board", "from": stand, "cars": wheel.gondolas, "reach": 3.1, "lead": 0.35, "local": Vector3(0, 0.3, 0)})
 	route.append({"kind": "candy_ride", "stand": Vector3(0, 0.3, 0), "to": _w(Vector3(-0.5, ed_y, zc - 3.1)),
 		"until": func() -> bool:
 			var fb: Object = player.floor_body
@@ -1108,8 +1108,8 @@ func _stage_17() -> Vector3:
 	var land: Dictionary = _wall_geometry(w2)
 	var beam: Dictionary = _blk(_ahead(land, 0.76, 0.0, 10.0, -(land["c"] as Vector3).x), 1.6, 10.0, "alt", 0.6)
 	var bc: Vector3 = beam["c"]
-	var m1: Piston = _mallet(Vector3(bc.x - 1.55, bc.y + 1.35, bc.z + 2.5), 1.0, 2.6, 5.0, 0.0)
-	var m2: Piston = _mallet(Vector3(bc.x - 1.55, bc.y + 1.35, bc.z - 2.5), 1.0, 2.6, 5.0, fposmod(-0.07, 1.0))
+	var m1: Piston = _mallet(Vector3(bc.x - 1.55, bc.y + 1.35, bc.z + 2.5), 1.0, 2.6, 6.5, 0.0)
+	var m2: Piston = _mallet(Vector3(bc.x - 1.55, bc.y + 1.35, bc.z - 2.5), 1.0, 2.6, 6.5, fposmod(-0.05, 1.0))
 	var q: Dictionary = _post(_ahead(beam, 0.76, 0.0, 2.0), 2.0, 2.0)
 	var qc: Vector3 = q["c"]
 	var top2 := Vector3(qc.x, qc.y + 3.3, qc.z - 1.0 - 1.6 - 1.5)
@@ -1121,9 +1121,8 @@ func _stage_17() -> Vector3:
 	_hop(p1, w2)
 	_wall_route(w2)
 	_hop(land, beam, Vector3(0, 0, 4.5))
-	r_walk(_w(Vector3(bc.x, bc.y, bc.z + 5.0)))
-	r_walk(_w(Vector3(bc.x, bc.y, bc.z + 3.5)))
-	_wait(func() -> bool: return _ram_clear(m1, 0.2, 1.0 + 1.5) and _ram_clear(m2, 0.7, 1.5 + 1.5), _w(Vector3(bc.x, bc.y, bc.z + 3.5)))
+	r_walk(_w(Vector3(bc.x, bc.y, bc.z + 4.7)))
+	_wait(func() -> bool: return _ram_clear(m1, 0.2, 1.1 + 1.5) and _ram_clear(m2, 0.7, 1.7 + 1.5), _w(Vector3(bc.x, bc.y, bc.z + 4.7)))
 	r_walk(_w(Vector3(bc.x, bc.y, bc.z - 5.2)))
 	_hop(beam, q)
 	r_walk(_w(Vector3(qc.x, qc.y, qc.z - 0.3)))
@@ -1140,11 +1139,11 @@ func _stage_17() -> Vector3:
 func _stage_18() -> void:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
 	var pad: Dictionary = _blk(Vector3(0, 0, -9.0), 7.0, 7.0, "main", 1.2)
-	var shot: float = 34.0
-	var target_c := Vector3(0, 3.0, -9.0 - shot)
+	var shot: float = 18.0
+	var target_c := Vector3(0, 4.0, -9.0 - shot)
 	var cannon := CarnivalCannon.new()
 	cannon.target = _w(target_c)
-	cannon.arc = 9.0
+	cannon.arc = 7.0
 	cannon.period = 3.0
 	cannon.phase = 0.0
 	cannon.tell = 1.6
@@ -1155,8 +1154,7 @@ func _stage_18() -> void:
 	_blk(target_c, 14.0, 12.0, "main", 1.4)
 	kit.finish(_w(target_c + Vector3(0, 0, -2.5)), _yaw)
 	_finish_pos = _w(target_c + Vector3(0, 0, -2.5))
-	_hop(cp0, pad, Vector3(0, 0, 1.0))
-	r_walk(_w(Vector3(0, 0, -7.0)))
+	_hop(cp0, pad, Vector3(0, 0, 2.3))
 	r_barrel(cannon, _w(target_c))
 	r_walk(_w(target_c + Vector3(0, 0, -2.5)))
 	# the big top rising behind the finish, with a ring of lights, spotlights and the crowd's balloons
