@@ -9142,3 +9142,53 @@ func test_zp_items_respect_ruleset() -> void:
 	check(low.party.boxes.size() < full and low.party.boxes.size() > 0, "Low item frequency thins the boxes, mid-course rows included (%d of %d)" % [low.party.boxes.size(), full])
 	_party_race_done()
 	_pm_reset()
+
+## Pixel Panic (very hard tier) audit: the main route's jump statistics, the move / machine counts and
+## the checkpoint count, against the tier's rules in docs/NEW_WORLDS_4_BRIEF.md.
+func test_zq_arcade_stats() -> void:
+	var idx: int = -1
+	for i: int in Game.LEVELS.size():
+		if str(Game.LEVELS[i]["id"]) == "arcade":
+			idx = i
+	if idx < 0 or (only_level >= 0 and only_level != idx):
+		return
+	var lvl: LevelBase = await load_level(idx)
+	var worst: float = 0.0
+	var hard: int = 0
+	var jumps: int = 0
+	var wall: int = 0
+	var mantle: int = 0
+	for step: Dictionary in lvl.route:
+		var kind: String = str(step["kind"])
+		if kind == "w_run":
+			wall += 1
+		elif kind == "m_climb":
+			mantle += 1
+		elif kind == "jump" and not step.has("to_node"):
+			var need: Vector2 = required_jump(lvl, step["from"], step["to"])
+			var pct: float = need.x / max_jump_reach(need.y, float(step.get("speed", -1.0)))
+			worst = maxf(worst, pct)
+			jumps += 1
+			if pct > 0.95:
+				print("        arcade: jump %d is %.1f%% (%s -> %s)" % [jumps, pct * 100.0, str(step["from"]), str(step["to"])])
+			if pct >= 0.85:
+				hard += 1
+	var widths: Array = lvl.get("landing_widths")
+	var narrow: int = 0
+	var thinnest: float = 99.0
+	for w: float in widths:
+		thinnest = minf(thinnest, w)
+		if w >= 0.99 and w <= 1.41:
+			narrow += 1
+	print("        arcade: %d main-path jumps, hardest %.1f%%, %d at 85%% or more, %d/%d landings 1.0-1.4 m, thinnest %.2f m" % [jumps, worst * 100.0, hard, narrow, widths.size(), thinnest])
+	print("        arcade: %d checkpoints, %d wall runs, %d mantles on the main route; branches %d, shortcuts %d" % [lvl.checkpoints.size(), wall, mantle, int(lvl.get("stat_branches")), int(lvl.get("stat_shortcuts"))])
+	check(lvl.checkpoints.size() == 14, "arcade: 14 checkpoints (%d)" % lvl.checkpoints.size())
+	check(worst >= 0.92 and worst <= 0.95, "arcade: the hardest main-path jump is 92-95%% (%.1f%%)" % (worst * 100.0))
+	check(hard >= 12, "arcade: 12 or more main-path jumps at 85%% or more (%d)" % hard)
+	check(widths.size() > 0 and float(narrow) / float(widths.size()) >= 0.333, "arcade: a third of the landings are 1.0-1.4 m (%d of %d)" % [narrow, widths.size()])
+	check(thinnest >= 0.9, "arcade: no landing under 0.9 m (%.2f)" % thinnest)
+	check(int(lvl.get("stat_branches")) >= 3 and int(lvl.get("stat_shortcuts")) >= 4, "arcade: 3+ branches and 4+ shortcuts")
+	for cls: String in ["LaserGate", "Piston", "Crusher", "WarpPortal", "ArcadeBlock", "ArcadeChomper", "ArcadePaddle", "ArcadeGlitch"]:
+		check(lvl.find_children("*", cls, true, false).size() > 0, "arcade: has a %s" % cls)
+	check(wall + int(lvl.get("stat_wallruns")) >= 3, "arcade: 3+ wall runs")
+	check(mantle >= 3, "arcade: 3+ mantles on the main route (%d)" % mantle)
