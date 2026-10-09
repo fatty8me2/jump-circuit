@@ -3398,7 +3398,17 @@ const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_l
 	"kit_block_tell", "kit_block_slam", "kit_block_rise", "kit_hammer_tell", "kit_hammer_swing", "kit_hammer_park",
 	"emote_wave", "emote_thumbsup", "emote_dance", "emote_bow", "emote_laugh", "emote_flex", "emote_spin",
 	"emote_facepalm", "emote_taunt", "emote_sit", "emote_strongman", "emote_salute", "emote_hero", "emote_dab",
-	"emote_rockstar"]
+	"emote_rockstar",
+	# the Big Update: Toybox Tumble, Olympus Rising, Pixel Panic (gen_toybox / gen_olympus / gen_arcade)
+	"toybox_checkpoint", "toybox_finish", "toybox_car_wind", "toybox_car_stop", "toybox_jack_tune", "toybox_jack_pop",
+	"toybox_tell_tick", "toybox_tower_creak", "toybox_tower_fall", "toybox_tower_thud", "toybox_tower_lift",
+	"toybox_tower_chime", "toybox_note_1", "toybox_note_2", "toybox_note_3", "toybox_note_4", "toybox_note_5",
+	"olympus_checkpoint", "olympus_finish", "olympus_chariot_launch", "olympus_column_crack", "olympus_column_fall",
+	"olympus_column_reform", "olympus_mirror_charge", "olympus_mirror_fire", "olympus_spirit_call",
+	"olympus_spirit_gust", "olympus_tell_tick", "arcade_checkpoint", "arcade_finish", "arcade_boss_defeat",
+	"arcade_block_tick", "arcade_block_land", "arcade_block_clear_warn", "arcade_block_clear", "arcade_block_drop",
+	"arcade_paddle_ping", "arcade_ball_ping", "arcade_glitch_warn", "arcade_glitch_hop", "arcade_scroll_start",
+	"arcade_boss_charge", "arcade_boss_blast"]
 const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
 	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
 	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz",
@@ -3411,7 +3421,10 @@ const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "
 	"neon_sign_buzz", "frontier_fuse_hiss", "frontier_collapse_rumble", "frontier_steam_hiss", "frontier_cart_rumble",
 	"doom_pour_loop", "doom_reactor_hum", "doom_grate_buzz", "doom_gear_grind", "abyss_current_loop", "abyss_surge_loop",
 	"tempest_wind", "tempest_trolley", "tempest_gondola_motor", "tempest_crane_slew", "void_rift_hum", "void_collapse_rumble",
-	"kit_zipline_whirr", "kit_log_roll"]
+	"kit_zipline_whirr", "kit_log_roll",
+	# the Big Update: the three new worlds' loops
+	"toybox_car_whirr", "olympus_chariot_wind", "olympus_mirror_hum", "olympus_wind_loop", "arcade_chomper_loop",
+	"arcade_ball_hum", "arcade_scroll_rumble"]
 
 
 func test_z_world_sounds() -> void:
