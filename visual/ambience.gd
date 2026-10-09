@@ -800,10 +800,26 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 			]
 		"arcane":
 			return [
-				# PLACEHOLDER - the Arcane Library level agent replaces this case (near / mid / far layers)
-				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
-					"color": Color(1.00, 0.80, 0.35), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+				# near: dust hanging in the candlelight, drifting up on the warm air, and violet spell-glints
+				{"depth": "near", "amount": 130, "lifetime": 3.4, "tex": Fx.Tex.DOT, "size": 0.07, "additive": false,
+					"color": Color(1.0, 0.9, 0.7, 0.65), "speed": Vector2(0.05, 0.25), "dir": Vector3.UP, "spread": 70.0,
+					"gravity": Vector3(0.0, 0.1, 0.0), "turbulence": 0.7, "turbulence_scale": 5.0,
 					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 40, "lifetime": 2.2, "tex": Fx.Tex.STAR, "size": 0.12,
+					"pick": PackedColorArray([Color(2.4, 1.7, 0.7), Color(1.7, 1.0, 2.6), Color(2.6, 2.2, 1.4)]),
+					"speed": Vector2(0.0, 0.15), "spread": 180.0, "curve": "pop"},
+				# mid: loose pages tumbling down past you, parchment and cream
+				{"depth": "mid", "amount": 60, "lifetime": 7.0, "facing": "mesh", "mesh": ArcaneFx.page_mesh(),
+					"pick": PackedColorArray([Color(0.96, 0.9, 0.74), Color(0.9, 0.82, 0.62), Color(0.98, 0.94, 0.84)]),
+					"dir": Vector3.DOWN, "spread": 30.0, "speed": Vector2(0.4, 1.0), "scale": Vector2(0.8, 1.7),
+					"angle": Vector2(0, 360), "spin": Vector2(-70, 70), "turbulence": 0.5, "curve": "pop"},
+				# far: warm violet smoke drifting between the shelves, and candle sparks climbing into the vault
+				{"depth": "far", "amount": 36, "lifetime": 11.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 20.0,
+					"radius": 80.0, "pick": PackedColorArray([Color(0.35, 0.18, 0.4, 0.2), Color(0.5, 0.28, 0.22, 0.16)]),
+					"speed": Vector2(0.4, 1.2), "dir": Vector3(0.3, 0.15, 0.1), "spread": 40.0, "angle": Vector2(0, 360),
+					"spin": Vector2(-5, 5), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
+				{"depth": "far", "amount": 70, "lifetime": 8.0, "tex": Fx.Tex.STAR, "size": 1.0, "radius": 75.0,
+					"color": Color(2.2, 1.5, 0.7), "dir": Vector3.UP, "spread": 18.0, "speed": Vector2(1.0, 3.0), "curve": "pop"},
 			]
 		"siege":
 			return [
