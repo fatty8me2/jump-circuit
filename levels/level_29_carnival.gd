@@ -71,7 +71,7 @@ func _configure() -> void:
 	music_track = "carnival"
 	kill_y = -80.0
 	# 0 = main line, 1 = every alternative branch, 2 = main line taking every optional shortcut
-	route_variants = 3
+	route_variants = 4
 
 
 # ---- local-frame helpers --------------------------------------------------------------------
@@ -153,6 +153,40 @@ func _ahead(a: Dictionary, pct: float, dy: float, sz: float, dx: float = 0.0) ->
 	var k: int = ceili((m - 0.4) / 0.2 - 0.001)
 	var e: float = float(k) * 0.2 - 0.03
 	return Vector3(ac.x + dx, ac.y + dy, front + 0.35 - e - sz * 0.5)
+
+
+## Like _ahead, but `pct` is the share of max reach for the whole FLAT jump, so a sideways step `dx` counts too.
+func _ahead_d(a: Dictionary, pct: float, dy: float, sz: float, dx: float = 0.0) -> Vector3:
+	var r: float = _reach(dy)
+	var m: float = pct * r
+	var pf: float = sqrt(maxf(m * m - dx * dx, 0.25)) / r
+	return _ahead(a, pf, dy, sz, dx)
+
+
+## SHORTCUT helper: a line of small posts from `from_a` toward `to_a` (a deck, hopped to by the caller), every hop at
+## `pct` of max reach (flat distance, so sideways steps count), the line running along local x = `lat` and climbing
+## `rise` m a post until it reaches the deck's height. The caller lands the last hop `land_dx` sideways of the deck's
+## centre; the line stops when that hop needs 93% or less.
+func _post_line(from_a: Dictionary, to_a: Dictionary, pct: float, size: float, lat: float, rise: float = 0.0, land_dx: float = 0.0) -> Array[Dictionary]:
+	var posts: Array[Dictionary] = []
+	var q: Dictionary = from_a
+	var near_z: float = (to_a["c"] as Vector3).z + float(to_a["hz"])
+	var to_y: float = (to_a["c"] as Vector3).y
+	for i: int in 14:
+		var qc: Vector3 = q["c"]
+		var gap: float = (qc.z - float(q["hz"])) - near_z
+		var dxf: float = (to_a["c"] as Vector3).x + land_dx - qc.x
+		var r: float = _reach(to_y - qc.y)
+		if gap + 0.75 <= sqrt(maxf(pow(0.93 * r, 2.0) - dxf * dxf, 1.0)):
+			break
+		var dx: float = clampf(lat - qc.x, -3.0, 3.0)
+		var dy: float = clampf(to_y - qc.y, 0.0, rise)
+		var nc: Vector3 = _ahead_d(q, pct, dy, size, dx)
+		if nc.z - size * 0.5 < near_z + 0.4:
+			break
+		q = _post(nc, size, size)
+		posts.append(q)
+	return posts
 
 
 ## Checkpoint slab facing the next stage's heading (_next_yaw).
@@ -568,8 +602,18 @@ func _stage_6() -> Vector3:
 	var s2z: float = f0 - 0.6 - 9.0 - 0.6 - 4.0 - 0.6 - 4.5
 	kit.seesaw(_w(Vector3(3.5, y, s2z)), 9.0, 2.6, false, 0.0)
 	var cp: Dictionary = _cp(_ahead(merge, 0.76, 0.0, 5.0))
+	# SHORTCUT: a line of small posts straight down the gorge between the two ways (90% of max reach a hop)
+	var sc_posts: Array[Dictionary] = _post_line(_area(fc, 5.5, 1.5), merge, 0.90, 1.4, 0.0)
 	_hop(cp0, fork, Vector3(0, 0, 0.4))
-	if route_variant == 1:
+	if route_variant == 2:
+		r_walk(_w(Vector3(0, y, fc.z)))
+		var sprev: Dictionary = _area(fc, 5.5, 1.5)
+		for sp: Dictionary in sc_posts:
+			_hop(sprev, sp)
+			sprev = sp
+		_hop(sprev, merge, Vector3(0, 0, 0.6))
+		_hop(merge, cp, Vector3(0, 0, 1.2))
+	elif route_variant == 1:
 		r_walk(_w(Vector3(3.5, y, f0 + 0.6)))
 		r_walk(_w(Vector3(3.5, y, f0 - 1.2)))
 		r_walk(_w(Vector3(3.5, y, f0 - 5.1)))
@@ -847,7 +891,7 @@ func _stage_11() -> Vector3:
 			_hop(prev, qq)
 			prev = qq
 		_hop(prev, merge, Vector3(0, 0, 0.6))
-	elif route_variant == 2:
+	elif route_variant == 3:
 		r_walk(_w(Vector3(0, y, fc.z)))
 		_hop(_area(fc, 5.5, 1.5), w)
 		_wall_route(w)
@@ -885,33 +929,34 @@ func _stage_12() -> Vector3:
 	var z0: float = dc.z + 11.0
 	var b1: FallingBlock = kit.falling_block(_w(Vector3(0, y, z0 - 5.0)), _sz(Vector3(6.4, 1.6, 3.0)), 7.0, 6.0, 0.0)
 	var b2: FallingBlock = kit.falling_block(_w(Vector3(0, y, z0 - 14.0)), _sz(Vector3(6.4, 1.6, 3.0)), 7.0, 6.0, 0.5)
-	_blk(Vector3(5.4, y, z0 - 11.0), 1.6, 18.0, "accent", 0.6)
 	var beam: Dictionary = _blk(_ahead(deck, 0.76, 0.0, 10.0), 1.8, 10.0, "alt", 0.6)
 	var bc: Vector3 = beam["c"]
 	var press: Crusher = kit.crusher(_w(Vector3(bc.x, bc.y, bc.z)), Vector3(2.4, 1.2, 2.0), 3.2, 6.0, 0.0, _yaw)
 	var w2: Dictionary = _post(_ahead(beam, 0.76, 0.0, 1.8), 1.8, 1.8)
 	var land: Dictionary = _wall_geometry(w2)
 	var cp: Dictionary = _cp(_ahead(land, 0.76, 0.0, 5.0, -(land["c"] as Vector3).x))
-	_hop(cp0, deck, Vector3(0, 0, 9.0))
+	# SHORTCUT: a line of posts down the right of the whole tower, past blocks, weight and wall (90% a hop)
+	var sc12: Array[Dictionary] = _post_line(cp0, cp, 0.90, 1.4, 5.0, 0.0, 2.0)
 	if route_variant == 2:
-		# SHORTCUT: step out onto the catwalk beside the deck and walk past both blocks
-		r_walk(_w(Vector3(3.0, y, z0 - 2.0)))
-		r_jump(_w(Vector3(3.0, y, z0 - 2.0)), _w(Vector3(5.4, y, z0 - 2.0)))
-		r_walk(_w(Vector3(5.4, y, z0 - 19.0)))
-		r_jump(_w(Vector3(5.4, y, z0 - 19.3)), _w(Vector3(2.4, y, z0 - 19.3)))
+		var sprev: Dictionary = cp0
+		for sp: Dictionary in sc12:
+			_hop(sprev, sp)
+			sprev = sp
+		_hop(sprev, cp, Vector3(2.0, 0, 1.2))
 	else:
+		_hop(cp0, deck, Vector3(0, 0, 9.0))
 		r_walk(_w(Vector3(0, y, z0 - 1.5)))
 		_wait(func() -> bool: return b1.is_clear_for(Game.course_time, 0.9 + 1.5), _w(Vector3(0, y, z0 - 1.5)))
 		r_walk(_w(Vector3(0, y, z0 - 10.0)))
 		_wait(func() -> bool: return b2.is_clear_for(Game.course_time, 0.9 + 1.5), _w(Vector3(0, y, z0 - 10.0)))
-	r_walk(_w(Vector3(0, y, dc.z - 10.0)))
-	var tp: float = 1.4
-	_wait(func() -> bool: return _press_ok(press, tp - 0.3, tp + 0.8 + 1.5), _w(Vector3(0, y, dc.z - 10.0)))
-	_hop(deck, beam, Vector3(0, 0, 4.5))
-	r_walk(_w(Vector3(bc.x, bc.y, bc.z - 4.8)))
-	_hop(beam, w2)
-	_wall_route(w2)
-	_hop(land, cp, Vector3(0, 0, 1.2))
+		r_walk(_w(Vector3(0, y, dc.z - 10.0)))
+		var tp: float = 1.4
+		_wait(func() -> bool: return _press_ok(press, tp - 0.3, tp + 0.8 + 1.5), _w(Vector3(0, y, dc.z - 10.0)))
+		_hop(deck, beam, Vector3(0, 0, 4.5))
+		r_walk(_w(Vector3(bc.x, bc.y, bc.z - 4.8)))
+		_hop(beam, w2)
+		_wall_route(w2)
+		_hop(land, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	# the drop tower: a tall striped tower with a cage, and the strongman's weights
 	_high_striker(Vector3(-9.5, y - 6.0, dc.z - 2.0))
@@ -984,18 +1029,14 @@ func _stage_14() -> Vector3:
 	var merge: Dictionary = _blk(Vector3(0, 4.0, za - 30.0 - 2.0 - 0.9 - 2.5), 8.0, 5.0)
 	var mfront: float = (merge["c"] as Vector3).z + 2.5
 	# SHORTCUT: a line of posts climbing beside the rails
-	var posts: Array[Dictionary] = []
-	var q: Dictionary = cp0
-	while (q["c"] as Vector3).z - float(q["hz"]) - mfront > 7.6 and posts.size() < 6:
-		q = _post(_ahead(q, 0.86, 1.0 if (q["c"] as Vector3).y < 3.5 else 0.0, 2.0, 4.0 - (q["c"] as Vector3).x), 2.0, 2.0)
-		posts.append(q)
+	var posts: Array[Dictionary] = _post_line(cp0, merge, 0.90, 1.6, 4.0, 1.0, 2.5)
 	var cp: Dictionary = _cp(_ahead(merge, 0.76, 0.0, 5.0))
 	if route_variant == 2:
 		var prev: Dictionary = cp0
 		for pp: Dictionary in posts:
 			_hop(prev, pp)
 			prev = pp
-		_hop(prev, merge, Vector3(-4.0, 0, 0.6))
+		_hop(prev, merge, Vector3(2.5, 0, 0.6))
 	else:
 		var stand: Vector3 = _w(Vector3(0, 0, 0.4))
 		r_walk(stand)
