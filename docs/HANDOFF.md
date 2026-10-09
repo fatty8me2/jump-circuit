@@ -1,3 +1,69 @@
+# HANDOFF - 2026-10-09 (session 6): v2.0.0 big update
+
+Read this first. The big update is built and merged on the `big-update` branch (HEAD 21432a7 when this
+section was written). It is **not released**: v2.0.0 waits for the owner's OK, and the owner has not yet
+seen anything visual from it in a real window.
+
+## What shipped on `big-update` (since v1.8.0, b3efa2e)
+- **8 new worlds**, slotted into the campaign by difficulty (`Game.LEVELS`, 31 courses in all):
+  - medium: Toybox Tumble, Mushroom Hollow, Carnival Chaos;
+  - hard: Sky Citadel, Dino Valley, Arcane Library;
+  - very hard: Pixel Panic, Castle Siege (just before The Final Ascent).
+  Each has its own score, ambience, footsteps, mechanic sounds, medal times, Silver hat and bot-proven routes.
+- **Generic obstacle kit** (10 pieces: launch barrel, zipline, cannonball battery, rolling log, seesaw,
+  flipper, drawbridge, gap wall, falling block, spinning hammer) and a Kit Gallery in the Playground.
+  See `docs/KIT_OBSTACLES.md`.
+- **Cosmetics:** 5 new characters (Wizard, Pirate, Yeti, Robo-Pup, Pixel Hero); 18 new hats; 6 paints,
+  6 trails, 4 finish effects; 10 emotes and 6 victory poses (both mirrored online).
+- **Animation:** wall runs, mantles, wall kicks and knocks mirrored online; new fidgets, per-character idle
+  flourishes, landing variety, checkpoint flourish, respawn beam.
+- **Depth:** ghost replays of your personal-best run; 3 challenges per course; Challenges and Stats screens;
+  new titles; earned rewards never re-lock.
+- **Party mode rebuilt:**
+  - core fixes: respawn protection, Fox Claw no longer an instant KO, Swap Warp by real course distance with a
+    handshake, items kept when there is no target, round time limit, host-drop recovery, box-grant race,
+    tap-on-press attacks, real Shrink and Freeze, Jetpack balance, boxes on every course;
+  - new HUD: standings strip, "Targeted!" warnings, radar arrows, item feed, roulette, spectate countdown,
+    animated results;
+  - CPU racers (Easy / Normal / Hard), "Party vs CPU" solo, and "Fill with CPUs" online;
+  - 7 new items: Homing Shell, Leader Strike, Fake Box, Turbo Boost, Ghost, Decoy, Shockwave;
+  - cups of 3, 5 or 8 rounds (or Endless) ending on a podium; a host ruleset; new game types King of the
+    Hill, Elimination, Coin Rush and Hot Potato.
+- **Controls:** the D-pad now plays emotes (keys 1-4 too). The left stick and WASD still move.
+
+## Open owner decisions
+1. **D-pad emotes.** The D-pad no longer moves the character. Confirm this binding, or pick another.
+2. **Gilded hats instead of new shapes.** The Gold tier uses five Gilded versions of existing hats, not new
+   shapes. Confirm, or ask for new shapes.
+3. **Sky Citadel's jump density.** 87 of its 91 main-path jumps are at 85% or more. It may be too dense
+   for a hard world. Owner to say whether to ease it.
+4. **Shortcuts that save little time** on Toybox Tumble, Mushroom Hollow, Carnival Chaos, Castle Siege and
+   Arcane Library. Some shortcuts barely beat the main route. Owner to say whether to rework them.
+5. **Nothing visual has been seen in a real window yet:** shaders, the podium, the effects, the new worlds'
+   looks, the Locker previews and the party HUD. Headless runs never compile shaders or particles.
+
+## Remaining steps, in order
+1. **Windowed screenshot pass**, only with the owner's OK (the owner plays on this PC; never open a window
+   without asking). Cover the new worlds, the shaders, the podium, the effects and the HUD.
+2. **Release v2.0.0**, only with the owner's OK: merge to `main`, bump `config/version`, export, zip,
+   `gh release`. Release notes must be 600 characters or fewer; `docs/RELEASE_NOTES_v2.0.0.txt` is the text.
+   The GitHub token problem from session 4 was not rechecked for this section. Confirm auth before any push
+   or `gh release`.
+
+## Small known items (not fixed)
+- `party/party_names.gd` still describes the Fox's tap attack as "Claw (KO)"; the claw no longer KOs
+  outright. Reword it.
+- CPU "Hard" does not pick a different `route_variant`; variants change the geometry a level builds at load.
+  Hard takes corner shortcuts only.
+- Tests: this documentation pass ran no Godot and no tests. The full suite takes over 90 minutes, so run it
+  in slices (the bot levels one at a time, then `--skip=test_n_bot`) before the release.
+
+## Branches
+| Branch | State |
+|---|---|
+| `big-update` (lead worktree `.claude/worktrees/lead-big`) | v2.0.0 candidate, merged, HEAD 21432a7 |
+| `docs-v2` | this documentation pass on top of `big-update` (README, this section, DECISIONS, release notes) |
+
 # HANDOFF - 2026-10-01 (session 4): PAUSED mid-round. Four more worlds, medal times, earnable characters
 
 Read this first when picking the work up. **Everything is paused on purpose; the owner asked for it.** No agents or

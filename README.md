@@ -11,7 +11,8 @@ Run `build/JumpCircuit.exe` (see *Building* below), or open the project in Godot
 
 | Input | Action |
 |---|---|
-| WASD / left stick / D-pad | Move (camera relative) |
+| WASD / left stick | Move (camera relative) |
+| D-pad, or keys 1-4 | Play an emote: up, right, down, left (pick the four in the Locker). Movement input cancels it |
 | Space / A | Jump - tap for a hop, hold for full height |
 | Mouse / right stick | Orbit camera, wheel zooms |
 | R / Y | Instantly back to the checkpoint (before the first checkpoint: instant restart; on the results screen: run it again). Bailing out while falling still counts as a fall |
@@ -24,7 +25,33 @@ Run `build/JumpCircuit.exe` (see *Building* below), or open the project in Godot
 momentum toys everywhere: boost strips, ice slides, bumpers, hammers that hurl you, conveyors, updrafts,
 blinking blocks, sweepers and kill bricks.
 
-Five levels: Launch Gardens, Bounce Foundry, Balance Works, Clockwork Heights, The Final Ascent.
+Thirty-one courses make one campaign, in order of difficulty. The finale, The Final Ascent, is always
+last. Eight worlds were added in v2.0: three medium (Toybox Tumble, Mushroom Hollow, Carnival Chaos),
+three hard (Sky Citadel, Dino Valley, Arcane Library) and two very hard (Pixel Panic and Castle Siege,
+just before the finale).
+
+| # | Course | # | Course |
+|---|---|---|---|
+| 1 | Launch Gardens | 17 | Sky Citadel |
+| 2 | Bounce Foundry | 18 | Super Carrier |
+| 3 | Balance Works | 19 | Sakura Peaks |
+| 4 | Clockwork Heights | 20 | Jungle Temple |
+| 5 | Coral Depths | 21 | Dino Valley |
+| 6 | Toybox Tumble | 22 | Wild West Heist |
+| 7 | Orbital Drift | 23 | Neon City |
+| 8 | Xeno Wilds | 24 | Arcane Library |
+| 9 | Mushroom Hollow | 25 | Doom Fortress |
+| 10 | Cinder Peak | 26 | The Abyss |
+| 11 | Frostbite Pass | 27 | Tempest Tower |
+| 12 | Scarab Sands | 28 | The Void |
+| 13 | Carnival Chaos | 29 | Pixel Panic |
+| 14 | Phantom Manor | 30 | Castle Siege |
+| 15 | Storm Armada | 31 | The Final Ascent |
+| 16 | Sugar Rush | | |
+
+The numbers are play order (the campaign order in `Game.LEVELS` in `autoload/game.gd`). The
+`--level=N` option counts from 0.
+
 The run timer stays hidden until you have cleared a level once (Settings can force it on or off).
 Once you have a best, every checkpoint shows your split against it and the results screen shows the
 time gained or lost. Leaving the window pauses a solo run; pause-menu actions that would throw away
@@ -32,6 +59,33 @@ banked checkpoints ask for a second press.
 Progress, personal bests and best-run splits are saved to `user://progress.json`
 (`%APPDATA%\Godot\app_userdata\Jump Circuit\`). Bests set on an earlier layout of a course are
 kept in the file as `legacy_best` but no longer shown (`SaveData.LAYOUT_REV`).
+
+## Cosmetics, emotes and the Locker
+
+Everything you can wear or play is unlocked by play. Earned rewards stay unlocked. Open the Locker from
+the title screen; its tabs preview each item live.
+
+* **Characters:** Volt and the original set, plus five new ones: Wizard, Pirate, Yeti, Robo-Pup and Pixel Hero.
+* **Hats:** 18 new ones: a Silver hat for every new world, five Gilded Gold hats, and five more for medal
+  counts, runs and stats.
+* **Looks:** 6 paints, 6 trails and 4 finish effects.
+* **Emotes:** 10 emotes. Four are in the D-pad slots (keys 1-4); set them in the Locker. They play on
+  your character and are mirrored to other racers online.
+* **Victory poses:** 6, played at the finish and on the party podium.
+* **Titles:** shown beside your name on the roster and race board.
+
+## Ghosts, challenges and stats
+
+* **Ghost replays:** a solo run records your position about 15 times a second. Your personal-best run is
+  saved per course in `user://ghosts/<course>.ghost` and plays back as a translucent racer on your next
+  attempt. Settings > Ghost (solo runs) switches it Off or Personal best, and the pause menu has the same
+  toggle. A ghost recorded on another course layout is discarded. Ghosts never appear in party or
+  multiplayer runs.
+* **Challenges:** every course has three: **Flawless** (finish without a fall), **Silver Standard**
+  (earn Silver or better) and **Speedrunner** (finish under a time halfway between Silver and Gold).
+  The Challenges screen lists them per course. Completing them counts toward titles such as Challenger.
+* **Stats:** the Stats screen totals your runs, falls, time played, medals by tier, favourite course and
+  party wins.
 
 ## Racing friends
 
@@ -63,20 +117,37 @@ solo play and classic races are completely unaffected.
 
 * **Party / Team Party** (multiplayer): in the lobby the host picks **Mode: Race** (the classic race),
   **Party** (free-for-all) or **Team Party** (two teams, Blaze vs Tide, balanced automatically; the host
-  can move anyone with the *Move to* buttons). Each race is a round of the **Party Cup**: 1st 10 points,
-  then 8, 6, 5, 4, 3, 2, 1; **+3 per KO** (a rival who falls or is KO'd within 4 s of your hit); **+2**
-  for the first racer through each checkpoint. A round ends when everyone is home or 45 s after the
-  first finisher. In Team Party a team scores the sum of its members. After each round everyone sees the
-  round breakdown and the cup standings; the host picks the next course or ends the cup.
+  can move anyone with the *Move to* buttons), plus a game type from the ruleset (below). Each race is a
+  round of a **cup** of 3, 5 or 8 rounds, or Endless. Round points: 1st 10, then 8, 6, 5, 4, 3, 2, 1;
+  **+3 per KO** (a rival who falls or is KO'd within 4 s of your hit); **+2** for the first racer through
+  each checkpoint. A round ends when everyone is home, 45 s after the first finisher, or when the round
+  time limit runs out (default 4 min; the last 30 s are counted down on the HUD). In Team Party a team
+  scores the sum of its members. After each round everyone sees the round breakdown and the cup
+  standings; the host picks the next course or ends the cup. A finished cup ends on a podium: the top
+  three on pedestals with their cosmetics, and the cup totals.
+* **Game types** (the ruleset's *game* setting; each one lives in `party/modes/`):
+  * **King of the Hill:** hold the glowing zone, which moves between checkpoint lawns.
+  * **Elimination:** the last racer through each checkpoint is out and spectates; the last one standing wins.
+  * **Coin Rush:** coins lie along the route and KOs drop them; most coins wins.
+  * **Hot Potato:** a bomb passes on a Shove or a hit; whoever holds it when the timer runs out loses points.
+* **Ruleset** (lobby, saved in Settings): item frequency (off, low, normal or chaos), each item on or off,
+  KO value (1 to 10 points), round time limit (90 s to 8 min), CPU fill and cup length. The host's copy
+  travels with every roster update, so everyone plays by the same rules.
+* **CPU racers:** a CPU drives the course's own route at Easy, Normal or Hard (Hard takes shortcuts and
+  rarely botches a jump). CPUs roll and use items, get hit and KO'd, and score like anyone else.
+  **Party vs CPU** on the title screen runs a solo party cup against 1 to 7 CPUs, with no network needed.
+  Online, **Fill with CPUs** in the lobby tops the room up to 4, 6 or 8 racers when a round starts, and the
+  CPUs leave when the cup ends.
 * **Party Practice** (title menu): any unlocked course with item boxes and practice dummies on the
   checkpoint lawns. Every box hands out the next power-up, so you can try them all. Nothing is saved.
 
-Spinning **?** boxes wait in a row at the start and on every checkpoint lawn. The leader mostly rolls
-small or defensive items; racers at the back get the wild stuff. Everyone always has a **Shove**.
+Spinning **?** boxes wait at the start, on every checkpoint lawn and in rows along the course, about
+every 40 m between checkpoints. The leader mostly rolls small or defensive items; racers at the back get
+the wild stuff. Everyone always has a **Shove**.
 
 | Input (default; rebind in Settings > Party Mode controls) | Action |
 |---|---|
-| F / left mouse / X, or RT | Attack (the Shove, or the transformation's attack; hold to charge) |
+| F / left mouse / X, or RT | Attack (the Shove, or the transformation's attack). A tap fires on press; hold past 0.2 s to charge |
 | E / right mouse / RB, or LT | Use the item in your slot (Hero's Tunic: throw the current tool) |
 | Q / B | Shove |
 | C / LB | Next tool (Hero's Tunic) |
@@ -85,7 +156,7 @@ Power-ups (display names live in `party/party_names.gd`, so they are easy to ren
 
 | Power-up | What it does |
 |---|---|
-| Nine-Tailed Fox (10 s) | Chakra cloak, ears and nine flowing tails. x1.6 speed, x1.35 jump. Tap Attack: Fox Claw, a lunging swipe that KOs. Hold: charge a Tailed Beast Bomb and release for a huge blast. |
+| Nine-Tailed Fox (10 s) | Chakra cloak, ears and nine flowing tails. x1.6 speed, x1.35 jump. Tap Attack: Fox Claw, a lunging swipe with a big knockback (a KO only if they fall). Hold: charge a Tailed Beast Bomb and release for a huge blast. |
 | Hero's Tunic (10 s) | Tunic, cap, shield and the Legend Blade: a three-swing combo; hold for a Spin Attack. Use throws the current tool - Boomerang (stuns), Hookshot (yank a rival to you, or pull yourself to a wall), Bombs. Next tool cycles them. |
 | Golden Surge Hair (10 s) | Spiky golden hair and a crackling aura. x1.4 speed, a double jump. Tap: Dash Punch. Hold: "Ka... me..." - release an Energy Wave beam that shoves everyone along it. |
 | Thunder Cloud | Lightning strikes every rival ahead of you: stunned, then slowed. |
@@ -99,12 +170,20 @@ Power-ups (display names live in `party/party_names.gd`, so they are easy to ren
 | Tornado | A tornado wanders up the course for 9 s flinging every rival it catches. |
 | Gravity Bomb | Lobbed; rivals caught in the blast float helplessly in a bubble. |
 | Ice Beam | Freezes the rival in front in a block of ice. |
+| Homing Shell | A shell that chases the racer ahead along the course and spins them out. |
+| Leader Strike | Calls an orbital strike on 1st place, with a long warning to run. |
+| Fake Box | Sets a perfect fake item box down behind you. The first rival to grab it is blasted and stunned. |
+| Turbo Boost | Rocket nozzles on your heels: a few seconds of much higher speed. |
+| Ghost | Go intangible, so nothing can hit you. Touch a rival to steal the item they hold. |
+| Decoy | A fake you runs up the course. Rivals chase it, and it soaks up one hit. |
+| Shockwave | Stamp the ground: every rival close to you is hurled away. |
 
 How it works online: every hit is detected by the attacker against the victim's ghost and sent to the
 victim, whose game applies it to its own character (knockback, stun, status effects, KOs). Hazards
 (puddles, tornadoes, magnet pull) are checked by each player against their own character. The host
 decides item-box pickups, checkpoint bonuses and the round end, so every screen shows the same scores.
-Over the room relay, party packets ride the existing pose event - no relay redeploy is needed.
+Over the room relay, party packets ride the existing pose event - no relay redeploy is needed. CPU
+racers are simulated by the host, which broadcasts their poses and hits like a peer's.
 
 ## Project layout
 
@@ -141,7 +220,7 @@ tools\Godot_v4.7.1-stable_win64.exe --headless --path . --import
 tools\Godot_v4.7.1-stable_win64.exe --headless --path . res://tests/run_tests.tscn
 ```
 
-Options after `--`: `--only=<substring>`, `--skip=<substring>`, `--level=<0-14>`, `--route=<n|all>`, `--fps=<cap>`. A selection that matches
+Options after `--`: `--only=<substring>`, `--skip=<substring>`, `--level=<0-30>`, `--route=<n|all>`, `--fps=<cap>`. A selection that matches
 nothing exits with code 2. Any engine or script error logged during a test fails that test, and a
 per-test watchdog fails a test that hangs.
 The suite measures the controller (speed, jump heights/distances, coyote, buffer, air control),

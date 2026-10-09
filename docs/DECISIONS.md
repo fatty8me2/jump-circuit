@@ -119,3 +119,30 @@
 - Solo "Party vs CPU" is a one-person `Net.local_session` (host, no peers) running the ordinary party race flow;
   it really pauses (the paused race clock is held by moving `Net.race_start_time`). Online, "Fill with CPUs" tops the
   roster up to 8 when a round starts and removes the CPUs when the cup ends, so the lobby is never full of them.
+
+## v2.0 big update (2026-10-09)
+
+- **D-pad plays emotes (owner decision pending).** The D-pad used to move the character. It now plays four
+  emote slots (up, right, down, left; keys 1-4 mirror them), set in the Locker. The left stick and WASD still
+  move. Reason: the D-pad was unused in gameplay, and emotes need a fast, pad-friendly input. Any movement input
+  cancels an emote, and emotes never start mid-air or during a countdown. The bindings are `emote_1`..`emote_4`
+  in `autoload/game.gd`; the slot settings are in `autoload/settings.gd` (defaults wave, thumbsup, dance, bow).
+- **CPU racers are route walkers, with no physics body.** A CPU is a `RouteWalker` that follows the course's own
+  `r_*` route. A second real `Player` was rejected: checkpoints, kill zones and the finish gate react to any
+  `Player`, so a CPU could bank a checkpoint, kill the human or finish the race. The walker reads the level only
+  (platform positions, timing tests, ray casts for ground, edges and landings) and keeps its own progress. Only
+  the host simulates CPUs, and it broadcasts their poses in one batched `cpose` packet. Hard does not pick a
+  different `route_variant`, because variants change the geometry a level builds at load.
+- **The party ruleset is synced in the roster config.** `PartyRuleset` is plain data. The host's copy travels
+  with every roster snapshot (`Net._party_cfg`), on the direct connection and the relay alike, so guests need no
+  extra message. Every field is sanitised on the way in (a bad or hand-edited value falls back to its default),
+  so a bad packet cannot break a round. `PartyRuleset` is the one place the game reads rules from.
+- **Ghost file format.** One file per course: `user://ghosts/<level_id>.ghost`. Header: `"JCGH"`, version 1,
+  15 Hz, layout rev, sample count, finish time and id. The body is zstd-compressed, 15 bytes per sample
+  (position, yaw, flags). A ghost from another version, another `SaveData.LAYOUT_REV` or with a damaged body is
+  rejected on load, so a rebuilt course never replays a stale run. Only the personal-best run is kept, and only
+  solo runs record or play back.
+- **Challenges are derived, then remembered.** Three per course, generated from `Game.LEVELS`: Flawless (no
+  fall), Silver Standard (Silver or better) and Speedrunner (under the time halfway between Silver and Gold).
+  They are computed from the save's level records, so old saves earn them retroactively. `SaveData` also keeps
+  each earned `"id:kind"` key, so a later layout rebuild never takes one back. Earned rewards never re-lock.
