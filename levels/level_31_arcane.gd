@@ -488,7 +488,7 @@ func _stage_5() -> Vector3:
 	# the shelf wall-run: along the right end of the landing, over the void
 	kit.wallrun(_w(Vector3(5.7, land_c.y + 1.2, f0 - 9.0)), Vector3(15.0, 6.5, 0.6), _yaw + 90.0)
 	var pb: Dictionary = _post(Vector3(3.6, land_c.y, f0 - 19.6), 2.2, 2.2)
-	var cp: Dictionary = _cp(_ahead(pb, 0.86, 0.0, 5.0, -3.6))
+	var cp: Dictionary = _cp(_ahead(pb, 0.86, 0.0, 5.0))
 	_hop(cp0, p1)
 	_hop(p1, _area(disc_c, 1.6, 1.6))
 	r_walk(_w(disc_c + Vector3(0, 0, -0.2)))
@@ -670,8 +670,14 @@ func _stage_10() -> Vector3:
 	var local := Vector3(0, bsz.y * 0.5 + 0.05, 0)
 	var rb_top := Vector3(3.6, 0.0, f0 - 1.2 - bsz.z * 0.5)
 	var far_z: float = (mz + 1.5) + 1.2 + bsz.z * 0.5
-	var book: ArcaneBook = _book(rb_top, bsz, Vector3(0, 0, far_z - rb_top.z), 11.0, 0.0, Color(0.1, 0.3, 0.25))
-	var book_far: Vector3 = rb_top + Vector3(0, 0, far_z - rb_top.z)
+	var zm: float = (rb_top.z + far_z) * 0.5
+	var mid: Dictionary = _blk(Vector3(3.6, 0.0, zm), 3.6, 3.0)
+	var z1_far: float = zm + 1.5 + 1.2 + bsz.z * 0.5
+	var book: ArcaneBook = _book(rb_top, bsz, Vector3(0, 0, z1_far - rb_top.z), 9.0, 0.0, Color(0.1, 0.3, 0.25))
+	var book_far: Vector3 = Vector3(rb_top.x, 0.0, z1_far)
+	var rb2_top := Vector3(3.6, 0.0, zm - 1.5 - 1.2 - bsz.z * 0.5)
+	var book2: ArcaneBook = _book(rb2_top, bsz, Vector3(0, 0, far_z - rb2_top.z), 9.0, 0.5, Color(0.45, 0.25, 0.08))
+	var book2_far: Vector3 = Vector3(rb2_top.x, 0.0, far_z)
 	# SHORTCUT: a post hangs off the fork's front and the spell door on it opens onto the merge
 	var sp: Dictionary = _post(_ahead(_area(fc, 5.5, 1.5), 0.93, 0.0, 1.2), 1.2, 1.2, "accent")
 	var spc: Vector3 = sp["c"]
@@ -691,11 +697,16 @@ func _stage_10() -> Vector3:
 	else:
 		r_walk(_w(Vector3(3.6, 0, f0 + 1.6)))
 		var far_w: Vector3 = _w(book_far) - Vector3(0, bsz.y * 0.5, 0)
-		_ride(_w(Vector3(3.6, 0, f0 + 0.45)), book, local, _w(Vector3(3.6, 0, mz + 0.3)),
+		_ride(_w(Vector3(3.6, 0, f0 + 0.45)), book, local, _w(Vector3(3.6, 0, zm + 0.3)),
 			func() -> bool: return book.global_position.distance_to(far_w) < 0.8)
+		r_walk(_w(Vector3(3.6, 0, zm + 0.5)))
+		var far2_w: Vector3 = _w(book2_far) - Vector3(0, bsz.y * 0.5, 0)
+		_ride(_w(Vector3(3.6, 0, zm - 1.5 + 0.45)), book2, local, _w(Vector3(3.6, 0, mz + 0.3)),
+			func() -> bool: return book2.global_position.distance_to(far2_w) < 0.8)
 	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
 	_hop(merge, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
+	mid.clear()
 	return cp["c"]
 
 
@@ -805,7 +816,7 @@ func _stage_12() -> Vector3:
 
 func _stage_13() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
-	var p1: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.3))
+	var p1: Dictionary = _post(_ahead(cp0, 0.86, 0.0, 1.3))
 	var beam: Dictionary = _blk(_ahead(p1, 0.86, 0.0, 16.0), 1.4, 16.0, "alt", 0.6)
 	var wc: Vector3 = beam["c"]
 	var back: float = wc.z + 8.0
@@ -941,7 +952,7 @@ func _stage_15() -> Vector3:
 
 func _stage_16() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
-	var p1: Dictionary = _post(_ahead(cp0, 0.88, 0.0, 1.3))
+	var p1: Dictionary = _post(_ahead(cp0, 0.86, 0.0, 1.3))
 	var beam: Dictionary = _blk(_ahead(p1, 0.86, 0.0, 18.0), 1.4, 18.0, "alt", 0.6)
 	var wc: Vector3 = beam["c"]
 	var back: float = wc.z + 9.0
