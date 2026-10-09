@@ -255,14 +255,16 @@ const THEMES: Dictionary = {
 		"decor": Color(0.72, 0.50, 0.30), "decor2": Color(1.00, 0.55, 0.75), "metal": Color(0.78, 0.80, 0.86),
 		"cloud_light": Color(1.00, 0.97, 0.88), "cloud_shade": Color(0.85, 0.7, 0.55),
 	},
-	"fungal": {  # PLACEHOLDER palette - the level agent owns and retunes this entry
-		"sky_top": Color(0.45, 0.70, 0.55), "sky_horizon": Color(0.95, 0.90, 0.60), "sky_bottom": Color(0.30, 0.36, 0.20),
-		"sun": Color(1.00, 0.95, 0.70), "sun_energy": 1.0, "sun_rot": Vector3(-45, 150, 0),
-		"ambient": Color(0.60, 0.60, 0.65), "ambient_energy": 0.8, "fog": Color(0.70, 0.80, 0.55), "fog_density": 0.002,
-		"top": Color(0.92, 0.25, 0.22), "side": Color(0.95, 0.90, 0.80), "trim": Color(1.00, 0.95, 0.85),
-		"alt_top": Color(0.55, 0.75, 0.30), "accent": Color(1.00, 0.75, 0.25), "accent2": Color(0.60, 0.40, 0.85),
-		"decor": Color(0.36, 0.26, 0.16), "decor2": Color(0.45, 0.65, 0.25), "metal": Color(0.55, 0.55, 0.60),
-		"cloud_light": Color(0.79, 0.89, 0.63), "cloud_shade": Color(0.28, 0.32, 0.22),
+	# Mushroom Hollow: a sunny storybook forest floor at beetle size - warm gold daylight, mossy greens,
+	# bark browns, toadstool red and cream. (levels/level_26_fungal.gd swaps in its own sky shader.)
+	"fungal": {
+		"sky_top": Color(0.36, 0.62, 0.92), "sky_horizon": Color(1.00, 0.91, 0.66), "sky_bottom": Color(0.38, 0.54, 0.26),
+		"sun": Color(1.00, 0.91, 0.70), "sun_energy": 1.3, "sun_rot": Vector3(-38, 128, 0),
+		"ambient": Color(0.78, 0.84, 0.66), "ambient_energy": 0.85, "fog": Color(0.86, 0.9, 0.66), "fog_density": 0.0032,
+		"top": Color(0.46, 0.67, 0.27), "side": Color(0.5, 0.34, 0.2), "trim": Color(1.00, 0.93, 0.7),
+		"alt_top": Color(0.88, 0.72, 0.4), "accent": Color(0.92, 0.25, 0.2), "accent2": Color(1.00, 0.78, 0.3),
+		"decor": Color(0.34, 0.6, 0.26), "decor2": Color(0.92, 0.3, 0.24), "metal": Color(0.62, 0.5, 0.36),
+		"cloud_light": Color(1.00, 0.98, 0.92), "cloud_shade": Color(0.78, 0.8, 0.86),
 	},
 	# Sky Citadel: marble temples on golden-hour cloud - cream marble over warm travertine, gold trim,
 	# lapis accents, a peach-gold sky. (levels/level_27_olympus.gd swaps in its own sky, sun and marble shader.)
