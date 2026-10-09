@@ -39,7 +39,7 @@ const PARCHMENT := Color(0.96, 0.9, 0.74)
 const OXBLOOD := Color(0.5, 0.1, 0.22)
 
 ## Testing aid: build every stage but start the player (and the bot's route) at stage N. 0 = off.
-const DEV_START: int = 15
+const DEV_START: int = 0
 ## Testing aid: stop building after stage N (a finish gate goes at its end). 0 = build them all.
 const DEV_LAST: int = 0
 
@@ -954,7 +954,9 @@ func _stage_16() -> Vector3:
 	_hop(cp0, p1)
 	_hop(p1, beam, Vector3(0, 0, 0.6))
 	r_walk(_w(Vector3(wc.x, wc.y, back - 1.8)))
-	_wait(func() -> bool: return _walls_ok([[wall, 0.0, 2.2 + 0.9]]) and _gates_ok([[gate, 0.7, 2.0 + 1.5]]), _w(Vector3(wc.x, wc.y, back - 1.8)))
+	_wait(func() -> bool: return _walls_ok([[wall, 0.0, 2.4]]), _w(Vector3(wc.x, wc.y, back - 1.8)))
+	r_walk(_w(Vector3(wc.x, wc.y, back - 8.0)))
+	_wait(func() -> bool: return _gates_ok([[gate, 0.0, 2.6]]), _w(Vector3(wc.x, wc.y, back - 8.0)))
 	r_walk(_w(Vector3(wc.x, wc.y, front + 0.5)))
 	r_walk(_w(Vector3(wc.x, wc.y, hinge_z + 0.5)))
 	_wait(func() -> bool: return br.is_down_for(Game.course_time, 2.4 + 1.5), _w(Vector3(wc.x, wc.y, hinge_z + 0.5)))
