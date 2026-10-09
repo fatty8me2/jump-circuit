@@ -106,9 +106,8 @@ static func _burst(layer_ref: PartyLayer, key: String, pos: Vector3, is_local: b
 			"box_aabb": RADIUS * 2.0}, g + Vector3(0, 0.25, 0))
 	layer_ref.sfx.play_at("warp", pos, 1.0, 0.6)
 	# ...and lets go
-	layer_ref.get_tree().create_timer(0.48, false).timeout.connect(func() -> void:
-		if not is_instance_valid(layer_ref) or not layer_ref.is_inside_tree():
-			return
+	# tween on the layer (dies with it) rather than a SceneTreeTimer whose lambda captured the layer
+	layer_ref.create_tween().tween_callback(func() -> void:
 		PartyFx.orb_pulse(layer_ref, pos, Color(0.5, 0.25, 1.0, 0.3), 0.3, RADIUS, 0.5, 1.6)
 		PartyFx.shockwave(layer_ref, pos - Vector3(0, 0.6, 0), VIOLET, RADIUS * 1.1, 0.5)
 		PartyFx.ring_pulse(layer_ref, pos, Vector3.UP, Color(0.8, 0.6, 1.0), 0.3, RADIUS * 1.2, 0.4, 0.1)
@@ -126,7 +125,7 @@ static func _burst(layer_ref: PartyLayer, key: String, pos: Vector3, is_local: b
 			HeroFx.pop(layer_ref, {"amount": 40, "lifetime": 2.4, "shape": "sphere", "radius": RADIUS * 0.7, "dir": Vector3.UP,
 				"spread": 40.0, "speed": Vector2(0.1, 0.5), "gravity": Vector3(0, 0.4, 0), "turbulence": 0.6, "size": 0.14,
 				"curve": "pop", "tex": Fx.Tex.STAR, "explosiveness": 0.5, "color": Color(1.1, 0.8, 1.6),
-				"box_aabb": RADIUS * 3.0}, pos))
+				"box_aabb": RADIUS * 3.0}, pos)).set_delay(0.48)
 	if not is_local:
 		return
 	layer_ref.send_fx("gravity", "burst", {"k": key, "pos": PowerUp.arr(pos)})

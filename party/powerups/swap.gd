@@ -74,13 +74,13 @@ static func _warp_fx(parent: Node, a: Vector3, b: Vector3) -> void:
 	PartyFx.speed_lines(parent, a + Vector3(0, 0.9, 0), b + Vector3(0, 0.9, 0), Color(0.8, 1.5, 1.4, 0.7), 16, 0.5)
 	PartyFx.speed_lines(parent, b + Vector3(0, 0.9, 0), a + Vector3(0, 0.9, 0), Color(0.8, 1.2, 1.6, 0.7), 16, 0.5)
 	# a moment later both portals snap shut
-	var t: SceneTree = parent.get_tree()
-	if t != null:
-		t.create_timer(0.72, false).timeout.connect(func() -> void:
-			if is_instance_valid(parent) and parent.is_inside_tree():
-				for at: Vector3 in [a, b]:
-					PartyFx.burst(parent, at + Vector3(0, 0.9, 0), Color(0.6, 1.0, 0.95), 24, 5.0, 0.2, 0.4)
-					PartyFx.star_ring(parent, at + Vector3(0, 0.9, 0), Color(0.5, 1.0, 0.9), 6, 4.0, 0.3, across))
+	# a tween on `parent` (not a SceneTreeTimer): it dies with the node, so a lambda that captured the freed
+	# node is never called (guarding inside the lambda is too late: Godot errors on the call itself)
+	if parent.is_inside_tree():
+		parent.create_tween().tween_callback(func() -> void:
+			for at: Vector3 in [a, b]:
+				PartyFx.burst(parent, at + Vector3(0, 0.9, 0), Color(0.6, 1.0, 0.95), 24, 5.0, 0.2, 0.4)
+				PartyFx.star_ring(parent, at + Vector3(0, 0.9, 0), Color(0.5, 1.0, 0.9), 6, 4.0, 0.3, across)).set_delay(0.72)
 
 
 static func remote_fx(layer_ref: PartyLayer, _from_id: int, action: String, d: Dictionary) -> void:
