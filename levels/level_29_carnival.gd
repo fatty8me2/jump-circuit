@@ -39,7 +39,7 @@ const TEAL := Color(0.2, 0.75, 0.8)
 const PINK := Color(1.0, 0.42, 0.62)
 
 ## Testing aid: build every stage but start the player (and the bot's route) at stage N. 0 = off.
-const DEV_START: int = 4
+const DEV_START: int = 13
 ## Testing aid: stop building after stage N (a finish gate goes at its end). 0 = build them all.
 const DEV_LAST: int = 0
 
@@ -235,7 +235,7 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 3.0), 0.0)
 	var yaws: Array[float] = [0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0, -90.0, 0.0, 0.0, 90.0, 90.0, 0.0, 0.0, -90.0]
-	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6]
+	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10, _stage_11, _stage_12, _stage_13, _stage_14, _stage_15, _stage_16, _stage_17]
 	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
 	var starts: Array[int] = []
 	var origins: Array[Vector3] = []
@@ -250,8 +250,8 @@ func _build() -> void:
 	starts.append(route.size())
 	origins.append(_o)
 	_stage_no = last + 1
-	if last == 18:
-		pass
+	if last == 17:
+		_stage_18()
 	else:
 		# (dev) the finish right after the last stage built
 		var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
@@ -260,6 +260,7 @@ func _build() -> void:
 		_finish_pos = _w(Vector3(0, 0, -9.5))
 		_hop(cp0, fin)
 		r_walk(_w(Vector3(0, 0, -9.8)))
+	player_failed.connect(func(c: String) -> void: print("FAILCAUSE ", c, " ", player.global_position, " t=", Game.course_time))  # DEBUG-HOOK
 	_surroundings()
 	_carnival_materials()
 	if DEV_START > 1:
@@ -591,6 +592,590 @@ func _stage_6() -> Vector3:
 	deco.arrow_sign(_w(Vector3(-4.2, y, fc.z + 0.2)), deg_to_rad(_yaw), -1.0, RED)
 	deco.arrow_sign(_w(Vector3(4.2, y, fc.z + 0.2)), deg_to_rad(_yaw), 1.0, TEAL)
 	return cp["c"]
+
+
+# ---- stage 7: Mallet Alley - the ring-toss cannonballs roll across the deck, then mallets punch the beam ---
+
+## A mallet that punches out of a striped launcher across the route: the piston, dressed. `top` is the ram's top
+## centre when retracted; it punches toward local +x when `dir` = 1 (-x when -1).
+func _mallet(top: Vector3, dir: float, stroke: float, period: float, phase: float) -> Piston:
+	var size := Vector3(1.6, 1.3, 1.2)
+	var p: Piston = kit.piston(_w(top), size, _yaw - 90.0 * dir, stroke, period, phase, 10.0)
+	var b := Basis(Vector3.UP, deg_to_rad(_yaw - 90.0 * dir))
+	var depth: float = stroke + 0.45
+	var c: Vector3 = _w(top) - Vector3(0, size.y * 0.5, 0) + b * Vector3(0, 0, size.z * 0.5 + depth * 0.5 + 0.02)
+	var n := Node3D.new()
+	n.transform = Transform3D(b, c)
+	add_child(n)
+	var h: float = size.y + 1.6
+	var w: float = size.x + 0.8
+	var stripe: ShaderMaterial = CarnivalDecor.stripe_mat(RED, CREAM, 8.0)
+	var gold: StandardMaterial3D = Look.flat(GOLD, 0.35, 0.7, 0.2)
+	n.add_child(Look.box(Vector3(0.4, h, depth), stripe, Vector3(-w * 0.5 + 0.2, 0, 0)))
+	n.add_child(Look.box(Vector3(0.4, h, depth), stripe, Vector3(w * 0.5 - 0.2, 0, 0)))
+	n.add_child(Look.box(Vector3(w - 0.8, 0.78, depth), stripe, Vector3(0, h * 0.5 - 0.39, 0)))
+	n.add_child(Look.box(Vector3(w - 0.8, 0.78, depth), stripe, Vector3(0, -h * 0.5 + 0.39, 0)))
+	n.add_child(Look.box(Vector3(w + 0.12, 0.12, depth + 0.12), gold, Vector3(0, h * 0.5 + 0.06, 0)))
+	return p
+
+
+func _stage_7() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var deck: Dictionary = _blk(_ahead(cp0, 0.74, 0.0, 14.0), 8.0, 14.0)
+	var dc: Vector3 = deck["c"]
+	var lane_z: float = dc.z + 1.0
+	# the ring-toss cannon on a little stand at the right, rolling balls across the deck toward local -x
+	_blk(Vector3(10.6, dc.y, lane_z), 3.0, 3.0, "alt", 0.8)
+	var bat: CannonBattery = kit.battery(_w(Vector3(10.6, dc.y, lane_z)), _yaw + 90.0, 24.0, 9.0, 4.4, 0.0, 0.0)
+	var beam: Dictionary = _blk(_ahead(deck, 0.76, 0.0, 12.0), 1.6, 12.0, "alt", 0.6)
+	var bc: Vector3 = beam["c"]
+	var m1: Piston = _mallet(Vector3(bc.x - 1.55, bc.y + 1.35, bc.z + 2.5), 1.0, 2.6, 5.0, 0.0)
+	var m2: Piston = _mallet(Vector3(bc.x - 1.55, bc.y + 1.35, bc.z - 2.5), 1.0, 2.6, 5.0, fposmod(-0.07, 1.0))
+	var pa: Dictionary = _post(_ahead(beam, 0.76, 0.0, 2.0), 2.0, 2.0)
+	var cp: Dictionary = _cp(_ahead(pa, 0.76, 0.0, 5.0, -(pa["c"] as Vector3).x))
+	_hop(cp0, deck, Vector3(0, 0, 5.0))
+	r_walk(_w(Vector3(0, dc.y, lane_z + 3.2)))
+	# lane stretch d 7.0..10.2 m from the muzzle (1.9 m in front of the node) is where the path crosses it
+	_wait(func() -> bool: return bat.is_clear_for(7.0, 10.2, 2.4), _w(Vector3(0, dc.y, lane_z + 3.2)))
+	r_walk(_w(Vector3(0, dc.y, lane_z - 4.0)))
+	r_walk(_w(Vector3(0, dc.y, dc.z - 6.2)))
+	var lane_t: Array[float] = [1.3, 1.85]
+	_wait(func() -> bool: return _ram_clear(m1, lane_t[0] - 0.3, lane_t[0] + 0.4 + 1.5) and _ram_clear(m2, lane_t[1] - 0.3, lane_t[1] + 0.4 + 1.5),
+		_w(Vector3(0, dc.y, dc.z - 6.2)))
+	_hop(deck, beam, Vector3(0, 0, 4.5))
+	r_walk(_w(Vector3(bc.x, bc.y, bc.z - 5.2)))
+	_hop(beam, pa)
+	_hop(pa, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	# the ring-toss stall: bottles on a shelf, hoops, a striped awning and a row of lights
+	deco.kiosk(_w(Vector3(-9.5, dc.y - 4.0, dc.z)), deg_to_rad(_yaw) - 1.4, GOLD)
+	deco.string_lights(_w(Vector3(-4.0, dc.y + 6.0, dc.z + 6.0)), _w(Vector3(4.0, dc.y + 6.0, dc.z - 6.0)), 1.4, 0.8)
+	deco.balloons(_w(Vector3(7.0, dc.y - 3.0, dc.z - 6.0)), 5, 5.0)
+	return cp["c"]
+
+
+# ---- stage 8: Ferris Wheel - ride a gondola up the front of the wheel, mantle out at the top ---------------------
+
+func _stage_8() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var lp: Dictionary = _blk(_ahead(cp0, 0.74, 0.0, 6.0), 5.0, 6.0)
+	var zc: float = (lp["c"] as Vector3).z
+	var radius: float = 6.5
+	var yc: float = radius
+	var xw: float = -5.0
+	var wheel := CarnivalWheel.new()
+	wheel.radius = radius
+	wheel.period = 28.0
+	wheel.count = 6
+	wheel.position = _w(Vector3(xw, yc, zc))
+	wheel.rotation.y = deg_to_rad(_yaw)
+	add_child(wheel)
+	var ed_y: float = yc + 2.0
+	_blk(Vector3(0, ed_y, zc - 6.1), 5.0, 6.0)
+	var ed_front: float = zc - 6.1 - 3.0
+	var ledge_top := Vector3(0, ed_y + 3.3, ed_front - 1.6 - 0.7)
+	var ledge: Dictionary = _ledge(ledge_top, Vector3(2.8, 9.0, 1.4))
+	var cp: Dictionary = _cp(_ahead(ledge, 0.76, 0.0, 5.0))
+	var centre: Vector3 = _w(Vector3(xw, yc, zc))
+	_hop(cp0, lp)
+	var stand: Vector3 = _w(Vector3(-2.15, 0, zc))
+	r_walk(stand)
+	route.append({"kind": "candy_board", "from": stand, "cars": wheel.gondolas, "reach": 3.4, "lead": 0.45, "local": Vector3(0, 0.3, 0)})
+	route.append({"kind": "candy_ride", "stand": Vector3(0, 0.3, 0), "to": _w(Vector3(-0.5, ed_y, zc - 6.1)),
+		"until": func() -> bool:
+			var fb: Object = player.floor_body
+			if not (fb is CarnivalWheel.Gondola):
+				return false
+			return (fb as Node3D).global_position.y + 0.25 - centre.y >= 2.0})
+	r_walk(_w(Vector3(0, ed_y, ed_front + 0.9)))
+	r_mantle(_w(Vector3(0, ed_y, ed_front + 0.35)), _w(ledge_top + Vector3(0, 0, 0.2)))
+	_hop(ledge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	# the wheel's boarding steps and a barker's booth; fairy lights strung from the hub to the ground
+	deco.kiosk(_w(Vector3(4.8, -4.0, zc + 4.0)), deg_to_rad(_yaw) + 0.3, RED)
+	deco.balloons(_w(Vector3(-11.5, -2.0, zc + 2.0)), 6, 6.0)
+	deco.pole(_w(Vector3(3.2, 0, zc + 3.4)), 3.5, TEAL)
+	return cp["c"]
+
+
+# ---- stage 9: Zipline Gorge - BRANCH: the zipline over the gorge | the whack-a-mole stepping stones ---------------
+
+func _stage_9() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.76, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	var y: float = fc.y
+	# RIGHT: five mole stones across the gorge
+	var period: float = 7.4
+	var moles: Array[CarnivalMole] = []
+	var areas: Array[Dictionary] = []
+	var prev: Dictionary = _area(Vector3(3.5, y, fc.z), 1.5, 1.5)
+	var dxs: Array[float] = [0.0, 0.5, -0.5, 0.5, -0.4]
+	for i: int in 5:
+		var c: Vector3 = _ahead(prev, 0.74 + 0.01 * float(i % 3), 0.0, 1.9, dxs[i])
+		moles.append(_mole(c, period, fposmod(-0.6 * float(i) / period, 1.0)))
+		var a: Dictionary = _area(c, 0.95, 0.95)
+		areas.append(a)
+		prev = a
+	var merge: Dictionary = _blk(_ahead(prev, 0.76, 0.0, 8.0, -(prev["c"] as Vector3).x), 11.0, 8.0)
+	var mfront: float = (merge["c"] as Vector3).z + 4.0
+	# LEFT: the zipline from the fork to the merge deck, 4 m past its edge
+	var z_end: float = mfront - 4.0
+	var zip: Zipline = kit.zipline(_w(Vector3(-3.5, y, f0 + 0.8)), _w(Vector3(-3.5, y, z_end)), 11.0, 1.4)
+	var cp: Dictionary = _cp(_ahead(merge, 0.76, 0.0, 5.0))
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 1:
+		r_walk(_w(Vector3(3.5, y, fc.z)))
+		_wait(func() -> bool: return _moles_ok([[moles[0], 0.8, 2.0 + 1.5], [moles[1], 1.65, 2.85 + 1.5],
+				[moles[2], 2.5, 3.7 + 1.5], [moles[3], 3.35, 4.55 + 1.5], [moles[4], 4.2, 5.4 + 1.5]]), _w(Vector3(3.5, y, fc.z)))
+		prev = _area(Vector3(3.5, y, fc.z), 1.5, 1.5)
+		for i: int in 5:
+			_hop(prev, areas[i])
+			prev = areas[i]
+		_hop(prev, merge, Vector3(0, 0, 1.0))
+	else:
+		r_walk(_w(Vector3(-3.5, y, f0 + 0.6)))
+		route.append({"kind": "k_zip", "zip": zip, "point": _w(Vector3(-3.5, y + 2.2, mfront + 2.0)), "radius": 0.6, "to": _w(Vector3(-3.5, y, z_end))})
+		r_walk(_w(Vector3(-3.5, y, z_end - 1.0)))
+	r_walk(_w(merge["c"] as Vector3))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	deco.arrow_sign(_w(Vector3(-4.2, y, fc.z + 0.2)), deg_to_rad(_yaw), -1.0, GOLD)
+	deco.arrow_sign(_w(Vector3(4.2, y, fc.z + 0.2)), deg_to_rad(_yaw), 1.0, TEAL)
+	deco.far_wheel(_w(Vector3(24.0, y - 10.0, f0 - 18.0)), 14.0, deg_to_rad(_yaw))
+	return cp["c"]
+
+
+# ---- stage 10: Funhouse Doors - the sliding doors, then the mirror beams [shortcut: the side catwalk] -------------
+
+func _stage_10() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var deck: Dictionary = _blk(_ahead(cp0, 0.76, 0.0, 34.0), 7.0, 34.0)
+	var dc: Vector3 = deck["c"]
+	var y: float = dc.y
+	var z0: float = dc.z + 17.0
+	var gw1: GapWall = kit.gap_wall(_w(Vector3(0, y, z0 - 8.0)), _yaw, 3.4, 9.0, 0.0, {"open_time": 3.6})
+	var gw2: GapWall = kit.gap_wall(_w(Vector3(0, y, z0 - 17.0)), _yaw, 3.4, 9.0, 0.5, {"open_time": 3.6})
+	var lz: float = z0 - 25.0
+	var l1: LaserGate = kit.laser(_w(Vector3(0, y + 1.2, lz)), Vector3(7.0, 2.4, 0.2), 5.0, 0.3, 0.0, _yaw)
+	var l2: LaserGate = kit.laser(_w(Vector3(0, y + 1.2, lz - 3.5)), Vector3(7.0, 2.4, 0.2), 5.0, 0.3, fposmod(-0.07, 1.0), _yaw)
+	# SHORTCUT: a catwalk outside the laser posts
+	var walk: Dictionary = _blk(Vector3(5.6, y, lz - 1.75), 1.6, 10.0, "accent", 0.6)
+	var pb: Dictionary = _post(_ahead(deck, 0.76, 0.0, 2.0), 2.0, 2.0)
+	var cp: Dictionary = _cp(_ahead(pb, 0.76, 0.0, 5.0, -(pb["c"] as Vector3).x))
+	_hop(cp0, deck, Vector3(0, 0, 15.0))
+	r_walk(_w(Vector3(0, y, z0 - 2.5)))
+	_wait(func() -> bool: return gw1.is_open_for(Game.course_time, 0.8 + 1.5), _w(Vector3(0, y, z0 - 2.5)))
+	r_walk(_w(Vector3(0, y, z0 - 11.0)))
+	_wait(func() -> bool: return gw2.is_open_for(Game.course_time, 0.8 + 1.5), _w(Vector3(0, y, z0 - 11.0)))
+	r_walk(_w(Vector3(0, y, lz + 2.5)))
+	if route_variant == 2:
+		r_walk(_w(Vector3(3.0, y, lz + 0.5)))
+		r_jump(_w(Vector3(3.1, y, lz + 0.5)), _w(Vector3(5.6, y, lz + 0.5)))
+		r_walk(_w(Vector3(5.6, y, lz - 5.0)))
+		r_jump(_w(Vector3(5.6, y, lz - 5.5)), _w(Vector3(2.4, y, lz - 5.5)))
+	else:
+		_wait(func() -> bool: return _dark(l1, 0.0, 0.5 + 1.5) and _dark(l2, 0.3, 1.1 + 1.5), _w(Vector3(0, y, lz + 2.5)))
+		r_walk(_w(Vector3(0, y, lz - 5.0)))
+	r_walk(_w(Vector3(0, y, dc.z - 15.8)))
+	_hop(deck, pb)
+	_hop(pb, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	# the funhouse front: a laughing painted face over the doors, mirror shards on the beam posts
+	for g: LaserGate in [l1, l2]:
+		for sx: float in [-1.0, 1.0]:
+			var m := Look.box(Vector3(0.5, 0.9, 0.05), Look.flat(Color(0.85, 0.9, 1.0), 0.05, 1.0), Vector3(sx * (g.size.x * 0.5 + 0.18), g.size.y * 0.5 + 0.9, 0))
+			m.rotation = Vector3(0.0, sx * 0.6, 0.15)
+			g.add_child(m)
+	deco.string_lights(_w(Vector3(-4.5, y + 6.5, z0 - 2.0)), _w(Vector3(4.5, y + 6.5, z0 - 2.0)), 1.0, 0.7)
+	deco.string_lights(_w(Vector3(-4.5, y + 6.5, z0 - 14.0)), _w(Vector3(4.5, y + 6.5, z0 - 14.0)), 1.0, 0.7)
+	return cp["c"]
+
+
+# ---- stage 11: Hall of Mirrors - BRANCH: the funhouse door | the mantle route [shortcut: the mirror wall run] ------
+
+## A funhouse door frame around a warp ring (`floor_pos` / yaw as given to kit.portal, world).
+func _door_frame(floor_pos: Vector3, yaw_deg: float, col: Color) -> void:
+	var n := Node3D.new()
+	n.transform = Transform3D(Basis(Vector3.UP, deg_to_rad(yaw_deg)), floor_pos)
+	add_child(n)
+	var stripe: ShaderMaterial = CarnivalDecor.stripe_mat(col, CREAM, 8.0)
+	for sx: float in [-1.0, 1.0]:
+		n.add_child(Look.box(Vector3(0.3, 3.4, 0.4), stripe, Vector3(sx * 1.8, 1.7, 0)))
+	n.add_child(Look.box(Vector3(4.1, 0.34, 0.44), stripe, Vector3(0, 3.5, 0)))
+	n.add_child(Look.sphere(0.24, Look.flat(GOLD, 0.3, 0.0, 2.6), Vector3(0, 3.95, 0)))
+
+
+func _stage_11() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var fork: Dictionary = _blk(_ahead(cp0, 0.76, 0.0, 3.0), 11.0, 3.0)
+	var fc: Vector3 = fork["c"]
+	var f0: float = fc.z - 1.5
+	var y: float = fc.y
+	# LEFT: the door whisks you to the exit deck E, then two posts and the merge
+	var e: Dictionary = _blk(Vector3(-3.5, y, f0 - 14.0), 5.0, 5.0)
+	var door: WarpPortal = kit.portal(_w(Vector3(-3.5, y, fc.z - 0.6)), _yaw, _w(Vector3(-3.5, y, f0 - 12.8)), _yaw, 7.0)
+	_door_frame(_w(Vector3(-3.5, y, fc.z - 0.6)), _yaw, RED)
+	_door_frame(_w(Vector3(-3.5, y, f0 - 12.8)), _yaw, TEAL)
+	var p1: Dictionary = _post(_ahead(e, 0.76, 0.0, 2.0, 0.4), 2.0, 2.0)
+	var p2: Dictionary = _post(_ahead(p1, 0.78, 0.0, 2.0, -0.4), 2.0, 2.0)
+	var merge: Dictionary = _blk(_ahead(p2, 0.78, 0.0, 3.0, -(p2["c"] as Vector3).x), 11.0, 3.0)
+	var mc: Vector3 = merge["c"]
+	var mfront: float = mc.z + 1.5
+	# RIGHT: the mantle route - a 3.3 m crate, posts along its top, then the long drop to the merge
+	var crate_top := Vector3(3.5, y + 3.3, f0 - 1.6 - 3.0)
+	var crate: Dictionary = _ledge(crate_top, Vector3(2.8, 9.0, 6.0))
+	var q: Dictionary = crate
+	var qs: Array[Dictionary] = []
+	while (q["c"] as Vector3).z - float(q["hz"]) - mfront > 8.4:
+		q = _post(_ahead(q, 0.75, 0.0, 2.0, 0.4 if qs.size() % 2 == 0 else -0.4), 2.0, 2.0)
+		qs.append(q)
+	# SHORTCUT: the mirror wall run from a post on the fork's lip, landing near the merge
+	var w: Dictionary = _post(_ahead(_area(fc, 5.5, 1.5), 0.76, 0.0, 1.8, 0.0), 1.8, 1.8)
+	var wl: Dictionary = _wall_geometry(w)
+	var cp: Dictionary = _cp(_ahead(merge, 0.76, 0.0, 5.0))
+	_hop(cp0, fork, Vector3(0, 0, 0.4))
+	if route_variant == 1:
+		r_walk(_w(Vector3(3.5, y, fc.z + 0.3)))
+		r_mantle(_w(Vector3(3.5, y, f0 + 0.35)), _w(crate_top + Vector3(0, 0, 0.2)))
+		var prev: Dictionary = crate
+		for qq: Dictionary in qs:
+			_hop(prev, qq)
+			prev = qq
+		_hop(prev, merge, Vector3(0, 0, 0.6))
+	elif route_variant == 2:
+		r_walk(_w(Vector3(0, y, fc.z)))
+		_hop(_area(fc, 5.5, 1.5), w)
+		_wall_route(w)
+		_hop(wl, merge, Vector3(0, 0, 0.6))
+	else:
+		r_walk(_w(Vector3(-3.5, y, fc.z + 0.6)))
+		r_portal(_w(Vector3(-3.5, y, fc.z - 0.9)), door.exit_point())
+		r_walk(_w(Vector3(-3.5, y, f0 - 14.5)))
+		_hop(e, p1)
+		_hop(p1, p2)
+		_hop(p2, merge, Vector3(-3.5, 0, 0.6))
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	# mirrors along both sides, tall distorting panels in funhouse colours
+	for k: int in 4:
+		var glass := StandardMaterial3D.new()
+		glass.albedo_color = Color(0.8, 0.88, 1.0)
+		glass.metallic = 1.0
+		glass.roughness = 0.06
+		var mir := Look.box(_sz(Vector3(0.2, 7.0, 3.2)), glass, _w(Vector3(-9.5, y + 1.0, f0 - 6.0 - 8.0 * float(k))))
+		mir.rotation.y = deg_to_rad(_yaw) + 0.25
+		add_child(mir)
+	deco.arrow_sign(_w(Vector3(-4.2, y, fc.z + 0.2)), deg_to_rad(_yaw), -1.0, RED)
+	deco.arrow_sign(_w(Vector3(4.2, y, fc.z + 0.2)), deg_to_rad(_yaw), 1.0, GOLD)
+	return cp["c"]
+
+
+# ---- stage 12: Drop Tower - falling blocks, the dropping weight, a wall run onto the tower ----------------------------
+
+func _stage_12() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var deck: Dictionary = _blk(_ahead(cp0, 0.74, 0.0, 22.0), 6.4, 22.0)
+	var dc: Vector3 = deck["c"]
+	var y: float = dc.y
+	var z0: float = dc.z + 11.0
+	var b1: FallingBlock = kit.falling_block(_w(Vector3(0, y, z0 - 5.0)), _sz(Vector3(6.4, 1.6, 3.0)), 7.0, 6.0, 0.0)
+	var b2: FallingBlock = kit.falling_block(_w(Vector3(0, y, z0 - 14.0)), _sz(Vector3(6.4, 1.6, 3.0)), 7.0, 6.0, 0.5)
+	var beam: Dictionary = _blk(_ahead(deck, 0.76, 0.0, 10.0), 1.8, 10.0, "alt", 0.6)
+	var bc: Vector3 = beam["c"]
+	var press: Crusher = kit.crusher(_w(Vector3(bc.x, bc.y, bc.z)), Vector3(2.4, 1.2, 2.0), 3.2, 6.0, 0.0, _yaw)
+	var w2: Dictionary = _post(_ahead(beam, 0.76, 0.0, 1.8), 1.8, 1.8)
+	var land: Dictionary = _wall_geometry(w2)
+	var cp: Dictionary = _cp(_ahead(land, 0.76, 0.0, 5.0, -(land["c"] as Vector3).x))
+	_hop(cp0, deck, Vector3(0, 0, 9.0))
+	r_walk(_w(Vector3(0, y, z0 - 1.5)))
+	_wait(func() -> bool: return b1.is_clear_for(Game.course_time, 0.9 + 1.5), _w(Vector3(0, y, z0 - 1.5)))
+	r_walk(_w(Vector3(0, y, z0 - 10.0)))
+	_wait(func() -> bool: return b2.is_clear_for(Game.course_time, 0.9 + 1.5), _w(Vector3(0, y, z0 - 10.0)))
+	r_walk(_w(Vector3(0, y, dc.z - 10.0)))
+	var tp: float = 1.4
+	_wait(func() -> bool: return _press_ok(press, tp - 0.3, tp + 0.8 + 1.5), _w(Vector3(0, y, dc.z - 10.0)))
+	_hop(deck, beam, Vector3(0, 0, 4.5))
+	r_walk(_w(Vector3(bc.x, bc.y, bc.z - 4.8)))
+	_hop(beam, w2)
+	_wall_route(w2)
+	_hop(land, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	# the drop tower: a tall striped tower with a cage, and the strongman's weights
+	_high_striker(Vector3(-9.5, y - 6.0, dc.z - 2.0))
+	_high_striker(Vector3(9.5, y - 6.0, dc.z + 6.0))
+	deco.balloons(_w(Vector3(8.0, y - 4.0, dc.z - 8.0)), 6, 6.0)
+	return cp["c"]
+
+
+# ---- stage 13: Barrel Rollers - the rolling logs, a pair of moles between them -------------------------------------
+
+func _stage_13() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var deck: Dictionary = _blk(_ahead(cp0, 0.76, 0.0, 6.0), 7.0, 6.0)
+	var dc: Vector3 = deck["c"]
+	var y: float = dc.y
+	var f: float = dc.z - 3.0
+	var log_len: float = 12.0
+	kit.log_roller(_w(Vector3(0, y, f - 0.8 - log_len * 0.5)), log_len, 2.6, _yaw + 90.0, 3.0, 6.0, 0.0)
+	var isl: Dictionary = _blk(Vector3(0, y, f - 0.8 - log_len - 0.8 - 1.6), 3.2, 3.2, "alt", 0.8)
+	var period: float = 7.4
+	var c1: Vector3 = _ahead(isl, 0.74, 0.0, 1.9, 0.5)
+	var mo1: CarnivalMole = _mole(c1, period, 0.0)
+	var a1: Dictionary = _area(c1, 0.95, 0.95)
+	var c2: Vector3 = _ahead(a1, 0.74, 0.0, 1.9, -0.5)
+	var mo2: CarnivalMole = _mole(c2, period, fposmod(-0.6 / period, 1.0))
+	var a2: Dictionary = _area(c2, 0.95, 0.95)
+	var isl2: Dictionary = _blk(_ahead(a2, 0.74, 0.0, 3.2, -c2.x), 3.2, 3.2, "alt", 0.8)
+	var ic2: Vector3 = isl2["c"]
+	var f2: float = ic2.z - 1.6
+	kit.log_roller(_w(Vector3(0, y, f2 - 0.8 - log_len * 0.5)), log_len, 2.6, _yaw + 90.0, 3.0, 6.0, 0.5)
+	var cp: Dictionary = _cp(Vector3(0, y, f2 - 0.8 - log_len - 0.8 - 2.5))
+	_hop(cp0, deck, Vector3(0, 0, 1.0))
+	r_walk(_w(Vector3(0, y, f + 0.8)))
+	r_walk(_w(Vector3(0, y, f - 1.6)))
+	r_walk(_w(Vector3(0, y, f - 0.8 - log_len + 0.8)))
+	r_walk(_w(Vector3(0, y, (isl["c"] as Vector3).z)))
+	_wait(func() -> bool: return _moles_ok([[mo1, 0.8, 2.0 + 1.5], [mo2, 1.65, 2.85 + 1.5]]), _w(Vector3(0, y, (isl["c"] as Vector3).z)))
+	_hop(isl, a1)
+	_hop(a1, a2)
+	_hop(a2, isl2)
+	r_walk(_w(Vector3(0, y, f2 - 1.6)))
+	r_walk(_w(Vector3(0, y, f2 - 0.8 - log_len + 0.8)))
+	r_walk(_w(Vector3(0, y, f2 - 0.8 - log_len - 0.8 - 2.0)))
+	r_checkpoint()
+	for k: int in 5:
+		var bz: float = f - 3.0 - 6.0 * float(k)
+		add_child(Look.cylinder(0.8, 1.3, Look.flat(Color(0.55, 0.32, 0.18), 0.8), _w(Vector3(-7.0, y - 3.0, bz)), 0.7, 14))
+		add_child(Look.cylinder(0.82, 0.1, Look.flat(GOLD, 0.3, 0.8), _w(Vector3(-7.0, y - 2.5, bz)), -1.0, 14))
+	deco.bunting(_w(Vector3(-5.0, y + 5.0, f - 2.0)), _w(Vector3(5.0, y + 5.0, f - 14.0)), 1.2, 14)
+	deco.bunting(_w(Vector3(5.0, y + 5.0, f2 - 2.0)), _w(Vector3(-5.0, y + 5.0, f2 - 14.0)), 1.2, 14)
+	return cp["c"]
+
+
+# ---- stage 14: The Big Dipper - the long coaster up the hill [shortcut: the post line beside the rails] --------------
+
+func _stage_14() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var za: float = -2.5 - 0.9 - 2.0
+	var car := CarnivalCoaster.new()
+	car.size = Vector3(3.0, 0.5, 4.0)
+	car.tint = Color(0.2, 0.6, 0.95)
+	car.points = [Vector3.ZERO, Vector3(0, 2.5, -6.0), Vector3(0, 7.5, -13.0), Vector3(0, 6.0, -20.0), Vector3(0, 4.0, -30.0)]
+	car.dock = 4.5
+	car.travel = 5.5
+	car.dock_b = 2.2
+	car.back = 2.2
+	car.position = _w(Vector3(0, 0, za)) - Vector3(0, 0.25, 0)
+	car.rotation.y = deg_to_rad(_yaw)
+	add_child(car)
+	var merge: Dictionary = _blk(Vector3(0, 4.0, za - 30.0 - 2.0 - 0.9 - 2.5), 8.0, 5.0)
+	var mfront: float = (merge["c"] as Vector3).z + 2.5
+	# SHORTCUT: a line of posts climbing beside the rails
+	var posts: Array[Dictionary] = []
+	var q: Dictionary = cp0
+	while (q["c"] as Vector3).z - float(q["hz"]) - mfront > 7.6 and posts.size() < 6:
+		q = _post(_ahead(q, 0.86, 1.0 if (q["c"] as Vector3).y < 3.5 else 0.0, 2.0, 4.0 - (q["c"] as Vector3).x), 2.0, 2.0)
+		posts.append(q)
+	var cp: Dictionary = _cp(_ahead(merge, 0.76, 0.0, 5.0))
+	if route_variant == 2:
+		var prev: Dictionary = cp0
+		for pp: Dictionary in posts:
+			_hop(prev, pp)
+			prev = pp
+		_hop(prev, merge, Vector3(-4.0, 0, 0.6))
+	else:
+		var stand: Vector3 = _w(Vector3(0, 0, 0.4))
+		r_walk(stand)
+		_wait(func() -> bool: return car.docked_for(Game.course_time, 0, 3.0), stand)
+		route.append({"kind": "x_jump", "from": _w(Vector3(0, 0, -2.0)), "to_node": car, "to_local": Vector3(0, 0.3, 0.2), "hold": true})
+		route.append({"kind": "candy_ride", "stand": Vector3(0, 0.3, 0.2), "to": _w(Vector3(0, 4.0, (merge["c"] as Vector3).z + 0.2)),
+			"until": func() -> bool: return car.dock_at(Game.course_time) == 1})
+	_hop(merge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	deco.far_coaster(_w(Vector3(-24.0, -14.0, 6.0)), deg_to_rad(_yaw) + 0.2, 90.0, 14.0)
+	deco.arrow_sign(_w(Vector3(-2.2, 0, 1.6)), deg_to_rad(_yaw), 0.0, RED)
+	deco.balloons(_w(Vector3(7.5, 2.0, -12.0)), 6, 6.0)
+	return cp["c"]
+
+
+# ---- stage 15: Twin Carousels - two turning decks, turning opposite ways ------------------------------------------------
+
+## Ride a carousel: from the edge of `from_a` onto the turning deck (hub is the local floor point of its centre) and
+## off again toward `exit_a` as it comes round. Returns the carousel.
+func _carousel(from_a: Dictionary, hub: Vector3, radius: float, period: float, exit_a: Dictionary) -> CarnivalCarousel:
+	var car := CarnivalCarousel.new()
+	car.radius = radius
+	car.period = period
+	car.position = _w(hub) - Vector3(0, 0.25, 0)
+	add_child(car)
+	_floors.append({"top": _w(hub), "size": Vector3(radius * 2.0, 0, radius * 2.0), "drop": 0.5, "frag": true, "stage": _stage_no})
+	var locals: Array = []
+	for i: int in 12:
+		var a: float = TAU * float(i) / 12.0
+		locals.append(Vector3(cos(a) * (radius - 0.9), 0.25, sin(a) * (radius - 0.9)))
+	var stand: Vector3 = _w(_edge(from_a, hub))
+	r_walk(stand)
+	route.append({"kind": "x_jump", "from": stand, "to_node": car, "to_locals": locals, "reach": 3.8, "lead": 0.55})
+	var hw: Vector3 = _w(hub)
+	var target: Vector3 = _w(exit_a["c"])
+	var ex: Vector3 = Vector3(target.x - hw.x, 0, target.z - hw.z).normalized()
+	var sgn: float = signf(period)
+	var lead_deg: float = rad_to_deg(TAU / absf(period)) * 0.6
+	route.append({"kind": "h_jump", "to": target, "test": func() -> bool:
+		var rel: Vector3 = player.global_position - hw
+		rel = Vector3(rel.x, 0, rel.z).normalized()
+		var a2: float = rad_to_deg(atan2(rel.cross(ex).y, rel.dot(ex))) * sgn
+		return a2 >= lead_deg - 7.0 and a2 <= lead_deg + 7.0})
+	return car
+
+
+func _stage_15() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var p1: Dictionary = _post(_ahead(cp0, 0.70, 0.0, 2.0), 2.0, 2.0)
+	var r1: float = 4.2
+	var hub1 := Vector3(0, 0, (p1["c"] as Vector3).z - 1.0 - 2.0 - r1)
+	var isl: Dictionary = _post(Vector3(0, 0, hub1.z - r1 - 4.0 - 1.5), 3.0, 3.0)
+	var r2: float = 5.0
+	var hub2 := Vector3(0, 1.0, (isl["c"] as Vector3).z - 1.5 - 2.0 - r2)
+	var m2: Dictionary = _post(Vector3(0, 1.5, hub2.z - r2 - 4.0 - 1.0), 2.0, 2.0)
+	var p3: Dictionary = _post(_ahead(m2, 0.76, 0.0, 2.0, 0.4), 2.0, 2.0)
+	var cp: Dictionary = _cp(_ahead(p3, 0.76, 0.0, 5.0, -0.4))
+	_hop(cp0, p1)
+	_carousel(p1, hub1, r1, 13.0, isl)
+	_carousel(isl, hub2, r2, -12.0, m2)
+	_hop(m2, p3)
+	_hop(p3, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	deco.tent(_w(Vector3(-15.0, -6.0, hub1.z)), 6.0, 4.0, 5.0, 0.4, TEAL, CREAM)
+	deco.tent(_w(Vector3(15.0, -6.0, hub2.z)), 6.0, 4.0, 5.0, -0.3, PINK, CREAM)
+	deco.balloons(_w(Vector3(-8.0, -2.0, hub2.z + 4.0)), 6, 5.0)
+	return cp["c"]
+
+
+# ---- stage 16: Midnight Wheel - the great wheel, up to the big top's roof ---------------------------------------------------------
+
+func _stage_16() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var lp: Dictionary = _blk(_ahead(cp0, 0.74, 0.0, 6.0), 5.0, 6.0)
+	var zc: float = (lp["c"] as Vector3).z
+	var radius: float = 9.0
+	var yc: float = radius
+	var xw: float = -5.0
+	var wheel := CarnivalWheel.new()
+	wheel.radius = radius
+	wheel.period = 26.0
+	wheel.count = 8
+	wheel.tint = Color(0.35, 0.3, 0.85)
+	wheel.position = _w(Vector3(xw, yc, zc))
+	wheel.rotation.y = deg_to_rad(_yaw)
+	add_child(wheel)
+	var ed_y: float = yc + 0.94 * radius - 0.2
+	_blk(Vector3(0, ed_y, zc - 3.1), 5.0, 6.0)
+	var ed_front: float = zc - 3.1 - 3.0
+	var ledge_top := Vector3(0, ed_y + 3.3, ed_front - 1.6 - 0.7)
+	var ledge: Dictionary = _ledge(ledge_top, Vector3(2.8, 9.0, 1.4))
+	var cp: Dictionary = _cp(_ahead(ledge, 0.76, 0.0, 5.0))
+	var centre: Vector3 = _w(Vector3(xw, yc, zc))
+	_hop(cp0, lp)
+	var stand: Vector3 = _w(Vector3(-2.15, 0, zc))
+	r_walk(stand)
+	route.append({"kind": "candy_board", "from": stand, "cars": wheel.gondolas, "reach": 3.4, "lead": 0.45, "local": Vector3(0, 0.3, 0)})
+	route.append({"kind": "candy_ride", "stand": Vector3(0, 0.3, 0), "to": _w(Vector3(-0.5, ed_y, zc - 3.1)),
+		"until": func() -> bool:
+			var fb: Object = player.floor_body
+			if not (fb is CarnivalWheel.Gondola):
+				return false
+			return (fb as Node3D).global_position.y + 0.25 - centre.y >= 0.9 * radius - 0.6})
+	r_walk(_w(Vector3(0, ed_y, ed_front + 0.9)))
+	r_mantle(_w(Vector3(0, ed_y, ed_front + 0.35)), _w(ledge_top + Vector3(0, 0, 0.2)))
+	_hop(ledge, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	deco.big_top(_w(Vector3(-30.0, -20.0, zc - 40.0)), 1.4, 0.3)
+	deco.balloons(_w(Vector3(-12.0, 4.0, zc + 3.0)), 6, 6.0)
+	return cp["c"]
+
+
+# ---- stage 17: Big Top Climb - mantle the canvas, run its wall, mallets across the ridge -----------------------------------
+
+func _stage_17() -> Vector3:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var ledge_top := Vector3(0, 3.3, -2.5 - 1.6 - 1.5)
+	var la: Dictionary = _ledge(ledge_top, Vector3(2.8, 9.0, 3.0))
+	var p1: Dictionary = _post(_ahead(la, 0.76, 0.0, 2.0, 0.4), 2.0, 2.0)
+	var w2: Dictionary = _post(_ahead(p1, 0.78, 0.0, 1.8, -0.4), 1.8, 1.8)
+	var land: Dictionary = _wall_geometry(w2)
+	var beam: Dictionary = _blk(_ahead(land, 0.76, 0.0, 10.0, -(land["c"] as Vector3).x), 1.6, 10.0, "alt", 0.6)
+	var bc: Vector3 = beam["c"]
+	var m1: Piston = _mallet(Vector3(bc.x - 1.55, bc.y + 1.35, bc.z + 2.5), 1.0, 2.6, 5.0, 0.0)
+	var m2: Piston = _mallet(Vector3(bc.x - 1.55, bc.y + 1.35, bc.z - 2.5), 1.0, 2.6, 5.0, fposmod(-0.07, 1.0))
+	var q: Dictionary = _post(_ahead(beam, 0.76, 0.0, 2.0), 2.0, 2.0)
+	var qc: Vector3 = q["c"]
+	var top2 := Vector3(qc.x, qc.y + 3.3, qc.z - 1.0 - 1.6 - 1.5)
+	var lb: Dictionary = _ledge(top2, Vector3(2.8, 9.0, 3.0))
+	var cp: Dictionary = _cp(_ahead(lb, 0.76, 0.0, 5.0, -qc.x))
+	r_walk(_w(Vector3(0, 0, -1.6)))
+	r_mantle(_w(Vector3(0, 0, -2.15)), _w(ledge_top + Vector3(0, 0, 1.0)))
+	_hop(la, p1)
+	_hop(p1, w2)
+	_wall_route(w2)
+	_hop(land, beam, Vector3(0, 0, 4.5))
+	r_walk(_w(Vector3(bc.x, bc.y, bc.z + 5.0)))
+	r_walk(_w(Vector3(bc.x, bc.y, bc.z + 3.5)))
+	_wait(func() -> bool: return _ram_clear(m1, 0.2, 1.0 + 1.5) and _ram_clear(m2, 0.7, 1.5 + 1.5), _w(Vector3(bc.x, bc.y, bc.z + 3.5)))
+	r_walk(_w(Vector3(bc.x, bc.y, bc.z - 5.2)))
+	_hop(beam, q)
+	r_walk(_w(Vector3(qc.x, qc.y, qc.z - 0.3)))
+	r_mantle(_w(Vector3(qc.x, qc.y, qc.z - 0.65)), _w(top2 + Vector3(0, 0, 1.0)))
+	_hop(lb, cp, Vector3(0, 0, 1.2))
+	r_checkpoint()
+	deco.big_top(_w(Vector3(-4.0, -30.0, -30.0)), 1.0, 0.2)
+	deco.string_lights(_w(Vector3(-6.0, 9.0, -4.0)), _w(Vector3(6.0, 9.0, -30.0)), 1.6, 0.8)
+	return cp["c"]
+
+
+# ---- stage 18: THE HUMAN CANNONBALL (set piece) - fire out of the great cannon to the big top ------------------------------
+
+func _stage_18() -> void:
+	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
+	var pad: Dictionary = _blk(Vector3(0, 0, -9.0), 7.0, 7.0, "main", 1.2)
+	var shot: float = 34.0
+	var target_c := Vector3(0, 3.0, -9.0 - shot)
+	var cannon := CarnivalCannon.new()
+	cannon.target = _w(target_c)
+	cannon.arc = 9.0
+	cannon.period = 3.0
+	cannon.phase = 0.0
+	cannon.tell = 1.6
+	cannon.mouth = 1.2
+	cannon.position = _w(Vector3(0, 0, -9.0)) + Vector3(0, 1.15, 0)
+	add_child(cannon)
+	# the landing: the ring of the big top, a wide stage
+	_blk(target_c, 14.0, 12.0, "main", 1.4)
+	kit.finish(_w(target_c + Vector3(0, 0, -2.5)), _yaw)
+	_finish_pos = _w(target_c + Vector3(0, 0, -2.5))
+	_hop(cp0, pad, Vector3(0, 0, 1.0))
+	r_walk(_w(Vector3(0, 0, -7.0)))
+	r_barrel(cannon, _w(target_c))
+	r_walk(_w(target_c + Vector3(0, 0, -2.5)))
+	# the big top rising behind the finish, with a ring of lights, spotlights and the crowd's balloons
+	deco.big_top(_w(target_c + Vector3(0, -7.0, -26.0)), 1.1, deg_to_rad(_yaw) + 0.1)
+	deco.pole(_w(target_c + Vector3(-7.5, -1.4, 4.5)), 9.0, RED)
+	deco.pole(_w(target_c + Vector3(7.5, -1.4, 4.5)), 9.0, TEAL)
+	deco.string_lights(_w(target_c + Vector3(-7.5, 7.6, 4.5)), _w(target_c + Vector3(7.5, 7.6, 4.5)), 1.6, 0.7)
+	deco.string_lights(_w(Vector3(-3.4, 5.0, -9.0)), _w(target_c + Vector3(-7.5, 7.6, 4.5)), 4.0, 0.9, true)
+	deco.string_lights(_w(Vector3(3.4, 5.0, -9.0)), _w(target_c + Vector3(7.5, 7.6, 4.5)), 4.0, 0.9, true)
+	deco.balloons(_w(target_c + Vector3(-9.0, -1.4, 0.0)), 7, 6.0)
+	deco.balloons(_w(target_c + Vector3(9.0, -1.4, -3.0)), 7, 6.0)
+	deco.searchlights(_w(target_c + Vector3(-14.0, -12.0, -10.0)), 2)
+	deco.searchlights(_w(target_c + Vector3(14.0, -12.0, -10.0)), 2)
+	_finish_light = OmniLight3D.new()
+	_finish_light.light_color = GOLD
+	_finish_light.light_energy = 2.0
+	_finish_light.omni_range = 16.0
+	_finish_light.position = _finish_pos + Vector3(0, 4.0, 0)
+	add_child(_finish_light)
 
 
 # ---- environment ----------------------------------------------------------------------------------

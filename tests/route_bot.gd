@@ -103,6 +103,8 @@ func _physics_process(dt: float) -> void:
 			stuck = true
 		return
 	var step: Dictionary = level.route[step_index]
+	if OS.get_environment("BOT_TRACE") == "2" and Engine.get_physics_frames() % 6 == 0:  # PAUSE-HOOK
+		print("POS %d %s t=%.2f p=%s v=%s g=%s" % [step_index, str(step["kind"]), Game.course_time, str(player.global_position.snapped(Vector3.ONE * 0.1)), str(player.velocity.snapped(Vector3.ONE * 0.1)), str(player.grounded)])  # PAUSE-HOOK
 	var first_tick: bool = _step_time == 0.0
 	var index_before: int = step_index
 	_step_time += dt
