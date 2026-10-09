@@ -335,6 +335,8 @@ func _build() -> void:
 		_finish_pos = _w(Vector3(0, 0, -9.5))
 		_hop(cp0, fin)
 		r_walk(_w(Vector3(0, 0, -9.8)))
+	_dress_machines()
+	_surroundings()
 	_arcane_materials()
 	if DEV_START > 1:
 		set_spawn(origins[DEV_START - 1] + Vector3(0, 0.1, 0), yaws[DEV_START - 1])
@@ -624,7 +626,7 @@ func _stage_9() -> Vector3:
 	var front: float = wc.z - 10.0
 	var ra: Piston = _lectern(wc, back - 5.0, 1.0, 0.0)
 	var rb: Piston = _lectern(wc, back - 9.0, -1.0, fposmod(-0.55 / 6.5, 1.0))
-	var gate: ArcaneHourglass = _gate(Vector3(wc.x, wc.y, back - 14.0), 8.0, 0.25, 4.4)
+	var gate: ArcaneHourglass = _gate(Vector3(wc.x, wc.y, back - 14.0), 6.5, 0.0, 4.4)
 	var ledge_top := Vector3(wc.x, wc.y + 3.3, front - 1.6 - 0.7)
 	var ld: Dictionary = _ledge(ledge_top, Vector3(2.8, 9.0, 1.4))
 	var cp: Dictionary = _cp(_ahead(ld, 0.85, 0.0, 5.0, -wc.x))
@@ -657,7 +659,7 @@ func _stage_10() -> Vector3:
 	var bc: Vector3 = beam["c"]
 	var bfront: float = bc.z - 6.0
 	var lz: float = bc.z + 1.5
-	var gate: LaserGate = kit.laser(_w(Vector3(bc.x, bc.y + 1.2, lz)), Vector3(3.2, 2.4, 0.2), 5.0, 0.3, 0.0, _yaw)
+	var gate: LaserGate = kit.laser(_w(Vector3(bc.x, bc.y + 1.2, lz)), Vector3(3.2, 2.4, 0.2), 8.0, 0.2, 0.5, _yaw)
 	var ink_gap: float = 4.0
 	var mz: float = bfront - ink_gap - 1.5
 	var merge: Dictionary = _blk(Vector3(0, 0, mz), 11.0, 3.0)
@@ -1006,6 +1008,7 @@ func _stage_17() -> void:
 	route.append({"kind": "x_jump", "to_node": _orrery[2], "to_locals": locals[2], "reach": 5.4, "lead": 0.55})
 	route.append({"kind": "x_jump", "to": _w(podium_c)})
 	r_walk(_w(podium_c + Vector3(0, 0, -0.2)))
+	_orrery_dress(tc, radii, pod_y)
 	cp0.clear()
 
 
@@ -1063,3 +1066,208 @@ func _arcane_materials() -> void:
 		for key: String in ["top_color", "side_color", "trim_color", "half_size", "is_round", "trim_glow"]:
 			r.set_shader_parameter(key, sm.get_shader_parameter(key))
 		m.material_override = r
+
+
+# ---- dressing: machines, floors, far scenery, set piece -------------------------------------------------
+
+## Reskin every kit machine and classic hazard the course uses (found by type, after the build).
+func _dress_machines() -> void:
+	for n: Node in find_children("*", "GapWall", true, false):
+		deco.dress_gap_wall(n as GapWall)
+	for n: Node in find_children("*", "FallingBlock", true, false):
+		deco.dress_falling_block(n as FallingBlock)
+	for n: Node in find_children("*", "LaserGate", true, false):
+		deco.dress_laser(n as LaserGate)
+	for n: Node in find_children("*", "Crusher", true, false):
+		deco.dress_crusher(n as Crusher)
+	for n: Node in find_children("*", "Sweeper", true, false):
+		deco.dress_sweeper(n as Sweeper)
+	for n: Node in find_children("*", "Piston", true, false):
+		var p: Piston = n as Piston
+		deco.dress_ram(p.position + Vector3(0, p.size.y * 0.5, 0), p.size, p.stroke, p.rotation_degrees.y)
+	for n: Node in find_children("*", "WarpPortal", true, false):
+		var w: WarpPortal = n as WarpPortal
+		deco.dress_portal(w.position, w.rotation_degrees.y, VIOLET)
+		deco.dress_portal(w.exit_pos, w.exit_yaw_deg, GOLD)
+
+
+## Every point the route passes (takeoffs, landings, walk targets) and every floor: the far
+## scenery keeps clear of them.
+func _route_points() -> Array[Vector3]:
+	var pts: Array[Vector3] = []
+	for st: Dictionary in route:
+		for key: String in ["from", "to", "entry", "exit", "top", "jump_from", "point"]:
+			if st.has(key) and st[key] is Vector3 and (st[key] as Vector3) != Vector3.ZERO:
+				pts.append(st[key])
+	for p: Vector3 in _cp_world:
+		pts.append(p)
+	for f: Dictionary in _floors:
+		pts.append(f["top"])
+	return pts
+
+
+func _clear_of(p: Vector3, pts: Array[Vector3], dist: float) -> bool:
+	for q: Vector3 in pts:
+		if Vector2(p.x - q.x, p.z - q.z).length() < dist and absf(p.y - q.y) < dist + 30.0:
+			return false
+	return true
+
+
+## True when nothing walkable sits inside the box (world centre, half extents).
+func _box_free(c: Vector3, h: Vector3, skip: Dictionary = {}) -> bool:
+	for f: Dictionary in _floors:
+		if f == skip:
+			continue
+		var t: Vector3 = f["top"]
+		var s: Vector3 = f["size"]
+		if absf(t.x - c.x) < h.x + s.x * 0.5 and absf(t.z - c.z) < h.z + s.z * 0.5 and t.y > c.y - h.y - 0.5 and t.y - float(f["drop"]) < c.y + h.y:
+			return false
+	return true
+
+
+func _surroundings() -> void:
+	var rng: RandomNumberGenerator = kit.rng
+	var pts: Array[Vector3] = _route_points()
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for p: Vector3 in pts:
+		lo = lo.min(p)
+		hi = hi.max(p)
+	var mid: Vector3 = (lo + hi) * 0.5
+	var span: Vector3 = hi - lo
+	# under every floor: a slim broken column under a small one, a stepped keel under a big one -
+	# never where it would poke through anything walkable below
+	for f: Dictionary in _floors:
+		var t: Vector3 = f["top"]
+		var s: Vector3 = f["size"]
+		var under: Vector3 = t - Vector3(0, float(f["drop"]), 0)
+		if maxf(s.x, s.z) <= 2.7:
+			var length: float = rng.randf_range(2.5, 5.0)
+			if _box_free(under - Vector3(0, length * 0.5 + 1.5, 0), Vector3(0.5, length * 0.5 + 1.5, 0.5), f):
+				deco.column(under, minf(s.x, s.z) * 0.18, length)
+		elif minf(s.x, s.z) >= 2.9:
+			var depth: float = clampf(minf(s.x, s.z) * 0.6, 1.5, 5.0)
+			if _box_free(under - Vector3(0, depth * 0.5, 0), Vector3(s.x * 0.5, depth * 0.5, s.z * 0.5), f):
+				deco.keel(under, s.x, s.z, depth)
+	# candles at every checkpoint: a candelabra at two corners of the slab
+	for i: int in _cp_world.size():
+		var c: Vector3 = _cp_world[i]
+		deco.candelabra(c + Vector3(2.1, 0, 2.1), 1.5, 3, i % 4 == 0)
+		deco.candelabra(c + Vector3(-2.1, 0, 2.1), 1.5, 3, false)
+		if i % 3 == 0:
+			deco.globe(c + Vector3(-2.0, 0, -2.0), 0.55)
+		else:
+			deco.book_pile(c + Vector3(2.0, 0, -2.0), 4)
+	# far scenery round the course: towering bookcases, arches, floating stairs, chandeliers, hovering
+	# books, quills in inkwells, armillary spheres - kept well clear of the route
+	var placed: int = 0
+	var tries: int = 0
+	while placed < 54 and tries < 1100:
+		tries += 1
+		var p := Vector3(rng.randf_range(lo.x - 110.0, hi.x + 110.0), rng.randf_range(lo.y - 30.0, hi.y + 45.0), rng.randf_range(lo.z - 110.0, hi.z + 110.0))
+		if not _clear_of(p, pts, 30.0):
+			continue
+		var roll: float = rng.randf()
+		var yaw: float = rng.randf() * TAU
+		if roll < 0.30:
+			var h: float = rng.randf_range(24.0, 70.0)
+			deco.shelf(p - Vector3(0, h * 0.5, 0), ArcaneDecor.turn(yaw), rng.randf_range(8.0, 16.0), h, rng.randf_range(3.0, 5.0), float(rng.randi() % 7))
+		elif roll < 0.42:
+			deco.arch(p, ArcaneDecor.turn(yaw, 0.0, rng.randf_range(-0.3, 0.3)), rng.randf_range(8.0, 14.0), rng.randf_range(12.0, 20.0), GOLD if rng.randf() < 0.6 else VIOLET)
+		elif roll < 0.54:
+			deco.stairs(p, ArcaneDecor.turn(yaw, rng.randf_range(-0.3, 0.3), rng.randf_range(-0.3, 0.3)), rng.randi_range(10, 18), rng.randf_range(3.0, 5.0), 0.8, 1.2)
+		elif roll < 0.66:
+			deco.chandelier(p + Vector3(0, 12.0, 0), rng.randf_range(3.0, 5.5), 5.0)
+		elif roll < 0.78:
+			var fb: Node3D = deco.floating_book(p, ArcaneDecor.turn(yaw, rng.randf_range(-0.4, 0.4), rng.randf_range(-0.3, 0.3)), rng.randf_range(2.5, 5.0))
+			fb.scale = Vector3.ONE * rng.randf_range(1.0, 1.8)
+		elif roll < 0.88:
+			deco.quill(p, ArcaneDecor.turn(yaw, 0.0, rng.randf_range(-0.2, 0.2)), rng.randf_range(1.5, 3.0))
+		elif roll < 0.94:
+			deco.armillary(p, rng.randf_range(4.0, 9.0))
+		else:
+			var slab := Look.box(Vector3(16, 1.2, 16), Look.flat(Color(0.3, 0.17, 0.1), 0.6), p)
+			add_child(slab)
+			deco.book_pile(p + Vector3(rng.randf_range(-5, 5), 0.6, rng.randf_range(-5, 5)), 6)
+			deco.candelabra(p + Vector3(rng.randf_range(-5, 5), 0.6, rng.randf_range(-5, 5)), 2.4, 5, false)
+		placed += 1
+	# ambient life along the route: pages falling through the candle smoke, gold motes rising
+	for i: int in _cp_world.size():
+		var here: Vector3 = _cp_world[i]
+		var prev: Vector3 = _cp_world[i - 1] if i > 0 else Vector3.ZERO
+		var c3: Vector3 = (here + prev) * 0.5 + Vector3(0, 5.0, 0)
+		var ext := Vector3(absf(here.x - prev.x) * 0.5 + 12.0, 9.0, absf(here.z - prev.z) * 0.5 + 12.0)
+		ArcaneFx.pages(self, c3 + Vector3(0, 4.0, 0), ext, 60)
+		ArcaneFx.motes(self, c3 - Vector3(0, 3.0, 0), ext * Vector3(0.8, 0.9, 0.8), 45)
+
+
+## The orrery tower's dressing: orbit rings under the pads (they turn with them), planets floating
+## over the rings, the great armillary above the podium and the open grimoire on its lectern.
+func _orrery_dress(tc: Vector3, radii: Array[float], pod_y: float) -> void:
+	var cols: Array[Color] = [Color(0.9, 0.5, 0.3), Color(0.4, 0.6, 1.0), Color(0.9, 0.8, 0.4)]
+	for i: int in _orrery.size():
+		var ring: RotatingPlatform = _orrery[i]
+		var tm := TorusMesh.new()
+		tm.inner_radius = radii[i] - 0.05
+		tm.outer_radius = radii[i] + 0.05
+		tm.rings = 96
+		tm.ring_segments = 6
+		var t := Look.mesh_node(tm, Look.flat(GOLD, 0.3, 0.8, 0.6), Vector3(0, -0.55, 0))
+		t.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		ring.add_child(t)
+		# a little planet riding each ring between the pads
+		var a: float = TAU / 6.0
+		var pl: Node3D = deco.planet(Vector3.ZERO, 0.55 + 0.1 * float(i), cols[i], i == 1)
+		root_remove(pl)
+		ring.add_child(pl)
+		pl.position = Vector3(radii[i] * cos(a), 0.9, -radii[i] * sin(a))
+	var top: Vector3 = _w(Vector3(tc.x, pod_y, tc.z))
+	deco.armillary(top + Vector3(0, 6.5, 0), 3.4)
+	deco.lectern(top + Vector3(0, 0, 0.9), ArcaneDecor.turn(deg_to_rad(_yaw)), 1.3)
+	for k: int in 4:
+		var a2: float = TAU * float(k) / 4.0 + 0.4
+		deco.candelabra(top + Vector3(cos(a2) * 1.55, 0.0, sin(a2) * 1.55), 1.3, 3, k == 0)
+	ArcaneFx.halo(self, top + Vector3(0, 0.3, 0), 1.7, 36, GOLD)
+	ArcaneFx.motes(self, top + Vector3(0, 4.0, 0), Vector3(3.0, 4.0, 3.0), 50)
+	_finish_light = OmniLight3D.new()
+	_finish_light.light_color = Color(1.0, 0.78, 0.45)
+	_finish_light.light_energy = 2.0
+	_finish_light.omni_range = 16.0
+	_finish_light.position = top + Vector3(0, 3.0, 0)
+	add_child(_finish_light)
+
+
+func root_remove(n: Node) -> void:
+	if n.get_parent() != null:
+		n.get_parent().remove_child(n)
+
+
+# ---- live effects -----------------------------------------------------------------------------------
+
+## The grimoire blazes: gold light and a fountain of loose pages out of the open book.
+func _finish_sequence() -> void:
+	var cols: Array[Color] = [GOLD, VIOLET, PARCHMENT, GOLD, VIOLET]
+	for i: int in cols.size():
+		var fw: GPUParticles3D = ArcaneFx.finale(cols[i], 80)
+		fw.position = _finish_pos + Vector3(-6.0 + 3.0 * float(i), 5.0 + float(i % 2) * 3.0, -1.0)
+		add_child(fw)
+		fw.restart()
+		fw.emitting = true
+	var pf: GPUParticles3D = ArcaneFx.page_fountain(70)
+	pf.position = _finish_pos + Vector3(0, 1.4, 0.9)
+	add_child(pf)
+	pf.restart()
+	pf.emitting = true
+	var fx: Array[GPUParticles3D] = ArcaneFx.cp_burst(GOLD)
+	for p2: GPUParticles3D in fx:
+		p2.position = _finish_pos + Vector3(0, 0.6, 0)
+		add_child(p2)
+		p2.restart()
+		p2.emitting = true
+	# SOUND: arcane_finish - the grimoire opens: a rising choir, a celesta run and a rush of pages
+	WorldAudio.at(self, "arcane_finish", _finish_pos + Vector3(0, 3.0, 0), 1.0, 120.0)
+	if _finish_light != null:
+		_finish_light.light_energy = 9.0
+		var tw: Tween = create_tween()
+		tw.tween_property(_finish_light, "light_energy", 2.0, 1.6)
+	await get_tree().create_timer(0.9).timeout
