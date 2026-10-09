@@ -36,6 +36,8 @@ static var local_count: int = 3
 static var current: CpuField = null
 ## Tests set this to make a round's CPU randomness repeatable (-1 = random).
 static var test_seed: int = -1
+## Tests freeze the CPUs' own running (they stay where they are put); hazards and items still work.
+static var test_hold: bool = false
 static var _order: Array[String] = []
 static var _ident: Dictionary = {}
 
@@ -233,8 +235,9 @@ func _physics_process(dt: float) -> void:
 	if _stand_t > 0.5:
 		_stand_t = 0.0
 		_standing = Net.standings()
-	for r: CpuRacer in racers.values():
-		r.tick(dt, self)
+	if not test_hold:
+		for r: CpuRacer in racers.values():
+			r.tick(dt, self)
 	_tick_hazards()
 	_pose_acc += dt
 	if _pose_acc >= Net.POSE_INTERVAL - 0.002:

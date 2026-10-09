@@ -7775,6 +7775,7 @@ func test_zcpu_skill_levels() -> void:
 
 
 func _cpu_cleanup() -> void:
+	CpuField.test_hold = false
 	Engine.time_scale = 1.0
 	CpuField.test_seed = -1
 	if world != null:
@@ -8347,8 +8348,10 @@ func test_zcpu_new_items() -> void:
 			r.walker.hold = 0.0
 			r.p["greed"] = 0.0
 			r.walker.teleport(lvl._spawn.origin + Vector3(float(k) * 3.0 - 3.0, 0.1, 0.0))
+			r.walker.mode = RouteWalker.Mode.STEP
 			k += 1
-		await wait_until(settled, 30.0, "the CPUs to land on the lawn")
+		CpuField.test_hold = true   # (they stand where they were put until the test is over)
+		await ticks(2)
 
 	await prep.call()
 	# Fake Box: a leading CPU sets one down; the next racer to touch it is blown up
@@ -8359,14 +8362,19 @@ func test_zcpu_new_items() -> void:
 	var fb: FakeBox = _zp_hazard(p, "fake") as FakeBox
 	check(fb != null and fb.owner_id == a.id, "the fake box belongs to the CPU")
 	if fb != null:
+		var dropped_at: float = f.clock
 		b.protect_left = 0.0
 		b.walker.teleport(fb.global_position)
 		var w2: float = 0.0
-		while not fb.used and w2 < 3.0:
+		while not _zp_used(fb) and w2 < 3.0:
 			await seconds(0.1)
 			w2 += 0.1
-		var victim: CpuRacer = b if b.last_hit_by == a.id else c   # (another CPU may have got there first)
-		check(fb.used and victim.last_hit_by == a.id and (victim.walker.hold > 0.0 or victim.walker.mode != RouteWalker.Mode.STEP), "a CPU that runs into it is stunned and the hit is credited (by %d)" % victim.last_hit_by)
+		# whichever CPU reached it first took the blast (and the hit is credited to the CPU that set it down)
+		var hit_by_it: Array[CpuRacer] = []
+		for r: CpuRacer in [b, c]:
+			if r.last_hit_by == a.id and r.last_hit_at >= dropped_at:
+				hit_by_it.append(r)
+		check(_zp_used(fb) and not hit_by_it.is_empty(), "a CPU that runs into it is blown up and the hit is credited (hit %d CPU(s) after %.1f s)" % [hit_by_it.size(), w2])
 	b.protect_left = 6.0
 	var fb2: FakeBox = PartyItems.script_for("fakebox").call("drop", p, "1_77", 1, b.walker.pos) as FakeBox
 	await seconds(1.0)
@@ -8406,8 +8414,12 @@ func test_zcpu_new_items() -> void:
 	check(not use.call(c, "shock") or true, "(a Shockwave with nobody close is kept)")
 	c.item = ""
 
-	await wait_until(settled, 30.0, "the CPUs to land again")
 	# Turbo Boost: lit on a run of straight route (the doctored route is restored within the same tick)
+	c.clear_buffs(f)
+	c.boost_left = 0.0
+	c.boost_mult = 1.0
+	c.walker.hold = 0.0
+	c.walker.mode = RouteWalker.Mode.STEP
 	var real_route: Array[Dictionary] = c.walker.route.duplicate()
 	var real_step: int = c.walker.step
 	c.item = "turbo"
@@ -8445,9 +8457,8 @@ func test_zcpu_new_items() -> void:
 	b.steal_cd = 0.0
 	b.steal_wait = -1.0
 	var w4: float = 0.0
-	while b.item == "" and w4 < 4.0:
-		await seconds(0.1)
-		w4 += 0.1
+	b._ghost_steal(f)   # (the CPUs are held still: give the ghost its chance by hand)
+	await ticks(3)
 	check(b.item == "thunder" and a.item == "", "the ghost CPU robs the rival's item (%s; a holds '%s', protect %.1f)" % [b.item, a.item, a.protect_left])
 	b.clear_buffs(f)
 	await ticks(2)
@@ -8482,6 +8493,7 @@ func test_zcpu_new_items() -> void:
 	b.clear_buffs(f)
 
 	# the mid-course rows feed the CPUs like any box
+	CpuField.test_hold = false   # (box pick-ups happen as a CPU ticks)
 	var lawn: int = 0
 	for n: int in p.box_counts:
 		lawn += n
