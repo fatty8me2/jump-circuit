@@ -249,6 +249,13 @@ for _n, _d in (("dino_checkpoint", 1.2), ("dino_finish", 3.0), ("dino_tell", 0.6
 for _n, _d in (("dino_geyser_rumble", 2.0), ("dino_geyser_roar", 1.5), ("dino_stampede_thunder", 2.0),
                ("dino_volcano_rumble", 2.4)):
     _reg(_n, _d, True)
+# Carnival Chaos (gen_carnival): the mechanics' clips (checkpoint, finish, cannon, coaster, carousel, wheel, mole)
+for _n, _d in (("carnival_checkpoint", 1.6), ("carnival_finish", 3.0), ("carnival_cannon_fanfare", 1.8),
+               ("carnival_coaster_bell", 0.9), ("carnival_mole_rumble", 1.0), ("carnival_mole_whistle", 1.0),
+               ("carnival_mole_pop", 0.6)):
+    _reg(_n, _d)
+for _n, _d in (("carnival_coaster_rumble", 2.0), ("carnival_carousel_loop", 3.6), ("carnival_wheel_creak", 2.0)):
+    _reg(_n, _d, True)
 
 
 # ---------------------------------------------------------------------------
@@ -6909,6 +6916,135 @@ def gen_dino():
     save_loop(name, unit(deep) + 0.25 * unit(grit))
 
 
+def carnival_note(r, f, secs):
+    """A calliope pipe: a steam whistle's buzzy reed through two formants, with a soft attack and release."""
+    t = tv(secs)
+    v = voice(f, len(t), 14, 1.0, 0.003, 5.5, r)
+    v = unit(svf(v, 1400.0, 1.8) + 0.5 * svf(v, 2800.0, 2.5))
+    return taper(v * np.minimum(t / 0.02, 1.0) * np.clip((secs - t) / 0.1, 0.0, 1.0), 0.01)
+
+
+def gen_carnival():
+    # the checkpoint: a brassy "ta-da" stinger on a major chord, and a bell's ding over the top
+    name = "carnival_checkpoint"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = np.zeros(n)
+    place(x, 0.0, brass(r, 0.3, midi(67), midi(72), attack=0.01, release=0.05), 0.5)
+    for m, g in ((72, 1.0), (76, 0.6), (79, 0.5)):
+        place(x, 0.22, brass(r, 1.2, midi(m), midi(m), attack=0.01, release=0.4), 0.45 * g)
+    place(x, 0.22, taper(modes(tv(1.2), bell_modes(midi(88), 0.8), r, 0.003, hard=7000.0), 0.02), 0.4)
+    save(name, x, fin=0.002, fout=0.15)
+
+    # the finish: a brass band's flourish up a triad, a held chord, and a run back up; rockets burst over it
+    name = "carnival_finish"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    for t0, m in ((0.0, 60), (0.2, 67), (0.4, 72)):
+        place(x, t0, brass(r, 0.2, midi(m), midi(m), attack=0.01, release=0.05), 0.45)
+    for m, g in ((72, 1.0), (76, 0.7), (79, 0.6), (84, 0.4)):
+        place(x, 0.7, brass(r, 1.3, midi(m), midi(m) * 1.004, attack=0.02, release=0.3), 0.4 * g)
+    for k, m in enumerate((79, 81, 84, 86, 84, 88, 91)):
+        place(x, 2.0 + 0.09 * k, brass(r, 0.6, midi(m), midi(m), attack=0.01, release=0.12), 0.35)
+    for t_launch, rise, glit in ((0.55, 0.5, 0.0), (1.3, 0.55, 0.3), (1.85, 0.45, 0.0), (2.4, 0.5, 0.3)):
+        x += firework_shell(r, dur(name), t_launch, rise, stars=180, glitter=glit)
+    save(name, x, fin=0.002, fout=0.2)
+
+    # the cannon's "ta-da": a quick rising "ta" and a held "da" with a chord, and a paper streamer popping out
+    name = "carnival_cannon_fanfare"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = np.zeros(n)
+    place(x, 0.0, brass(r, 0.26, midi(67), midi(72), attack=0.01, release=0.04), 0.5)
+    for m, g in ((72, 1.0), (76, 0.55), (79, 0.45)):
+        place(x, 0.28, brass(r, 1.4, midi(m), midi(m), attack=0.012, release=0.5), 0.4 * g)
+    pop = taper(thud(tv(0.12), 260.0, 90.0, 0.05, 0.03, harm=(0.3,)) + 0.9 * click(r, 0.12, 2000, 9000, 0.002), 0.01)
+    place(x, 0.28, pop, 0.9)
+    streamer = noise(r, n, 2500, 9000) * np.exp(-np.maximum(t - 0.3, 0.0) / 0.25) * (t > 0.3)
+    save(name, x + 0.35 * streamer, fin=0.002, fout=0.15)
+
+    # the coaster's station bell: a bronze clanger struck twice, the clapper bouncing back once
+    name = "carnival_coaster_bell"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = np.zeros(n)
+    for t0, g in ((0.0, 1.0), (0.09, 0.45)):
+        ts = tv(dur(name) - t0)
+        b = modes(ts, bell_modes(midi(84), 0.7), r, 0.002, hard=8000.0)
+        b = b + 0.5 * click(r, len(ts) / SR, 2000, 9000, 0.002)
+        place(x, t0, taper(b, 0.02), g)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # the mole's drumroll: a hollow drum rolled under the board, the taps bunching up and swelling
+    name = "carnival_mole_rumble"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    roll = snare_roll(r, dur(name), 34, 1.6, 160.0, 1100.0)
+    shell = noise(r, n, 90, 400) * np.minimum(t / 0.9, 1.0) ** 2
+    save(name, roll + 0.4 * shell, fin=0.002, fout=0.05)
+
+    # the stone is about to drop: a slide whistle falling away from a high note, with a little wobble
+    name = "carnival_mole_whistle"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    f = 1800.0 * (260.0 / 1800.0) ** np.clip(t / 0.95, 0.0, 1.0) * (1.0 + 0.012 * np.sin(TAU * 7.0 * t))
+    x = tone(f) + 0.12 * tone(2.0 * f)
+    x = unit(x) * np.minimum(t / 0.012, 1.0) * np.clip((dur(name) - t) / 0.15, 0.0, 1.0)
+    save(name, x, fin=0.002, fout=0.05)
+
+    # the board pops up: a cork's pop, and a spring's boing that jumps up in pitch then settles
+    name = "carnival_mole_pop"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    f = 200.0 * 2.6 ** np.minimum(t / 0.1, 1.0) * 0.5 ** np.clip((t - 0.1) / 0.4, 0.0, 1.0)
+    boing = tone(f) * env(t, 0.002, 0.2) + 0.25 * tone(2.0 * f) * env(t, 0.002, 0.05)
+    pop = click(r, dur(name), 600, 6000, 0.002) + 0.5 * thud(t, 240.0, 120.0, 0.03, 0.03, harm=(0.2,))
+    save(name, unit(boing) * 0.8 + pop, fin=0.0008, fout=0.1)
+
+    # the carnival rail (loop): a coaster's wheels rolling on the steel, rail joints clacking every quarter second
+    name = "carnival_coaster_rumble"
+    r = rng(name)
+    n = ns(dur(name))
+    rumble = cnoise(r, n, 35, 220) * (0.7 + 0.3 * crand(r, n, 3))
+    clack = np.zeros(n)
+    for k in range(8):
+        cplace(clack, (k + 0.5) * dur(name) / 8.0 + r.uniform(-0.004, 0.004),
+               taper(click(r, 0.03, 1200, 4500, 0.004)), r.uniform(0.5, 0.8))
+    save_loop(name, unit(rumble) + 0.5 * unit(clack))
+
+    # the carousel (loop, seamless): a calliope playing a four-note tune round twice, over a motor's hum and a steam chuff
+    name = "carnival_carousel_loop"
+    r = rng(name)
+    n = ns(dur(name))
+    beat = dur(name) / 8.0
+    x = np.zeros(n)
+    for b, m in enumerate((72, 76, 79, 84, 81, 79, 76, 72)):
+        cplace(x, b * beat, carnival_note(r, midi(m), beat * 0.92), 0.8)
+        cplace(x, b * beat, carnival_note(r, midi(m - 5), beat * 0.92), 0.3)
+    motor = hum_stack(n, cyc(midi(38), n), 10, 1.0, 1.3, r) * (0.85 + 0.15 * clfo(n, 8))
+    chuff = cnoise(r, n, 200, 1500) * (0.5 + 0.5 * clfo(n, 8)) ** 2
+    save_loop(name, unit(x) + 0.5 * motor + 0.2 * chuff)
+
+    # the wheel's iron creak (loop): a slow stick-slip groan through steel, a faint calliope far off
+    name = "carnival_wheel_creak"
+    r = rng(name)
+    n = ns(dur(name))
+    creak_sig = circ_creak(r, n, lambda u: 6.0 + 5.0 * np.sin(TAU * u), [
+        (140.0, 1.0, 0.04), (140.0 * 2.3, 0.7, 0.03), (140.0 * 4.7, 0.45, 0.02), (140.0 * 8.8, 0.25, 0.012)])
+    far = np.zeros(n)
+    cplace(far, 0.5, carnival_note(r, midi(72), 0.8), 0.3)
+    cplace(far, 1.3, carnival_note(r, midi(76), 0.6), 0.25)
+    rub = cnoise(r, n, 300, 1200) * (0.5 + 0.5 * clfo(n, 4))
+    save_loop(name, unit(creak_sig) + 0.6 * unit(far) + 0.2 * rub)
+
+
 def verify():
     ok = True
     total = 0
@@ -6967,7 +7103,7 @@ GENERATORS = (gen_steps, gen_wall, gen_movement_loops, gen_lasers, gen_crusher_p
               gen_foundry, gen_reef, gen_orbital, gen_clockwork, gen_balance, gen_gardens, gen_ascent, gen_xeno,
               gen_volcano, gen_glacier, gen_desert, gen_manor, gen_armada, gen_candy, gen_carrier,
               gen_sakura, gen_jungle, gen_frontier, gen_neon, gen_doom, gen_abyss, gen_tempest, gen_void, gen_kit, gen_emotes,
-              gen_toybox, gen_olympus, gen_arcade, gen_siege, gen_fungal, gen_dino)
+              gen_toybox, gen_olympus, gen_arcade, gen_siege, gen_fungal, gen_dino, gen_carnival)
 
 
 def main():

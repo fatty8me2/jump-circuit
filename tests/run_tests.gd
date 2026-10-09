@@ -3418,7 +3418,10 @@ const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_l
 	# Dino Valley (gen_dino)
 	"dino_checkpoint", "dino_finish", "dino_tell", "dino_trike_paw", "dino_foot_rumble", "dino_geyser_gurgle",
 	"dino_geyser_erupt", "dino_tar_glug", "dino_stampede_call", "dino_rex_roar", "dino_rex_step", "dino_rex_snarl",
-	"dino_rex_chomp"]
+	"dino_rex_chomp",
+	# Carnival Chaos (gen_carnival)
+	"carnival_checkpoint", "carnival_finish", "carnival_cannon_fanfare", "carnival_coaster_bell",
+	"carnival_mole_rumble", "carnival_mole_whistle", "carnival_mole_pop"]
 const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
 	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
 	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz",
@@ -3438,7 +3441,9 @@ const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "
 	# Castle Siege and Mushroom Hollow (gen_siege / gen_fungal)
 	"siege_oil_loop", "fungal_puff_loop", "fungal_snail_squelch",
 	# Dino Valley (gen_dino)
-	"dino_geyser_rumble", "dino_geyser_roar", "dino_stampede_thunder", "dino_volcano_rumble"]
+	"dino_geyser_rumble", "dino_geyser_roar", "dino_stampede_thunder", "dino_volcano_rumble",
+	# Carnival Chaos (gen_carnival)
+	"carnival_coaster_rumble", "carnival_carousel_loop", "carnival_wheel_creak"]
 
 
 func test_z_world_sounds() -> void:
