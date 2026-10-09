@@ -206,6 +206,28 @@ for _n, _d in (("kit_barrel_load", 0.9), ("kit_barrel_fuse", 0.08), ("kit_barrel
 for _n, _d in (("kit_zipline_whirr", 1.0), ("kit_log_roll", 1.5)):
     _reg(_n, _d, True)
 
+# the Big Update's new worlds: Toybox Tumble, Olympus Rising, Pixel Panic (gen_toybox / gen_olympus / gen_arcade)
+for _n, _d in (("toybox_checkpoint", 1.2), ("toybox_finish", 2.8), ("toybox_car_wind", 1.0), ("toybox_car_stop", 0.5),
+               ("toybox_jack_tune", 1.1), ("toybox_jack_pop", 0.6), ("toybox_tell_tick", 0.12),
+               ("toybox_tower_creak", 1.2), ("toybox_tower_fall", 1.2), ("toybox_tower_thud", 0.8),
+               ("toybox_tower_lift", 1.0), ("toybox_tower_chime", 1.0),
+               ("toybox_note_1", 0.9), ("toybox_note_2", 0.9), ("toybox_note_3", 0.9), ("toybox_note_4", 0.9),
+               ("toybox_note_5", 0.9),
+               ("olympus_checkpoint", 1.6), ("olympus_finish", 3.0), ("olympus_chariot_launch", 1.0),
+               ("olympus_column_crack", 1.2), ("olympus_column_fall", 1.6), ("olympus_column_reform", 1.2),
+               ("olympus_mirror_charge", 1.0), ("olympus_mirror_fire", 1.0), ("olympus_spirit_call", 1.1),
+               ("olympus_spirit_gust", 1.5), ("olympus_tell_tick", 0.5),
+               ("arcade_checkpoint", 1.2), ("arcade_finish", 2.4), ("arcade_boss_defeat", 1.4),
+               ("arcade_block_tick", 0.1), ("arcade_block_land", 0.2), ("arcade_block_clear_warn", 1.0),
+               ("arcade_block_clear", 0.6), ("arcade_block_drop", 0.5), ("arcade_paddle_ping", 0.25),
+               ("arcade_ball_ping", 0.2), ("arcade_glitch_warn", 1.0), ("arcade_glitch_hop", 0.4),
+               ("arcade_scroll_start", 1.0), ("arcade_boss_charge", 1.1), ("arcade_boss_blast", 0.8)):
+    _reg(_n, _d)
+for _n, _d in (("toybox_car_whirr", 1.0), ("olympus_chariot_wind", 2.0), ("olympus_mirror_hum", 1.0),
+               ("olympus_wind_loop", 2.0), ("arcade_chomper_loop", 1.0), ("arcade_ball_hum", 1.0),
+               ("arcade_scroll_rumble", 1.0)):
+    _reg(_n, _d, True)
+
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -5929,6 +5951,453 @@ def gen_emotes():
 # ===========================================================================
 # verification
 # ===========================================================================
+# ===========================================================================
+# the Big Update's three new worlds' mechanics: Toybox Tumble (gen_toybox), Olympus Rising (gen_olympus)
+# and Pixel Panic (gen_arcade). Each clip is called by name from mechanics/<world>_*.gd.
+# ===========================================================================
+def xylo(r, f, secs):
+    """A wooden xylophone bar struck with a hard mallet: a free bar's modes over a dry tick."""
+    t = tv(secs)
+    x = modes(t, bar_modes(f, 0.45, (1.0, 0.3, 0.12, 0.05, 0.02), 1.0), r, 0.002, hard=6000)
+    return taper(x + 0.25 * click(r, secs, 2000, 8000, 0.002), 0.01)
+
+
+def ratchet(r, secs, count, pw, lo, hi):
+    """A toy ratchet: a pawl clicking over a toothed wheel. pw > 1 bunches the clicks up at the end
+    (the key winding faster), pw < 1 spaces them out (the lift slowing as it tops out)."""
+    x = np.zeros(ns(secs))
+    for k in range(count):
+        t0 = secs * 0.96 * (1.0 - (1.0 - k / count) ** pw)
+        place(x, t0, click(r, 0.03, lo, hi, 0.0015), r.uniform(0.6, 1.0))
+    return x
+
+
+def stone_knock(r, secs, f0):
+    """A block of stone landing on stone: a short low thud over a dry grit tick."""
+    t = tv(secs)
+    return taper(thud(t, f0, f0 * 0.45, 0.04, 0.05, harm=(0.4, 0.15)) + 0.4 * click(r, secs, 800, 4000, 0.004), 0.01)
+
+
+def lyre(f, secs, tau=0.9):
+    """A plucked golden lyre string: a bright pluck that dulls fast over a warm fundamental."""
+    t = tv(secs)
+    x = tone(f, t) + 0.35 * tone(f * 2.0, t) * np.exp(-t / 0.25) + 0.12 * tone(f * 3.0, t) * np.exp(-t / 0.1)
+    return taper(x * env(t, 0.003, tau), 0.02)
+
+
+def chip(f, n, wave="square"):
+    """A chiptune voice following pitch f (scalar or per-sample): a band-limited square (odd harmonics,
+    1/k) or triangle (odd harmonics, 1/k^2, alternating sign). Band-limited, so it never aliases."""
+    f = np.broadcast_to(np.asarray(f, dtype=float), (n,))
+    ph = TAU * np.cumsum(f) / SR
+    top = float(np.max(f))
+    x = np.zeros(n)
+    for k in range(1, 200, 2):
+        if top * k > SR * 0.42:
+            break
+        if wave == "tri":
+            x += (-1.0) ** ((k - 1) // 2) * np.sin(k * ph) / (k * k)
+        else:
+            x += np.sin(k * ph) / k
+    return unit(x)
+
+
+def chip_note(f, secs, tau, wave="square", attack=0.002):
+    """One chiptune note: an instant attack and an exponential decay."""
+    t = tv(secs)
+    return taper(chip(f, len(t), wave) * env(t, attack, tau), 0.005)
+
+
+def bitcrush(x, bits=4):
+    """Sample-depth crush: the grit of an old cartridge."""
+    q = 2.0 ** (bits - 1)
+    return np.round(x * q) / q
+
+
+def gen_toybox():
+    # the checkpoint: a music box runs up a C major arpeggio and tinkles the top note
+    name = "toybox_checkpoint"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for k, nt in enumerate((72, 76, 79, 84, 88)):
+        place(x, 0.06 * k, tine(r, midi(nt), dur(name), 0.9), 0.8 if k < 4 else 0.6)
+    save(name, x, fin=0.002, fout=0.15)
+
+    # the finish: the toy rocket roars up while a music-box fanfare rings out over it
+    name = "toybox_finish"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    roar = noise(r, n, 120, 3500) * (0.25 + 0.75 * np.clip(t / 1.8, 0.0, 1.0)) * np.exp(-np.maximum(t - 2.4, 0.0) / 0.2)
+    x = 0.8 * roar + 0.6 * thud(t, 60, 35, 1.2, 1.2, harm=(0.2, 0.05))
+    x += 0.4 * whoosh(r, dur(name), 200, 1800, 500, 1.6, 0.4)
+    for k, nt in enumerate((72, 76, 79, 84)):
+        place(x, 0.05 + 0.13 * k, tine(r, midi(nt), 1.0, 1.0), 0.7)
+    for nt in (84, 88, 91):
+        place(x, 0.7, tine(r, midi(nt), 2.0, 1.4), 0.5)
+    save(name, x, fin=0.002, fout=0.25)
+
+    # the car's key: the ratchet clicks faster and faster as the spring tightens, a wind-up whine under it
+    name = "toybox_car_wind"
+    r = rng(name)
+    t = tv(dur(name))
+    x = ratchet(r, dur(name), 22, 1.8, 2000, 7000)
+    x += 0.25 * tone(glide(260.0, 620.0, t, dur(name))) * np.minimum(t / 0.05, 1.0)
+    save(name, x, fin=0.002, fout=0.08)
+
+    # the car runs down: a tin clunk
+    name = "toybox_car_stop"
+    r = rng(name)
+    t = tv(dur(name))
+    x = thud(t, 260, 120, 0.02, 0.03, harm=(0.3, 0.1)) + 0.5 * modes(t, bar_modes(780.0, 0.08), r, 0.01, hard=4000)
+    x += 0.4 * click(r, dur(name), 1500, 6000, 0.002)
+    save(name, x, fin=0.0008, fout=0.08)
+
+    # the car's clockwork (loop): a spring hum and 24 gear teeth ticking round each lap
+    name = "toybox_car_whirr"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    gear = np.zeros(n)
+    for k in range(24):
+        cplace(gear, k * dur(name) / 24.0, click(r, 0.012, 1500, 6000, 0.002), 0.6 + 0.4 * r.uniform())
+    hum = tone(cyc(150.0, n), t) + 0.35 * tone(cyc(300.0, n), t)
+    save_loop(name, 0.7 * unit(hum) * (0.7 + 0.3 * clfo(n, 24)) + 0.5 * unit(gear))
+
+    # the jack-in-the-box tunes up: a music box plays a wobbling tune, the notes bunching up as it winds faster
+    name = "toybox_jack_tune"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    t = tv(dur(name))
+    notes = (72, 76, 79, 76, 81, 84, 81, 79, 84)
+    for k, nt in enumerate(notes):
+        t0 = dur(name) * (1.0 - (1.0 - k / len(notes)) ** 1.6)
+        place(x, t0, tine(r, midi(nt) * (1.0 + 0.012 * np.sin(k * 1.3)), 0.6, 0.5), 0.8)
+    x += 0.25 * tone(glide(300.0, 900.0, t, dur(name))) * np.clip(t / dur(name), 0.0, 1.0) ** 3
+    save(name, x, fin=0.002, fout=0.05)
+
+    # the pop: SPROING - the spring releases and the clown head bangs out of the box
+    name = "toybox_jack_pop"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    boing = tone(glide(160.0, 900.0, t, 0.2)) * env(t, 0.001, 0.14)
+    boing *= 1.0 + 0.3 * np.sin(TAU * 42.0 * t) * np.exp(-t / 0.2)
+    x = boing + 0.5 * noise(r, n, 1200, 5000) * env(t, 0.001, 0.05) + 0.7 * thud(t, 260, 90, 0.05, 0.06)
+    save(name, x, fin=0.0005, fout=0.1)
+
+    # one tick of the toy rattle (played once per tick, faster as the warning nears)
+    name = "toybox_tell_tick"
+    r = rng(name)
+    t = tv(dur(name))
+    x = click(r, dur(name), 2500, 8000, 0.0015) + 0.5 * modes(t, bar_modes(1400.0, 0.01), r, 0.01, hard=6000)
+    save(name, x, fin=0.0005, fout=0.02)
+
+    # the blocks groan under the strain: stacked timber and a couple of knocks
+    name = "toybox_tower_creak"
+    r = rng(name)
+    x = creak(r, dur(name), lambda u: 12.0 + 26.0 * u, [(210.0, 1.0, 0.03), (520.0, 0.6, 0.02), (1100.0, 0.35, 0.012)])
+    place(x, 0.3, wood_knock(r, 0.08, 330.0, 0.015, 4000.0), 0.35)
+    place(x, 0.9, wood_knock(r, 0.08, 300.0, 0.015, 4000.0), 0.45)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the tower topples: a scatter of wooden blocks clattering down, denser at the start
+    name = "toybox_tower_fall"
+    r = rng(name)
+    x = 0.5 * thud(tv(dur(name)), 140.0, 60.0, 0.1, 0.12)
+    for t0 in np.sort(0.95 * dur(name) * r.random(18) ** 0.8):
+        place(x, t0, wood_knock(r, 0.14, r.uniform(260.0, 640.0), 0.012, 4500.0), r.uniform(0.3, 0.9))
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the tower slaps down across the gap: a heavy wooden slap
+    name = "toybox_tower_thud"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = thud(t, 110.0, 45.0, 0.06, 0.08) + 0.6 * wood_knock(r, dur(name), 230.0, 0.03, 4000.0)
+    x += 0.4 * noise(r, n, 1000, 4000) * env(t, 0.001, 0.04)
+    save(name, x, fin=0.0005, fout=0.1)
+
+    # the blocks ratchet back up like a toy on a spring: slowing clicks and a rising whine
+    name = "toybox_tower_lift"
+    r = rng(name)
+    t = tv(dur(name))
+    x = ratchet(r, dur(name), 16, 0.6, 1500, 6000)
+    x += 0.3 * tone(glide(220.0, 520.0, t, dur(name))) * np.clip(t / 0.1, 0.0, 1.0)
+    save(name, x, fin=0.002, fout=0.08)
+
+    # a music-box chime each beat of the last second
+    name = "toybox_tower_chime"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.0, tine(r, midi(84), dur(name), 1.0), 0.8)
+    place(x, 0.1, tine(r, midi(91), dur(name), 0.8), 0.5)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # five xylophone notes on the pentatonic scale, climbing (the key bounce)
+    for k, nt in enumerate((72, 74, 76, 79, 81), start=1):
+        name = "toybox_note_%d" % k
+        r = rng(name)
+        save(name, xylo(r, midi(nt), dur(name)), fin=0.0005, fout=0.08)
+
+
+def gen_olympus():
+    # the checkpoint: a golden lyre chord, strummed, with a glint of light
+    name = "olympus_checkpoint"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for k, nt in enumerate((64, 68, 71, 76)):
+        place(x, 0.035 * k, lyre(midi(nt), dur(name) - 0.035 * k, 0.9), 0.6)
+    place(x, 0.12, fm_glass(midi(88), 0.9, 0.3, 0.4), 0.25)
+    save(name, x, fin=0.002, fout=0.15)
+
+    # the finish: a brass and choir swell in the temple's reverb
+    name = "olympus_finish"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    brass = horn(r, dur(name), (52, 59, 64, 71), (700.0, 1800.0), 0.03, 0.35, 0.6)
+    choir = voice(glide(midi(64), midi(67), t, dur(name)), n, 16, 1.2, 0.005, 5.0, r)
+    choir = unit(svf(choir, 800.0, 2.0) + 0.5 * svf(choir, 1150.0, 3.0))
+    swell = np.minimum(t / 0.9, 1.0) * np.clip((dur(name) - t) / 0.5, 0.0, 1.0)
+    x = space(r, 0.8 * brass + 0.6 * choir * swell, 1.6, 0.2)
+    save(name, x, fin=0.01, fout=0.2)
+
+    # the chariot's wings (loop): beating feathers, four strokes a second, over a rush of air
+    name = "olympus_chariot_wind"
+    r = rng(name)
+    n = ns(dur(name))
+    flap = 0.3 + 0.7 * np.abs(clfo(n, 8))
+    wings = cband(r.standard_normal(n), 400, 2600) * flap
+    rush = cnoise(r, n, 90, 500)
+    save_loop(name, unit(wings) + 0.5 * unit(rush))
+
+    # the chariot leaves its dock: a rush of wings
+    name = "olympus_chariot_launch"
+    r = rng(name)
+    x = whoosh(r, dur(name), 400.0, 2400.0, 800.0, 0.35, 0.3)
+    for k in range(6):
+        place(x, 0.04 + 0.09 * k, noise(r, ns(0.07), 900, 4000) * env(tv(0.07), 0.003, 0.03), 0.6 * (1.0 - k / 8.0))
+    save(name, x, fin=0.002, fout=0.2)
+
+    # the column's tell: old marble groans and splits, then a sharp crack
+    name = "olympus_column_crack"
+    r = rng(name)
+    x = creak(r, dur(name), lambda u: 20.0 + 50.0 * u, [(320.0, 1.0, 0.02), (980.0, 0.6, 0.012), (1900.0, 0.35, 0.008)])
+    place(x, 0.9, click(r, 0.05, 600, 6000, 0.008), 0.8)
+    place(x, 0.9, stone_knock(r, 0.4, 200.0), 0.6)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the column tears loose and tumbles down through the clouds: a tearing rush and falling stone
+    name = "olympus_column_fall"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    tear = noise(r, n, 350, 3000) * (0.4 + 0.6 * np.abs(noise(r, n, None, 25))) * env(t, 0.02, 0.9)
+    x = unit(tear)
+    for k, t0 in enumerate((0.25, 0.48, 0.66, 0.9, 1.05, 1.2, 1.32, 1.42)):
+        place(x, t0, stone_knock(r, 0.35, r.uniform(150.0, 260.0)), 0.9 * 0.8 ** k)
+    save(name, x, fin=0.002, fout=0.15)
+
+    # the column rises back out of the cloud: gold chimes
+    name = "olympus_column_reform"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for k, nt in enumerate((79, 83, 86, 91)):
+        place(x, 0.16 * k, fm_glass(midi(nt), 1.0, 0.35, 0.6), 0.6 - 0.08 * k)
+    save(name, x, fin=0.002, fout=0.2)
+
+    # the mirror's charge: a rising chime and a glint of bright metal
+    name = "olympus_mirror_charge"
+    r = rng(name)
+    t = tv(dur(name))
+    f = glide(900.0, 2600.0, t, dur(name))
+    x = taper(tone(f) * env(t, 0.25, 0.8) + 0.3 * tone(2.0 * f) * env(t, 0.25, 0.4), 0.02)
+    place(x, 0.7, fm_glass(midi(96), 0.5, 0.15, 0.4), 0.5)
+    save(name, x, fin=0.002, fout=0.08)
+
+    # the mirror fires: a bright blade of light striking out across the court
+    name = "olympus_mirror_fire"
+    r = rng(name)
+    t = tv(dur(name))
+    x = whoosh(r, dur(name), 2000.0, 5000.0, 2500.0, 0.05, 0.05) * 0.8
+    x += 0.6 * modes(t, bell_modes(1400.0, 0.45), r, 0.004)
+    x += 0.4 * click(r, dur(name), 3000, 9000, 0.002)
+    save(name, x, fin=0.0005, fout=0.12)
+
+    # the mirror's light singing (loop): a steady E5 with its octave and fifth, breathing slowly
+    name = "olympus_mirror_hum"
+    n = ns(dur(name))
+    t = tv(dur(name))
+    f = cyc(midi(76), n)
+    x = tone(f, t) + 0.35 * tone(2.0 * f, t) + 0.12 * tone(3.0 * f, t)
+    save_loop(name, x * (0.85 + 0.15 * clfo(n, 5)))
+
+    # the spirit draws breath upwind: a rising whistle with the air in it
+    name = "olympus_spirit_call"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = whistle(midi(62), midi(79), dur(name), 0.02) + 0.25 * noise(r, n, 1800, 5000) * np.clip(t / dur(name), 0.0, 1.0)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the gust sweeps the lane: a rushing gust
+    name = "olympus_spirit_gust"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = whoosh(r, dur(name), 200.0, 1400.0, 250.0, 0.55, 0.35) + 0.35 * noise(r, n, 300, 2000) * env(t, 0.3, 0.6)
+    save(name, x, fin=0.002, fout=0.2)
+
+    # one small bronze bell tick (played once per tick, faster as the hazard nears)
+    name = "olympus_tell_tick"
+    r = rng(name)
+    t = tv(dur(name))
+    x = modes(t, bell_modes(1046.5, 0.2), r, 0.003) + 0.15 * click(r, dur(name), 3000, 9000, 0.001)
+    save(name, x, fin=0.0005, fout=0.05)
+
+    # the wind along the lane (loop): steady air, swelling slowly
+    name = "olympus_wind_loop"
+    r = rng(name)
+    n = ns(dur(name))
+    body = cnoise(r, n, 120, 900) * (0.6 + 0.4 * crand(r, n, 4))
+    save_loop(name, unit(body) + 0.5 * cnoise(r, n, 40, 180))
+
+
+def gen_arcade():
+    # the 1-up jingle: six quick square notes, then a held top note
+    name = "arcade_checkpoint"
+    x = np.zeros(ns(dur(name)))
+    for k, nt in enumerate((76, 79, 88, 84, 86, 91)):
+        place(x, 0.1 * k, chip_note(midi(nt), 0.2, 0.12), 0.7)
+    place(x, 0.6, chip_note(midi(91), 0.6, 0.35), 0.7)
+    save(name, x, fin=0.001, fout=0.15)
+
+    # the stage-clear fanfare: a C arpeggio climbing to a held chord over a triangle bass
+    name = "arcade_finish"
+    x = np.zeros(ns(dur(name)))
+    for k, nt in enumerate((72, 76, 79, 84)):
+        place(x, 0.11 * k, chip_note(midi(nt), 0.2, 0.15), 0.6)
+    for nt in (84, 88, 91):
+        place(x, 0.5, chip_note(midi(nt), 1.8, 0.9), 0.45)
+    place(x, 0.5, chip_note(midi(48), 2.2, 1.2, "tri"), 0.6)
+    save(name, x, fin=0.001, fout=0.2)
+
+    # the boss breaks into pixels: a noise explosion, then a falling-away minor arpeggio
+    name = "arcade_boss_defeat"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = 0.9 * bitcrush(unit(noise(r, n, 60, 5000) * env(t, 0.002, 0.3)), 4)
+    for k, nt in enumerate((69, 72, 76, 81, 84, 88, 93)):
+        place(x, 0.12 + 0.045 * k, chip_note(midi(nt), 0.12 if k < 6 else 0.5, 0.08 if k < 6 else 0.35), 0.5)
+    save(name, x, fin=0.001, fout=0.2)
+
+    # the block's blip as it drops a step
+    name = "arcade_block_tick"
+    save(name, chip_note(midi(88), dur(name), 0.03), fin=0.0005, fout=0.01)
+
+    # the piece locks in: a dull 8-bit thunk
+    name = "arcade_block_land"
+    r = rng(name)
+    t = tv(dur(name))
+    x = chip(glide(220.0, 70.0, t, 0.15), len(t), "tri") * env(t, 0.001, 0.07)
+    x += 0.3 * click(r, dur(name), 800, 3000, 0.003)
+    save(name, x, fin=0.0005, fout=0.02)
+
+    # the row is about to clear: a flashing warble
+    name = "arcade_block_clear_warn"
+    n = ns(dur(name))
+    t = tv(dur(name))
+    f = 660.0 + 150.0 * np.sin(TAU * 11.0 * t)
+    x = chip(f, n) * (0.6 + 0.4 * np.sin(TAU * 14.0 * t)) * (0.6 + 0.4 * t / dur(name))
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the row clears: a bright line-clear sweep
+    name = "arcade_block_clear"
+    t = tv(dur(name))
+    x = chip(glide(300.0, 1800.0, t, 0.5), len(t)) * env(t, 0.003, 0.35)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # the block falls away: a descending zip
+    name = "arcade_block_drop"
+    t = tv(dur(name))
+    x = chip(glide(1500.0, 200.0, t, 0.45), len(t)) * env(t, 0.002, 0.3)
+    save(name, x, fin=0.001, fout=0.05)
+
+    # the pong paddle turns at the end of its lane: a "tok"
+    name = "arcade_paddle_ping"
+    save(name, chip_note(440.0, dur(name), 0.05), fin=0.0005, fout=0.01)
+
+    # the pong ball hits a wall: a higher ping
+    name = "arcade_ball_ping"
+    save(name, chip_note(1760.0, dur(name), 0.04), fin=0.0005, fout=0.01)
+
+    # the glitch tile warns it will hop: a bitcrushed static stutter, getting louder
+    name = "arcade_glitch_warn"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    steps = 20
+    seg = np.minimum((t * steps).astype(int), steps - 1)
+    fs = np.exp(r.uniform(np.log(300.0), np.log(2400.0), steps))
+    gates = (r.uniform(0.0, 1.0, steps) > 0.3).astype(float)
+    x = chip(fs[seg], n) * gates[seg] * (0.3 + 0.7 * t / dur(name))
+    save(name, bitcrush(x, 3), fin=0.002, fout=0.05)
+
+    # the glitch tile hops: a zap down the scale with a burst of static
+    name = "arcade_glitch_hop"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = chip(glide(2000.0, 180.0, t, 0.35), n) * env(t, 0.001, 0.2)
+    x += 0.5 * noise(r, n, 2000, 8000) * env(t, 0.001, 0.04)
+    save(name, bitcrush(x, 4), fin=0.0005, fout=0.05)
+
+    # the screen jolts and the siren warns: four alarm blips
+    name = "arcade_scroll_start"
+    x = np.zeros(ns(dur(name)))
+    for k in range(4):
+        place(x, 0.22 * k, chip_note(880.0 if k % 2 == 0 else 660.0, 0.2, 0.12), 0.7)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # the boss's eyes lock on: a rising square sweep
+    name = "arcade_boss_charge"
+    t = tv(dur(name))
+    x = chip(glide(150.0, 1600.0, t, dur(name)), len(t)) * (0.5 + 0.5 * t / dur(name))
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the boss's column slams down: a crunchy 8-bit boom
+    name = "arcade_boss_blast"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    boom = unit(noise(r, n, 60, 6000) * env(t, 0.001, 0.22))
+    low = chip(glide(160.0, 40.0, t, 0.8), n) * env(t, 0.002, 0.3)
+    save(name, bitcrush(0.8 * boom + low, 4), fin=0.0005, fout=0.05)
+
+    # the chomper's "waka waka" (loop): two mouth-opening chomps a second
+    name = "arcade_chomper_loop"
+    x = np.zeros(ns(dur(name)))
+    m = ns(0.26)
+    t = tv(0.26)
+    for t0 in (0.0, 0.5):
+        cplace(x, t0, chip(glide(300.0, 650.0, t, 0.26), m) * env(t, 0.003, 0.1), 0.8)
+    save_loop(name, x)
+
+    # the pong ball's hum (loop): a quiet triangle tone on a whole number of cycles
+    name = "arcade_ball_hum"
+    n = ns(dur(name))
+    save_loop(name, chip(cyc(330.0, n), n, "tri"))
+
+    # the scroll wall's rumble (loop): a low static roar pulsing eight times a loop
+    name = "arcade_scroll_rumble"
+    r = rng(name)
+    n = ns(dur(name))
+    low = cnoise(r, n, 35, 160) * (0.7 + 0.3 * clfo(n, 8))
+    save_loop(name, unit(low) + 0.4 * chip(cyc(55.0, n), n))
+
+
 def verify():
     ok = True
     total = 0
@@ -5986,7 +6455,8 @@ def verify():
 GENERATORS = (gen_steps, gen_wall, gen_movement_loops, gen_lasers, gen_crusher_piston, gen_swings, gen_surfaces,
               gen_foundry, gen_reef, gen_orbital, gen_clockwork, gen_balance, gen_gardens, gen_ascent, gen_xeno,
               gen_volcano, gen_glacier, gen_desert, gen_manor, gen_armada, gen_candy, gen_carrier,
-              gen_sakura, gen_jungle, gen_frontier, gen_neon, gen_doom, gen_abyss, gen_tempest, gen_void, gen_kit, gen_emotes)
+              gen_sakura, gen_jungle, gen_frontier, gen_neon, gen_doom, gen_abyss, gen_tempest, gen_void, gen_kit, gen_emotes,
+              gen_toybox, gen_olympus, gen_arcade)
 
 
 def main():
