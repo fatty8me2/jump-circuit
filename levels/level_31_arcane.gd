@@ -26,6 +26,11 @@ extends LevelBase
 ## 16 The Observatory    a SLIDING SHELF, an HOURGLASS GATE, a circle throw, the foot of the tower
 ## 17 THE ORRERY TOWER   SET PIECE: ride the rotating rings up to the open grimoire, the finish
 ##
+## SHORTCUTS (route 2): stages 3, 4, 7, 8, 11, 12, 13, 14 and 16 each have a HIGH LINE - a 4.1 m (maximum height)
+## MANTLE up a column at the checkpoint's front corner, a 1 m cornice over the whole stage, a drop jump to
+## the next checkpoint - which skips every clock-locked wait below; stages 6 and 10 keep their hidden posts
+## (93/91%) and spell door, stage 9 its own column and cornice.
+##
 ## Arcane mechanics (own scripts): ArcaneBook (flying books), ArcaneInk (ink rivers that flood),
 ## ArcaneCircle (spell circles), ArcaneHourglass (time gates). Kit obstacles (docs/KIT_OBSTACLES.md):
 ## gap_wall (sliding shelves), falling_block (tomes), zipline (the quill line), seesaw (the lectern).
@@ -343,6 +348,23 @@ func _build() -> void:
 		route = route.slice(starts[DEV_START - 1])
 
 
+## A high SHORTCUT line beside the stage: mantle the column at the checkpoint's front corner (a 4.1 m
+## mantle, the most the move gives), run a 1 m cornice over the hazards below, drop to `to` (local
+## landing centre). Always builds the geometry; routes it (and returns true) only on the shortcut variant.
+func _cornice(end_z: float, to: Vector3, side: float = 1.0) -> bool:
+	var col: Dictionary = _ledge(Vector3(2.95 * side, 4.1, -3.4), Vector3(1.5, 12.0, 1.8), "accent")
+	var cornice: Dictionary = _blk(Vector3(2.95 * side, 4.1, (-4.7 + end_z) * 0.5), 1.0, -4.7 - end_z, "accent", 0.5)
+	if route_variant != 2:
+		return false
+	r_walk(_w(Vector3(2.35 * side, 0, 2.0)))
+	r_mantle(_w(Vector3(2.35 * side, 0, -0.35)), _w(Vector3(2.95 * side, 4.1, -3.6)))
+	r_walk(_w(Vector3(2.95 * side, 4.1, -3.3)))
+	_hop(col, cornice, Vector3(0, 0, (-4.7 - end_z) * 0.5 - 1.8))
+	r_walk(_w(Vector3(2.95 * side, 4.1, end_z + 1.2)))
+	r_jump(_w(Vector3(2.95 * side, 4.1, end_z + 0.35)), _w(to))
+	return true
+
+
 # ---- stage 1: The Reading Room - a stair of floating posts, a desk, mantle the bookcase -----------
 
 func _stage_1() -> Vector3:
@@ -395,17 +417,19 @@ func _stage_2() -> Vector3:
 	var dock_c: Dictionary = _blk(Vector3(bc.x, bc.y + rise, b2_far.z - bsz.z * 0.5 - 1.2 - 1.5), 3.4, 3.0)
 	var p: Dictionary = _post(_ahead(dock_c, 0.87, 0.0, 1.4, 0.4), 1.4, 1.4)
 	var cp: Dictionary = _cp(_ahead(p, 0.86, 0.0, 5.0, -(p["c"] as Vector3).x))
-	_hop(cp0, dock_a)
-	r_walk(_w(Vector3(ac.x, ac.y, ac.z + 0.3)))
-	var far1w: Vector3 = _w(b1_far) - Vector3(0, bsz.y * 0.5, 0)
-	_ride(_w(Vector3(ac.x, ac.y, a_front + 0.45)), b1, local, _w(bc + Vector3(0, 0, 0.3)),
-		func() -> bool: return b1.global_position.distance_to(far1w) < 0.8)
-	r_walk(_w(Vector3(bc.x, bc.y, bc.z + 0.3)))
-	var far2w: Vector3 = _w(b2_far) - Vector3(0, bsz.y * 0.5, 0)
-	_ride(_w(Vector3(bc.x, bc.y, b_front + 0.45)), b2, local, _w((dock_c["c"] as Vector3) + Vector3(0, 0, 0.3)),
-		func() -> bool: return b2.global_position.distance_to(far2w) < 0.8)
-	_hop(dock_c, p)
-	_hop(p, cp, Vector3(0, 0, 1.2))
+	var cp_s: Vector3 = cp["c"]
+	if not _cornice(cp_s.z + 2.5 + 3.8, cp_s + Vector3(1.4, 0, 0.6)):
+		_hop(cp0, dock_a)
+		r_walk(_w(Vector3(ac.x, ac.y, ac.z + 0.3)))
+		var far1w: Vector3 = _w(b1_far) - Vector3(0, bsz.y * 0.5, 0)
+		_ride(_w(Vector3(ac.x, ac.y, a_front + 0.45)), b1, local, _w(bc + Vector3(0, 0, 0.3)),
+			func() -> bool: return b1.global_position.distance_to(far1w) < 0.8)
+		r_walk(_w(Vector3(bc.x, bc.y, bc.z + 0.3)))
+		var far2w: Vector3 = _w(b2_far) - Vector3(0, bsz.y * 0.5, 0)
+		_ride(_w(Vector3(bc.x, bc.y, b_front + 0.45)), b2, local, _w((dock_c["c"] as Vector3) + Vector3(0, 0, 0.3)),
+			func() -> bool: return b2.global_position.distance_to(far2w) < 0.8)
+		_hop(dock_c, p)
+		_hop(p, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	return cp["c"]
 
@@ -431,15 +455,17 @@ func _stage_3() -> Vector3:
 	var p1: Dictionary = _post(_ahead(land, 0.87, 0.6, 1.3, 0.4), 1.3, 1.3)
 	var p2: Dictionary = _post(_ahead(p1, 0.88, 0.0, 1.2, -0.4))
 	var cp: Dictionary = _cp(_ahead(p2, 0.86, 0.0, 5.0, -(p2["c"] as Vector3).x))
-	_hop(cp0, bank_a)
-	r_walk(_w(Vector3(a.x, a.y, a.z + 0.5)))
-	_wait(func() -> bool: return _inks_ok([[ink1, 0.0, 3.0]]), _w(Vector3(a.x, a.y, a.z + 0.5)))
-	r_walk(_w(Vector3(b.x, b.y, b.z + 0.5)))
-	_wait(func() -> bool: return _inks_ok([[ink2, 0.6, 3.0]]), _w(Vector3(b.x, b.y, b.z + 0.5)))
-	_hop(bank_b, land)
-	_hop(land, p1)
-	_hop(p1, p2)
-	_hop(p2, cp, Vector3(0, 0, 1.2))
+	var cp_s: Vector3 = cp["c"]
+	if not _cornice(cp_s.z + 2.5 + 6.5, cp_s + Vector3(1.4, 0, 0.6)):
+		_hop(cp0, bank_a)
+		r_walk(_w(Vector3(a.x, a.y, a.z + 0.5)))
+		_wait(func() -> bool: return _inks_ok([[ink1, 0.0, 3.0]]), _w(Vector3(a.x, a.y, a.z + 0.5)))
+		r_walk(_w(Vector3(b.x, b.y, b.z + 0.5)))
+		_wait(func() -> bool: return _inks_ok([[ink2, 0.6, 3.0]]), _w(Vector3(b.x, b.y, b.z + 0.5)))
+		_hop(bank_b, land)
+		_hop(land, p1)
+		_hop(p1, p2)
+		_hop(p2, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	return cp["c"]
 
@@ -455,21 +481,23 @@ func _stage_4() -> Vector3:
 	var front: float = bc.z - 11.0
 	var z1: float = back - 8.0
 	var z2: float = back - 16.0
-	var opts: Dictionary = {"open_time": 3.6, "move_time": 1.2, "warn": 1.1}
+	var opts: Dictionary = {"open_time": 3.6, "move_time": 1.2, "warn": 1.1, "height": 3.2}
 	var w1: GapWall = kit.gap_wall(_w(Vector3(bc.x, bc.y, z1)), _yaw, 3.4, 9.0, 0.0, opts)
 	var w2: GapWall = kit.gap_wall(_w(Vector3(bc.x, bc.y, z2)), _yaw, 3.4, 9.0, 0.4, opts)
 	var cab_top := Vector3(bc.x, bc.y + 3.3, front - 1.6 - 0.7)
 	var cab: Dictionary = _ledge(cab_top, Vector3(2.8, 9.0, 1.4))
 	var cp: Dictionary = _cp(_ahead(cab, 0.85, 0.0, 5.0, -bc.x))
-	_hop(cp0, p1)
-	_hop(p1, beam, Vector3(0, 0, 0.6))
-	r_walk(_w(Vector3(bc.x, bc.y, z1 + 3.5)))
-	_wait(func() -> bool: return _walls_ok([[w1, 0.0, 2.4]]), _w(Vector3(bc.x, bc.y, z1 + 3.5)))
-	r_walk(_w(Vector3(bc.x, bc.y, z2 + 3.5)))
-	_wait(func() -> bool: return _walls_ok([[w2, 0.0, 2.4]]), _w(Vector3(bc.x, bc.y, z2 + 3.5)))
-	r_walk(_w(Vector3(bc.x, bc.y, front + 0.9)))
-	r_mantle(_w(Vector3(bc.x, bc.y, front + 0.35)), _w(cab_top + Vector3(0, 0, 0.3)))
-	_hop(cab, cp, Vector3(0, 0, 1.2))
+	var cp_s: Vector3 = cp["c"]
+	if not _cornice(cp_s.z + 2.5 + 5.0, cp_s + Vector3(1.4, 0, 0.6)):
+		_hop(cp0, p1)
+		_hop(p1, beam, Vector3(0, 0, 0.6))
+		r_walk(_w(Vector3(bc.x, bc.y, z1 + 3.5)))
+		_wait(func() -> bool: return _walls_ok([[w1, 0.0, 2.4]]), _w(Vector3(bc.x, bc.y, z1 + 3.5)))
+		r_walk(_w(Vector3(bc.x, bc.y, z2 + 3.5)))
+		_wait(func() -> bool: return _walls_ok([[w2, 0.0, 2.4]]), _w(Vector3(bc.x, bc.y, z2 + 3.5)))
+		r_walk(_w(Vector3(bc.x, bc.y, front + 0.9)))
+		r_mantle(_w(Vector3(bc.x, bc.y, front + 0.35)), _w(cab_top + Vector3(0, 0, 0.3)))
+		_hop(cab, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	return cp["c"]
 
@@ -573,15 +601,17 @@ func _stage_7() -> Vector3:
 	var p2: Dictionary = _post(_ahead(ld, 0.87, 0.0, 1.2, 0.4))
 	var p3: Dictionary = _post(_ahead(p2, 0.88, 0.6, 1.2, -0.4))
 	var cp: Dictionary = _cp(_ahead(p3, 0.86, 0.0, 5.0, -(p3["c"] as Vector3).x))
-	_hop(cp0, p1)
-	_hop(p1, walk, Vector3(0, 0, 0.6))
-	r_walk(_w(Vector3(wc.x, wc.y, back - 1.8)))
-	_wait(func() -> bool: return _blocks_ok([[t1, 0.15, 2.45], [t2, 0.8, 3.1]]), _w(Vector3(wc.x, wc.y, back - 1.8)))
-	r_walk(_w(Vector3(wc.x, wc.y, front + 0.9)))
-	r_mantle(_w(Vector3(wc.x, wc.y, front + 0.35)), _w(ledge_top + Vector3(0, 0, 0.3)))
-	_hop(ld, p2)
-	_hop(p2, p3)
-	_hop(p3, cp, Vector3(0, 0, 1.2))
+	var cp_s: Vector3 = cp["c"]
+	if not _cornice(cp_s.z + 2.5 + 4.5, cp_s + Vector3(1.4, 0, 0.6)):
+		_hop(cp0, p1)
+		_hop(p1, walk, Vector3(0, 0, 0.6))
+		r_walk(_w(Vector3(wc.x, wc.y, back - 1.8)))
+		_wait(func() -> bool: return _blocks_ok([[t1, 0.15, 2.45], [t2, 0.8, 3.1]]), _w(Vector3(wc.x, wc.y, back - 1.8)))
+		r_walk(_w(Vector3(wc.x, wc.y, front + 0.9)))
+		r_mantle(_w(Vector3(wc.x, wc.y, front + 0.35)), _w(ledge_top + Vector3(0, 0, 0.3)))
+		_hop(ld, p2)
+		_hop(p2, p3)
+		_hop(p3, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	return cp["c"]
 
@@ -599,12 +629,14 @@ func _stage_8() -> Vector3:
 	var p1: Dictionary = _post(_ahead(land, 0.87, 0.0, 1.3, 0.4))
 	var p2: Dictionary = _post(_ahead(p1, 0.88, 0.6, 1.2, -0.4))
 	var cp: Dictionary = _cp(_ahead(p2, 0.86, 0.0, 5.0, -(p2["c"] as Vector3).x))
-	_hop(cp0, dock)
-	r_zipline(zip, _w(start_top + Vector3(0, 2.2, -20.0)), 0.6, _w(Vector3(dc.x, dc.y, start_top.z - 28.0)))
-	r_walk(_w(Vector3(dc.x, dc.y, (land["c"] as Vector3).z - 2.0)))
-	_hop(land, p1)
-	_hop(p1, p2)
-	_hop(p2, cp, Vector3(0, 0, 1.2))
+	var cp_s: Vector3 = cp["c"]
+	if not _cornice(cp_s.z + 2.5 + 6.0, cp_s + Vector3(1.4, 0, 0.6)):
+		_hop(cp0, dock)
+		r_zipline(zip, _w(start_top + Vector3(0, 2.2, -20.0)), 0.6, _w(Vector3(dc.x, dc.y, start_top.z - 28.0)))
+		r_walk(_w(Vector3(dc.x, dc.y, (land["c"] as Vector3).z - 2.0)))
+		_hop(land, p1)
+		_hop(p1, p2)
+		_hop(p2, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	return cp["c"]
 
@@ -633,7 +665,7 @@ func _stage_9() -> Vector3:
 	# SHORTCUT: a mantle up the column beside the checkpoint and a narrow cornice over the whole aisle
 	var sc_x: float = 2.95
 	var col: Dictionary = _ledge(Vector3(sc_x, 4.1, -3.4), Vector3(1.5, 12.0, 1.8), "accent")
-	var cz_end: float = (cp["c"] as Vector3).z + 2.5 + 3.8
+	var cz_end: float = (cp["c"] as Vector3).z + 2.5 + 4.2
 	var cornice: Dictionary = _blk(Vector3(sc_x, 4.1, (-4.7 + cz_end) * 0.5), 1.0, -4.7 - cz_end, "accent", 0.5)
 	if route_variant == 2:
 		r_walk(_w(Vector3(2.35, 0, 2.0)))
@@ -744,17 +776,19 @@ func _stage_11() -> Vector3:
 	var deck_c: Dictionary = _blk(Vector3(bc.x, bc.y + rise, bk_far.z - bsz.z * 0.5 - 1.2 - 1.5), 3.6, 3.0)
 	var p1: Dictionary = _post(_ahead(deck_c, 0.88, 0.0, 1.2, 0.4))
 	var cp: Dictionary = _cp(_ahead(p1, 0.86, 0.0, 5.0, -(p1["c"] as Vector3).x))
-	_hop(cp0, deck_a)
-	r_walk(_w(Vector3(ac.x, ac.y, a_front + 1.0)))
-	r_walk(_w(Vector3(ac.x, ac.y, a_front - 4.5)))
-	r_walk(_w(Vector3(ac.x, ac.y, a_front - 8.4)))
-	r_jump(_w(Vector3(ac.x, ac.y, a_front - 8.6)), _w(Vector3(bc.x, bc.y, bc.z)))
-	r_walk(_w(Vector3(bc.x, bc.y, bc.z + 0.3)))
-	var far_w: Vector3 = _w(bk_far) - Vector3(0, bsz.y * 0.5, 0)
-	_ride(_w(Vector3(bc.x, bc.y, b_front + 0.45)), bk, local, _w((deck_c["c"] as Vector3) + Vector3(0, 0, 0.3)),
-		func() -> bool: return bk.global_position.distance_to(far_w) < 0.8)
-	_hop(deck_c, p1)
-	_hop(p1, cp, Vector3(0, 0, 1.2))
+	var cp_s: Vector3 = cp["c"]
+	if not _cornice(cp_s.z + 2.5 + 5.2, cp_s + Vector3(1.4, 0, 0.6)):
+		_hop(cp0, deck_a)
+		r_walk(_w(Vector3(ac.x, ac.y, a_front + 1.0)))
+		r_walk(_w(Vector3(ac.x, ac.y, a_front - 4.5)))
+		r_walk(_w(Vector3(ac.x, ac.y, a_front - 8.4)))
+		r_jump(_w(Vector3(ac.x, ac.y, a_front - 8.6)), _w(Vector3(bc.x, bc.y, bc.z)))
+		r_walk(_w(Vector3(bc.x, bc.y, bc.z + 0.3)))
+		var far_w: Vector3 = _w(bk_far) - Vector3(0, bsz.y * 0.5, 0)
+		_ride(_w(Vector3(bc.x, bc.y, b_front + 0.45)), bk, local, _w((deck_c["c"] as Vector3) + Vector3(0, 0, 0.3)),
+			func() -> bool: return bk.global_position.distance_to(far_w) < 0.8)
+		_hop(deck_c, p1)
+		_hop(p1, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	return cp["c"]
 
@@ -790,38 +824,26 @@ func _stage_12() -> Vector3:
 	var lgate: ArcaneHourglass = _gate(Vector3(-3.5, 4.5, f0 - 10.2), 7.0, 0.3, 3.6)
 	var la: Dictionary = _post(_ahead(hi, 0.90, -1.5, 1.2, 0.3))
 	var la2: Dictionary = _post(_ahead(la, 0.90, -1.5, 1.2, -0.3))
-	# SHORTCUT: the broken column (a 4.1 m mantle) and its cornices
-	var col: Dictionary = _ledge(Vector3(0, 4.1, f0 - 0.9), Vector3(1.4, 12.0, 1.8), "accent")
-	var cornice: Dictionary = _blk(Vector3(0, 4.1, f0 - 1.8 - 6.0 - 0.4), 1.0, 12.0, "accent", 0.5)
-	var n2: Vector3 = _ahead(cornice, 0.88, 0.0, 0.0)
-	var l2: float = n2.z - (mz + 1.5 + 4.5)
-	var cornice2: Dictionary = _blk(Vector3(0, 4.1, n2.z - l2 * 0.5), 1.0, l2, "accent", 0.5)
-	_hop(cp0, fork, Vector3(0, 0, 0.4))
-	if route_variant == 2:
-		r_walk(_w(Vector3(0, 0, fc.z + 0.9)))
-		r_mantle(_w(Vector3(0, 0, fc.z + 0.65)), _w(Vector3(0, 4.1, f0 - 1.0)))
-		_hop(col, cornice, Vector3(0, 0, 5.0))
-		r_walk(_w(Vector3(0, 4.1, f0 - 13.6)))
-		_hop(cornice, cornice2, Vector3(0, 0, l2 * 0.5 - 0.8))
-		r_walk(_w(Vector3(0, 4.1, n2.z - l2 + 0.6)))
-		_hop(cornice2, merge, Vector3(0, 0, 0.4))
-	elif route_variant != 1:
-		r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
-		r_portal(_w(Vector3(-3.5, 0, fc.z - 0.9)), door.exit_point())
-		r_walk(_w(Vector3(-3.5, 4.5, f0 - 8.3)))
-		_wait(func() -> bool: return _gates_ok([[lgate, 0.0, 1.8 + 1.5]]), _w(Vector3(-3.5, 4.5, f0 - 8.3)))
-		r_walk(_w(Vector3(-3.5, 4.5, f0 - hi_len + 1.5)))
-		_hop(hi, la)
-		_hop(la, la2)
-		_hop(la2, merge, Vector3(-3.5, 0, 0.6))
-	else:
-		r_walk(_w(Vector3(3.6, 0, fc.z + 0.6)))
-		r_wallrun(_w(Vector3(4.2, 0, f0 + 0.35)), _w(Vector3(5.6, 1.4, f0 - 3.2)), _w(Vector3(5.6, 1.4, f0 - 10.6)), _w(Vector3(2.0, 4.4, f0 - 14.4)))
-		r_wallrun(Vector3.ZERO, _w(Vector3(2.0, 4.4, f0 - 14.4)), _w(Vector3(2.0, 4.4, f0 - 19.6)), _w(Vector3(3.6, my, f0 - 27.4)), true, true)
-		_hop(pb, pb2)
-		_hop(pb2, merge, Vector3(3.6, 0, 0.6))
 	var cp: Dictionary = _cp(_ahead(merge, 0.86, 0.0, 5.0))
-	_hop(merge, cp, Vector3(0, 0, 1.2))
+	var cp_s: Vector3 = cp["c"]
+	if not _cornice(cp_s.z + 2.5 + 7.0, cp_s + Vector3(1.4, 0, 0.6)):
+		_hop(cp0, fork, Vector3(0, 0, 0.4))
+		if route_variant != 1:
+			r_walk(_w(Vector3(-3.5, 0, fc.z + 0.6)))
+			r_portal(_w(Vector3(-3.5, 0, fc.z - 0.9)), door.exit_point())
+			r_walk(_w(Vector3(-3.5, 4.5, f0 - 8.3)))
+			_wait(func() -> bool: return _gates_ok([[lgate, 0.0, 1.8 + 1.5]]), _w(Vector3(-3.5, 4.5, f0 - 8.3)))
+			r_walk(_w(Vector3(-3.5, 4.5, f0 - hi_len + 1.5)))
+			_hop(hi, la)
+			_hop(la, la2)
+			_hop(la2, merge, Vector3(-3.5, 0, 0.6))
+		else:
+			r_walk(_w(Vector3(3.6, 0, fc.z + 0.6)))
+			r_wallrun(_w(Vector3(4.2, 0, f0 + 0.35)), _w(Vector3(5.6, 1.4, f0 - 3.2)), _w(Vector3(5.6, 1.4, f0 - 10.6)), _w(Vector3(2.0, 4.4, f0 - 14.4)))
+			r_wallrun(Vector3.ZERO, _w(Vector3(2.0, 4.4, f0 - 14.4)), _w(Vector3(2.0, 4.4, f0 - 19.6)), _w(Vector3(3.6, my, f0 - 27.4)), true, true)
+			_hop(pb, pb2)
+			_hop(pb2, merge, Vector3(3.6, 0, 0.6))
+		_hop(merge, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
 	return cp["c"]
 
@@ -847,13 +869,14 @@ func _stage_13() -> Vector3:
 	var ledge_top := Vector3(land_c.x, land_c.y + 3.3, land_c.z - 2.5 - 1.6 - 0.7)
 	var ld: Dictionary = _ledge(ledge_top, Vector3(3.0, 9.0, 1.4))
 	var cp: Dictionary = _cp(_ahead(ld, 0.85, 0.0, 5.0, -land_c.x))
-	_hop(cp0, p1)
-	_hop(p1, beam, Vector3(0, 0, 0.6))
-	r_walk(_w(Vector3(wc.x, wc.y, back - 1.5)))
-	_wait(func() -> bool: return _press_ok(c1, t1 - 0.3, t1 + 0.3 + 1.5) and _press_ok(c2, t2 - 0.3, t2 + 0.3 + 1.5),
-		_w(Vector3(wc.x, wc.y, back - 1.5)))
-	r_walk(_w(Vector3(disc_c.x, disc_c.y, disc_c.z + 0.2)))
-	route.append({"kind": "kick", "from": _w(Vector3(disc_c.x, disc_c.y, disc_c.z + 0.2)), "to": _w(land_c)})
+	if not _cornice(land_c.z + 2.5 + 5.5, land_c + Vector3(1.4, 0, 0.6)):
+		_hop(cp0, p1)
+		_hop(p1, beam, Vector3(0, 0, 0.6))
+		r_walk(_w(Vector3(wc.x, wc.y, back - 1.5)))
+		_wait(func() -> bool: return _press_ok(c1, t1 - 0.3, t1 + 0.3 + 1.5) and _press_ok(c2, t2 - 0.3, t2 + 0.3 + 1.5),
+			_w(Vector3(wc.x, wc.y, back - 1.5)))
+		r_walk(_w(Vector3(disc_c.x, disc_c.y, disc_c.z + 0.2)))
+		route.append({"kind": "kick", "from": _w(Vector3(disc_c.x, disc_c.y, disc_c.z + 0.2)), "to": _w(land_c)})
 	r_walk(_w(Vector3(land_c.x, land_c.y, land_c.z - 1.4)))
 	r_mantle(_w(Vector3(land_c.x, land_c.y, land_c.z - 2.15)), _w(ledge_top + Vector3(0, 0, 0.3)))
 	_hop(ld, cp, Vector3(0, 0, 1.2))
@@ -881,29 +904,22 @@ func _stage_14() -> Vector3:
 		prev = _crumble(_ahead(prev, 0.87, 0.6, 1.4, dxs[i + 1]))
 		after.append(prev)
 	var cp: Dictionary = _cp(_ahead(prev, 0.86, 0.0, 5.0, -(prev["c"] as Vector3).x))
-	# SHORTCUT: a circle on a post off the side of the first step throws you straight onto the landing
-	var sc_c: Vector3 = _ahead(cp0, 0.93, 0.0, 3.0, -3.4)
-	var throw_to := Vector3(lc.x, lc.y, lc.z + 3.2)
-	var circ: ArcaneCircle = _circle(sc_c, throw_to, 3.6, 1.3, GOLD)
-	if route_variant == 2:
-		r_jump(_w(_edge(cp0, sc_c)), _w(sc_c), true)
-		r_walk(_w(sc_c + Vector3(0, 0, -0.1)))
-		route.append({"kind": "kick", "from": _w(sc_c + Vector3(0, 0, -0.1)), "to": _w(throw_to)})
-	else:
+	# SHORTCUT: the high line over the whole stage
+	var cp_s: Vector3 = cp["c"]
+	if not _cornice(cp_s.z + 2.5 + 5.0, cp_s + Vector3(1.4, 0, 0.6)):
 		prev = cp0
 		for i: int in 2:
 			_hop(prev, steps[i])
 			prev = steps[i]
 		_hop(prev, land, Vector3(0, 0, 3.0))
-	r_walk(_w(Vector3(lc.x, lc.y, lc.z + 3.0)))
-	route.append({"kind": "b_sweep", "to": _w(Vector3(lc.x, lc.y, lc.z - 3.2)), "sweeper": sw, "tol": 0.6})
-	prev = land
-	for i: int in 3:
-		_hop(prev, after[i])
-		prev = after[i]
-	_hop(prev, cp, Vector3(0, 0, 1.2))
+		r_walk(_w(Vector3(lc.x, lc.y, lc.z + 3.0)))
+		route.append({"kind": "b_sweep", "to": _w(Vector3(lc.x, lc.y, lc.z - 3.2)), "sweeper": sw, "tol": 0.6})
+		prev = land
+		for i: int in 3:
+			_hop(prev, after[i])
+			prev = after[i]
+		_hop(prev, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
-	circ.get_index()
 	return cp["c"]
 
 
@@ -971,24 +987,25 @@ func _stage_16() -> Vector3:
 	var wc: Vector3 = beam["c"]
 	var back: float = wc.z + 9.0
 	var front: float = wc.z - 9.0
-	var wall: GapWall = kit.gap_wall(_w(Vector3(wc.x, wc.y, back - 5.0)), _yaw, 3.4, 9.0, 0.0, {"open_time": 3.6, "move_time": 1.2, "warn": 1.1})
+	var wall: GapWall = kit.gap_wall(_w(Vector3(wc.x, wc.y, back - 5.0)), _yaw, 3.4, 9.0, 0.0, {"open_time": 3.6, "move_time": 1.2, "warn": 1.1, "height": 3.2})
 	var gate: ArcaneHourglass = _gate(Vector3(wc.x, wc.y, back - 11.0), 8.0, 0.0, 4.4)
 	var deck: Dictionary = _blk(Vector3(wc.x, wc.y, front - 1.5 + 0.02), 4.0, 3.0, "main", 0.8)
 	var hinge_z: float = front - 3.0 + 0.02
 	var br: Drawbridge = kit.drawbridge(_w(Vector3(wc.x, wc.y, hinge_z)), 8.0, 3.4, _yaw, 12.0, 0.0)
 	var cp_c := Vector3(wc.x, wc.y, hinge_z - 8.0 - 2.5 + 0.1)
 	var cp: Dictionary = _cp(cp_c)
-	_hop(cp0, p1)
-	_hop(p1, beam, Vector3(0, 0, 0.6))
-	r_walk(_w(Vector3(wc.x, wc.y, back - 1.8)))
-	_wait(func() -> bool: return _walls_ok([[wall, 0.0, 2.4]]), _w(Vector3(wc.x, wc.y, back - 1.8)))
-	r_walk(_w(Vector3(wc.x, wc.y, back - 8.0)))
-	_wait(func() -> bool: return _gates_ok([[gate, 0.0, 2.6]]), _w(Vector3(wc.x, wc.y, back - 8.0)))
-	r_walk(_w(Vector3(wc.x, wc.y, front + 0.5)))
-	r_walk(_w(Vector3(wc.x, wc.y, hinge_z + 0.5)))
-	_wait(func() -> bool: return br.is_down_for(Game.course_time, 2.4 + 1.5), _w(Vector3(wc.x, wc.y, hinge_z + 0.5)))
-	r_walk(_w(Vector3(cp_c.x, cp_c.y, cp_c.z + 1.0)))
-	r_walk(_w(cp_c))
+	if not _cornice(cp_c.z + 2.5 + 7.0, cp_c + Vector3(1.4, 0, 0.6)):
+		_hop(cp0, p1)
+		_hop(p1, beam, Vector3(0, 0, 0.6))
+		r_walk(_w(Vector3(wc.x, wc.y, back - 1.8)))
+		_wait(func() -> bool: return _walls_ok([[wall, 0.0, 2.4]]), _w(Vector3(wc.x, wc.y, back - 1.8)))
+		r_walk(_w(Vector3(wc.x, wc.y, back - 8.0)))
+		_wait(func() -> bool: return _gates_ok([[gate, 0.0, 2.6]]), _w(Vector3(wc.x, wc.y, back - 8.0)))
+		r_walk(_w(Vector3(wc.x, wc.y, front + 0.5)))
+		r_walk(_w(Vector3(wc.x, wc.y, hinge_z + 0.5)))
+		_wait(func() -> bool: return br.is_down_for(Game.course_time, 2.4 + 1.5), _w(Vector3(wc.x, wc.y, hinge_z + 0.5)))
+		r_walk(_w(Vector3(cp_c.x, cp_c.y, cp_c.z + 1.0)))
+		r_walk(_w(cp_c))
 	r_checkpoint()
 	deck.clear()
 	return cp["c"]
