@@ -227,6 +227,19 @@ for _n, _d in (("toybox_car_whirr", 1.0), ("olympus_chariot_wind", 2.0), ("olymp
                ("olympus_wind_loop", 2.0), ("arcade_chomper_loop", 1.0), ("arcade_ball_hum", 1.0),
                ("arcade_scroll_rumble", 1.0)):
     _reg(_n, _d, True)
+# Castle Siege (gen_siege) and Mushroom Hollow (gen_fungal): the mechanics' clips
+for _n, _d in (("siege_boulder_launch", 1.0), ("siege_boulder_whistle", 1.1), ("siege_boulder_impact", 1.2),
+               ("siege_ram_creak", 1.0), ("siege_ram_whoosh", 0.9), ("siege_ram_thud", 0.9),
+               ("siege_oil_tilt", 1.2), ("siege_oil_pour", 1.2), ("siege_volley_horn", 1.6),
+               ("siege_volley_whoosh", 1.2), ("siege_volley_hit", 0.9), ("siege_trebuchet_wind", 1.2),
+               ("siege_trebuchet_throw", 1.0), ("siege_warning_horn", 0.8), ("siege_checkpoint", 2.0),
+               ("siege_finish", 3.0),
+               ("fungal_cap_boing", 0.6), ("fungal_checkpoint", 1.2), ("fungal_finish", 2.4),
+               ("fungal_drip_plink", 0.4), ("fungal_drip_splash", 0.5), ("fungal_puff_swell", 1.1),
+               ("fungal_puff_blow", 0.5), ("fungal_tell_tick", 0.1), ("fungal_frog_croak", 0.6)):
+    _reg(_n, _d)
+for _n, _d in (("siege_oil_loop", 2.0), ("fungal_puff_loop", 2.0), ("fungal_snail_squelch", 1.5)):
+    _reg(_n, _d, True)
 
 
 # ---------------------------------------------------------------------------
@@ -6398,6 +6411,298 @@ def gen_arcade():
     save_loop(name, unit(low) + 0.4 * chip(cyc(55.0, n), n))
 
 
+# ===========================================================================
+# Castle Siege (gen_siege) and Mushroom Hollow (gen_fungal): the mechanics' clips. Each is called by name
+# from mechanics/siege_*.gd, mechanics/fungal_*.gd, levels/level_32_siege.gd and levels/level_26_fungal.gd.
+# ===========================================================================
+def snare_roll(r, secs, count, pw=1.8, lo=1800.0, hi=7000.0):
+    """A snare drum roll: taps that bunch up towards the end (pw > 1 quickens them)."""
+    x = np.zeros(ns(secs))
+    for k in range(count):
+        t0 = secs * (1.0 - (1.0 - k / count) ** pw)
+        place(x, t0, noise(r, ns(0.03), lo, hi) * np.exp(-tv(0.03) / 0.006), r.uniform(0.4, 0.9))
+    return x
+
+
+def gen_siege():
+    # the trebuchet's arm lets go: a last creak of the timber, then the arm whips away on a whoosh
+    name = "siege_boulder_launch"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.0, creak(r, 0.3, lambda u: 40.0 - 20.0 * u, [(260.0, 1.0, 0.02), (640.0, 0.6, 0.012), (1300.0, 0.3, 0.008)]), 0.6)
+    place(x, 0.2, whoosh(r, 0.6, 160.0, 1100.0, 300.0, 0.22, 0.12), 0.9)
+    place(x, 0.2, click(r, 0.01, 1500, 6000, 0.002), 0.3)
+    save(name, x, fin=0.001, fout=0.1)
+
+    # the boulder's whistle: a rising, gritty air-whistle over about 1.1 s
+    name = "siege_boulder_whistle"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    f = glide(520.0, 2300.0, t, dur(name))
+    air = unit(svf(r.standard_normal(n), f, 12.0))
+    x = 0.6 * unit(tone(f)) + 0.5 * air
+    x *= np.minimum(t / 0.12, 1.0) * np.clip((dur(name) - t) / 0.15, 0.0, 1.0)
+    save(name, x, fin=0.001, fout=0.05)
+
+    # the boulder lands on the masonry: a heavy stone knock, a crack of grit and a spray of rubble
+    name = "siege_boulder_impact"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    body = thud(t, 120.0, 42.0, 0.12, 0.09, harm=(0.3, 0.1))
+    rubble = np.zeros(n)
+    grains(r, rubble, 28, 0.04, 0.55, 500.0, 3200.0, 0.003, 0.012, 1.0, decay=0.2)
+    x = body + 0.8 * click(r, dur(name), 900, 5000, 0.004) + 0.5 * noise(r, n, 400, 2500) * env(t, 0.001, 0.05)
+    x += 0.6 * unit(rubble)
+    save(name, x, fin=0.0008, fout=0.12)
+
+    # the ram's chains take the strain: a groan of iron with link rattles through it
+    name = "siege_ram_creak"
+    r = rng(name)
+    n = ns(dur(name))
+    x = iron_creak(r, dur(name), 210.0, rate=(14.0, 30.0))
+    rattle = np.zeros(n)
+    for _ in range(14):
+        t0 = r.uniform(0.0, dur(name) * 0.9)
+        place(rattle, t0, modes(tv(0.05), bar_modes(r.uniform(900.0, 1500.0), 0.012, (1.0, 0.5, 0.3, 0.15, 0.1), 0.8),
+                                r, 0.02, hard=4000), r.uniform(0.3, 0.8))
+    x += 0.6 * unit(rattle)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the log swings in on its chains: an air whoosh with a low body under it
+    name = "siege_ram_whoosh"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = whoosh(r, dur(name), 110.0, 420.0, 130.0, 0.38, 0.22, 1.4)
+    x += 0.25 * noise(r, n, 60, 300) * np.sin(np.pi * np.clip(t / dur(name), 0.0, 1.0)) ** 0.8
+    save(name, x, fin=0.002, fout=0.08)
+
+    # the log strikes the gate: a heavy wooden thud
+    name = "siege_ram_thud"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    body = thud(t, 95.0, 38.0, 0.09, 0.11, harm=(0.35, 0.12))
+    x = body + 0.5 * wood_knock(r, dur(name), 150.0, 0.05, 2500.0) + 0.35 * noise(r, n, 80, 700) * env(t, 0.002, 0.05)
+    save(name, x, fin=0.0008, fout=0.12)
+
+    # the cauldron tips on its trunnions: an iron groan that swells and dies away
+    name = "siege_oil_tilt"
+    r = rng(name)
+    t = tv(dur(name))
+    x = iron_creak(r, dur(name), 130.0, rate=(8.0, 18.0)) + 0.35 * thud(t, 80.0, 55.0, 0.5, 0.6, harm=(0.2,))
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the oil pours out in a thick gout: broad wet noise under a crowd of bubbles
+    name = "siege_oil_pour"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = 0.8 * noise(r, n, 200, 1600) * env(t, 0.03, 0.5)
+    for _ in range(20):
+        t0 = r.uniform(0.05, 0.9)
+        place(x, t0, bubble(r.uniform(260.0, 620.0), 0.07, r.uniform(0.012, 0.03), 0.9), r.uniform(0.2, 0.6))
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the oil running down the gutter (loop): a steady rush of liquid, with bubbles rising through it
+    name = "siege_oil_loop"
+    r = rng(name)
+    n = ns(dur(name))
+    flow = cnoise(r, n, 220.0, 1700.0, 2) * (0.6 + 0.4 * crand(r, n, 5))
+    gurgle = np.zeros(n)
+    for _ in range(12):
+        cplace(gurgle, r.uniform(0.0, dur(name)), bubble(r.uniform(300.0, 700.0), 0.08, r.uniform(0.008, 0.02), 0.7),
+               r.uniform(0.15, 0.5))
+    save_loop(name, unit(flow) + 0.6 * unit(gurgle) + 0.25 * cnoise(r, n, 60, 240))
+
+    # the war horn: two low notes, a fifth apart, with a rasp
+    name = "siege_volley_horn"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = horn(r, dur(name), (43, 50), form=(600.0, 1400.0), scoop=0.05, attack=0.05, release=0.25)
+    x += 0.2 * noise(r, n, 1500, 4000) * env(t, 0.05, 0.5)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the volley: a hiss of arrows through the air, rising and passing
+    name = "siege_volley_whoosh"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = 0.9 * whoosh(r, dur(name), 900.0, 2600.0, 1400.0, 0.5, 0.3, 1.2)
+    hiss = noise(r, n, 2500, 9000) * (0.5 + 0.5 * np.sin(TAU * 9.0 * t)) * np.sin(np.pi * np.clip(t / dur(name), 0.0, 1.0)) ** 0.6
+    x += 0.35 * hiss
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the arrows bite the stone: a scatter of shaft thunks and a masonry tap under them
+    name = "siege_volley_hit"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = 0.8 * thud(t, 240.0, 110.0, 0.03, 0.03, harm=(0.2,)) + 0.4 * click(r, dur(name), 2000, 9000, 0.002)
+    for _ in range(16):
+        place(x, r.uniform(0.0, 0.55), wood_knock(r, 0.05, r.uniform(900.0, 1500.0), 0.008, 7000.0), r.uniform(0.3, 0.8))
+    save(name, x, fin=0.0008, fout=0.08)
+
+    # the winch takes up the arm: a ratchet clicking evenly round the drum, a timber under strain
+    name = "siege_trebuchet_wind"
+    r = rng(name)
+    x = ratchet(r, dur(name), 30, 1.0, 1800.0, 6500.0)
+    x += 0.35 * creak(r, dur(name), lambda u: 18.0, [(210.0, 1.0, 0.02), (460.0, 0.5, 0.012)])
+    save(name, x, fin=0.002, fout=0.08)
+
+    # the arm whips over and stops against its bar: a whoosh, a creak and a wooden knock
+    name = "siege_trebuchet_throw"
+    r = rng(name)
+    x = whoosh(r, dur(name), 90.0, 520.0, 160.0, 0.45, 0.2, 1.8)
+    place(x, 0.0, creak(r, 0.35, lambda u: 30.0, [(260.0, 1.0, 0.02), (600.0, 0.6, 0.012)]), 0.6)
+    place(x, 0.45, wood_knock(r, 0.2, 180.0, 0.03, 3500.0), 0.9)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # a short blast on the horn, two notes, with a warning rasp
+    name = "siege_warning_horn"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = horn(r, dur(name), (50, 57), form=(650.0, 1500.0), scoop=0.06, attack=0.02, release=0.12)
+    x += 0.15 * noise(r, n, 1500, 4000) * env(t, 0.02, 0.2)
+    save(name, x, fin=0.002, fout=0.08)
+
+    # a stage banked: a horn call over a snare roll that quickens, and a shower of embers
+    name = "siege_checkpoint"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    place(x, 0.0, snare_roll(r, dur(name) * 0.7, 36, 1.8), 1.0)
+    place(x, 0.3, horn(r, 1.7, (48, 55, 60), form=(700.0, 1800.0), scoop=0.04, attack=0.03, release=0.2), 0.7)
+    embers = np.zeros(n)
+    grains(r, embers, 30, 0.2, 1.8, 2000.0, 7000.0, 0.001, 0.003, 0.8, decay=0.6)
+    x += 0.3 * unit(embers)
+    save(name, x, fin=0.002, fout=0.2)
+
+    # the banner is raised: a brass fanfare, drums and the army's roar
+    name = "siege_finish"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = np.zeros(n)
+    for m, t0, d in ((55, 0.0, 0.4), (60, 0.4, 0.4), (64, 0.8, 0.4), (67, 1.2, 1.8)):
+        place(x, t0, brass(r, d, midi(m), midi(m), (700.0, 1800.0), 0.02, 0.1), 0.5)
+    for t0 in (0.0, 0.4, 0.8, 1.2, 1.6, 2.0):
+        place(x, t0, thud(tv(0.3), 110.0, 45.0, 0.05, 0.09), 0.6)
+    place(x, 1.6, snare_roll(r, 1.0, 26, 1.6), 0.5)
+    crowd = noise(r, n, 250, 3000) * np.clip(t / 1.2, 0.0, 1.0) ** 1.2 * np.exp(-np.maximum(t - 2.4, 0.0) / 0.2)
+    x += 0.35 * crowd
+    save(name, x, fin=0.002, fout=0.25)
+
+
+def gen_fungal():
+    # the bounce: a rubbery boing as the cap springs, the boing wobbling as it settles
+    name = "fungal_cap_boing"
+    r = rng(name)
+    t = tv(dur(name))
+    boing = tone(glide(170.0, 520.0, t, 0.2)) * env(t, 0.001, 0.16)
+    boing *= 1.0 + 0.25 * np.sin(TAU * 36.0 * t) * np.exp(-t / 0.18)
+    x = unit(boing) + 0.35 * thud(t, 210.0, 95.0, 0.05, 0.05)
+    save(name, x, fin=0.001, fout=0.08)
+
+    # the checkpoint: a warm wooden chime, four xylophone notes up and one more above
+    name = "fungal_checkpoint"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for k, nt in enumerate((67, 71, 74, 79)):
+        place(x, 0.07 * k, xylo(r, midi(nt), dur(name) - 0.07 * k), 0.7)
+    place(x, 0.3, xylo(r, midi(86), dur(name) - 0.3), 0.45)
+    save(name, x, fin=0.002, fout=0.15)
+
+    # the finish: a rising chime of glass tines, with a soft puff of spores at the top
+    name = "fungal_finish"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for k, nt in enumerate((64, 67, 71, 74, 79, 83)):
+        place(x, 0.12 * k, tine(r, midi(nt), 1.6, 1.0), 0.55)
+    tt = tv(0.9)
+    place(x, 0.7, taper(noise(r, len(tt), 200, 1400) * env(tt, 0.08, 0.3), 0.02), 0.6)
+    save(name, x, fin=0.002, fout=0.25)
+
+    # a drip lands in a puddle: a glassy tick
+    name = "fungal_drip_plink"
+    r = rng(name)
+    x = fm_glass(midi(100), dur(name), 0.09, index=1.2, ratio=2.76, attack=0.001)
+    x += 0.3 * click(r, dur(name), 3000, 9000, 0.0015)
+    save(name, x, fin=0.0005, fout=0.03)
+
+    # the drop lands on a leaf: a wet slap, a bubble and a few droplets flicking off
+    name = "fungal_drip_splash"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    drops = np.zeros(n)
+    grains(r, drops, 14, 0.03, 0.35, 1200.0, 5000.0, 0.002, 0.006, 0.9, decay=0.15)
+    x = 0.7 * thud(t, 260.0, 110.0, 0.05, 0.05, harm=(0.2,)) + 0.8 * noise(r, n, 600, 4000) * env(t, 0.0008, 0.035)
+    x += 0.5 * unit(drops)
+    place(x, 0.12, bubble(520.0, 0.12, 0.02, 0.6), 0.25)
+    save(name, x, fin=0.0008, fout=0.08)
+
+    # the puff inflates: a rising hiss that swells over about 1.1 s
+    name = "fungal_puff_swell"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    rise = np.clip(t / dur(name), 0.0, 1.0) ** 1.6
+    hiss = svf(r.standard_normal(n), glide(320.0, 2400.0, t, dur(name)), 3.5)
+    x = unit(hiss) * rise + 0.2 * tone(glide(300.0, 700.0, t, dur(name))) * rise
+    save(name, x, fin=0.002, fout=0.08)
+
+    # the puff lets out its breath: a soft whump
+    name = "fungal_puff_blow"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = thud(t, 170.0, 70.0, 0.06, 0.08, harm=(0.2,)) + 0.4 * noise(r, n, 200, 1200) * env(t, 0.002, 0.1)
+    save(name, x, fin=0.001, fout=0.05)
+
+    # one quick wooden tick of the warning toadstool (played once per tick, faster as the hazard nears)
+    name = "fungal_tell_tick"
+    r = rng(name)
+    t = tv(dur(name))
+    x = wood_knock(r, dur(name), 1250.0, 0.008, 7000.0) + 0.3 * click(r, dur(name), 2000, 7000, 0.001)
+    save(name, x, fin=0.0003, fout=0.02)
+
+    # the frog's croak: a buzzy, pulsed call that dips in pitch, through a throaty formant
+    name = "fungal_frog_croak"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    f = glide(160.0, 105.0, t, dur(name))
+    car = sum(tone(f * k) / k ** 1.2 for k in range(1, 9))
+    pulses = (0.5 - 0.5 * np.cos(TAU * 27.0 * t)) ** 2
+    swell = np.sin(np.pi * np.clip(t / dur(name), 0.0, 1.0)) ** 0.5
+    x = unit(svf(car, 600.0, 2.2) + 0.3 * car) * pulses * swell
+    save(name, x, fin=0.002, fout=0.06)
+
+    # the spores drift through the air (loop): an airy rush, swelling and easing
+    name = "fungal_puff_loop"
+    r = rng(name)
+    n = ns(dur(name))
+    body = cnoise(r, n, 300.0, 2600.0, 2) * (0.55 + 0.45 * crand(r, n, 4))
+    save_loop(name, unit(body) + 0.3 * cnoise(r, n, 80, 300))
+
+    # the snail trundles (loop): a wet bed under three soft squelches a loop, each one a suck of mud
+    name = "fungal_snail_squelch"
+    r = rng(name)
+    n = ns(dur(name))
+    bed = cnoise(r, n, 200.0, 900.0, 2) * (0.5 + 0.5 * clfo(n, 3))
+    sq = np.zeros(n)
+    for k in range(3):
+        tt = tv(0.6)
+        squelch = unit(svf(r.standard_normal(len(tt)), glide(350.0, 1100.0, tt, 0.6), 4.0))
+        cplace(sq, k * dur(name) / 3.0, squelch * np.sin(np.pi * np.minimum(tt / 0.6, 1.0)) ** 2, 0.7)
+    save_loop(name, unit(bed) + 0.8 * unit(sq))
+
+
 def verify():
     ok = True
     total = 0
@@ -6456,7 +6761,7 @@ GENERATORS = (gen_steps, gen_wall, gen_movement_loops, gen_lasers, gen_crusher_p
               gen_foundry, gen_reef, gen_orbital, gen_clockwork, gen_balance, gen_gardens, gen_ascent, gen_xeno,
               gen_volcano, gen_glacier, gen_desert, gen_manor, gen_armada, gen_candy, gen_carrier,
               gen_sakura, gen_jungle, gen_frontier, gen_neon, gen_doom, gen_abyss, gen_tempest, gen_void, gen_kit, gen_emotes,
-              gen_toybox, gen_olympus, gen_arcade)
+              gen_toybox, gen_olympus, gen_arcade, gen_siege, gen_fungal)
 
 
 def main():
