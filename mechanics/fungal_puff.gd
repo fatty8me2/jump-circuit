@@ -17,7 +17,7 @@ extends Area3D
 @export var lift: float = 66.0
 @export var max_rise: float = 9.0
 ## The walkable shelf round the column's footprint (metres beyond `radius`).
-@export var shelf: float = 1.4
+@export var shelf: float = 1.9
 
 var _ball: Node3D
 var _ball_mat: StandardMaterial3D

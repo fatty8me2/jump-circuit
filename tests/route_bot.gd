@@ -97,11 +97,6 @@ func _physics_process(dt: float) -> void:
 			log_lines.append("route exhausted at %s without reaching the finish" % str(player.global_position.snapped(Vector3.ONE * 0.01)))
 			stuck = true
 		return
-	if _human_pause > 0.0:
-		_human_pause -= dt
-		player.cmd_move = Vector2.ZERO
-		player.cmd_jump = false
-		return
 	var step: Dictionary = level.route[step_index]
 	var first_tick: bool = _step_time == 0.0
 	var index_before: int = step_index
@@ -152,12 +147,7 @@ func _physics_process(dt: float) -> void:
 		_pending_bounce = false
 
 
-var _human_pause: float = 0.0
-
-
 func _next() -> void:
-	if OS.get_environment("BOT_PAUSE") == "1" and step_index < level.route.size() and str(level.route[step_index]["kind"]) in ["b_wait", "wait", "x_wait", "c_wait", "checkpoint"]:
-		_human_pause = 1.0
 	step_index += 1
 	_begin_step()
 

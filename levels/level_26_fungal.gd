@@ -1,18 +1,39 @@
 extends LevelBase
 ## 26. MUSHROOM HOLLOW (campaign index 8, MEDIUM tier) - a sunny storybook forest floor seen at beetle
-## size: daisies tall as trees, toadstool caps to bounce on, a snail to ride, puffballs that lift you on
-## a cloud of spores, a frog that flicks its tongue, acorns that drop, and at the end the GREAT TOADSTOOL.
-## Warm golden daylight, mossy greens and toadstool red: nothing like Xeno Wilds' glowing alien night.
-## Eighteen stages, seventeen checkpoints. It is a friendly course: the hardest main-path jump is about
-## 85% of max reach and every main-path landing is 1.4 m or wider.
+## size: daisies tall as trees, toadstool caps to bounce on, a snail and ladybirds to ride, puffballs that
+## lift you on a cloud of spores, a frog that flicks its tongue, acorns that drop, dewdrops, and at the end the
+## GREAT TOADSTOOL. Warm golden daylight, mossy greens and toadstool red: nothing like Xeno Wilds' glowing
+## alien night. Eighteen stages, seventeen checkpoints. A friendly course: the hardest main-path jump is
+## about 82% of max reach and every main-path landing is 2 m or wider.
 ##
-## PLACEHOLDER HEADER - the stage list is filled in as the stages are built.
+##  1 Daisy Meadow       a gentle hop chain over spotted caps and leaves
+##  2 Springcaps         BULLSEYE CAPS: land in the gold heart to be thrown highest, two bounces up the hill
+##  3 Bark Run           WALL RUN a long fallen bark, then MANTLE the stump
+##  4 Dewdrop Valley     BRANCH: stepping leaves under two DEWDROPS | the DEW-LEAF SLIDE
+##                       [shortcut: two springcaps straight down the middle]
+##  5 Snail Ferry        board the SNAIL and ride it over the stream
+##  6 Spore Lift         two PUFFBALLS: wait for the spores to blow, ride the cloud up to the ledge
+##  7 Fairy Ring         BRANCH: two chained bark WALL RUNS | the FAIRY RING (portal) up to a long branch
+##                       [shortcut: a little ring on a cap by the fork]
+##  8 Acorn Drop         walk the root under two falling ACORNS (crushers), MANTLE the stump
+##  9 Frog Pond          lily pads while two FROGS flick their tongues (pistons) across them
+## 10 Hollow Log         the SUNBEAM (laser) on the plank, then three chained WALL RUNS up the hollow trunk
+## 11 Ladybird Crossing  BRANCH: ride the flying LADYBIRD | three bounces on springcaps
+##                       [shortcut: MANTLE a tall stem and run the high branch]
+## 12 Falling Leaves     dry leaves that give way, one green leaf under a dewdrop
+## 13 Ant Highway        two stepping stones under dewdrops [shortcut: WALL RUN the bark]
+## 14 Dew Garden         a spore lift, then leaves under a dewdrop
+## 15 Ladybird Lane      two LADYBIRDS ferry you over the gaps
+## 16 Root Flare         two MANTLES up the roots at the foot of the great toadstool
+## 17 The Lower Gills    SPIRAL of bracket shelves up the great toadstool's stalk
+## 18 THE GREAT TOADSTOOL  SET PIECE: climb the gills while the dew weeps down them in a wave behind you,
+##                       out under the rim, a springcap throws you over it onto the flat red cap and the gate
 ##
 ## Fungal mechanics (own scripts): FungalCap (bullseye bounce caps), FungalPuff (spore-puff lifts),
-## FungalSnail (a snail you ride), FungalDrip (falling dewdrops) and FungalTell (a warning toadstool
-## for the timed machines). Visuals: visual/fungal_{sky,decor,fx,sway}.gd, fungal_{moss,water,ground,
-## ray}.gdshader. Route variants for the bot: 0 = main line, 1 = every alternative branch, 2 = main
-## line + every shortcut. Every wait the bot makes holds for 1.5 s more.
+## FungalSnail (a snail or a ladybird you ride), FungalDrip (falling dewdrops), FungalTell (a warning
+## toadstool for the timed machines) and FungalTongue (the frog's tongue). Visuals: visual/fungal_{sky,
+## decor,fx,sway}.gd, fungal_{moss,water,ground,ray}.gdshader. Route variants for the bot: 0 = main line,
+## 1 = every alternative branch, 2 = main line + every shortcut. Every wait the bot makes holds for 1.5 s more.
 
 const RED := Color(0.9, 0.22, 0.18)
 const ORANGE := Color(0.96, 0.58, 0.2)
@@ -518,7 +539,6 @@ func _stage_4() -> Vector3:
 			_:
 				steps.append(_cap_plat(cc, dia[i] * 0.5, PINKCAP))
 		zc = cz - dia[i] * 0.5
-	print("S4 t_total ", t_total, " gap_r ", gap_r, " pct ", (gap_r + 0.75) / _reach(-0.875), " slide gap ", gap, " mc ", mc)
 	var arrive: Array[float] = [1.0, 1.9, 2.9]
 	var d1: FungalDrip = _drip((steps[1]["c"] as Vector3), 7.0, 5.5, arrive[1] + 2.7)
 	var d2: FungalDrip = _drip((steps[2]["c"] as Vector3), 7.0, 5.5, arrive[2] + 2.7)
@@ -617,7 +637,7 @@ func _puff(c: Vector3, height: float = 9.0, period: float = 8.0, phase: float = 
 
 func _stage_6() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
-	var pr: float = 3.0
+	var pr: float = 3.5
 	var pf1_c: Vector3 = _ahead(cp0, 0.74, 0.0, pr * 2.0)
 	var pf1: FungalPuff = _puff(pf1_c, 9.0, 8.0, 0.0)
 	var ledge_a: Dictionary = _blk(Vector3(pf1_c.x, pf1_c.y + 8.0, pf1_c.z - pr - 1.2 - 2.5), 5.0, 5.0, "alt", 0.8)
@@ -638,7 +658,7 @@ func _stage_6() -> Vector3:
 ## Bot: stand off to the side of the column on the shelf until the puffball will keep blowing long enough,
 ## step in, ride the spores up above `above` and fly onto the ledge centre `to`.
 func _lift(pf: FungalPuff, c: Vector3, shelf_r: float, to: Vector3, above: float) -> void:
-	var stand: Vector3 = _w(Vector3(c.x + (shelf_r - 0.5), c.y, c.z + 0.3))
+	var stand: Vector3 = _w(Vector3(c.x + (shelf_r - 1.2), c.y, c.z + 0.3))
 	var mid: Vector3 = _w(c)
 	r_walk(stand)
 	_wait(func() -> bool: return pf.on_over(Game.course_time, 0.5, 4.0), stand)
@@ -725,7 +745,6 @@ func _stage_7() -> Vector3:
 	var sdoor: WarpPortal = kit.portal(_w(spc + Vector3(0, 0, -0.1)), _yaw, _w(Vector3(0.0, 0, mz + 0.9)), _yaw, 6.0)
 	_dress_ring(_w(Vector3(0.0, 0, mz + 0.9)), _yaw, Color(0.5, 0.8, 1.0))
 	var cp: Dictionary = _cp(_ahead(merge, 0.78, 0.0, 5.0))
-	print("S7 hi_len ", hi_len, " mz ", mz, " pct pb2 ", 0.78)
 	_hop(cp0, fork, Vector3(0, 0, 0.4))
 	if route_variant == 2:
 		r_walk(_w(Vector3(0, 0, fc.z + 0.2)))
@@ -1057,7 +1076,6 @@ func _stage_11() -> Vector3:
 	var br_len: float = col_front - front_b
 	var branch: Dictionary = _blk(Vector3(0.0, 4.1, col_front - br_len * 0.5), 1.8, br_len, "alt", 0.6)
 	var cp: Dictionary = _cp(_ahead(merge, 0.78, 0.0, 5.0))
-	print("S11 br_len ", br_len, " mz ", mz, " s_ab ", s_ab, " s_bm ", s_bm)
 	_hop(cp0, fork, Vector3(0, 0, 0.4))
 	if route_variant == 2:
 		r_walk(_w(Vector3(0, 0, fc.z + 0.9)))
@@ -1152,7 +1170,7 @@ func _stage_13() -> Vector3:
 
 func _stage_14() -> Vector3:
 	var cp0: Dictionary = _area(Vector3.ZERO, 2.5, 2.5)
-	var pr: float = 3.0
+	var pr: float = 3.5
 	var pf_c: Vector3 = _ahead(cp0, 0.74, 0.0, pr * 2.0)
 	var pf: FungalPuff = _puff(pf_c, 9.0, 8.0, 0.25)
 	var ledge: Dictionary = _blk(Vector3(pf_c.x, pf_c.y + 7.0, pf_c.z - pr - 1.2 - 2.5), 5.0, 5.0, "alt", 0.8)
@@ -1355,7 +1373,6 @@ func _stage_17() -> Vector3:
 	r_checkpoint()
 	_yaw_override = cp_yaw
 	_y_over = y0 + RISE * 7.0
-	print("S17 delta deg ", rad_to_deg(delta), " first ", rad_to_deg(first_phi), " cp_yaw ", cp_yaw)
 	return cp_c
 
 
@@ -1454,7 +1471,6 @@ func _stage_18() -> void:
 	FungalFx.halo(self, fin_w + Vector3(0, 1.0, 0), 4.5, 40, GOLD)
 	FungalFx.petals(self, fin_w + Vector3(0, 6.0, 0), Vector3(10, 4, 10), 30)
 	FungalFx.spores(self, fin_w + Vector3(0, 1.0, 0), 5.0, 30, Color(1.0, 0.9, 0.6))
-	print("S18 top_y ", _top_y, " s_out ", s_out, " dist_b ", dist_b, " delta deg ", rad_to_deg(delta))
 
 # @@STAGES@@
 
@@ -1658,23 +1674,3 @@ func _finish_sequence() -> void:
 	# SOUND: fungal_finish - the great toadstool blooms: a rising chime and a puff of spores
 	WorldAudio.at(self, "fungal_finish", _finish_pos + Vector3(0, 3.0, 0), 1.0, 120.0)
 	await get_tree().create_timer(0.9).timeout
-
-
-# ---- temporary debugging ----------------------------------------------------------------------------
-
-const DEBUG_JUMPS: bool = true
-var _dbg_connected: bool = false
-
-
-func _process(_dt: float) -> void:
-	if DEBUG_JUMPS and player != null and not _dbg_connected:
-		_dbg_connected = true
-		player_failed.connect(func(cause: String) -> void: print("FAIL ", cause, " t=", snappedf(Game.course_time, 0.01), " at ", player.global_position.snapped(Vector3.ONE * 0.01)))
-		player.jumped.connect(func() -> void: print("JUMP t=", snappedf(Game.course_time, 0.01), " at ", player.global_position.snapped(Vector3.ONE * 0.01), " hspeed ", snappedf(player.horizontal_speed(), 0.01)))
-var _dbg_acc: float = 0.0
-func _physics_process(dt: float) -> void:
-	super._physics_process(dt)
-	_dbg_acc += dt
-	if DEBUG_JUMPS and player != null and _dbg_acc > 0.1 and Game.course_time > 50.5 and Game.course_time < 53.0:
-		_dbg_acc = 0.0
-		var lbn: Array = find_children("*", "FungalSnail", true, false); print("LB ", (lbn[lbn.size() - 1] as Node3D).global_position.snapped(Vector3.ONE * 0.01) if lbn.size() > 0 else "-"); print("TR t=", snappedf(Game.course_time, 0.1), " ", player.global_position.snapped(Vector3.ONE * 0.01), " v ", player.velocity.snapped(Vector3.ONE * 0.1), " wall ", player.is_wall_running(), " gr ", player.grounded)
