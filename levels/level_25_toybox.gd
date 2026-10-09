@@ -346,7 +346,20 @@ func _stage_2() -> Vector3:
 	var froms: Array[Vector3] = [_w(Vector3(-1.9, 0, -2.15)), _w(Vector3(1.9, 0, -2.15))]
 	var exits: Array[Vector3] = [_w(Vector3(-1.9, 0, far_z + 1.0)), _w(Vector3(1.9, 0, far_z + 1.0))]
 	var poses: Array[Vector3] = [_w(Vector3(-1.9, -0.25, near_z - ride)), _w(Vector3(1.9, -0.25, near_z - ride))]
-	_ferry(cars, froms, exits, poses)
+	# SHORTCUT: two blocks beside the cars - two long leaps over the rug, no waiting for a ride
+	# (a launch pad flush beside the start slab, a landing pad flush beside the far one)
+	var lp: Dictionary = _blk(Vector3(4.0, 0, -1.0), 3.0, 3.0, "main", 0.8)
+	var rp: Dictionary = _blk(Vector3(4.0, 0, far_z), 3.0, 5.0, "main", 0.8)
+	var sc: Array[Dictionary] = _even_chain(-2.5, far_z + 2.5, 4.0, 3)
+	if route_variant == 2:
+		r_walk(_w(Vector3(3.2, 0, -1.0)))
+		_hop(lp, sc[0])
+		_hop(sc[0], sc[1])
+		_hop(sc[1], sc[2])
+		_hop(sc[2], rp, Vector3(0, 0, 1.0))
+		r_walk(_w(Vector3(0, 0, far_z)))
+	else:
+		_ferry(cars, froms, exits, poses)
 	r_checkpoint()
 	return far["c"]
 
@@ -525,7 +538,7 @@ func _stage_5() -> Vector3:
 	var p2: Dictionary = _post(_ahead(beam, 0.84, 0.6, 2.0), 2.0, 2.0)
 	var cp: Dictionary = _cp(_ahead(p2, 0.82, 0.0, 5.0))
 	# SHORTCUT: two little blocks beside the beam carry you past both lasers
-	var sc: Array[Dictionary] = _side_chain(p1, 2, 3.6, 0.84)
+	var sc: Array[Dictionary] = _side_chain(p1, 2, 3.6, 0.80)
 	_hop(cp0, p1)
 	if route_variant == 2:
 		_hop(p1, sc[0])
@@ -671,6 +684,19 @@ func _side_chain(from: Dictionary, n: int, dx: float, pct: float) -> Array[Dicti
 	return out
 
 
+## `n` square blocks (2 m) in a straight line at local x, spaced so every hop between the front edge
+## `from_z` and the near edge `to_z` of the landing is the same length.
+func _even_chain(from_z: float, to_z: float, x: float, n: int) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var g: float = (from_z - to_z - 2.0 * float(n)) / float(n + 1)
+	var z: float = from_z
+	for i: int in n:
+		z -= g + 1.0
+		out.append(_post(Vector3(x, 0, z), 2.0, 2.0, "accent"))
+		z -= 1.0
+	return out
+
+
 func _stage_9() -> Vector3:
 	var clen: float = 6.5
 	var ride: float = 16.0
@@ -679,11 +705,23 @@ func _stage_9() -> Vector3:
 	cars.append(_car(Vector3(-1.9, 0, near_z), Vector3(0, 0, -ride), 18.0, 0.0, GREEN, 0.36, clen))
 	cars.append(_car(Vector3(1.9, 0, near_z), Vector3(0, 0, -ride), 18.0, 0.5, YELLOW, 0.36, clen))
 	var fz: float = near_z - ride - clen * 0.5 - 0.8 - 1.75
-	_blk(Vector3(0, 0, fz), 3.5, 3.5, "main", 0.8)
+	var landing: Dictionary = _blk(Vector3(0, 0, fz), 3.5, 3.5, "main", 0.8)
+	var rp: Dictionary = _blk(Vector3(4.0, 0, fz), 4.5, 3.5, "main", 0.8)
+	var lp: Dictionary = _blk(Vector3(4.0, 0, -1.0), 3.0, 3.0, "main", 0.8)
 	var froms: Array[Vector3] = [_w(Vector3(-1.9, 0, -2.15)), _w(Vector3(1.9, 0, -2.15))]
 	var exits: Array[Vector3] = [_w(Vector3(-1.0, 0, fz + 0.5)), _w(Vector3(1.0, 0, fz + 0.5))]
 	var poses: Array[Vector3] = [_w(Vector3(-1.9, -0.25, near_z - ride)), _w(Vector3(1.9, -0.25, near_z - ride))]
-	_ferry(cars, froms, exits, poses)
+	# SHORTCUT: three blocks beside the train - three long leaps instead of the ride
+	var sc: Array[Dictionary] = _even_chain(-2.5, fz + 1.75, 4.0, 3)
+	if route_variant == 2:
+		r_walk(_w(Vector3(3.2, 0, -1.0)))
+		_hop(lp, sc[0])
+		_hop(sc[0], sc[1])
+		_hop(sc[1], sc[2])
+		_hop(sc[2], rp, Vector3(0, 0, 0.6))
+		r_walk(_w(Vector3(0.5, 0, fz)))
+	else:
+		_ferry(cars, froms, exits, poses)
 	# the brick wall: a wall-run panel along the right, over the void, to a post
 	var f: float = fz - 1.75
 	kit.wallrun(_w(Vector3(2.3, 1.2, f - 9.5)), Vector3(16.0, 6.5, 0.6), _yaw + 90.0)
@@ -711,7 +749,7 @@ func _stage_10() -> Vector3:
 	var shelf_top := Vector3(bc.x, bc.y + 3.3, far - 1.6 - 0.8)
 	var shelf: Dictionary = _ledge(shelf_top, Vector3(3.0, 9.0, 1.6))
 	var cp: Dictionary = _cp(_ahead(shelf, 0.80, 0.0, 5.0, -bc.x))
-	var sc: Array[Dictionary] = _side_chain(p1, 2, 3.6, 0.84)
+	var sc: Array[Dictionary] = _side_chain(p1, 2, 3.6, 0.80)
 	_hop(cp0, p1)
 	if route_variant == 2:
 		_hop(p1, sc[0])
@@ -789,14 +827,23 @@ func _stage_12() -> Vector3:
 	var dock2: Dictionary = _blk(Vector3(1.0, 0, dz - 1.5 - len_a - 1.5), 3.0, 3.0, "main", 0.8)
 	var p1: Dictionary = _post(_ahead(dock2, 0.80, 0.6, 2.0, -1.0), 2.0, 2.0)
 	var cp: Dictionary = _cp(_ahead(p1, 0.80, 0.0, 5.0))
-	var hold_a: Vector3 = _w(Vector3(0, 0, -2.0))
-	r_walk(hold_a)
-	_wait(func() -> bool: return _bridge_ok(tower_a, 0.0, 3.6), hold_a)
-	r_walk(_w(Vector3(1.0, 0, dz + 0.4)))
-	var hold_b: Vector3 = _w(Vector3(1.0, 0, dz - 0.6))
-	r_walk(hold_b)
-	_wait(func() -> bool: return _bridge_ok(tower_b, 0.0, 3.6), hold_b)
-	r_walk(_w(Vector3(1.0, 0, dz - 1.5 - len_a - 0.9)))
+	# SHORTCUTS: a stepping block beside each tower - one 90% leap and a short hop, no waiting
+	var sa: Dictionary = _post(Vector3(2.8, 0, -7.9), 2.0, 2.0, "accent")
+	var sb: Dictionary = _post(Vector3(3.3, 0, dz - 1.5 - 5.4), 2.0, 2.0, "accent")
+	if route_variant == 2:
+		_hop(cp0, sa)
+		_hop(sa, dock)
+		_hop(dock, sb)
+		_hop(sb, dock2)
+	else:
+		var hold_a: Vector3 = _w(Vector3(0, 0, -2.0))
+		r_walk(hold_a)
+		_wait(func() -> bool: return _bridge_ok(tower_a, 0.0, 3.6), hold_a)
+		r_walk(_w(Vector3(1.0, 0, dz + 0.4)))
+		var hold_b: Vector3 = _w(Vector3(1.0, 0, dz - 0.6))
+		r_walk(hold_b)
+		_wait(func() -> bool: return _bridge_ok(tower_b, 0.0, 3.6), hold_b)
+		r_walk(_w(Vector3(1.0, 0, dz - 1.5 - len_a - 0.9)))
 	_hop(dock2, p1)
 	_hop(p1, cp, Vector3(0, 0, 1.2))
 	r_checkpoint()
@@ -897,7 +944,7 @@ func _stage_16() -> Vector3:
 	cars.append(_car(Vector3(lanes[1], 0, near_z), Vector3(0, 0, -ride), 16.0, 0.5, ORANGE))
 	var cp: Dictionary = _cp(_ahead(merge, 0.80, 0.0, 5.0))
 	_hop(cp0, fork, Vector3(0, 0, 0.4))
-	if route_variant != 1:
+	if route_variant == 0:
 		var froms: Array[Vector3] = [_w(Vector3(lanes[0], 0, f0 + 0.35)), _w(Vector3(lanes[1], 0, f0 + 0.35))]
 		var exits: Array[Vector3] = [_w(Vector3(lanes[0], 0, mn - 1.2)), _w(Vector3(lanes[1], 0, mn - 1.2))]
 		var poses: Array[Vector3] = [_w(Vector3(lanes[0], -0.25, near_z - ride)), _w(Vector3(lanes[1], -0.25, near_z - ride))]
@@ -928,7 +975,7 @@ func _stage_17() -> Vector3:
 	var jack: ToyboxJack = _jack(jc, 4.5, 0.0, Vector3(0, 20.5, -3.0), YELLOW)
 	var ja: Dictionary = _area(jc, 1.3, 1.3)
 	var cp: Dictionary = _cp(Vector3(jc.x, 5.0, jc.z - 1.3 - 2.0 - 2.5))
-	var sc: Array[Dictionary] = _side_chain(p1, 3, 3.6, 0.84)
+	var sc: Array[Dictionary] = _side_chain(p1, 3, 3.6, 0.78)
 	_hop(cp0, p1)
 	if route_variant == 2:
 		_hop(p1, sc[0])
@@ -1005,10 +1052,16 @@ func _stage_18() -> void:
 	r_walk(_w(Vector3(pcc.x, pcc.y, pcc.z - 0.6)))
 	r_mantle(_w(Vector3(pcc.x, pcc.y, pcc.z - 1.0 + 0.35)), _w(be_top + Vector3(0, 0, 0.2)))
 	_hop(bookend, s2, Vector3(0, 0, 1.2))
-	var hold_a: Vector3 = _w(Vector3(0, s2c.y, tfront + 0.4))
-	r_walk(hold_a)
-	_wait(func() -> bool: return _bridge_ok(tower, 0.0, 3.6), hold_a)
-	r_walk(_w(Vector3(0, s2c.y, tfront - tlen - 0.9)))
+	# SHORTCUT: a stepping block beside the tower
+	var sbk: Dictionary = _post(Vector3(3.2, s2c.y, tfront - 5.4), 1.8, 1.8, "accent")
+	if route_variant == 2:
+		_hop(s2, sbk)
+		_hop(sbk, dock)
+	else:
+		var hold_a: Vector3 = _w(Vector3(0, s2c.y, tfront + 0.4))
+		r_walk(hold_a)
+		_wait(func() -> bool: return _bridge_ok(tower, 0.0, 3.6), hold_a)
+		r_walk(_w(Vector3(0, s2c.y, tfront - tlen - 0.9)))
 	_wait(func() -> bool: return _resting(jack, 0.0, 2.0))
 	_hop(dock, _area(jc, 1.3, 1.3))
 	_kick(jc, Vector3(s3c.x, y3, s3c.z + 1.2))
