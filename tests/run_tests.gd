@@ -3465,7 +3465,7 @@ const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "
 	# the Arcane Library (gen_arcane)
 	"arcane_book_flap", "arcane_ink_flow",
 	# the flow set's loops (the wind rush and the rail grind) and the aurora draft and hyperloop pod hum
-	"flow_wind_loop", "flow_rail_grind", "aurora_draft_loop", "hyperloop_pod_hum"]
+	"flow_wind_loop", "flow_rail_grind", "aurora_draft_loop", "hyperloop_pod_hum", "skysurf_ribbon_loop"]
 
 
 func test_z_world_sounds() -> void:
