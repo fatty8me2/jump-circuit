@@ -331,14 +331,16 @@ const THEMES: Dictionary = {
 		"decor": Color(0.30, 0.27, 0.26), "decor2": Color(0.74, 0.10, 0.12), "metal": Color(0.30, 0.30, 0.34),
 		"cloud_light": Color(0.80, 0.42, 0.25), "cloud_shade": Color(0.18, 0.10, 0.12),
 	},
-	"aurora": {  # PLACEHOLDER palette - the Flow level agent owns and retunes this entry
-		"sky_top": Color(0.10, 0.12, 0.30), "sky_horizon": Color(0.55, 0.80, 0.85), "sky_bottom": Color(0.20, 0.25, 0.35),
-		"sun": Color(0.85, 0.95, 1.00), "sun_energy": 1.0, "sun_rot": Vector3(-45, 150, 0),
-		"ambient": Color(0.60, 0.62, 0.70), "ambient_energy": 0.8, "fog": Color(0.45, 0.60, 0.70), "fog_density": 0.002,
-		"top": Color(0.85, 0.92, 0.98), "side": Color(0.40, 0.50, 0.65), "trim": Color(0.40, 0.95, 0.85),
-		"alt_top": Color(0.55, 0.75, 0.95), "accent": Color(0.40, 0.95, 0.85), "accent2": Color(0.85, 0.50, 1.00),
-		"decor": Color(0.25, 0.32, 0.45), "decor2": Color(0.50, 0.90, 0.80), "metal": Color(0.70, 0.74, 0.80),
-		"cloud_light": Color(0.70, 0.85, 0.90), "cloud_shade": Color(0.20, 0.25, 0.35),
+	# Aurora Run: a clear, calm mountain night - deep indigo sky, blue-white snow, teal ice trim, and the aurora's
+	# green / violet light on everything (levels/level_33_aurora.gd swaps in its own star dome and curtains).
+	"aurora": {
+		"sky_top": Color(0.006, 0.010, 0.045), "sky_horizon": Color(0.07, 0.26, 0.34), "sky_bottom": Color(0.04, 0.08, 0.14),
+		"sun": Color(0.55, 0.88, 0.98), "sun_energy": 0.95, "sun_rot": Vector3(-26, 172, 0),
+		"ambient": Color(0.36, 0.52, 0.80), "ambient_energy": 0.95, "fog": Color(0.06, 0.15, 0.25), "fog_density": 0.0021,
+		"top": Color(0.84, 0.92, 1.0), "side": Color(0.20, 0.30, 0.50), "trim": Color(0.32, 1.0, 0.80),
+		"alt_top": Color(0.62, 0.78, 0.96), "accent": Color(0.75, 0.40, 1.0), "accent2": Color(0.35, 1.0, 0.80),
+		"decor": Color(0.16, 0.24, 0.38), "decor2": Color(0.40, 0.95, 0.85), "metal": Color(0.60, 0.70, 0.84),
+		"cloud_light": Color(0.45, 0.85, 0.80), "cloud_shade": Color(0.10, 0.18, 0.32),
 	},
 	"skysurf": {  # PLACEHOLDER palette - the Flow level agent owns and retunes this entry
 		"sky_top": Color(0.10, 0.12, 0.30), "sky_horizon": Color(0.55, 0.80, 0.85), "sky_bottom": Color(0.20, 0.25, 0.35),
