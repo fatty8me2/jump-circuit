@@ -204,7 +204,8 @@ func _lane(k: int, ops: Array) -> void:
 	var per_m: float = pitch_drop / maxf(total_ramp, 1.0)
 	_cur = start
 	if route_variant == 0:
-		r_walk(Vector3(LANE_X, y0, PLAZA_Z[k - 1] - 4.0))
+		r_walk(Vector3(3.5, y0, PLAZA_Z[k - 1] - 5.5))
+		r_walk(Vector3(LANE_X, y0, PLAZA_Z[k - 1] - 5.5))
 	for op: Array in ops:
 		match str(op[0]):
 			"ramp":
