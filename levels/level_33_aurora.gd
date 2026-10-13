@@ -20,13 +20,13 @@ extends LevelBase
 ## line beside it too. Mechanics of its own: AuroraDraft (a ribbon of light that lifts and carries you) and
 ## AuroraMote (glowing motes along the fast line that add a little flow). Visuals: visual/aurora_*.
 
-const PLAZA_HX: float = 9.0
+const PLAZA_HX: float = 17.0
 const PLAZA_HZ: float = 8.0
 ## Plaza centre z and the drop (m) of each stage, plaza 0 is the start, plaza 9 the finish.
 const PLAZA_Z: Array[float] = [0.0, -110.0, -230.0, -360.0, -470.0, -600.0, -750.0, -870.0, -980.0, -1140.0]
 const DROP: Array[float] = [11.0, 13.0, 14.0, 11.0, 14.0, 13.0, 14.0, 11.0, 20.0]
 ## x of the safe lane where it leaves / re-enters a plaza.
-const LANE_X: float = 5.0
+const LANE_X: float = 11.0
 
 var _tuning: MovementTuning
 var plaza_y: Array[float] = []
@@ -179,7 +179,6 @@ func _ramp(zlen: float, drop: float, wid: float, dlen: float = 5.0, dx: float = 
 func _lane(k: int, ops: Array) -> void:
 	var y0: float = plaza_y[k - 1]
 	var y1: float = plaza_y[k]
-	var z0: float = PLAZA_Z[k - 1] - PLAZA_HZ
 	var z1: float = PLAZA_Z[k] + PLAZA_HZ
 	var start: Dictionary = _rect(Vector3(LANE_X, y0, PLAZA_Z[k - 1]), 4.0, PLAZA_HZ)
 	# dry pass: z used by everything but the fill, and the drop the hops take
@@ -203,7 +202,6 @@ func _lane(k: int, ops: Array) -> void:
 	var total_ramp: float = ramp_z + fill_z
 	var pitch_drop: float = ((y0 - y1) + hop_dy)  # hop_dy is negative for drops: ramps take what remains
 	var per_m: float = pitch_drop / maxf(total_ramp, 1.0)
-	print("aurora stage %d: ramps %.1f m + fill %.1f m, ramp pitch %.1f deg, hardest hop so far %.0f%%" % [k, ramp_z, fill_z, rad_to_deg(atan(per_m)), _hop_max * 100.0])
 	_cur = start
 	if route_variant == 0:
 		r_walk(Vector3(LANE_X, y0, PLAZA_Z[k - 1] - 4.0))
@@ -227,18 +225,7 @@ func _lane(k: int, ops: Array) -> void:
 func _plaza(k: int) -> void:
 	var c := Vector3(0, plaza_y[k], PLAZA_Z[k])
 	var size := Vector3(PLAZA_HX * 2.0, 1.6, PLAZA_HZ * 2.0)
-	var body := FlowSurface.new()
-	body.gain = 0.0
-	body.cap = 30.0
-	var cs := CollisionShape3D.new()
-	var bs := BoxShape3D.new()
-	bs.size = size
-	cs.shape = bs
-	body.add_child(cs)
-	body.add_child(Look.platform_box(size, "main"))
-	body.add_child(Look.underside(size, 2.0, false))
-	body.position = c - Vector3(0, size.y * 0.5, 0)
-	add_child(body)
+	kit.plat(c, size, "main", 2.0)
 	_note_span(c + Vector3(0, 0, PLAZA_HZ), c - Vector3(0, 0, PLAZA_HZ), PLAZA_HX * 2.0)
 	if k > 0 and k < PLAZA_Z.size() - 1:
 		var cp: Checkpoint = kit.checkpoint(c, 0.0)
@@ -300,7 +287,6 @@ func _build() -> void:
 		r_flow([Vector3(0, plaza_y[9], PLAZA_Z[9] + 4.0), Vector3(0, plaza_y[9], PLAZA_Z[9] - 2.0)], 1.0)
 	_finish_pos = Vector3(0, plaza_y[9], PLAZA_Z[9] - 2.0)
 	_surroundings()
-	print("aurora: hardest safe hop %.0f%%" % (_hop_max * 100.0))
 
 
 ## The safe line's ops for stage k (see _lane).
@@ -439,6 +425,14 @@ func _flow(k: int) -> void:
 	match k:
 		1:
 			_flow_1()
+		2:
+			_flow_2()
+		3:
+			_flow_3()
+		7:
+			_flow_7()
+		9:
+			_flow_9()
 		4:
 			_flow_4()
 		5:
@@ -483,7 +477,7 @@ func _flow_generic(k: int) -> void:
 func _flow_4() -> void:
 	var a := Vector3(0, plaza_y[3], PLAZA_Z[3] - 8.0)
 	var b := Vector3(0, plaza_y[4], PLAZA_Z[4] + 8.0)
-	_fslope(a, b, 22.0)
+	_fslope(a, b, 16.0)
 	var gp: Array[Vector3] = []
 	for z: float in [-374.0, -384.0, -394.0]:
 		gp.append(Vector3(0, _line_y(a, b, z), z))
@@ -491,7 +485,7 @@ func _flow_4() -> void:
 	var rc: Array[Vector3] = []
 	for i: int in 8:
 		var z: float = -402.0 - 8.0 * float(i)
-		rc.append(Vector3(4.0 * sin(TAU * float(i) * 8.0 / 72.0), _line_y(a, b, z) + 1.1, z))
+		rc.append(Vector3(4.0 * sin(TAU * float(i) * 8.0 / 72.0) * (1.0 - float(i) / 8.0), _line_y(a, b, z) + 1.1, z))
 	kit.ring_line(rc, {"add_speed": 3.0, "radius": 2.5})
 	var mp := PackedVector3Array()
 	for i: int in 7:
@@ -526,7 +520,6 @@ func _flow_5() -> void:
 	var times5: Array[float] = [0.25, 0.5, 0.75, 1.0]
 	var fl: Dictionary = _flight(arc, CHUTE_SPEED, yl, times5, 3.0)
 	var land: Vector3 = fl["land"]
-	print("aurora stage 5 flight: lip %s land %s speed %.1f" % [str(arc.lip()), str(land), float(fl["speed"])])
 	var deck_z0: float = land.z + 9.0
 	var deck_z1: float = PLAZA_Z[5] + 8.0
 	_fdeck(Vector3(0, yl, (deck_z0 + deck_z1) * 0.5), Vector3(16.0, 1.2, deck_z0 - deck_z1))
@@ -561,7 +554,6 @@ func _flow_6() -> void:
 	var times6: Array[float] = [0.5, 0.85, 1.2, 1.55, 1.9]
 	var fl: Dictionary = _flight(arc, 21.0, yl, times6, 2.0, spec)
 	var land: Vector3 = fl["land"]
-	print("aurora stage 6 flight: lip %s land %s speed %.1f" % [str(arc.lip()), str(land), float(fl["speed"])])
 	var d: AuroraDraft = AuroraDraft.new()
 	d.size = DRAFT_SIZE
 	d.push = DRAFT_PUSH
@@ -581,6 +573,119 @@ func _flow_6() -> void:
 		r_flow([Vector3(0, yl, land.z - 3.0), Vector3(0, yl, shelf_z1), Vector3(0, plaza_y[6], PLAZA_Z[6] + 8.0), Vector3(0, plaza_y[6], PLAZA_Z[6])])
 
 
+## A half-pipe from the end of a flat flow run, carved wall to wall (rim guards on).
+func _pipe(start: Vector3, end: Vector3, width: float = 12.0, depth: float = 2.6, opts: Dictionary = {}) -> HalfPipe:
+	var pipe: HalfPipe = kit.halfpipe(start, end, width, depth, opts)
+	_note_span(start, end, width + 4.0)
+	return pipe
+
+
+## Stage 2 (PINE RUN): two gates, then a long half-pipe carved down through the pines.
+func _flow_2() -> void:
+	var y0: float = plaza_y[1]
+	var z0: float = PLAZA_Z[1]
+	_fdeck(Vector3(0, y0, z0 - 20.0), Vector3(12.0, 1.0, 24.0))
+	var gp: Array[Vector3] = [Vector3(0, y0, z0 - 12.0), Vector3(0, y0, z0 - 22.0)]
+	kit.boost_chain(gp, 18.0, 6.0, {"speed_end": 22.0})
+	var pipe: HalfPipe = _pipe(Vector3(0, y0, z0 - 32.0), Vector3(0, plaza_y[2], PLAZA_Z[2] + 8.0), 12.0, 2.6, {"flat": 0.2})
+	if route_variant == 1:
+		var run: Array[Vector3] = [Vector3(0, y0, z0 - 2.0), gp[0], gp[1], Vector3(0, y0, z0 - 32.0)]
+		r_flow(run)
+		r_flow(pipe.carve_points(3, 0.55))
+		var out: Array[Vector3] = [pipe.centre_point(1.0), Vector3(0, plaza_y[2], PLAZA_Z[2])]
+		r_flow(out)
+
+
+## Stage 3 (RIDGE RAILS): gates, then two ridge rails one after the other (rail to rail) over a gully slope
+## that catches anyone who misses (it runs on to the plaza, a little slower).
+func _flow_3() -> void:
+	var y0: float = plaza_y[2]
+	var z0: float = PLAZA_Z[2]
+	_fdeck(Vector3(0, y0, z0 - 23.0), Vector3(12.0, 1.0, 30.0))
+	var gp: Array[Vector3] = [Vector3(0, y0, z0 - 14.0), Vector3(0, y0, z0 - 24.0)]
+	kit.boost_chain(gp, 20.0, 6.0, {"speed_end": 24.0})
+	var ga := Vector3(0, y0, z0 - 38.0)
+	var gb := Vector3(0, plaza_y[3], PLAZA_Z[3] + 8.0)
+	_fslope(ga, gb, 12.0, 26.0)
+	var r1: Array[Vector3] = [Vector3(0, y0 + 1.1, z0 - 44.0), Vector3(0, y0 - 0.2, z0 - 58.0), Vector3(-3.0, y0 - 2.2, z0 - 74.0), Vector3(-5.0, y0 - 4.4, z0 - 88.0)]
+	var rail1: GrindRail = kit.rail(r1, {"post_to_y": y0 - 16.0})
+	var tan1: Vector3 = (r1[3] - r1[2]).normalized()
+	var s2: Vector3 = r1[3] + tan1 * 4.5 + Vector3(0, -1.7, 0)
+	var r2: Array[Vector3] = [s2, Vector3(s2.x + 2.0, s2.y - 1.1, s2.z - 10.0), Vector3(s2.x + 6.0, s2.y - 2.9, s2.z - 22.0), Vector3(s2.x + 8.0, s2.y - 4.5, s2.z - 34.0)]
+	var rail2: GrindRail = kit.rail(r2, {"post_to_y": y0 - 20.0})
+	_mote_line(r1[0] + Vector3(0, 1.0, 0), r2[3] + Vector3(0, 1.0, 0), 8.0, 1.0)
+	if route_variant == 1:
+		var run: Array[Vector3] = [Vector3(0, y0, z0 - 2.0), gp[0], gp[1], Vector3(0, y0, z0 - 36.0)]
+		r_flow(run)
+		r_rail(rail1, rail1.start_point(), {"from": Vector3(0, y0 - 0.1, z0 - 40.0), "leave": r1[3], "chain_next": true, "to": rail2.start_point()})
+		r_rail(rail2, rail2.start_point(), {"chain": true, "to": Vector3(0, plaza_y[3], PLAZA_Z[3] + 2.0)})
+
+
+## Stage 7 (TWIN PIPES): gates, a half-pipe, a flat run, then a ridge rail over a slope into the plaza.
+func _flow_7() -> void:
+	var y0: float = plaza_y[6]
+	var z0: float = PLAZA_Z[6]
+	_fdeck(Vector3(0, y0, z0 - 20.0), Vector3(12.0, 1.0, 24.0))
+	var gp: Array[Vector3] = [Vector3(0, y0, z0 - 12.0), Vector3(0, y0, z0 - 22.0)]
+	kit.boost_chain(gp, 18.0, 6.0, {"speed_end": 22.0})
+	var p0 := Vector3(0, y0, z0 - 32.0)
+	var p1 := Vector3(0, y0 - 8.0, z0 - 72.0)
+	var pipe: HalfPipe = _pipe(p0, p1, 12.0, 2.6, {"flat": 0.2})
+	_fdeck(Vector3(0, p1.y, p1.z - 6.0), Vector3(12.0, 1.0, 12.0))
+	var sa := Vector3(0, p1.y, p1.z - 12.0)
+	var sb := Vector3(0, plaza_y[7], PLAZA_Z[7] + 8.0)
+	_fslope(sa, sb, 12.0, 26.0)
+	var r1: Array[Vector3] = [Vector3(0, sa.y + 1.1, sa.z - 4.0), Vector3(0, sa.y - 0.4, sa.z - 14.0), Vector3(3.0, sa.y - 2.0, sa.z - 24.0), Vector3(0, sa.y - 3.4, sa.z - 32.0)]
+	var rail1: GrindRail = kit.rail(r1, {"post_to_y": plaza_y[7] - 6.0})
+	_mote_line(r1[0] + Vector3(0, 1.0, 0), r1[3] + Vector3(0, 1.0, 0), 7.0, 1.0)
+	if route_variant == 1:
+		var run: Array[Vector3] = [Vector3(0, y0, z0 - 2.0), gp[0], gp[1], p0]
+		r_flow(run)
+		r_flow(pipe.carve_points(2, 0.55))
+		var onto: Array[Vector3] = [pipe.centre_point(1.0), Vector3(0, p1.y, sa.z + 2.0)]
+		r_flow(onto)
+		r_rail(rail1, rail1.start_point(), {"from": Vector3(0, sa.y, sa.z - 0.5), "to": Vector3(0, plaza_y[7], PLAZA_Z[7] + 1.0)})
+
+
+const FIN_SPEED: float = 25.0
+
+
+## Stage 9 (THE CASCADE): the pure-flow finale. Gates, a long half-pipe, a launch arc over the cascade with a chain of
+## eight rings flown along the arc, and a landing slope that runs into the finish.
+func _flow_9() -> void:
+	var y0: float = plaza_y[8]
+	var z0: float = PLAZA_Z[8]
+	_fdeck(Vector3(0, y0, z0 - 20.0), Vector3(12.0, 1.0, 24.0))
+	var gp: Array[Vector3] = [Vector3(0, y0, z0 - 12.0), Vector3(0, y0, z0 - 22.0)]
+	kit.boost_chain(gp, 20.0, 6.0, {"speed_end": 24.0})
+	var p0 := Vector3(0, y0, z0 - 32.0)
+	var p1 := Vector3(0, y0 - 9.0, z0 - 84.0)
+	var pipe: HalfPipe = _pipe(p0, p1, 12.0, 2.6, {"flat": 0.2})
+	_fdeck(Vector3(0, p1.y, p1.z - 8.0), Vector3(12.0, 1.0, 16.0))
+	var foot := Vector3(0, p1.y, p1.z - 12.0)
+	var arc: LaunchArc = kit.launch_arc(foot, 0.0, 22.0, 8.0, 10.0, {"cap": FIN_SPEED})
+	var yl: float = plaza_y[9] + 2.0
+	var times9: Array[float] = [0.12, 0.26, 0.4, 0.54, 0.68, 0.82, 0.96, 1.1]
+	var fl: Dictionary = _flight(arc, FIN_SPEED, yl, times9, 1.5)
+	var land: Vector3 = fl["land"]
+	var dz0: float = land.z + 10.0
+	var dz1: float = PLAZA_Z[9] + 8.0 + 10.0
+	_fdeck(Vector3(0, yl, (dz0 + dz1) * 0.5), Vector3(16.0, 1.2, maxf(dz0 - dz1, 1.0)))
+	_fslope(Vector3(0, yl, dz1), Vector3(0, plaza_y[9], PLAZA_Z[9] + 8.0), 14.0)
+	kit.ring_line(fl["rings"] as Array[Vector3], {"add_speed": 1.5, "radius": 2.8})
+	_motes(fl["path"] as PackedVector3Array)
+	if route_variant == 1:
+		var run: Array[Vector3] = [Vector3(0, y0, z0 - 2.0), gp[0], gp[1], p0]
+		r_flow(run)
+		r_flow(pipe.carve_points(3, 0.55))
+		var onto: Array[Vector3] = [pipe.centre_point(1.0), Vector3(0, p1.y, foot.z - 4.0)]
+		r_flow(onto)
+		r_launch(arc, Vector3(0, yl, land.z - 3.0))
+		var home: Array[Vector3] = [Vector3(0, yl, land.z - 3.0), Vector3(0, yl, dz1), Vector3(0, plaza_y[9], PLAZA_Z[9] + 8.0)]
+		r_flow(home)
+
+
+
 ## Stage 8: gates, one long slope down the moon meadow with a slalom of six rings along it.
 func _flow_8() -> void:
 	var y0: float = plaza_y[7]
@@ -594,7 +699,7 @@ func _flow_8() -> void:
 	_fslope(a, b, 14.0)
 	var rc: Array[Vector3] = []
 	for i: int in 6:
-		var z: float = a.z - 14.0 - 12.0 * float(i)
+		var z: float = a.z - 10.0 - 9.0 * float(i)
 		rc.append(Vector3(3.5 * sin(TAU * float(i) / 5.0), _line_y(a, b, z) + 1.1, z))
 	kit.ring_line(rc, {"add_speed": 2.5, "radius": 2.6})
 	if route_variant == 1:
