@@ -8,7 +8,7 @@ extends RefCounted
 
 ## Hats that leave the crown open (the antenna / crown spike stays visible), like
 ## CosmeticArt.OPEN_HATS.
-const OPEN_HATS: Array[String] = ["bunny", "flower_crown", "pixel_crown", "laurel", "gilded_headphones"]
+const OPEN_HATS: Array[String] = ["bunny", "flower_crown", "pixel_crown", "laurel", "gilded_headphones", "lotus_crown"]
 
 
 static func build(id: String, h: Node3D, v: PlayerVisual) -> void:
@@ -49,6 +49,14 @@ static func build(id: String, h: Node3D, v: PlayerVisual) -> void:
 			_gilded("beanie", h, v)
 		"gilded_headphones":
 			_gilded("headphones", h, v)
+		"aurora_beanie":
+			_aurora_beanie(h)
+		"skysurf_goggles":
+			_skysurf_goggles(h)
+		"mag_visor":
+			_mag_visor(h)
+		"lotus_crown":
+			_lotus_crown(h)
 		_:
 			pass
 
@@ -254,6 +262,90 @@ static func _cone(h: Node3D) -> void:
 	CosmeticArt.part(wob, CosmeticArt.cyl(0.5, 0.5, 14), white, Vector3(0, 0.02, 0), Vector3(0.4, 0.05, 0.4))
 	CosmeticArt.part(wob, CosmeticArt.cyl(0.5, 0.5, 14), white, Vector3(0, 0.2, 0), Vector3(0.21, 0.05, 0.21))
 	CosmeticArt.part(wob, CosmeticArt.sphere(0), orange, Vector3(0, 0.33, 0), Vector3.ONE * 0.07)
+
+
+# ---- Flow courses' Silver hats -------------------------------------------------------------------
+
+## Aurora Valley: a teal knit beanie with a ribbed navy cuff, a glowing green-violet aurora band
+## and a white pom-pom that bobs.
+static func _aurora_beanie(h: Node3D) -> void:
+	var knit := CosmeticArt.std(Color(0.12, 0.4, 0.45), 0.9)
+	var rib := CosmeticArt.std(Color(0.1, 0.13, 0.3), 0.9)
+	var green := CosmeticArt.std(Color(0.35, 1.0, 0.6), 0.4, 0.0, 1.4)
+	var violet := CosmeticArt.std(Color(0.62, 0.4, 1.0), 0.4, 0.0, 1.4)
+	var puff := CosmeticArt.std(Color(0.96, 0.98, 1.0), 0.9)
+	CosmeticArt.part(h, CosmeticArt.sphere(1), knit, Vector3(0, -0.08, 0), Vector3(0.62, 0.46, 0.62))
+	CosmeticArt.part(h, CosmeticArt.torus(0.26, 0.34), rib, Vector3(0, -0.11, 0), Vector3(1, 0.5, 1))
+	CosmeticArt.part(h, CosmeticArt.torus(0.3, 0.36), green, Vector3(0, -0.06, 0), Vector3(1, 0.5, 1))
+	CosmeticArt.part(h, CosmeticArt.torus(0.26, 0.3), violet, Vector3(0, 0.05, 0), Vector3(1, 0.6, 1))
+	var pom: Node3D = CosmeticArt.pivot(h, Vector3(0, 0.19, 0))
+	pom.set_meta("bob", [0.02, 2.0])
+	CosmeticArt.part(pom, CosmeticArt.sphere(2), puff, Vector3.ZERO, Vector3.ONE * 0.18)
+
+
+## Sky Surfer: aviator goggles (amber lenses, gold frames) on a brown headband, with an orange
+## windsock at the back that sways.
+static func _skysurf_goggles(h: Node3D) -> void:
+	var leather := CosmeticArt.std(Color(0.5, 0.31, 0.16), 0.7)
+	var gold := CosmeticArt.std(Color(0.9, 0.72, 0.3), 0.3, 0.85)
+	var lens := CosmeticArt.std(Color(1.0, 0.62, 0.2), 0.1, 0.1, 0.5)
+	var sock := CosmeticArt.std(Color(1.0, 0.42, 0.18), 0.7)
+	var white := CosmeticArt.std(Color(0.97, 0.97, 0.95), 0.6)
+	CosmeticArt.part(h, CosmeticArt.torus(0.22, 0.28), leather, Vector3(0, -0.1, 0), Vector3(1, 0.6, 1))
+	for side: float in [-1.0, 1.0]:
+		var at := Vector3(0.13 * side, -0.05, -0.26)
+		CosmeticArt.part(h, CosmeticArt.sphere(1), gold, at, Vector3(0.24, 0.2, 0.04))
+		CosmeticArt.part(h, CosmeticArt.sphere(1), lens, at + Vector3(0, 0, -0.03), Vector3(0.18, 0.15, 0.03))
+	CosmeticArt.part(h, CosmeticArt.box(), gold, Vector3(0, -0.05, -0.27), Vector3(0.06, 0.025, 0.03))
+	var tail: Node3D = CosmeticArt.pivot(h, Vector3(0, -0.04, 0.22))
+	tail.set_meta("sway", [0.7, 0.7, 0.3, 0.0, 0.0])
+	# the sock opens wide at the back (cylinder +Y turned to +Z)
+	CosmeticArt.part(tail, CosmeticArt.cyl(0.09, 0.02, 12), sock, Vector3(0, 0, 0.2), Vector3(1, 0.4, 1), Vector3(PI * 0.5, 0, 0))
+	CosmeticArt.part(tail, CosmeticArt.torus(0.035, 0.055), white, Vector3(0, 0, 0.15), Vector3.ONE, Vector3(PI * 0.5, 0, 0))
+	CosmeticArt.part(tail, CosmeticArt.torus(0.06, 0.09), white, Vector3(0, 0, 0.3), Vector3.ONE, Vector3(PI * 0.5, 0, 0))
+
+
+## Hyperloop: a sleek white cap and visor with a cyan lens and a glowing cyan strip, plus a
+## cyan fin at the back.
+static func _mag_visor(h: Node3D) -> void:
+	var white := CosmeticArt.std(Color(0.95, 0.96, 0.98), 0.35, 0.1)
+	var cyan := CosmeticArt.std(Color(0.2, 0.85, 1.0), 0.15, 0.3, 0.5)
+	var glow := CosmeticArt.std(Color(0.6, 1.0, 1.0), 0.3, 0.0, 2.0)
+	CosmeticArt.part(h, CosmeticArt.torus(0.24, 0.29), white, Vector3(0, -0.1, 0), Vector3(1, 0.55, 1))
+	CosmeticArt.part(h, CosmeticArt.sphere(1), white, Vector3(0, -0.05, 0), Vector3(0.6, 0.36, 0.62))
+	CosmeticArt.part(h, CosmeticArt.sphere(1), cyan, Vector3(0, -0.08, -0.27), Vector3(0.5, 0.14, 0.07))
+	CosmeticArt.part(h, CosmeticArt.box(), glow, Vector3(0, -0.08, -0.31), Vector3(0.42, 0.02, 0.02))
+	for side: float in [-1.0, 1.0]:
+		CosmeticArt.part(h, CosmeticArt.box(), white, Vector3(0.25 * side, -0.1, -0.06), Vector3(0.05, 0.1, 0.2))
+	CosmeticArt.part(h, CosmeticArt.box(), cyan, Vector3(0, 0.12, 0.14), Vector3(0.05, 0.1, 0.12))
+
+
+## Lotus Drift: a jade band with five pink and pale petals opening outward and a centre petal
+## that bobs, topped with a gold stamen. Leaves the crown open, like the flower crown.
+static func _lotus_crown(h: Node3D) -> void:
+	var jade := CosmeticArt.std(Color(0.22, 0.62, 0.45), 0.6)
+	var pink := CosmeticArt.std(Color(1.0, 0.56, 0.74), 0.5)
+	var pale := CosmeticArt.std(Color(1.0, 0.86, 0.93), 0.5)
+	var gold := CosmeticArt.std(Color(1.0, 0.85, 0.3), 0.3, 0.6, 0.6)
+	CosmeticArt.part(h, CosmeticArt.torus(0.24, 0.29), jade, Vector3(0, -0.1, 0), Vector3(1, 0.6, 1))
+	for k: int in 5:
+		_petal(h, TAU * float(k) / 5.0 + 0.3, 0.5, 0.22, -0.1, 0.26, 0.13, pink if k % 2 == 0 else pale)
+	var bud: Node3D = CosmeticArt.pivot(h, Vector3(0, -0.02, 0))
+	bud.set_meta("bob", [0.015, 2.0])
+	CosmeticArt.part(bud, CosmeticArt.sphere(1), pale, Vector3(0, 0.14, 0), Vector3(0.14, 0.3, 0.07))
+	CosmeticArt.part(bud, CosmeticArt.sphere(0), gold, Vector3(0, 0.27, 0), Vector3.ONE * 0.07)
+
+
+## One lotus petal: an ellipsoid whose long axis leans `tilt` from vertical toward the radial
+## direction `th`, its broad face turned outward (the basis is right-handed: x = tangent,
+## y = long axis, z = face normal).
+static func _petal(h: Node3D, th: float, tilt: float, base_r: float, base_y: float, length: float, width: float, mat: Material) -> void:
+	var r := Vector3(cos(th), 0.0, sin(th))
+	var t := Vector3(-sin(th), 0.0, cos(th))
+	var d: Vector3 = r * sin(tilt) + Vector3.UP * cos(tilt)
+	var n: Vector3 = t.cross(d)
+	var pos: Vector3 = Vector3(r.x * base_r, base_y, r.z * base_r) + d * (length * 0.5)
+	CosmeticArt.part_b(h, CosmeticArt.sphere(1), mat, pos, Basis(t * width, d * length, n * 0.05))
 
 
 # ---- gilded (Gold) versions of existing hats ---------------------------------------------------
