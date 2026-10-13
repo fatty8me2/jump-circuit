@@ -1756,7 +1756,7 @@ func test_zb4a_knockback_beats_jump_press() -> void:
 		t += 1
 	player.cmd_move = Vector2.ZERO
 	var peak_vy: float = player.velocity.y
-	for i: int in 40:
+	for i: int in 120:
 		if i < 6:
 			player.press_jump()
 		await get_tree().physics_frame
@@ -5679,7 +5679,7 @@ func test_ze_clips_animate_cleanly() -> void:
 	for c: String in Cosmetics.ids("character"):
 		v.set_character(c)
 		v.stop_emote()
-		for i: int in 40:
+		for i: int in 120:
 			v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
 		var rest_low: float = _ze_low(v)
 		var rest_mid: float = _ze_low(v, true)
@@ -5716,11 +5716,11 @@ func test_ze_clips_animate_cleanly() -> void:
 	for i: int in 30:
 		v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
 	check(v.is_emoting() and v.emote_kind() == "emote" and v.emote_id() == "dance", "standing still keeps the emote going")
-	for i: int in 40:
+	for i: int in 120:
 		v.animate(dt, Vector3(6, 0, 0), true, Vector3.RIGHT)
 	check(not v.is_emoting(), "running cancels the emote")
 	v.play_emote("wave", true)
-	for i: int in 40:
+	for i: int in 120:
 		v.animate(dt, Vector3(0, -5, 0), false, Vector3.FORWARD)
 	check(not v.is_emoting(), "leaving the ground cancels the emote")
 	v.play_pose("hero", false, 0.0, true)
@@ -7705,7 +7705,7 @@ func test_zn_checkpoint_flourish_and_respawn() -> void:
 		var spun: bool = v._flip_axis.y != 0.0 and v._flip_t < v._flip_len
 		var reach: float = 0.0
 		var finite: bool = true
-		for i: int in 40:
+		for i: int in 120:
 			v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
 			reach = maxf(reach, minf(v._hand_r.position.y, v._hand_l.position.y))
 			finite = finite and v._hand_r.position.is_finite() and v._hand_l.position.is_finite() and v._flip.basis.is_finite()
@@ -10236,13 +10236,14 @@ func test_zfk_gallery() -> void:
 	add_child(lvl)
 	world = lvl
 	await ticks(5)
-	var kinds: Array[String] = ["BoostGate", "SpeedRing", "FlowSurface", "LaunchArc", "FlowChain"]
+	var kinds: Array[String] = ["BoostGate", "SpeedRing", "FlowSurface", "LaunchArc", "FlowChain", "GrindRail", "HalfPipe"]
 	var missing: Array[String] = []
 	for k: String in kinds:
 		if lvl.find_children("*", k, true, false).is_empty():
 			missing.append(k)
 	check(missing.is_empty(), "the Flow Gallery shows the flow kit (missing: %s)" % str(missing))
 	check(lvl.find_children("*", "SpeedRing", true, false).size() >= 5 and lvl.find_children("*", "BoostGate", true, false).size() >= 5, "with a ring chain and gate chains")
+	check(lvl.find_children("*", "GrindRail", true, false).size() >= 3, "and rails, one pair for rail-to-rail")
 	lvl.player.use_device_input = false
 	lvl.player.teleport(Transform3D(Basis(), Vector3(200, 0.1, -8)))
 	await seconds(0.8)
@@ -10251,3 +10252,99 @@ func test_zfk_gallery() -> void:
 	await seconds(2.2)
 	lvl.player.cmd_move = Vector2.ZERO
 	check(lvl.player.global_position.x < 195.0 and lvl.player.grounded and lvl.deaths == 0, "and you can walk back over the join (x %.1f)" % lvl.player.global_position.x)
+
+
+func test_zfk_rail() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab(Vector3(200, 1, 400), Vector3(0, 0, -150))
+	var r1: GrindRail = kit.rail([Vector3(0, 3, 0), Vector3(0, 3, -30), Vector3(0, 2, -60)])
+	var r2: GrindRail = kit.rail([Vector3(0, 1.6, -33), Vector3(0, 1.0, -100)])
+	check(r1.length() > 59.0 and r1.length() < 62.0, "a rail's length follows its points (%.1f m)" % r1.length())
+	# drop onto it from above: it snaps and carries the real Player
+	player.teleport(Transform3D(Basis(), Vector3(0.5, 3.9, -2)))
+	var got: bool = await wait_until(func() -> bool: return r1.carrying() == player, 2.0, "falling onto the rail")
+	check(got and not player.control_enabled and r1.boarded == 1, "landing within 1.2 m snaps you into a grind")
+	await seconds(0.5)
+	var off: float = r1.rider_offset()
+	var on_rail: Vector3 = r1.point_at(off)
+	check(player.global_position.distance_to(on_rail) < 0.4, "the rider is on the line (%.2f m off)" % player.global_position.distance_to(on_rail))
+	check(player.horizontal_speed() >= r1.min_speed - 0.1 and player.horizontal_speed() <= r1.max_speed, "at the grind speed, 9 m/s at least (%.1f)" % player.horizontal_speed())
+	check(off > 3.0, "and moving along it (%.1f m in)" % off)
+	# jump leaves with the tangent velocity and a hop
+	await wait_until(func() -> bool: return r1.rider_offset() > 31.0, 6.0, "riding on toward the second rail")
+	var v_before: float = player.horizontal_speed()
+	player.press_jump()
+	await ticks(3)
+	check(r1.carrying() == null and player.control_enabled, "pressing jump leaves the rail")
+	check(player.velocity.y > 3.5 and player.horizontal_speed() > v_before - 1.0, "with the speed kept and a hop %s" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+	# the rail you left does not grab you back, the one underneath does (rail to rail)
+	var caught: bool = await wait_until(func() -> bool: return r2.carrying() == player, 2.5, "caught by the lower rail")
+	check(caught and r1.carrying() == null, "a second rail near the flight path catches you")
+	# a respawn lets go at once, with control back
+	player.teleport(Transform3D(Basis(), Vector3(20, 0.05, -10)))
+	await ticks(2)
+	check(r2.carrying() == null and player.control_enabled, "a respawn lets go of the rider")
+	await seconds(0.5)
+	# riding to the end throws you off along the rail
+	player.teleport(Transform3D(Basis(), Vector3(0.0, 3.6, -1)))
+	var again: bool = await wait_until(func() -> bool: return r1.carrying() == player, 2.0, "boarding again")
+	var left: bool = await wait_until(func() -> bool: return r1.carrying() == null and not r1.is_riding(), 12.0, "riding to the end")
+	check(again and left and r1.released_within(1.0), "reaching the end lets go")
+	check(player.velocity.z < -9.0 and player.velocity.y >= -2.0, "and launches along the rail %s" % str(player.velocity.snapped(Vector3.ONE * 0.1)))
+
+
+func test_zfk_rail_slope_speed() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab(Vector3(300, 1, 400), Vector3(0, -30, -100))
+	var down: GrindRail = kit.rail([Vector3(0, 0, 0), Vector3(0, -6, -30), Vector3(0, -12, -60)])
+	var up: GrindRail = kit.rail([Vector3(40, -12, 0), Vector3(40, -6, -30), Vector3(40, 0, -60)])
+	check(down.speed_at(9.0, 0.0, down.length()) > 15.0, "a rail going down builds speed (predicted %.1f m/s)" % down.speed_at(9.0, 0.0, down.length()))
+	check(up.speed_at(20.0, 0.0, up.length()) < 20.0 and up.speed_at(9.0, 0.0, up.length()) >= up.min_speed - 0.01, "and one going up loses it, but never under the minimum")
+	player.teleport(Transform3D(Basis(), Vector3(0.0, 0.9, -1)))
+	var got: bool = await wait_until(func() -> bool: return down.carrying() == player, 2.0, "boarding the downhill rail")
+	var left: bool = await wait_until(func() -> bool: return not down.is_riding(), 8.0, "riding it out")
+	var v_end: float = player.horizontal_speed()
+	check(got and left and absf(v_end - down.speed_at(9.0, 0.0, down.length())) < 3.0, "the exit speed matches speed_at() (%.1f vs %.1f)" % [v_end, down.speed_at(9.0, 0.0, down.length())])
+
+
+func test_zfk_pipe() -> void:
+	await new_world(Vector3(0, 0.05, 6))
+	kit.plat(Vector3(0, 0, 0), Vector3(20, 1, 24), "main", 0.0)
+	var pipe: HalfPipe = kit.halfpipe(Vector3(0, 0, -12), Vector3(0, -6, -82), 12.0, 2.6)
+	kit.plat(Vector3(0, -6, -98), Vector3(20, 1, 32), "main", 0.0)
+	await ticks(2)
+	check(pipe.has_method("flow") and absf(pipe.depth - 2.6) < 0.01, "a half-pipe is a flow surface (depth %.2f)" % pipe.depth)
+	var rim: Vector3 = pipe.surface_point(0.5, 1.0)
+	var mid: Vector3 = pipe.surface_point(0.5, 0.0)
+	check(absf((rim.y - mid.y) - 2.6) < 0.25 and absf(pipe.surface_point(0.0, 1.0).y - pipe.surface_point(0.0, 0.0).y) < 0.01, "the walls are 2.6 m deep in the middle and flush at the ends")
+	check(pipe.length > 69.0 and pipe.length < 71.5 and pipe.depth <= pipe._max_depth() + 0.001, "its length follows start/end, and the depth keeps the wall walkable")
+	player.cmd_move = Vector2(0, 1)
+	var reached: bool = await wait_until(func() -> bool: return player.global_position.z < -60.0, 10.0, "running down the pipe")
+	check(reached and player.horizontal_speed() > 14.0, "down the middle builds speed (%.1f m/s)" % player.horizontal_speed())
+	# carving from wall to wall keeps the speed
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, -8)))
+	await ticks(3)
+	player.velocity = Vector3(0, 0, -20)
+	var lo: float = 0.0
+	var hi: float = 0.0
+	var v_min: float = 99.0
+	var steer: float = 1.0
+	for i: int in 150:
+		var x: float = player.global_position.x
+		if x > 2.5:
+			steer = -1.0
+		elif x < -2.5:
+			steer = 1.0
+		player.cmd_move = Vector2(steer * 0.8, 1.0)
+		await get_tree().physics_frame
+		lo = minf(lo, x)
+		hi = maxf(hi, x)
+		v_min = minf(v_min, player.horizontal_speed())
+		if player.global_position.z < -78.0:
+			break
+	check(hi - lo > 3.0 and absf(player.global_position.x) < 8.0, "the stick carves wall to wall (x %.1f..%.1f)" % [lo, hi])
+	check(v_min > 15.0, "without losing speed (slowest %.1f m/s)" % v_min)
+
+
+func test_zfk_bot_slice2() -> void:
+	await _flow_bot("res://tests/flow_course2.gd", 120.0, "the bot carves half-pipes, grinds rail to rail, launches and flies a ring chain", 22.0, 0.5)

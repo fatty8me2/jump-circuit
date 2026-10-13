@@ -996,5 +996,56 @@ func _do_flow(step: Dictionary, dt: float) -> void:
 			_do_rail(step, dt)
 
 
-func _do_rail(_step: Dictionary, _dt: float) -> void:
-	pass
+## f_rail {rail, board, from?, leave?, to?, chain?, chain_next?}
+##   board       a world point on the rail to aim for (usually its start, or where the jump meets it)
+##   from        jump from this spot toward `board` (omit to walk / slide onto the rail)
+##   leave       a world point on the rail to jump off at (omit to ride to the end and be launched)
+##   to          where to land after leaving (needed unless chain_next)
+##   chain       already airborne from the previous rail step: steer for `board` at once
+##   chain_next  done as soon as another rail catches us (the next step must be a `chain` f_rail)
+func _do_rail(step: Dictionary, dt: float) -> void:
+	var rail: GrindRail = step["rail"]
+	var board: Vector3 = step["board"]
+	if _phase == 0:
+		if bool(step.get("chain", false)):
+			_phase = 1
+		elif step.has("from"):
+			_do_jump({"from": step["from"], "to": board, "hold": true}, dt)
+			if rail.carrying() == player:
+				_phase = 2
+			return
+		else:
+			_steer_ground(board)
+			if rail.carrying() == player:
+				_phase = 2
+			return
+	if _phase == 1:
+		if rail.carrying() == player:
+			_phase = 2
+		else:
+			if player.velocity.y <= 0.0:
+				player.cmd_jump = false
+			if not player.grounded:
+				_was_air = true
+			_steer_air(board)
+			if player.grounded and _was_air:
+				log_lines.append("f_rail %d: landed without catching the rail at %s" % [step_index, str(player.global_position.snapped(Vector3.ONE * 0.01))])
+				level.respawn()
+			return
+	if _phase == 2:
+		player.cmd_move = Vector2.ZERO
+		player.cmd_jump = false
+		if rail.carrying() != player:
+			_phase = 3
+		else:
+			if step.has("leave"):
+				var s_leave: float = rail.offset_of(step["leave"])
+				# the rail lets go on its next tick: leave when that tick would pass the point
+				if rail.rider_offset() + player.velocity.length() * dt >= s_leave:
+					rail.release_rider()
+			return
+	# phase 3: in the air after the rail
+	if bool(step.get("chain_next", false)) and player.has_meta("rail_rider"):
+		_next()
+		return
+	_air_phase(step["to"])

@@ -23,7 +23,7 @@ var chain: FlowChain
 var passes: int = 0
 
 const THICK: float = 1.6
-const REARM_TICKS: int = 30
+const REARM_SECONDS: float = 0.5
 
 var _area: Area3D
 var _mat: StandardMaterial3D
@@ -125,7 +125,7 @@ func _on_body(b: Node3D) -> void:
 		return
 	var p: Player = b as Player
 	var now: int = Engine.get_physics_frames()
-	if now - _last_tick < REARM_TICKS:
+	if now - _last_tick < int(REARM_SECONDS * float(Engine.physics_ticks_per_second)):
 		return
 	var fwd: Vector3 = forward()
 	var hv := Vector3(p.velocity.x, 0.0, p.velocity.z)
