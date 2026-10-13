@@ -10056,3 +10056,198 @@ func test_zf1_party_pickers_list_flow() -> void:
 	check(CpuMenu.unlocked_courses().size() == Game.LEVELS.size(), "with everything open the picker lists all %d courses" % Game.LEVELS.size())
 	Game.dev_mode = old_dev
 	SaveData.wipe()
+
+
+# ---- flow kit (docs/FLOW_KIT.md): run with  --only=test_zfk_ -------------------------------------------
+
+## Plays a flow course with the route bot and reports the top speed it reached and the longest ring chain.
+## `trace` > 0 also prints the speed every `trace` seconds (debugging a course).
+func _flow_bot(path: String, max_s: float, what: String, min_top: float = 18.0, trace: float = 0.0) -> Dictionary:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Game.level_index = -1
+	Game.race_mode = false
+	Game.course_time = 0.0
+	Game.course_running = true
+	var lvl: LevelBase = (load(path) as GDScript).new() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	var bot := RouteBot.new()
+	lvl.add_child(bot)
+	bot.attach(lvl)
+	var t: float = 0.0
+	var top: float = 0.0
+	var next_trace: float = 0.0
+	while t < max_s and not bot.done and not bot.stuck:
+		await get_tree().physics_frame
+		t += 1.0 / Engine.physics_ticks_per_second
+		var sp: float = lvl.player.horizontal_speed()
+		top = maxf(top, sp)
+		if trace > 0.0 and t >= next_trace:
+			next_trace = t + trace
+			print("        t=%.2f step %d  pos %s  speed %.1f  grounded %s" % [t, bot.step_index, str(lvl.player.global_position.snapped(Vector3.ONE * 0.1)), sp, str(lvl.player.grounded)])
+	for line: String in bot.log_lines:
+		print("        bot: ", line)
+	var chains: Array = lvl.find_children("*", "FlowChain", true, false)
+	var best_chain: int = (chains[0] as FlowChain).best if not chains.is_empty() else 0
+	check(bot.done and bot.retries == 0 and top >= min_top, "%s (%.1fs, %d respawns, top %.1f m/s, best chain %d, step %d/%d)" % [what, lvl.run_time, bot.retries, top, best_chain, bot.step_index, lvl.route.size()])
+	return {"bot": bot, "top": top, "chain": best_chain, "time": lvl.run_time}
+
+
+func test_zfk_bot_slice1() -> void:
+	await _flow_bot("res://tests/flow_course.gd", 90.0, "the bot flows through gates, a slope, a launch arc and an air ring chain", 24.0, 0.5)
+
+
+func test_zfk_ring() -> void:
+	await new_world(Vector3(0, 0.05, 6))
+	floor_slab()
+	var chain: FlowChain = kit.flow_chain()
+	var r1: SpeedRing = kit.speed_ring(Vector3(0, 1.0, -4), 0.0, 6.0, 2.2, 30.0)
+	var r2: SpeedRing = kit.speed_ring(Vector3(0, 1.0, -9), 0.0, 6.0, 2.2, 30.0)
+	var back: SpeedRing = kit.speed_ring(Vector3(0, 1.0, -30), 180.0, 6.0, 2.2, 30.0)
+	check(r1.chain == chain and r2.chain == chain and kit.flow_chain() == chain, "every ring of a level shares one chain counter")
+	player.cmd_move = Vector2(0, 1)
+	var hit: bool = await wait_until(func() -> bool: return r1.passes > 0, 3.0, "walking through the first ring")
+	await ticks(2)
+	var s1: float = player.horizontal_speed()
+	check(hit and s1 > 14.0 and s1 < 15.6, "a ring adds its 6 m/s to a 9 m/s run (%.1f)" % s1)
+	check(chain.count == 1, "and starts a chain of 1 (%d)" % chain.count)
+	var hit2: bool = await wait_until(func() -> bool: return r2.passes > 0, 3.0, "and the second ring")
+	await ticks(2)
+	check(hit2 and chain.count == 2 and player.horizontal_speed() > s1 + 0.5, "the second ring within 1.5 s builds the chain to 2 (%d) and adds more (%.1f)" % [chain.count, player.horizontal_speed()])
+	check(r2.speed_out(10.0, 2) > r2.speed_out(10.0, 1), "a longer chain gives a bit more speed")
+	check(r1.speed_out(29.0, 1) <= 30.0 and r1.speed_out(32.0, 1) == 32.0, "rings never push past their cap, and never slow you")
+	# the wrong way through a ring does nothing
+	var before: int = chain.total
+	await wait_until(func() -> bool: return player.global_position.z < -32.0, 4.0, "running past the backwards ring")
+	check(back.passes == 0 and chain.total == before, "a ring entered from the back is ignored")
+	# the chain times out, and a respawn forgets it
+	var broke: Array[int] = [0]
+	chain.broken.connect(func(n: int) -> void: broke[0] = n)
+	player.cmd_move = Vector2.ZERO
+	await seconds(FlowChain.WINDOW + 0.4)
+	check(chain.count == 0 and broke[0] == 2, "the chain breaks %.1f s after the last ring (broke at %d)" % [FlowChain.WINDOW, broke[0]])
+	chain.register(null)
+	chain.reset_state()
+	check(chain.count == 0, "reset_state() clears it (a respawn does)")
+
+
+func test_zfk_gate() -> void:
+	await new_world(Vector3(0, 0.05, 6))
+	floor_slab()
+	var g: BoostGate = kit.boost_gate(Vector3(0, 0, -4), 0.0, 20.0, 5.0)
+	player.cmd_move = Vector2(0, 1)
+	var hit: bool = await wait_until(func() -> bool: return g.passes > 0, 3.0, "walking through the gate")
+	await ticks(2)
+	check(hit and player.horizontal_speed() > 18.5 and player.horizontal_speed() <= 20.2, "a boost gate lifts a 9 m/s run to its 20 (%.1f)" % player.horizontal_speed())
+	check(g.speed_out(26.0) == 26.0 and g.speed_out(5.0) == 20.0, "and never slows a faster rider")
+	var g2: BoostGate = kit.boost_gate(Vector3(0, 0, -40), 0.0, 14.0, 5.0)
+	await wait_until(func() -> bool: return g2.passes > 0, 4.0, "the second gate")
+	check(kit.flow_chain().total >= 2, "gates count toward the ring chain")
+
+
+func test_zfk_slope() -> void:
+	await new_world(Vector3(0, 0.05, 6))
+	kit.plat(Vector3(0, 0, 0), Vector3(20, 1, 20), "main", 0.0)
+	var s: FlowSurface = kit.flow_slope_between(Vector3(0, 0, -10), Vector3(0, -12, -70), 10.0)
+	kit.plat(Vector3(0, -12, -90), Vector3(20, 1, 40), "main", 0.0)
+	check(s.has_method("flow") and s.flow()["gain"] > 0.0, "a flow slope answers the player's flow() query")
+	player.cmd_move = Vector2(0, 1)
+	var reached: bool = await wait_until(func() -> bool: return player.global_position.z < -60.0, 8.0, "running down the slope")
+	var v_end: float = player.horizontal_speed()
+	check(reached and v_end > 18.0 and v_end <= 30.6, "a 11 degree grade builds speed past the 9 m/s run limit (%.1f m/s)" % v_end)
+	var predicted: float = s.speed_after(9.0, 60.0, 11.3)
+	check(absf(v_end - predicted) < 5.0, "and speed_after() predicts it within 5 m/s (%.1f vs %.1f)" % [predicted, v_end])
+
+
+func test_zfk_flow_floor_keeps_speed() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	kit.plat(Vector3(0, 0, 0), Vector3(20, 1, 20), "main", 0.0)
+	kit.flow_slope(Vector3(0, 0, -60), Vector3(10, 0.6, 80), 0.0, 0.0)
+	kit.plat(Vector3(40, 0, -60), Vector3(20, 1, 80), "main", 0.0)
+	# on a flat flow surface carried speed is not bled away, and the stick carves
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, -12)))
+	await ticks(3)
+	player.velocity = Vector3(0, 0, -22)
+	player.cmd_move = Vector2(0, 1)
+	await seconds(0.8)
+	check(player.horizontal_speed() > 21.5, "no over-speed bleed on a flow surface (%.1f m/s after 0.8 s)" % player.horizontal_speed())
+	player.cmd_move = Vector2(1, 0)
+	await seconds(0.5)
+	var h: Vector3 = Vector3(player.velocity.x, 0.0, player.velocity.z)
+	check(h.x > 6.0 and player.horizontal_speed() > 20.5, "the stick carves it sideways at speed (vx %.1f, speed %.1f)" % [h.x, player.horizontal_speed()])
+	# an ordinary floor still bleeds the same speed
+	player.teleport(Transform3D(Basis(), Vector3(40, 0.05, -25)))
+	await ticks(3)
+	player.velocity = Vector3(0, 0, -22)
+	player.cmd_move = Vector2(0, 1)
+	await seconds(0.8)
+	check(player.horizontal_speed() < 19.5, "and a plain floor bleeds as before (%.1f m/s)" % player.horizontal_speed())
+
+
+func test_zfk_launch() -> void:
+	await new_world(Vector3(0, 0.05, 0))
+	kit.plat(Vector3(0, 0, 0), Vector3(20, 1, 12), "main", 0.0)
+	kit.flow_slope(Vector3(0, 0, -28), Vector3(8, 0.6, 44), 0.0, 0.0)
+	var arc: LaunchArc = kit.launch_arc(Vector3(0, 0, -50), 0.0, 24.0, 6.0, 9.0)
+	kit.plat(Vector3(0, 0, -100), Vector3(24, 1, 80), "main", 0.0)
+	check(is_equal_approx(arc.lip().y, 9.0 * sin(deg_to_rad(24.0))) and absf(arc.lip().z - (-50.0 - 9.0 * cos(deg_to_rad(24.0)))) < 0.01, "lip() is length*sin(pitch) above the foot and length*cos(pitch) ahead")
+	player.teleport(Transform3D(Basis(), Vector3(0, 0.05, -8)))
+	await ticks(3)
+	player.velocity = Vector3(0, 0, -24)
+	player.cmd_move = Vector2(0, 1)
+	var thrown: bool = await wait_until(func() -> bool: return arc.launches > 0, 4.0, "running up the ramp")
+	var v: Vector3 = player.velocity
+	var hs: float = Vector2(v.x, v.z).length()
+	var want: Vector3 = arc.launch_velocity(hs)
+	check(thrown and absf(v.y - want.y) < 1.5 and absf(v.z - want.z) < 1.0, "the lip throws with launch_velocity(): v %s vs %s" % [str(v.snapped(Vector3.ONE * 0.1)), str(want.snapped(Vector3.ONE * 0.1))])
+	check(hs > 22.0, "and the speed is kept up the ramp (%.1f m/s)" % hs)
+	var pred: Vector3 = arc.landing(hs, 0.0)
+	await wait_until(func() -> bool: return player.grounded and player.global_position.z < -60.0, 4.0, "coming down")
+	var err: float = Vector2(player.global_position.x - pred.x, player.global_position.z - pred.z).length()
+	check(err < 3.0, "the flight lands where landing() says (off by %.1f m, %.1f m flight)" % [err, absf(pred.z - arc.lip().z)])
+
+
+func test_zfk_player_untouched() -> void:
+	# nothing changes on a plain floor: an over-speed run bleeds at 5 m/s^2 exactly as before
+	await new_world(Vector3(0, 0.05, 0))
+	floor_slab()
+	await seconds(0.4)
+	player.velocity = Vector3(0, 0, -20)
+	player.cmd_move = Vector2(0, 1)
+	await seconds(1.0)
+	check(absf(player.horizontal_speed() - 15.0) < 1.0, "20 m/s bleeds to ~15 in a second on an ordinary floor (%.1f)" % player.horizontal_speed())
+	check(not player.floor_body.has_method("flow"), "the ordinary floor has no flow() query")
+
+
+func test_zfk_gallery() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	Game.level_index = -1
+	Game.race_mode = false
+	Game.course_time = 0.0
+	Game.course_running = true
+	var lvl: LevelBase = (load("res://levels/playground.tscn") as PackedScene).instantiate() as LevelBase
+	add_child(lvl)
+	world = lvl
+	await ticks(5)
+	var kinds: Array[String] = ["BoostGate", "SpeedRing", "FlowSurface", "LaunchArc", "FlowChain"]
+	var missing: Array[String] = []
+	for k: String in kinds:
+		if lvl.find_children("*", k, true, false).is_empty():
+			missing.append(k)
+	check(missing.is_empty(), "the Flow Gallery shows the flow kit (missing: %s)" % str(missing))
+	check(lvl.find_children("*", "SpeedRing", true, false).size() >= 5 and lvl.find_children("*", "BoostGate", true, false).size() >= 5, "with a ring chain and gate chains")
+	lvl.player.use_device_input = false
+	lvl.player.teleport(Transform3D(Basis(), Vector3(200, 0.1, -8)))
+	await seconds(0.8)
+	check(lvl.player.grounded and lvl.deaths == 0, "the gallery floor is solid and joined to the Kit Gallery (y %.2f)" % lvl.player.global_position.y)
+	lvl.player.cmd_move = Vector2(-1, 0)
+	await seconds(2.2)
+	lvl.player.cmd_move = Vector2.ZERO
+	check(lvl.player.global_position.x < 195.0 and lvl.player.grounded and lvl.deaths == 0, "and you can walk back over the join (x %.1f)" % lvl.player.global_position.x)
