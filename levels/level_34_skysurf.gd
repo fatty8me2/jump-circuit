@@ -43,6 +43,15 @@ var _min_y: float = 0.0
 var _stage_marks: Array[Dictionary] = []
 ## Every island and ramp built so far (world centre, rough radius), for the clearance check.
 var _isles: Array[Dictionary] = []
+var deco: SkysurfDecor
+var _env: Environment
+var _sun: DirectionalLight3D
+var _fill: DirectionalLight3D
+var _cp_bursts: Dictionary = {}
+## The flow lines' decorative trails: {"pts": PackedVector3Array, "air": bool, "rail": bool}.
+var _flow_paths: Array[Dictionary] = []
+## Chord end points in build order (start, every checkpoint, the mid isle, the finish) for the scenery.
+var _mid_world: Vector3 = Vector3.INF
 
 
 func _configure() -> void:
@@ -174,6 +183,11 @@ func _C(length: float, dy: float, width: float = 3.4, style: String = "alt") -> 
 
 
 ## The checkpoint deck: one hop onto a big round "goal" island.
+## A cloud puff on the island you stand on throws you up onto a new round island `dy` higher.
+func _P(dy: float, r: float = 2.4, strength: float = 20.0, pitch: float = 28.0) -> Dictionary:
+	return {"t": "puff", "dy": dy, "r": r, "s": strength, "p": pitch}
+
+
 func _K(pct: float, dy: float, r: float = 6.0) -> Dictionary:
 	return {"t": "cp", "pct": pct, "dy": dy, "r": r}
 
@@ -202,6 +216,23 @@ func _span(a: Dictionary, ang: float, length: float, width: float, style: String
 	var out: Dictionary = _box(c, width, length, style, 0.6, 0.0, ang)
 	out["c"] = c + Vector3(0, 0.02, 0)
 	r_walk(_w(p0 + d * (length - 0.5)))
+	return out
+
+
+## A SkysurfPuff at the middle of `a` flings you along heading `ang` onto a new disc `dy` higher.
+func _puff_hop(a: Dictionary, ang: float, dy: float, r: float, strength: float, pitch: float) -> Dictionary:
+	var c: Vector3 = a["c"]
+	var puff := SkysurfPuff.new()
+	puff.strength = strength
+	puff.pitch_deg = pitch
+	puff.radius = 1.2
+	puff.rotation_degrees.y = _yaw + ang
+	puff.position = _w(c)
+	add_child(puff)
+	var v: Vector3 = Basis(Vector3.UP, deg_to_rad(ang)) * (Vector3(0, cos(deg_to_rad(pitch)), -sin(deg_to_rad(pitch))) * strength)
+	var land: Vector3 = Ballistics.landing_point(_tuning, c + Vector3(0, 0.1, 0), v, c.y + dy)
+	var out: Dictionary = _disc(Vector3(land.x, c.y + dy, land.z), r, "main")
+	r_pad(_w(c), _w(out["c"]))
 	return out
 
 
@@ -264,6 +295,8 @@ func _trace(a: Dictionary, chord: float, side: float, amp: float, items: Array) 
 				cur = _span(cur, ang, float(it["len"]), float(it["w"]), style)
 			"climb":
 				cur = _climb(cur, ang, float(it["len"]), float(it["dy"]), float(it["w"]), style)
+			"puff":
+				cur = _puff_hop(cur, ang, float(it["dy"]), float(it["r"]), float(it["s"]), float(it["p"]))
 			"cp":
 				cur = _hop(cur, ang, float(it["pct"]), float(it["dy"]), {"r": it["r"]}, str(it.get("style", "goal")), 1.0, 7.0)
 				# we came in from the side: step to the middle of the deck before the next stage's walk
@@ -273,8 +306,20 @@ func _trace(a: Dictionary, chord: float, side: float, amp: float, items: Array) 
 
 ## Make `deck` the stage's checkpoint (facing the next stage) and close the safe route with it.
 func _checkpoint_at(deck: Dictionary) -> void:
-	kit.checkpoint(_w(deck["c"]), _next_yaw)
+	var cp: Checkpoint = kit.checkpoint(_w(deck["c"]), _next_yaw)
 	_cp_world.append(_w(deck["c"]))
+	var fx: Array[GPUParticles3D] = SkysurfFx.cp_burst(deco.palette(_cp_world.size() + 1))
+	for pt: GPUParticles3D in fx:
+		pt.position = _w(deck["c"]) + Vector3(0, 0.6, 0)
+		add_child(pt)
+	_cp_bursts[cp] = fx
+	cp.reached.connect(func(which: Checkpoint) -> void:
+		if which.index > current_checkpoint:
+			# SOUND: skysurf_checkpoint - a bright wind-chime flourish
+			WorldAudio.at(self, "skysurf_checkpoint", which.global_position, 0.9, 40.0)
+			for pt2: GPUParticles3D in (_cp_bursts[which] as Array):
+				pt2.restart()
+				pt2.emitting = true)
 
 
 # ---- the flow line ----------------------------------------------------------------------------
@@ -282,6 +327,39 @@ func _checkpoint_at(deck: Dictionary) -> void:
 # planner below builds the common figure - boost gates on the deck, a flow slope, a launch arc, a
 # chain of rings along the flight, a landing deck flush with B - and solves the slope's length and
 # pitch so that the flight comes down 13-26 m short of B at B's height.
+
+## Metres from a checkpoint deck's centre to where the flow figure proper begins: room to stand, to get
+## going again (the gates sit on this stretch) and for a stopped rider to start from.
+const RUNOUT: float = 20.0
+
+
+func yaw0(u: Vector3) -> float:
+	return _yaw_of(u)
+
+
+## The run-out deck between a checkpoint disc and the first slope / ramp / pipe, flush with the disc.
+func _runout_deck(a: Vector3, u: Vector3, yaw: float, width: float) -> void:
+	var c: Vector3 = a + u * ((5.5 + RUNOUT) * 0.5)
+	c.y = a.y - 0.02
+	kit.plat(c, Vector3(width, 1.0, RUNOUT - 5.5), "alt", 2.5, yaw)
+
+
+func _trail(pts: Array[Vector3], lift: float, air: bool) -> void:
+	var pv := PackedVector3Array()
+	for q: Vector3 in pts:
+		pv.append(q + Vector3(0, lift, 0))
+	_flow_paths.append({"pts": pv, "air": air, "rail": false})
+
+
+func _trail_rail(r: GrindRail) -> void:
+	if r == null:
+		return
+	var pv := PackedVector3Array()
+	var n: int = maxi(int(r.length() / 3.0), 2)
+	for i: int in n + 1:
+		pv.append(r.point_at(r.length() * float(i) / float(n)))
+	_flow_paths.append({"pts": pv, "air": false, "rail": true})
+
 
 func _yaw_of(u: Vector3) -> float:
 	return rad_to_deg(atan2(-u.x, -u.z))
@@ -355,7 +433,7 @@ func _flow_arc(a: Vector3, b: Vector3, opts: Dictionary = {}) -> Dictionary:
 				continue
 			var len: float = float(sl)
 			var run: float = len * cos(deg_to_rad(pitch))
-			var foot_s: float = 6.0 + run
+			var foot_s: float = RUNOUT + run
 			var foot_y: float = a.y - len * sin(deg_to_rad(pitch))
 			if foot_y < b.y - 0.5:
 				continue
@@ -378,11 +456,12 @@ func _flow_arc(a: Vector3, b: Vector3, opts: Dictionary = {}) -> Dictionary:
 		push_warning("skysurf: no clean flow figure for a %.1f m stage (best miss cost %.1f)" % [dist, best_cost])
 	var yaw: float = _yaw_of(u)
 	# the deck: gates, then the slope (if any), then the ramp
-	var g1: Vector3 = a + u * 2.4
-	var g2: Vector3 = a + u * 5.0
+	var g1: Vector3 = a + u * 9.0
+	var g2: Vector3 = a + u * 14.0
+	_runout_deck(a, u, yaw0(u), 9.0)
 	var gate_pts: Array[Vector3] = [g1, g2]
 	kit.boost_chain(gate_pts, 20.0, 3.2, {"speed_end": 24.0})
-	var top: Vector3 = a + u * 6.0
+	var top: Vector3 = a + u * RUNOUT
 	var foot: Vector3 = a + u * float(best["foot_s"])
 	foot.y = float(best["foot_y"])
 	var slope: FlowSurface = null
@@ -403,7 +482,7 @@ func _flow_arc(a: Vector3, b: Vector3, opts: Dictionary = {}) -> Dictionary:
 	# the landing deck, flush with B's deck
 	var land: Vector3 = best["landing"]
 	var s_land2: float = (land - a).dot(u)
-	var s_d0: float = s_land2 - 6.0
+	var s_d0: float = maxf(s_land2 - 14.0, float(best["foot_s"]) + 14.0)
 	var s_d1: float = dist - 3.0
 	var dc: Vector3 = a + u * ((s_d0 + s_d1) * 0.5)
 	dc.y = b.y - 0.02
@@ -411,6 +490,8 @@ func _flow_arc(a: Vector3, b: Vector3, opts: Dictionary = {}) -> Dictionary:
 	_min_y = minf(_min_y, b.y - 3.0)
 	if OS.has_environment("SKYSURF_DEBUG"):
 		_report_clearance(a, u, dist, float(best["foot_s"]), float(best["len"]))
+	_trail(pts1, 0.7, false)
+	_trail(ring_pts, 0.0, true)
 	var steps: Array[Dictionary] = []
 	steps.append({"kind": "f_line", "pts": pts1, "tol": 2.0})
 	var to: Vector3 = land + u * 2.0
@@ -439,7 +520,7 @@ func _flow_rails(a: Vector3, b: Vector3, opts: Dictionary = {}) -> Dictionary:
 	var y0: float = a.y + 1.4
 	var y1: float = b.y + 1.4
 	# gates on the deck, then the run-out deck under the first stretch of rail
-	var gate_s: Array[float] = [2.4, 5.0, 9.5, 14.0]
+	var gate_s: Array[float] = [8.0, 10.5, 13.0]
 	var gate_pts: Array[Vector3] = []
 	for s: float in gate_s:
 		gate_pts.append(a + u * s)
@@ -474,6 +555,15 @@ func _flow_rails(a: Vector3, b: Vector3, opts: Dictionary = {}) -> Dictionary:
 			p.y = lerpf(p2.y, y1, float(k) / float(n2))
 			r2.append(p)
 		rail2 = kit.rail(r2, {"post_to_y": minf(a.y, b.y) - 12.0})
+	# a boardwalk under the rails at the landing deck's height (descending stages only): a missed rail
+	# drops you onto it, a few metres lower, and you run on to B
+	if b.y <= a.y + 0.5:
+		var cs0: float = 33.0
+		var cs1: float = s_end - 7.0
+		if cs1 - cs0 > 6.0:
+			var cc: Vector3 = a + u * ((cs0 + cs1) * 0.5)
+			cc.y = b.y - 0.02
+			kit.plat(cc, Vector3(12.0, 1.0, cs1 - cs0), "alt", 2.5, yaw)
 	# the landing deck under the end of the last rail
 	var d0: float = s_end - 8.0
 	var d1: float = dist - 3.0
@@ -483,6 +573,8 @@ func _flow_rails(a: Vector3, b: Vector3, opts: Dictionary = {}) -> Dictionary:
 	_min_y = minf(_min_y, minf(a.y, b.y) - 3.0)
 	if OS.has_environment("SKYSURF_DEBUG"):
 		_report_clearance(a, u, dist, s_end, s_end - s0)
+	_trail_rail(rail1)
+	_trail_rail(rail2)
 	# the route
 	var from_pt: Vector3 = a + u * 15.5
 	var pre: Array[Vector3] = [a + u * 0.8]
@@ -502,14 +594,50 @@ func _flow_rails(a: Vector3, b: Vector3, opts: Dictionary = {}) -> Dictionary:
 	return {"steps": steps, "rail1": rail1, "rail2": rail2, "u": u, "yaw": yaw, "dist": dist}
 
 
+## A flow line that is one long grassy slide from A's run-out to B's deck, with a chain of rings strung
+## along it. opts: rings, width, ring_add.
+func _flow_slide(a: Vector3, b: Vector3, opts: Dictionary = {}) -> Dictionary:
+	var flat := Vector3(b.x - a.x, 0.0, b.z - a.z)
+	var dist: float = flat.length()
+	var u: Vector3 = flat / maxf(dist, 0.01)
+	var gate_pts: Array[Vector3] = [a + u * 9.0, a + u * 14.0]
+	kit.boost_chain(gate_pts, 20.0, 3.2, {"speed_end": 24.0})
+	_runout_deck(a, u, _yaw_of(u), 9.0)
+	var start: Vector3 = a + u * RUNOUT
+	var end: Vector3 = b - u * 6.0
+	var slope: FlowSurface = kit.flow_slope_between(start, end, float(opts.get("width", 10.0)))
+	var ring_n: int = int(opts.get("rings", 6))
+	var ring_pts: Array[Vector3] = []
+	for i: int in ring_n:
+		var t: float = lerpf(0.18, 0.88, float(i) / float(maxi(ring_n - 1, 1)))
+		ring_pts.append(start.lerp(end, t) + Vector3(0, 1.2, 0))
+	var rings: Array[SpeedRing] = kit.ring_line(ring_pts, {"add_speed": float(opts.get("ring_add", 2.0)), "radius": 2.6})
+	_min_y = minf(_min_y, minf(a.y, b.y) - 3.0)
+	if OS.has_environment("SKYSURF_DEBUG"):
+		_report_clearance(a, u, dist, dist - 6.0, dist - RUNOUT)
+	var steps: Array[Dictionary] = []
+	var pre: Array[Vector3] = [a + u * 0.8, gate_pts[0], gate_pts[1], start]
+	steps.append({"kind": "f_line", "pts": pre, "tol": 2.0})
+	var line: Array[Vector3] = []
+	for r: Vector3 in ring_pts:
+		line.append(r - Vector3(0, 1.2, 0))
+	line.append(end)
+	_trail(line, 0.7, false)
+	steps.append({"kind": "f_line", "pts": line, "tol": 2.0})
+	var out_pts: Array[Vector3] = [b]
+	steps.append({"kind": "f_line", "pts": out_pts, "tol": 2.0})
+	return {"steps": steps, "slope": slope, "rings": rings, "u": u, "dist": dist}
+
+
 ## A flow line that is one long half-pipe from A's deck to B's, carved wall to wall.
 func _flow_pipe(a: Vector3, b: Vector3, opts: Dictionary = {}) -> Dictionary:
 	var flat := Vector3(b.x - a.x, 0.0, b.z - a.z)
 	var dist: float = flat.length()
 	var u: Vector3 = flat / maxf(dist, 0.01)
-	var gate_pts: Array[Vector3] = [a + u * 2.4, a + u * 5.0]
+	var gate_pts: Array[Vector3] = [a + u * 9.0, a + u * 14.0]
+	_runout_deck(a, u, yaw0(u), 9.0)
 	kit.boost_chain(gate_pts, 20.0, 3.2, {"speed_end": 24.0})
-	var start: Vector3 = a + u * 6.0
+	var start: Vector3 = a + u * RUNOUT
 	var end: Vector3 = b - u * 6.0
 	var pipe: HalfPipe = kit.halfpipe(start, end, float(opts.get("width", 14.0)), float(opts.get("depth", 3.0)), {"flat": float(opts.get("flat", 0.2)), "shelf": 0.5})
 	_min_y = minf(_min_y, minf(a.y, b.y) - 3.0)
@@ -554,6 +682,9 @@ func _use_flow(s0: int, plan: Dictionary) -> void:
 
 func _build() -> void:
 	_tuning = load("res://resources/default_tuning.tres") as MovementTuning
+	add_child(Ambience.make(theme_id))
+	deco = SkysurfDecor.new(self, kit.rng)
+	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 0), 0.0)
 	var yaws: Array[float] = [0.0, -8.0, 7.0, -6.0, 9.0, 0.0, -10.0, 5.0, -7.0, 6.0, 0.0]
 	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10]
@@ -580,6 +711,9 @@ func _build() -> void:
 		_finish_pos = _w(fin["c"])
 		r_walk(_w(fin["c"]))
 	kill_y = _min_y - 90.0
+	_skin_islands()
+	_dress_flow()
+	_surroundings()
 
 
 ## The very first isle, with the player on it. A shape; the spawn is at its centre.
@@ -612,7 +746,7 @@ func _stage_2() -> Vector3:
 	var s0: int = route.size()
 	var cp: Dictionary = _trace(a, 88.0, -1.0, 15.0, items)
 	_checkpoint_at(cp)
-	_use_flow(s0, _flow_arc(_o, _w(cp["c"]), {"rings": 4, "slope_w": 10.0}))
+	_use_flow(s0, _flow_slide(_o, _w(cp["c"]), {"rings": 6, "width": 10.0}))
 	r_checkpoint()
 	return cp["c"]
 
@@ -681,8 +815,8 @@ func _stage_6() -> Vector3:
 
 func _stage_7() -> Vector3:
 	var a: Dictionary = {"c": Vector3.ZERO, "r": 6.0}
-	var items: Array = [_S(6.0, 3.2), _C(26.0, 4.5, 3.4), _H(0.70, 0.6, 1.9), _B(0.70, 0.6, 3.0, 3.0), _S(6.0, 3.2),
-		_C(26.0, 4.5, 3.4), _H(0.70, 0.6, 1.9), _B(0.72, 0.6, 3.0, 3.0), _K(0.74, 0.4)]
+	var items: Array = [_S(6.0, 3.2), _C(26.0, 4.5, 3.4), _H(0.70, 0.6, 1.9), _B(0.70, 0.6, 3.4, 3.4), _P(3.8), _P(3.8),
+		_S(8.0, 3.2), _H(0.70, 0.4, 1.9), _B(0.72, 0.4, 3.0, 3.0), _K(0.74, 0.4)]
 	var s0: int = route.size()
 	var cp: Dictionary = _trace(a, 90.0, 1.0, 15.0, items)
 	_checkpoint_at(cp)
@@ -737,6 +871,7 @@ func _stage_10() -> Vector3:
 	_finish_pos = _w(fin["c"])
 	# the flow line: ribbons up to the mid isle, then the great ring flight into the sun
 	var m_w: Vector3 = _w(mid["c"])
+	_mid_world = m_w
 	var leg1: Dictionary = _flow_rails(_o, m_w, {"two": true, "swing": 7.0})
 	var leg2: Dictionary = _flow_arc(m_w, _w(fin["c"]), {"rings": 10, "ring_add": 3.0, "pitch": 28.0, "deck": 12.0})
 	var all_steps: Array[Dictionary] = []
@@ -745,3 +880,227 @@ func _stage_10() -> Vector3:
 	_use_flow(s0, {"steps": all_steps})
 	r_walk(_w(fin["c"]))
 	return fin["c"]
+
+
+# ---- the look ---------------------------------------------------------------------------------
+
+func _restyle_environment() -> void:
+	for n: Node in get_children():
+		if n is WorldEnvironment:
+			_env = (n as WorldEnvironment).environment
+		elif n is DirectionalLight3D:
+			if n.name == "Sun":
+				_sun = n as DirectionalLight3D
+			else:
+				_fill = n as DirectionalLight3D
+	_env.background_mode = Environment.BG_SKY
+	_env.sky = SkysurfSky.make()
+	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	_env.ambient_light_color = Color(0.96, 0.84, 0.96)
+	_env.ambient_light_energy = 0.9
+	_env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	_env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	_env.tonemap_exposure = 1.05
+	_env.tonemap_white = 6.0
+	_env.fog_enabled = true
+	_env.fog_light_color = Color(1.0, 0.82, 0.82)
+	_env.fog_density = 0.0011
+	_env.fog_aerial_perspective = 0.45
+	_env.fog_sky_affect = 0.1
+	_env.fog_sun_scatter = 0.35
+	_env.glow_enabled = true
+	_env.glow_intensity = 0.7
+	_env.glow_bloom = 0.08
+	_env.glow_hdr_threshold = 1.1
+	_env.adjustment_enabled = true
+	_env.adjustment_saturation = 1.08
+	_env.adjustment_contrast = 1.04
+	# the low sun ahead and a little to the right; a cool lilac fill from behind
+	_sun.light_color = Color(1.0, 0.84, 0.66)
+	_sun.light_energy = 1.8
+	_sun.rotation_degrees = Vector3(-22, 152, 0)
+	_fill.light_color = Color(0.82, 0.76, 1.0)
+	_fill.light_energy = 0.38
+	_fill.rotation_degrees = Vector3(-24, 332, 0)
+
+
+## Swap every platform the kit built onto the island shader (same uniforms, new look).
+func _skin_islands() -> void:
+	var shader: Shader = preload("res://visual/skysurf_isle.gdshader")
+	for mi: Node in find_children("*", "MeshInstance3D", true, false):
+		var m: MeshInstance3D = mi as MeshInstance3D
+		var sm: ShaderMaterial = m.material_override as ShaderMaterial
+		if sm != null and sm.shader == Look.PLATFORM_SHADER:
+			sm.shader = shader
+
+
+## Dress the flow line: wind ribbons streaming along every gate run, slope, rail and ring flight.
+func _dress_flow() -> void:
+	for i: int in _flow_paths.size():
+		var f: Dictionary = _flow_paths[i]
+		var pts: PackedVector3Array = f["pts"]
+		if pts.size() < 2:
+			continue
+		var air: bool = bool(f["air"])
+		var ca: Color = deco.palette(i)
+		var cb: Color = deco.palette(i + 3).lerp(Color.WHITE, 0.5)
+		var offsets: Array[float] = [0.0]
+		if bool(f["rail"]):
+			offsets = [-0.8, 0.8]
+		for off: float in offsets:
+			var q := PackedVector3Array()
+			var chord: Vector3 = pts[pts.size() - 1] - pts[0]
+			var side: Vector3 = chord.cross(Vector3.UP)
+			side = side.normalized() * off if side.length() > 0.001 else Vector3.ZERO
+			for p3: Vector3 in pts:
+				q.append(p3 + side + (Vector3(0, 0.5, 0) if bool(f["rail"]) else Vector3.ZERO))
+			var rb := SkysurfRibbon.new()
+			rb.points = q
+			rb.width = 1.9 if air else 1.2
+			rb.color_a = ca
+			rb.color_b = cb
+			rb.speed = 8.0
+			rb.strength = 0.6 if air else 0.5
+			rb.phase = float(i) * 0.7 + off
+			rb.build()
+			add_child(rb)
+
+
+## Horizontal distance from `p` to the nearest chord (the straight line between consecutive decks).
+func _chord_dist(p: Vector3, chords: Array[Vector3]) -> float:
+	var best: float = INF
+	for i: int in chords.size() - 1:
+		var a: Vector3 = chords[i]
+		var b: Vector3 = chords[i + 1]
+		var ab: Vector3 = b - a
+		var t: float = clampf((p - a).dot(ab) / maxf(ab.length_squared(), 0.001), 0.0, 1.0)
+		best = minf(best, p.distance_to(a + ab * t))
+	return best
+
+
+func _clear_of_isles(p: Vector3, dist: float) -> bool:
+	for isl: Dictionary in _isles:
+		if (isl["c"] as Vector3).distance_to(p) < dist + float(isl["r"]):
+			return false
+	return true
+
+
+func _surroundings() -> void:
+	var rng: RandomNumberGenerator = kit.rng
+	var chords: Array[Vector3] = [Vector3.ZERO]
+	for c: Vector3 in _cp_world:
+		chords.append(c)
+	if _mid_world != Vector3.INF:
+		chords.insert(chords.size(), _mid_world)
+	chords.append(_finish_pos)
+	var lo := Vector3(INF, INF, INF)
+	var hi := Vector3(-INF, -INF, -INF)
+	for c: Vector3 in chords:
+		lo = lo.min(c)
+		hi = hi.max(c)
+	var mid: Vector3 = (lo + hi) * 0.5
+	var floor_y: float = lo.y - 70.0
+	# the sea of cloud
+	var sea := MeshInstance3D.new()
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(4200, 4200)
+	sea.mesh = pm
+	var smat := ShaderMaterial.new()
+	smat.shader = preload("res://visual/skysurf_sea.gdshader")
+	var ld: Vector3 = -_sun.global_transform.basis.z
+	smat.set_shader_parameter("sun_dir", Vector2(-ld.x, -ld.z))
+	sea.material_override = smat
+	sea.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	sea.position = Vector3(mid.x, floor_y, mid.z)
+	add_child(sea)
+	# cumulus mounds and towers rising from the sea, clear of the course
+	for k: int in 60:
+		var at := Vector3(rng.randf_range(lo.x - 260.0, hi.x + 260.0), floor_y - 4.0, rng.randf_range(lo.z - 200.0, hi.z + 260.0))
+		if _chord_dist(Vector3(at.x, lo.y, at.z), chords) < 60.0:
+			continue
+		if rng.randf() < 0.45:
+			deco.tower(at, rng.randf_range(40.0, 95.0), rng.randf_range(7.0, 14.0))
+		else:
+			deco.mound(at + Vector3(0, rng.randf_range(0.0, 14.0), 0), rng.randf_range(1.6, 3.2))
+	# far floating isles, balloons
+	var placed: int = 0
+	var tries: int = 0
+	while placed < 46 and tries < 600:
+		tries += 1
+		var ci: int = rng.randi_range(0, chords.size() - 2)
+		var base: Vector3 = chords[ci].lerp(chords[ci + 1], rng.randf())
+		var lat: Vector3 = Vector3(rng.randf_range(-1.0, 1.0), 0.0, rng.randf_range(-0.3, 0.3)).normalized() * rng.randf_range(55.0, 210.0)
+		var at2: Vector3 = base + lat + Vector3(0, rng.randf_range(-45.0, 40.0), 0)
+		var rad: float = rng.randf_range(7.0, 26.0)
+		if _chord_dist(at2, chords) < rad + 38.0:
+			continue
+		deco.far_isle(at2, rad, true)
+		placed += 1
+	for k: int in 9:
+		var ci2: int = rng.randi_range(0, chords.size() - 2)
+		var b2: Vector3 = chords[ci2].lerp(chords[ci2 + 1], rng.randf())
+		var off2: Vector3 = Vector3(rng.randf_range(-1.0, 1.0), 0.0, rng.randf_range(-0.2, 0.2)).normalized() * rng.randf_range(70.0, 170.0)
+		var bp: Vector3 = b2 + off2 + Vector3(0, rng.randf_range(-10.0, 35.0), 0)
+		if _chord_dist(bp, chords) > 45.0:
+			deco.balloon(bp, rng.randf_range(9.0, 16.0), deco.palette(k), deco.palette(k + 3))
+	# kites: a few along every stage, a whole valley of them in stage 4
+	for i2: int in chords.size() - 1:
+		var a: Vector3 = chords[i2]
+		var b: Vector3 = chords[i2 + 1]
+		var n_k: int = 14 if i2 == 3 else 4
+		for k: int in n_k:
+			var t: float = rng.randf_range(0.1, 0.9)
+			var pos: Vector3 = a.lerp(b, t)
+			var dir: Vector3 = (b - a)
+			dir.y = 0.0
+			var side: Vector3 = dir.cross(Vector3.UP).normalized()
+			var lat2: float = rng.randf_range(14.0, 48.0) * (1.0 if rng.randf() < 0.5 else -1.0)
+			var kp: Vector3 = pos + side * lat2 + Vector3(0, rng.randf_range(6.0, 30.0), 0)
+			if not _clear_of_isles(kp, 6.0):
+				continue
+			deco.kite(kp, rng.randf_range(5.0, 11.0), deco.palette(i2 + k), deco.palette(i2 + k + 2), rng.randf_range(-30.0, 30.0))
+	# birds wheeling over the stages
+	for i3: int in chords.size() - 1:
+		var mid3: Vector3 = chords[i3].lerp(chords[i3 + 1], 0.5)
+		var fl := SkysurfFlock.new()
+		fl.count = 11
+		fl.radius = rng.randf_range(18.0, 30.0)
+		fl.height = rng.randf_range(6.0, 16.0)
+		fl.seed_value = 40 + i3
+		fl.position = mid3 + Vector3(rng.randf_range(-20.0, 20.0), 0.0, rng.randf_range(-12.0, 12.0))
+		fl.build()
+		add_child(fl)
+	# petals on the wind and glints in the low sun, over every stage
+	for i4: int in chords.size() - 1:
+		var m4: Vector3 = chords[i4].lerp(chords[i4 + 1], 0.5)
+		var d4: Vector3 = chords[i4 + 1] - chords[i4]
+		d4.y = 0.0
+		var half: float = d4.length() * 0.5
+		var wind: Vector3 = d4.normalized() + Vector3(0.15, 0.0, 0.0)
+		SkysurfFx.petals(self, m4 + Vector3(0, 6.0, 0), Vector3(30.0, 9.0, half), 38, wind)
+		SkysurfFx.motes(self, m4 + Vector3(0, 5.0, 0), Vector3(26.0, 8.0, half), 26)
+	# the start: a pier arch and bunting; pinwheels and bunting on every checkpoint deck
+	kit.arch(_w_world(Vector3(0, 0, -9.0)), 8.0, 5.0, 0.0, Look.c("accent"))
+	deco.pinwheel(Vector3(-5.0, 0.0, 2.0), 1.3, SkysurfDecor.ROSE, SkysurfDecor.BUTTER, 2.4)
+	deco.pinwheel(Vector3(5.0, 0.0, 2.0), 1.3, SkysurfDecor.BUTTER, SkysurfDecor.ROSE, -2.4)
+	for k2: int in _cp_world.size():
+		var cw: Vector3 = _cp_world[k2]
+		var off_a: Vector3 = Vector3(-5.0, 0.0, 0.0)
+		var off_b: Vector3 = Vector3(5.0, 0.0, 0.0)
+		deco.pinwheel(cw + off_a, 1.3, deco.palette(k2), deco.palette(k2 + 2), 2.6)
+		deco.pinwheel(cw + off_b, 1.3, deco.palette(k2 + 2), deco.palette(k2), -2.6)
+	# rainbows: over the ring chain of Rainbow Bridge, and a great one behind the finish isle
+	if _cp_world.size() >= 9:
+		var r9a: Vector3 = _cp_world[7]
+		var r9b: Vector3 = _cp_world[8]
+		var m9: Vector3 = r9a.lerp(r9b, 0.5)
+		var d9: Vector3 = r9b - r9a
+		d9.y = 0.0
+		d9 = d9.normalized()
+		deco.rainbow(m9 + Vector3(0, -2.0, 0), 26.0, rad_to_deg(atan2(d9.x, d9.z)))
+	deco.rainbow(_finish_pos + Vector3(0, -3.0, -60.0), 55.0, 0.0)
+
+
+func _w_world(l: Vector3) -> Vector3:
+	return l
+
