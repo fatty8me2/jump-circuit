@@ -340,14 +340,17 @@ const THEMES: Dictionary = {
 		"decor": Color(0.25, 0.32, 0.45), "decor2": Color(0.50, 0.90, 0.80), "metal": Color(0.70, 0.74, 0.80),
 		"cloud_light": Color(0.70, 0.85, 0.90), "cloud_shade": Color(0.20, 0.25, 0.35),
 	},
-	"skysurf": {  # PLACEHOLDER palette - the Flow level agent owns and retunes this entry
-		"sky_top": Color(0.10, 0.12, 0.30), "sky_horizon": Color(0.55, 0.80, 0.85), "sky_bottom": Color(0.20, 0.25, 0.35),
-		"sun": Color(0.85, 0.95, 1.00), "sun_energy": 1.0, "sun_rot": Vector3(-45, 150, 0),
-		"ambient": Color(0.60, 0.62, 0.70), "ambient_energy": 0.8, "fog": Color(0.45, 0.60, 0.70), "fog_density": 0.002,
-		"top": Color(0.85, 0.92, 0.98), "side": Color(0.40, 0.50, 0.65), "trim": Color(0.40, 0.95, 0.85),
-		"alt_top": Color(0.55, 0.75, 0.95), "accent": Color(0.40, 0.95, 0.85), "accent2": Color(0.85, 0.50, 1.00),
-		"decor": Color(0.25, 0.32, 0.45), "decor2": Color(0.50, 0.90, 0.80), "metal": Color(0.70, 0.74, 0.80),
-		"cloud_light": Color(0.70, 0.85, 0.90), "cloud_shade": Color(0.20, 0.25, 0.35),
+	# Sky Surf: a pastel sunrise above a sea of cloud - cream islands with rose-lilac keels, mint and
+	# coral trims, a gold sun just clearing the horizon ahead. (levels/level_34_skysurf.gd swaps in its
+	# own sunrise sky, cloud sea, island shader and wind ribbons.)
+	"skysurf": {
+		"sky_top": Color(0.46, 0.54, 0.92), "sky_horizon": Color(1.0, 0.80, 0.62), "sky_bottom": Color(0.92, 0.74, 0.88),
+		"sun": Color(1.0, 0.86, 0.66), "sun_energy": 1.55, "sun_rot": Vector3(-24, 152, 0),
+		"ambient": Color(0.92, 0.80, 0.94), "ambient_energy": 0.95, "fog": Color(1.0, 0.82, 0.78), "fog_density": 0.0013,
+		"top": Color(1.0, 0.93, 0.85), "side": Color(0.80, 0.58, 0.76), "trim": Color(1.0, 0.70, 0.58),
+		"alt_top": Color(0.76, 0.93, 0.88), "accent": Color(1.0, 0.52, 0.55), "accent2": Color(0.42, 0.90, 0.92),
+		"decor": Color(0.62, 0.86, 0.72), "decor2": Color(1.0, 0.84, 0.50), "metal": Color(0.88, 0.84, 0.94),
+		"cloud_light": Color(1.0, 0.94, 0.90), "cloud_shade": Color(0.82, 0.70, 0.92),
 	},
 	"hyperloop": {  # PLACEHOLDER palette - the Flow level agent owns and retunes this entry
 		"sky_top": Color(0.10, 0.12, 0.30), "sky_horizon": Color(0.55, 0.80, 0.85), "sky_bottom": Color(0.20, 0.25, 0.35),
