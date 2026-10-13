@@ -97,6 +97,11 @@ const HATS: Dictionary = {
 	"gilded_cowboy": {"name": "Gilded Cowboy Hat", "rule": {"type": "medal", "level": "frontier", "tier": 3}},
 	"gilded_beanie": {"name": "Gilded Summit Beanie", "rule": {"type": "medal", "level": "ascent", "tier": 3}},
 	"gilded_headphones": {"name": "Gilded Neon Headphones", "rule": {"type": "medal", "level": "neon", "tier": 3}},
+	# Flow courses: their Silver hats
+	"aurora_beanie": {"name": "Aurora Beanie", "rule": {"type": "medal", "level": "aurora", "tier": 2}},
+	"skysurf_goggles": {"name": "Sky Surfer Goggles", "rule": {"type": "medal", "level": "skysurf", "tier": 2}},
+	"mag_visor": {"name": "Mag-Visor", "rule": {"type": "medal", "level": "hyperloop", "tier": 2}},
+	"lotus_crown": {"name": "Lotus Crown", "rule": {"type": "medal", "level": "lotus", "tier": 2}},
 }
 
 const PAINTS: Dictionary = {

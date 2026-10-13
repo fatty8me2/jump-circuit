@@ -4058,7 +4058,7 @@ func test_zc_remote_racer_cosmetics() -> void:
 # ---- medal times and rewards (characters, hats, paints, titles) --------------------------------
 
 ## Flow courses that don't have their Silver world hat yet (the hats agent adds them; drop ids as they land).
-const _FLOW_HATLESS: Array[String] = ["aurora", "skysurf", "hyperloop", "lotus"]
+const _FLOW_HATLESS: Array[String] = []
 
 ## The four worlds still being built carry provisional medal times (no bot time yet).
 const _ZM_PROVISIONAL: Array[String] = ["aurora", "skysurf", "hyperloop", "lotus"]
