@@ -425,10 +425,18 @@ static func hint(kind: String, id: String) -> String:
 					return "Lap other racers %d time%s (Run It Again)" % [n, "" if n == 1 else "s"]
 				"flawless_golds":
 					return "Gold with no falls in the same run"
+				"zen_seconds":
+					return zen_hint(n)
 				"runs":
 					return "Finish %d runs" % n
 			return "%s %d" % [str(rule.get("key", "")).capitalize(), n]
 	return ""
+
+
+## The hint for a zen_seconds stat rule ({"type": "stat", "key": "zen_seconds", "n": N}): total time in
+## the flow meter's ZEN state, banked into SaveData stats by FlowMeter.
+static func zen_hint(n: int) -> String:
+	return "Spend %d s in the ZEN state (Flow levels)" % n
 
 
 ## "Gold" / "Silver or better" phrasing for hints.

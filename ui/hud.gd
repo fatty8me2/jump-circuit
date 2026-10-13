@@ -127,6 +127,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+## The flow meter's widget (FlowMeter.setup) joins the overlay; it replaces the plain speed readout.
+func add_flow_widget(w: Control) -> void:
+	_root.add_child(w)
+	_root.move_child(w, _flash.get_index() + 1)
+
+
 func _timer_visible() -> bool:
 	if Game.race_mode or Settings.timer_mode == "on":
 		return true
@@ -272,7 +278,7 @@ func _process(dt: float) -> void:
 	_stage.text = "Stage %d / %d     Falls %d" % [level.current_checkpoint + 1, level.checkpoints.size() + 1, level.deaths]
 	_stage.visible = _results == null
 	var hs: float = level.player.horizontal_speed()
-	_speed.visible = hs > 11.0 and _results == null
+	_speed.visible = hs > 11.0 and _results == null and level.flow == null
 	_speed.text = "%d m/s" % int(hs)
 	_speed.add_theme_font_size_override("font_size", int(clampf(18.0 + (hs - 11.0) * 0.9, 18.0, 38.0)))
 	if _count.visible and Game.course_time < 0.0:
@@ -371,6 +377,7 @@ func show_results(time: float, prev_best: float, is_best: bool, deaths: int, pre
 	elif prev_ff >= 0:
 		falls_text += "   (fewest ever: %d)" % prev_ff
 	box.add_child(UiKit.label(falls_text, 18, UiKit.GOLD if falls_record else Color(0.7, 0.74, 0.85), HORIZONTAL_ALIGNMENT_CENTER))
+	_add_flow_lines(box)
 	var last: bool = Game.level_index == Game.LEVELS.size() - 1
 	var next: Button = UiKit.button("Finale" if last else "Next Level", func() -> void: Game.next_level())
 	var buttons: Array[Button] = [next,
@@ -396,6 +403,24 @@ func show_results(time: float, prev_best: float, is_best: bool, deaths: int, pre
 		next.grab_focus())
 	if new_medal > 0:
 		_celebrate_medal(new_medal)
+
+
+## Flow levels: "Flow 87%   ZEN for 42 s" and the best chain / top speed (FlowMeter.summary()).
+func _add_flow_lines(box: VBoxContainer) -> void:
+	if level == null or level.flow == null:
+		return
+	var s: Dictionary = level.flow.summary()
+	var zen_secs: int = int(s["zen_secs"])
+	var line: Label = UiKit.label("Flow %d%%    %s" % [int(s["pct"]), "ZEN for %d s" % zen_secs if zen_secs > 0 else "no ZEN this run"],
+		24, FlowHud.TIER_COLORS[4] if zen_secs > 0 else UiKit.TEAL, HORIZONTAL_ALIGNMENT_CENTER)
+	line.name = "FlowLine"
+	box.add_child(line)
+	var bits: Array[String] = ["Top speed %d m/s" % int(float(s["top_speed"]))]
+	if int(s["best_chain"]) >= 2:
+		bits.append("best chain x%d" % int(s["best_chain"]))
+	var sub: Label = UiKit.label("   -   ".join(bits), 16, UiKit.SOFT, HORIZONTAL_ALIGNMENT_CENTER)
+	sub.name = "FlowSub"
+	box.add_child(sub)
 
 
 # ---- medals ----------------------------------------------------------------------------------

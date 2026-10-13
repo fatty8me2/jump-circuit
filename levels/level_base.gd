@@ -48,6 +48,8 @@ var _ghosts: Dictionary = {}
 var _pause: PauseMenu
 ## Solo ghost replay + recorder (null in Party Mode and races).
 var ghost_run: GhostRun
+## The flow meter / ZEN state: only on Flow levels ("flow": true in Game.LEVELS), never in Party Mode.
+var flow: FlowMeter
 
 
 func _ready() -> void:
@@ -66,6 +68,7 @@ func _ready() -> void:
 	_build()
 	_collect_checkpoints()
 	_spawn_player()
+	_setup_flow()
 	Sfx.set_theme(theme_id)
 	if not headless_mode:
 		Sfx.music(music_track)
@@ -81,6 +84,14 @@ func _ready() -> void:
 		party = PartyLayer.new()
 		add_child(party)
 		party.setup(self)
+
+
+func _setup_flow() -> void:
+	if not FlowMeter.wanted():
+		return
+	flow = FlowMeter.new()
+	add_child(flow)
+	flow.setup(self)
 
 
 func _setup_ghost() -> void:
@@ -452,6 +463,8 @@ func restart_run() -> void:
 		cp.set_active(false, false)
 	if Game.party == null:
 		Sfx.music_progress(0.0)
+	if flow != null:
+		flow.reset()
 	hud.clear_banner()
 	respawn()
 
@@ -497,6 +510,8 @@ func _on_finish() -> void:
 		_finish_lap()
 		return
 	finished = true
+	if flow != null:
+		flow.finish()
 	player.control_enabled = false
 	# a racer can coast into the gate behind the race menu: close it before the
 	# results (which free the mouse again), or it would sit over them

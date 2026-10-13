@@ -76,6 +76,7 @@ func _ready() -> void:
 	_fanfare.bus = "Music"
 	add_child(_fanfare)
 	_setup_muffle()
+	set_process(false)   # only runs while the ZEN mix is easing (see set_zen_target)
 
 
 ## Quit with no sound in flight. The audio thread only lets go of a stopped playback on its next
@@ -299,6 +300,7 @@ func _apply_layer_mix(x: float) -> void:
 		return
 	var rule: Dictionary = LAYER_RULES.get(_music_name, LAYER_RULES["default"])
 	var base_gain: float = 1.0
+	x = maxf(x, _zen)   # ZEN (flow meter) swells the hi layer in whatever the course progress says
 	var hi_gain: float = x
 	if rule["mode"] == "cross":
 		# equal-power crossfade: the sum stays as loud as either layer on its own
@@ -372,6 +374,68 @@ func _set_music_duck(db: float) -> void:
 	var fx: AudioEffectAmplify = _bus_effect("Ducked", "AudioEffectAmplify") as AudioEffectAmplify
 	if fx != null:
 		fx.volume_db = db
+
+
+# ---- ZEN (the flow meter's state) -----------------------------------------------------------------
+# "Everything gets quiet except the music": while ZEN is held the score's hi layer swells in whatever
+# the course progress is, and the ambience and the effects go dull and a little quieter behind a
+# low-pass of their own (separate from the pause muffle, so the two compose). The mix eases in
+# ~1.5 s and out ~1 s; FlowMeter only sets the target.
+
+const ZEN_IN_RATE: float = 1.3
+const ZEN_OUT_RATE: float = 2.0
+## bus -> [closed cutoff Hz, closed gain dB]
+const ZEN_BUSES: Dictionary = {"Ambience": [2400.0, -7.0], "SFX": [7500.0, -3.0]}
+
+var _zen: float = 0.0
+var _zen_target: float = 0.0
+var _zen_fx: Dictionary = {}   # bus name -> [AudioEffectLowPassFilter, AudioEffectAmplify]
+
+
+## 0 = normal mix, 1 = full ZEN. The mix eases toward it on its own (also while paused).
+func set_zen_target(t: float) -> void:
+	_zen_target = clampf(t, 0.0, 1.0)
+	set_process(true)
+
+
+func zen_mix() -> float:
+	return _zen
+
+
+func zen_target() -> float:
+	return _zen_target
+
+
+func _process(dt: float) -> void:
+	var rate: float = ZEN_IN_RATE if _zen_target > _zen else ZEN_OUT_RATE
+	_zen += (_zen_target - _zen) * (1.0 - exp(-rate * dt))
+	if absf(_zen_target - _zen) < 0.002:
+		_zen = _zen_target
+		set_process(false)
+	_apply_zen()
+
+
+func _apply_zen() -> void:
+	if _zen > 0.0 and _zen_fx.is_empty():
+		for bus_name: String in ZEN_BUSES:
+			var idx: int = AudioServer.get_bus_index(bus_name)
+			if idx < 0:
+				continue
+			var lp := AudioEffectLowPassFilter.new()
+			lp.cutoff_hz = 20500.0
+			lp.resonance = 0.2
+			var amp := AudioEffectAmplify.new()
+			AudioServer.add_bus_effect(idx, lp)
+			AudioServer.add_bus_effect(idx, amp)
+			_zen_fx[bus_name] = [lp, amp]
+	for bus_name: String in _zen_fx:
+		var closed: Array = ZEN_BUSES[bus_name]
+		var lp: AudioEffectLowPassFilter = _zen_fx[bus_name][0]
+		var amp: AudioEffectAmplify = _zen_fx[bus_name][1]
+		# exponential sweep: equal musical steps, no sudden jump near the closed end
+		lp.cutoff_hz = 20500.0 * pow(float(closed[0]) / 20500.0, _zen)
+		amp.volume_db = float(closed[1]) * _zen
+	_apply_layer_mix(_layer_mix)
 
 
 # ---- the muffle while paused --------------------------------------------------------------------

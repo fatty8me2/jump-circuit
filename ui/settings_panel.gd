@@ -32,6 +32,7 @@ func _ready() -> void:
 	_slider_row(box, "Field of view", 55.0, 100.0, Settings.fov, func(v: float) -> void: Settings.fov = v,
 		func(v: float) -> String: return "%d°" % roundi(v), 1.0)
 	_check_row(box, "Invert vertical look", Settings.invert_y, func(on: bool) -> void: Settings.invert_y = on)
+	_check_row(box, "FOV kick at speed", Settings.fov_kick, func(on: bool) -> void: Settings.fov_kick = on)
 
 	_section(box, "Audio")
 	var pct := func(v: float) -> String: return "%d%%" % roundi(v * 100.0)
@@ -47,6 +48,8 @@ func _ready() -> void:
 		func(v: float) -> String: return "Low" if v <= 0.25 else ("Max" if v >= 1.95 else "%d%%" % roundi(v * 100.0)), 0.05)
 	_fullscreen_check = _check_row(box, "Fullscreen", Settings.fullscreen, func(on: bool) -> void: Settings.fullscreen = on)
 	_check_row(box, "V-Sync", Settings.vsync, func(on: bool) -> void: Settings.vsync = on)
+	# Flow levels: how much the flow meter / ZEN changes the picture (motion sensitivity)
+	_option_row(box, "Flow effects", Settings.FLOW_FX_NAMES, Settings.flow_fx, func(i: int) -> void: Settings.flow_fx = i)
 	_option_row(box, "Ghost (solo runs)", Settings.GHOST_NAMES, Settings.ghost_mode, func(i: int) -> void: Settings.ghost_mode = i)
 	var modes: Array[String] = ["auto", "on", "off"]
 	_option_row(box, "Run timer", ["After first clear", "Always", "Never"], modes.find(Settings.timer_mode), func(i: int) -> void: Settings.timer_mode = modes[i])

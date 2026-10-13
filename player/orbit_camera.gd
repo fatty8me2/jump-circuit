@@ -29,6 +29,8 @@ var _cur_dist: float = 7.2
 var _fall_look: float = 0.0
 var _shape: SphereShape3D
 var _fov_kick: float = 0.0
+## Extra degrees of FOV from the flow meter (FlowMeter eases it; 0 everywhere else).
+var flow_fov: float = 0.0
 
 
 func _ready() -> void:
@@ -46,7 +48,7 @@ func _ready() -> void:
 
 ## Settings changes (FOV slider) show at once, even while the pause menu has _process frozen.
 func _on_settings_changed() -> void:
-	fov = Settings.fov + _fov_kick
+	fov = Settings.fov + _fov_kick + flow_fov
 
 
 func face(dir: Vector3) -> void:
@@ -56,6 +58,7 @@ func face(dir: Vector3) -> void:
 	_focus_ready = false
 	# a respawn starts at rest: drop the speed FOV kick and any wall-pulled zoom at once
 	_fov_kick = 0.0
+	flow_fov = 0.0
 	fov = Settings.fov
 	_cur_dist = distance
 
@@ -129,9 +132,9 @@ func _process(dt: float) -> void:
 	_fall_look = lerpf(_fall_look, fall_target, 1.0 - exp(-4.0 * dt))
 
 	# speed opens the lens a little: momentum should be felt, not just measured
-	var kick_target: float = clampf((Vector2(vel.x, vel.z).length() - 10.5) * 1.1, 0.0, 17.0)
+	var kick_target: float = clampf((Vector2(vel.x, vel.z).length() - 10.5) * 1.1, 0.0, 17.0) if Settings.fov_kick else 0.0
 	_fov_kick = lerpf(_fov_kick, kick_target, 1.0 - exp(-3.5 * dt))
-	fov = Settings.fov + _fov_kick
+	fov = Settings.fov + _fov_kick + flow_fov
 
 	var pivot: Vector3 = _focus + Vector3(0, height - _fall_look, 0)
 	var rot := Basis.from_euler(Vector3(pitch, yaw, 0))
