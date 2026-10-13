@@ -49,6 +49,13 @@ const GHOST_OFF: int = 0
 const GHOST_PB: int = 1
 const GHOST_NAMES: Array[String] = ["Off", "Personal best"]
 var ghost_mode: int = GHOST_PB
+## Flow levels: how much the flow meter / ZEN state changes the picture (FlowMeter). Full, Reduced
+## (no FOV widening, fewer speed lines, softer grade) or Off (no screen effects at all; the HUD
+## meter and the music swell stay). A motion-sensitivity option.
+const FLOW_FX_NAMES: Array[String] = ["Full", "Reduced", "Off"]
+var flow_fx: int = 0
+## The lens opens with speed (OrbitCamera, and the flow meter's extra widening). Off = fixed FOV.
+var fov_kick: bool = true
 ## Tests point settings saves somewhere else so they never touch the real settings.cfg.
 var save_path_override: String = ""
 ## Party Mode rebinds: action -> {"key": physical keycode, "mouse": button, "pad": button}
@@ -108,6 +115,7 @@ func _sanitize() -> void:
 	quality = clampi(quality, 0, QUALITY_NAMES.size() - 1)
 	particles = _finite_clamp(particles, 0.2, 2.0, 1.0)
 	ghost_mode = clampi(ghost_mode, 0, GHOST_NAMES.size() - 1)
+	flow_fx = clampi(flow_fx, 0, FLOW_FX_NAMES.size() - 1)
 	color_index = posmod(color_index, RACER_COLORS.size())
 	# every cosmetic pick (trail_id, finish_id, character_id, hat_id, paint_id, title_id):
 	# a known id, else that kind's default
@@ -177,7 +185,7 @@ func _props() -> Array[String]:
 	return ["mouse_sensitivity", "invert_y", "fov", "master_volume", "sfx_volume", "music_volume", "ambience_volume",
 		"quality", "particles", "fullscreen", "vsync", "timer_mode", "player_name", "color_index", "last_room_code", "party_binds",
 		"trail_id", "finish_id", "character_id", "hat_id", "paint_id", "title_id", "ghost_mode",
-		"emote_id", "emote_id2", "emote_id3", "emote_id4", "pose_id", "party_ruleset"]
+		"emote_id", "emote_id2", "emote_id3", "emote_id4", "pose_id", "party_ruleset", "flow_fx", "fov_kick"]
 
 
 ## How many particles every emitter builds relative to the High baseline: Low 0.45,

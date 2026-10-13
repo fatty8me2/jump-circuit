@@ -9437,3 +9437,393 @@ func test_zd_rex() -> void:
 	check(not r.is_armed(), "crossing the line wakes it")
 	r.reset_state()
 	check(r.is_armed(), "a respawn re-arms it")
+
+
+# ---- flow meter and ZEN (docs/FLOW_BRIEF.md, workstream F3) --------------------------------------------
+
+## A meter that is not on a level: the rules are plain functions of speed and time.
+func _zf_meter() -> FlowMeter:
+	var m := FlowMeter.new()
+	add_child(m)
+	m.auto_step = false
+	return m
+
+
+func _zf_run(m: FlowMeter, speed: float, secs: float) -> void:
+	for i: int in int(secs * 60.0):
+		m.step(1.0 / 60.0, speed)
+
+
+func test_zflow_meter_fill_drain_tiers() -> void:
+	# the pure rules
+	check(FlowMeter.rate_for(20.0) > 0.0 and FlowMeter.rate_for(12.0) > 0.0, "12 m/s and up fills the meter")
+	check(FlowMeter.rate_for(24.0) > FlowMeter.rate_for(14.0), "a faster run fills faster")
+	check(FlowMeter.rate_for(9.0) < 0.0 and absf(FlowMeter.rate_for(9.0)) < 0.05, "9 m/s only holds it (a trickle of drain)")
+	check(FlowMeter.rate_for(4.0) < -0.15, "under 7 m/s it drains properly")
+	check(FlowMeter.rate_for(0.0) < FlowMeter.rate_for(4.0) - 0.3, "standing still drains fastest")
+	check(FlowMeter.tier_for(0.14, false) == 0 and FlowMeter.tier_for(0.15, false) == 1, "Flow 1 starts at 15%")
+	check(FlowMeter.tier_for(0.39, false) == 1 and FlowMeter.tier_for(0.40, false) == 2, "Flow 2 starts at 40%")
+	check(FlowMeter.tier_for(0.69, false) == 2 and FlowMeter.tier_for(0.70, false) == 3, "Flow 3 starts at 70%")
+	check(FlowMeter.tier_for(1.0, false) == 3 and FlowMeter.tier_for(1.0, true) == 4, "a full bar is still Flow 3 until ZEN is held")
+
+	var m: FlowMeter = _zf_meter()
+	_zf_run(m, 20.0, 1.3)
+	near(m.value, FlowMeter.rate_for(20.0) * 1.3, 0.01, "1.3 s at 20 m/s adds 1.3 s of fill")
+	check(m.tier == 1, "and that is Flow 1 (value %.2f)" % m.value)
+	var tiers: Array[int] = []
+	m.tier_changed.connect(func(t: int, _up: bool) -> void: tiers.append(t))
+	_zf_run(m, 24.0, 20.0)
+	check(m.value >= FlowMeter.ZEN_FULL and m.zen and m.tier == FlowMeter.TIER_ZEN, "holding 24 m/s fills the bar and reaches ZEN")
+	check(tiers == [2, 3, 4], "the tiers come in order, none skipped (%s)" % str(tiers))
+	check(Sfx.zen_target() == 1.0, "ZEN opens the music mix")
+	var zs: float = m.zen_seconds
+	_zf_run(m, 24.0, 3.0)
+	near(m.zen_seconds - zs, 3.0, 0.05, "ZEN seconds count while it is held")
+
+	# ZEN needs the bar full for a moment, not just touched
+	var m2: FlowMeter = _zf_meter()
+	m2.value = 1.0
+	_zf_run(m2, 24.0, FlowMeter.ZEN_HOLD * 0.6)
+	check(not m2.zen and m2.tier == 3, "a full bar is not ZEN yet")
+	_zf_run(m2, 24.0, FlowMeter.ZEN_HOLD * 0.6)
+	check(m2.zen, "...but is after the hold")
+	# slow cruising holds ZEN; stopping loses it
+	_zf_run(m2, 9.0, 10.0)
+	check(m2.zen and m2.value > 0.8, "9 m/s keeps ZEN for ten seconds (value %.2f)" % m2.value)
+	_zf_run(m2, 0.0, 2.5)
+	check(not m2.zen and m2.tier < 4, "stopping drops out of ZEN (tier %d)" % m2.tier)
+	_zf_run(m2, 0.0, 5.0)
+	check(m2.value == 0.0 and m2.tier == 0, "and drains the bar to nothing")
+
+	# a respawn is a big drain and ends ZEN and the chain
+	var m3: FlowMeter = _zf_meter()
+	m3.value = 1.0
+	_zf_run(m3, 24.0, 1.5)
+	check(m3.zen, "(ZEN again)")
+	m3.set_chain(4)
+	m3.on_respawn()
+	check(not m3.zen and m3.value < 0.4 and m3.chain_count == 0 and m3.respawns == 1, "a respawn drains 65%% and ends ZEN and the chain (value %.2f)" % m3.value)
+
+	# add() with a negative amount drains, and keeps its reasons
+	var m4: FlowMeter = _zf_meter()
+	m4.value = 0.5
+	m4.add_flow(-0.2, "hard_landing")
+	near(m4.value, 0.3, 0.001, "add() with a negative amount drains")
+	check(float(m4.added.get("hard_landing", 0.0)) < 0.0 and m4.last_reason == "hard_landing", "add() remembers its reasons")
+	# tier hysteresis: a hair under the line does not flutter the bar
+	m4.value = 0.41
+	m4.add_flow(0.0, "x")
+	check(m4.tier == 2, "(tier 2 at 41%)")
+	m4.add_flow(-0.02, "x")
+	check(m4.tier == 2, "dipping to 39% keeps Flow 2 (hysteresis)")
+	m4.add_flow(-0.05, "x")
+	check(m4.tier == 1, "34%% drops to Flow 1 (tier %d)" % m4.tier)
+
+	# the ring chain: each new link adds flow, a lapse resets it
+	var m5: FlowMeter = _zf_meter()
+	var chains: Array[int] = []
+	m5.chain_changed.connect(func(n: int) -> void: chains.append(n))
+	m5.set_chain(1)
+	check(m5.value == 0.0, "a lone ring adds nothing yet")
+	m5.set_chain(3)
+	check(m5.value > 0.05 and m5.best_chain == 3 and m5.added.has("chain"), "a chain of 3 adds flow (%.2f)" % m5.value)
+	_zf_run(m5, 24.0, 1.0)
+	check(m5.chain_count == 3, "the chain survives a second")
+	_zf_run(m5, 24.0, 1.5)
+	check(m5.chain_count == 0 and chains == [1, 3, 0], "and lapses after %.0f s (%s)" % [FlowMeter.CHAIN_WINDOW, str(chains)])
+	check(m5.best_chain == 3, "the best chain is remembered")
+	# the statics reach the level's meter
+	FlowMeter.current = m5
+	var before: float = m5.value
+	FlowMeter.add(0.1, "ring")
+	FlowMeter.chain(2)
+	check(m5.value > before + 0.1 and m5.chain_count == 2, "FlowMeter.add / FlowMeter.chain reach the current meter")
+	FlowMeter.current = null
+	FlowMeter.add(0.5, "nobody")
+	FlowMeter.chain(9)
+
+	# the results numbers: Flow % is the average of the bar
+	var m6: FlowMeter = _zf_meter()
+	m6.value = 1.0
+	_zf_run(m6, 24.0, 4.0)
+	var s: Dictionary = m6.summary()
+	check(int(s["pct"]) >= 95 and int(s["zen_secs"]) >= 3, "a run spent full is ~100%% flow with ZEN time (%s)" % str(s))
+	for node: FlowMeter in [m, m2, m3, m4, m5, m6]:
+		node.zen_seconds = 0.0   # (a bare meter would bank into the test save when freed)
+		node.queue_free()
+	Sfx.set_zen_target(0.0)
+	await ticks(2)
+
+
+func test_zflow_gating_flow_levels_only() -> void:
+	var keep: bool = FlowMeter.force_on
+	FlowMeter.force_on = false
+	Game.party = null
+	Game.level_index = 0
+	check(not FlowMeter.wanted(), "a campaign level gets no meter")
+	for i: int in Game.LEVELS.size():
+		if bool(Game.LEVELS[i].get("flow", false)):
+			Game.level_index = i
+			check(FlowMeter.wanted(), "flow level %s gets one" % Game.LEVELS[i]["id"])
+			Game.party = PartyRules.new("practice")
+			check(not FlowMeter.wanted(), "...but never in Party Mode")
+			Game.party = null
+			break
+	Game.level_index = 0
+	FlowMeter.force_on = true
+	check(FlowMeter.wanted(), "tests can force it on")
+	Game.party = PartyRules.new("practice")
+	check(not FlowMeter.wanted(), "forcing it on does not beat Party Mode")
+	Game.party = null
+	FlowMeter.force_on = false
+	var lvl: LevelBase = await load_level(0)
+	check(lvl.flow == null and lvl.hud.find_children("*", "FlowHud", true, false).is_empty(), "an ordinary level has no meter and no flow widget")
+	check(is_equal_approx(lvl.camera.flow_fov, 0.0) and lvl.hud._speed != null, "and no flow FOV (the plain speed readout stays)")
+	FlowMeter.force_on = true
+	lvl = await load_level(0)
+	check(lvl.flow != null and FlowMeter.current == lvl.flow, "forced on, the level builds a meter")
+	check(lvl.hud.find_children("*", "FlowHud", true, false).size() == 1, "with one HUD widget")
+	FlowMeter.force_on = keep
+	world.queue_free()
+	world = null
+	await ticks(3)
+	check(FlowMeter.current == null, "the meter lets go of the static when its level is freed")
+
+
+func test_zflow_effects_hud_and_modes() -> void:
+	var snap: Dictionary = {"flow_fx": Settings.flow_fx, "fov_kick": Settings.fov_kick}
+	Settings.flow_fx = 0
+	Settings.fov_kick = true
+	FlowMeter.force_on = true
+	SaveData.wipe()
+	var lvl: LevelBase = await load_level(0)
+	FlowMeter.force_on = false
+	var m: FlowMeter = lvl.flow
+	m.set_physics_process(false)
+	lvl.player.control_enabled = false
+	var probe := Node.new()
+	probe.set_script(load("res://tests/flow_probe.gd"))
+	probe.add_to_group("flow_highlight")
+	lvl.add_child(probe)
+	var widget: FlowHud = lvl.hud.find_children("*", "FlowHud", true, false)[0] as FlowHud
+	# nothing happens at rest
+	await seconds(0.5)
+	check(is_equal_approx(lvl.camera.flow_fov, 0.0) and not bool(m.fx.applied.get("overlay", false)), "at rest the camera is plain and the screen layer is hidden")
+	check(widget.tier_text() == "" and widget.speed_text() == "0 m/s", "the HUD shows an empty meter and the speed (%s)" % widget.speed_text())
+	# ride up the tiers, sampling the camera every few ticks to prove nothing pops
+	var biggest: float = 0.0
+	var last: float = lvl.camera.flow_fov
+	m.value = 0.0
+	for k: int in 600:
+		m.step(1.0 / 60.0, 24.0)
+		if k % 8 == 7:
+			await get_tree().process_frame
+			biggest = maxf(biggest, absf(lvl.camera.flow_fov - last))
+			last = lvl.camera.flow_fov
+	await seconds(3.0)
+	check(m.zen and m.tier == 4, "the meter reached ZEN (tier %d)" % m.tier)
+	check(lvl.camera.flow_fov > 6.0 and lvl.camera.flow_fov <= FlowFx.MAX_FOV_ADD + 0.01, "the lens widened (+%.1f deg)" % lvl.camera.flow_fov)
+	check(biggest < 0.9, "...smoothly (largest step per sample %.2f deg)" % biggest)
+	var ap: Dictionary = m.fx.applied
+	check(bool(ap["overlay"]) and float(ap["lines"]) > 0.1 and float(ap["vignette"]) > 0.2, "speed lines and vignette are on (%.2f / %.2f)" % [ap["lines"], ap["vignette"]])
+	check(float(ap["saturation"]) > 0.1 and float(ap["glow"]) > 0.15 and float(ap["hdr"]) < -0.1, "the grade and calm bloom are on")
+	check(Sfx.zen_target() == 1.0, "the music mix is open")
+	check(widget.tier_text() == "ZEN" and widget.banner_visible(), "the HUD says ZEN and the soft banner is up")
+	check(float(probe.get("last")) > 0.9 and FlowMeter.zen_amount > 0.9, "the highlight hook lights the group (%.2f)" % float(probe.get("last")))
+	widget.show_state(m.shown, 4, 7, 23.4, 0.016)
+	check(widget.speed_text() == "23 m/s" and widget.chain_text() == "CHAIN  x7", "speed and ring-chain readouts (%s | %s)" % [widget.speed_text(), widget.chain_text()])
+	# the banner only the first time
+	widget._banner.modulate.a = 0.0
+	m._set_zen(false)
+	m._set_zen(true)
+	check(widget._banner.modulate.a < 0.01, "ZEN a second time shows no banner")
+
+	# Reduced: no lens, softer everything; Off: nothing on screen
+	Settings.flow_fx = 1
+	await seconds(0.5)
+	await get_tree().process_frame
+	check(is_equal_approx(lvl.camera.flow_fov, 0.0) and float(m.fx.applied["lines"]) < float(ap["lines"]) * 0.5, "Reduced: no FOV widening, fewer speed lines")
+	check(float(m.fx.applied["saturation"]) > 0.0 and float(m.fx.applied["saturation"]) < float(ap["saturation"]), "Reduced: a gentler grade")
+	Settings.flow_fx = 2
+	await seconds(0.3)
+	await get_tree().process_frame
+	ap = m.fx.applied
+	check(not bool(ap["overlay"]) and float(ap["saturation"]) == 0.0 and float(ap["glow"]) == 0.0 and not bool(ap["trail"]) and not bool(ap["wind"]), "Off: no screen layer, grade, bloom, trail or streaks")
+	check(is_equal_approx(lvl.camera.flow_fov, 0.0) and is_equal_approx(float(ap["highlight"]), 0.0), "Off: no FOV change, no highlight")
+	check(widget.tier_text() == "ZEN" and Sfx.zen_target() == 1.0, "...but the HUD meter and the music swell stay")
+	# the FOV kick toggle also silences the camera's own speed kick
+	Settings.flow_fx = 0
+	Settings.fov_kick = false
+	await seconds(1.0)
+	await get_tree().process_frame
+	check(is_equal_approx(lvl.camera.flow_fov, 0.0), "FOV kick off: the flow widening is gone too")
+	lvl.camera.set("_fov_kick", 0.0)
+	lvl.player.velocity = Vector3(0, 0, -25)
+	lvl.camera._process(0.5)
+	check(is_equal_approx(float(lvl.camera.get("_fov_kick")), 0.0), "FOV kick off: the camera's speed kick is off")
+	Settings.fov_kick = true
+	lvl.camera._process(0.5)
+	check(float(lvl.camera.get("_fov_kick")) > 1.0, "FOV kick on: the camera kicks at 25 m/s again")
+	# a respawn drops the lens at once
+	lvl.camera.flow_fov = 5.0
+	lvl.camera.face(Vector3.FORWARD)
+	check(is_equal_approx(lvl.camera.flow_fov, 0.0), "a respawn (camera.face) drops the flow widening")
+	Settings.flow_fx = int(snap["flow_fx"])
+	Settings.fov_kick = bool(snap["fov_kick"])
+	m.zen_seconds = 0.0
+	world.queue_free()
+	world = null
+	await ticks(3)
+	check(is_equal_approx(Sfx.zen_target(), 0.0) and is_equal_approx(FlowMeter.zen_amount, 0.0), "leaving the level closes the ZEN mix")
+	SaveData.wipe()
+
+
+func test_zflow_results_and_stat() -> void:
+	SaveData.wipe()
+	FlowMeter.force_on = true
+	var lvl: LevelBase = await load_level(0)
+	FlowMeter.force_on = false
+	var m: FlowMeter = lvl.flow
+	m.set_physics_process(false)
+	check(SaveData.STAT_KEYS.has("zen_seconds") and SaveData.stat("zen_seconds") == 0, "zen_seconds is a save stat")
+	m.zen_seconds = 12.7
+	m.bank()
+	check(SaveData.stat("zen_seconds") == 12, "whole seconds are banked (%d)" % SaveData.stat("zen_seconds"))
+	m.bank()
+	check(SaveData.stat("zen_seconds") == 12, "banking twice does not double count")
+	m.zen_seconds = 15.2
+	m.bank()
+	check(SaveData.stat("zen_seconds") == 15, "only the new seconds are added (%d)" % SaveData.stat("zen_seconds"))
+	m.reset()
+	check(m.zen_seconds == 0.0 and m.value == 0.0 and SaveData.stat("zen_seconds") == 15, "a restart clears the run and keeps the bank")
+	check(Cosmetics.zen_hint(30).contains("30 s") and Cosmetics.zen_hint(30).contains("ZEN"), "the Locker hint for a zen_seconds rule reads '%s'" % Cosmetics.zen_hint(30))
+	check(Cosmetics.rule_met({"type": "stat", "key": "zen_seconds", "n": 15}, {}, SaveData.data.get("stats", {})), "a stat rule on zen_seconds can unlock cosmetics")
+	# the results panel carries the flow line
+	m.flow_acc = 87.0
+	m.flow_time = 100.0
+	m.zen_seconds = 7.9
+	m.best_chain = 6
+	m.peak_speed = 27.4
+	lvl._on_finish()
+	await seconds(1.6)
+	var line: Label = lvl.hud.find_child("FlowLine", true, false) as Label
+	check(line != null and line.text.contains("Flow 87%") and line.text.contains("ZEN for 7 s"), "results show 'Flow 87%% ... ZEN for 7 s' (%s)" % (line.text if line != null else "missing"))
+	var sub: Label = lvl.hud.find_child("FlowSub", true, false) as Label
+	check(sub != null and sub.text.contains("27 m/s") and sub.text.contains("chain x6"), "...with the top speed and best chain (%s)" % (sub.text if sub != null else "missing"))
+	check(SaveData.stat("zen_seconds") == 15 + 7, "finishing banks the run's ZEN seconds (%d)" % SaveData.stat("zen_seconds"))
+	check(not m.zen and not m.hud_widget.visible, "the HUD meter steps aside for the results")
+	# leaving a level mid-run banks what is owed
+	world.queue_free()
+	world = null
+	await ticks(3)
+	SaveData.wipe()
+	FlowMeter.force_on = true
+	var lvl2: LevelBase = await load_level(0)
+	FlowMeter.force_on = false
+	lvl2.flow.zen_seconds = 20.5
+	world.queue_free()
+	world = null
+	await ticks(3)
+	check(SaveData.stat("zen_seconds") == 20, "leaving the level banks the ZEN time (%d)" % SaveData.stat("zen_seconds"))
+	# non-flow levels never touch the stat
+	var lvl3: LevelBase = await load_level(0)
+	check(lvl3.flow == null, "(plain level)")
+	world.queue_free()
+	world = null
+	await ticks(3)
+	check(SaveData.stat("zen_seconds") == 20, "a plain level leaves the stat alone")
+	SaveData.wipe()
+
+
+func test_zflow_settings_toggles_and_pad() -> void:
+	var snap: Dictionary = {}
+	for p: String in Settings._props():
+		snap[p] = Settings.get(p)
+	check(Settings.flow_fx == 0 and Settings.fov_kick, "defaults: Flow effects Full, FOV kick on (nothing changes for existing players)")
+	check(Settings.FLOW_FX_NAMES == ["Full", "Reduced", "Off"], "Flow effects has Full / Reduced / Off")
+	# they survive a save and a hand-edited file
+	var path: String = "user://test_settings_flow.cfg"
+	Settings.save_path_override = path
+	Settings.flow_fx = 2
+	Settings.fov_kick = false
+	Settings.save_settings()
+	Settings.flow_fx = 0
+	Settings.fov_kick = true
+	Settings.load_settings(path)
+	check(Settings.flow_fx == 2 and not Settings.fov_kick, "both toggles are saved and loaded")
+	var cf := ConfigFile.new()
+	cf.set_value("s", "flow_fx", 9)
+	cf.set_value("s", "fov_kick", "maybe")
+	cf.save(path)
+	Settings.fov_kick = true
+	Settings.load_settings(path)
+	check(Settings.flow_fx == 2 and Settings.fov_kick, "an out-of-range flow_fx clamps and a wrong-typed fov_kick is ignored")
+	Settings.save_path_override = ""
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(path))
+	for p: String in snap:
+		Settings.set(p, snap[p])
+	Settings.flow_fx = 0
+	Settings.fov_kick = true
+
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var sp := SettingsPanel.new()
+	var holder: Control = UiKit.centered(sp)
+	add_child(holder)
+	await _focus_after_rebuild()
+	var flow_ob: OptionButton = null
+	var kick_cb: CheckButton = null
+	for ob: Node in sp.find_children("*", "OptionButton", true, false):
+		if (ob as OptionButton).item_count == 3 and (ob as OptionButton).get_item_text(1) == "Reduced":
+			flow_ob = ob as OptionButton
+	for row: Node in sp.find_children("*", "Label", true, false):
+		if (row as Label).text == "FOV kick at speed":
+			kick_cb = row.get_parent().get_child(1) as CheckButton
+	check(flow_ob != null and flow_ob.selected == 0, "Settings has a Flow effects row on Full")
+	check(kick_cb != null and kick_cb.button_pressed, "and an FOV kick row, on")
+	check(flow_ob != null and flow_ob.focus_mode == Control.FOCUS_ALL and kick_cb != null and kick_cb.focus_mode == Control.FOCUS_ALL, "both rows take focus")
+	if flow_ob == null or kick_cb == null:
+		holder.queue_free()
+		return
+	# a pad alone gets there: D-pad down from the first control, press and release a frame apart
+	var pad := func(btn: JoyButton) -> void:
+		var ev := InputEventJoypadButton.new()
+		ev.device = 2
+		ev.button_index = btn
+		ev.pressed = true
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+		var up: InputEventJoypadButton = ev.duplicate() as InputEventJoypadButton
+		up.pressed = false
+		Input.parse_input_event(up)
+		await get_tree().process_frame
+	var presses: int = 0
+	while get_viewport().gui_get_focus_owner() != kick_cb and presses < 40:
+		await pad.call(JOY_BUTTON_DPAD_DOWN)
+		presses += 1
+	check(get_viewport().gui_get_focus_owner() == kick_cb, "D-pad down reaches the FOV kick toggle (%d presses)" % presses)
+	await pad.call(JOY_BUTTON_A)
+	check(not Settings.fov_kick and not kick_cb.button_pressed and bool(sp.get("_dirty")), "pad A flips FOV kick off and marks Settings dirty")
+	await pad.call(JOY_BUTTON_A)
+	check(Settings.fov_kick, "and back on")
+	presses = 0
+	while get_viewport().gui_get_focus_owner() != flow_ob and presses < 40:
+		await pad.call(JOY_BUTTON_DPAD_DOWN)
+		presses += 1
+	check(get_viewport().gui_get_focus_owner() == flow_ob, "D-pad down reaches Flow effects (%d presses)" % presses)
+	await pad.call(JOY_BUTTON_A)
+	await get_tree().process_frame
+	check(flow_ob.get_popup().visible, "pad A opens the Flow effects choices")
+	await pad.call(JOY_BUTTON_DPAD_DOWN)
+	await pad.call(JOY_BUTTON_A)
+	await get_tree().process_frame
+	check(Settings.flow_fx == 1 and flow_ob.selected == 1, "pad down + A picks Reduced (flow_fx %d)" % Settings.flow_fx)
+	flow_ob.get_popup().hide()
+	sp.set("_dirty", false)
+	holder.queue_free()
+	for p: String in snap:
+		Settings.set(p, snap[p])
+	Settings.apply()
+	await ticks(2)

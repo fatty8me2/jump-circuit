@@ -11,7 +11,8 @@ const LAYOUT_REV: Dictionary = {"gardens": 3, "foundry": 3, "balance": 3, "clock
 ## Counters kept in data["stats"] (unlock rules read them, see Cosmetics "stat"):
 ##   laps_dealt      times you lapped another racer (Run It Again)
 ##   flawless_golds  Gold-medal runs finished without a single fall
-const STAT_KEYS: Array[String] = ["laps_dealt", "flawless_golds", "falls_total", "play_secs"]
+##   zen_seconds     whole seconds spent in the flow meter's ZEN state (FlowMeter banks it on finish / leaving)
+const STAT_KEYS: Array[String] = ["laps_dealt", "flawless_golds", "falls_total", "play_secs", "zen_seconds"]
 
 var data: Dictionary = {"levels": {}, "game_completed": false}
 ## Tests point this somewhere else so they never touch a real save.
