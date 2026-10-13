@@ -48,6 +48,20 @@ const ISL_THICK: float = 0.8
 ## Lateral line (m) the safe route hops the pits along.
 const LANE: float = 4.0
 const STONE: float = 2.6
+## The middle flow slab of an island, and the plain side lanes either side of it.
+const SLAB_W: float = 5.6
+const SIDE_W: float = 2.0
+## The launch arcs over the pits, and what the ring chain does in the air.
+const RAMP_PITCH: float = 28.0
+const RAMP_LEN: float = 9.0
+const RAMP_W: float = 5.0
+## How far past the pit's near edge the flight is meant to come down.
+const PEN: float = 8.0
+const RING_ADD: float = 4.0
+const RING_CAP: float = 30.0
+const RING_R: float = 2.4
+## Chain length assumed when the rings of a flight are reached (gates and earlier rings count).
+const CHAIN0: int = 5
 
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
@@ -70,6 +84,10 @@ var _hubs: Array[Vector3] = []
 var _stage_frames: Array[Dictionary] = []
 ## The stage length / drop figures, printed by the tests that care.
 var stage_lengths: Array[float] = []
+## The flow route's polyline being built (world points), and every launch arc in build order.
+var _poly: Array[Vector3] = []
+var _arcs: Array[LaunchArc] = []
+var _flow_speed: float = 25.0
 
 
 func _configure() -> void:
@@ -77,7 +95,7 @@ func _configure() -> void:
 	music_track = "hyperloop"
 	kill_y = -260.0
 	# 0 = the safe line, 1 = the flow line
-	route_variants = 1
+	route_variants = 2
 
 
 # ---- local-frame helpers --------------------------------------------------------------------
@@ -124,15 +142,31 @@ func _ahead(a: Dictionary, pct: float, dy: float, sz: float, dx: float = 0.0) ->
 
 
 ## A walkable deck (local top centre `c`, sx across, sz along).
-func _blk(c: Vector3, sx: float, sz: float, style: String = "main", thick: float = ISL_THICK) -> Dictionary:
+func _blk(c: Vector3, sx: float, sz: float, style: String = "main", thick: float = ISL_THICK, record: bool = true) -> Dictionary:
 	kit.plat(_w(c), Vector3(sx, thick, sz), style, 0.0, _yaw)
-	_decks.append({"top": _w(c), "size": Vector3(sx, thick, sz), "yaw": _yaw})
+	if record:
+		_decks.append({"top": _w(c), "size": Vector3(sx, thick, sz), "yaw": _yaw})
 	return {"c": c, "hx": sx * 0.5, "hz": sz * 0.5}
 
 
-## An island whose near end is at local z0 (negative) and which runs `length` further (-z).
-func _island(z0: float, length: float, y: float, w: float = ISL_W, lat: float = 0.0, style: String = "main") -> Dictionary:
-	return _blk(Vector3(lat, y, z0 - length * 0.5), w, length, style)
+## An island whose near end is at local z0 (negative), `length` long (-z), top height `y` at the near
+## end and `slope` metres lower at the far end. The middle is a FLOW slab (it keeps your speed), the
+## sides are plain white lanes (the safe route walks them; they never speed you up).
+func _island(z0: float, length: float, y: float, slope: float = 0.0) -> Dictionary:
+	var zc: float = z0 - length * 0.5
+	var y_end: float = y - slope
+	if slope <= 0.001:
+		for sx: float in [-1.0, 1.0]:
+			_blk(Vector3(sx * (SLAB_W * 0.5 + SIDE_W * 0.5), y, zc), SIDE_W, length, "main", ISL_THICK, false)
+		kit.flow_slope_between(_w(Vector3(0, y, z0)), _w(Vector3(0, y, z0 - length)), SLAB_W)
+	else:
+		var seg: float = sqrt(length * length + slope * slope)
+		var pitch: float = rad_to_deg(atan2(slope, length))
+		for sx: float in [-1.0, 1.0]:
+			kit.ramp(_w(Vector3(sx * (SLAB_W * 0.5 + SIDE_W * 0.5), (y + y_end) * 0.5, zc)), Vector3(SIDE_W, ISL_THICK, seg), -pitch, _yaw, "main")
+		kit.flow_slope_between(_w(Vector3(0, y, z0)), _w(Vector3(0, y_end, z0 - length)), SLAB_W)
+	_decks.append({"top": _w(Vector3(0, (y + y_end) * 0.5, zc)), "size": Vector3(ISL_W, ISL_THICK, length), "yaw": _yaw})
+	return {"c": Vector3(0, y_end, zc), "hx": ISL_W * 0.5, "hz": length * 0.5, "y0": y, "slope": slope}
 
 
 ## A small stepping plate.
@@ -140,12 +174,10 @@ func _plate(c: Vector3) -> Dictionary:
 	return _blk(c, STONE, STONE, "accent", 0.6)
 
 
-## A hop from local point `from` (a takeoff spot) to the middle of `b` (+ offset).
-func _hop_from(from: Vector3, b: Dictionary, off: Vector3 = Vector3.ZERO, hold: bool = true, speed: float = 0.0) -> void:
-	var to: Vector3 = (b["c"] as Vector3) + off
-	r_jump(_w(from), _w(to), hold)
-	if speed > 0.0:
-		route[route.size() - 1]["speed"] = speed
+## A hop from local point `from` (a takeoff spot) to local point `to`.
+func _hop_to(from: Vector3, to: Vector3) -> void:
+	if route_variant == 0:
+		r_jump(_w(from), _w(to), true)
 
 
 ## The round hub plate (checkpoint station) with its centre top at local `c`.
@@ -170,39 +202,108 @@ func _hub(c: Vector3, index: int) -> void:
 					p2.emitting = true)
 
 
-# ---- pits: a track bed with a mag-lift pad, crossed by stepping plates ------------------------------
+# ---- the flight over a pit: what a launch arc + ring chain does, simulated ---------------------------------
 
-## Cross from island `a` to a new island of `b_len` along the lane `sx`, over a pit that is hopped in
-## `hops.size()` jumps (each entry the percentage of max reach that jump needs) via `hops.size() - 1`
-## stepping plates, `drop` metres lower at the far side (negative = higher). Builds the plates, the
-## far island, the track bed with its mag-lift pad, and the safe route. Returns the far island.
-func _cross(a: Dictionary, sx: float, hops: Array, drop: float, b_len: float, b_w: float = ISL_W, b_style: String = "main") -> Dictionary:
-	var n: int = hops.size()
-	var dy: float = -drop / float(n)
-	var prev: Dictionary = a
-	var plates: Array[Dictionary] = []
-	for i: int in n - 1:
-		var c: Vector3 = _ahead(prev, float(hops[i]), dy, STONE, sx if i == 0 else 0.0)
-		prev = _plate(c)
-		plates.append(prev)
-	var bc: Vector3 = _ahead(prev, float(hops[n - 1]), dy, b_len, -sx if n > 1 else 0.0)
-	if n == 1:
-		bc.x = 0.0
-	var b: Dictionary = _blk(bc, b_w, b_len, b_style)
-	# --- the safe route
+## Simulates the flight of a rider leaving the lip (local) at horizontal speed `hs0` (forward = -z),
+## passing four rings along the way (each adds RING_ADD x the chain bonus up to RING_CAP), until it
+## comes down through `target_y`. Returns {"rings": Array[Vector3] (local centres), "landing": Vector3,
+## "time": float, "speed": float}.
+func _flight(lip: Vector3, hs0: float, target_y: float, ring_count: int = 4) -> Dictionary:
+	var t: MovementTuning = _tuning
+	var dt: float = 1.0 / 120.0
+	var vy0: float = clampf(hs0 * tan(deg_to_rad(RAMP_PITCH)), 3.0, 18.0)
+	# pass 1: the flight time (the vertical motion does not depend on the ring boosts)
+	var y: float = lip.y
+	var vy: float = vy0
+	var total: float = 0.0
+	while total < 6.0:
+		var g: float = t.gravity_rise if vy > 0.0 else t.gravity_fall
+		vy = maxf(vy - g * dt, -t.max_fall_speed)
+		y += vy * dt
+		total += dt
+		if total > 0.3 and vy < 0.0 and y <= target_y:
+			break
+	# pass 2: along the ground, with the rings
+	var times: Array[float] = []
+	for i: int in ring_count:
+		times.append(total * (0.16 + 0.60 * float(i) / float(maxi(ring_count - 1, 1))))
+	var p: Vector3 = lip
+	var hs: float = hs0
+	vy = vy0
+	var clock: float = 0.0
+	var k: int = 0
+	var rings: Array[Vector3] = []
+	while clock < total + 0.05:
+		var g2: float = t.gravity_rise if vy > 0.0 else t.gravity_fall
+		vy = maxf(vy - g2 * dt, -t.max_fall_speed)
+		if hs > t.max_speed:
+			hs = move_toward(hs, t.max_speed, t.air_overspeed_drag * dt)
+		p.y += vy * dt
+		p.z -= hs * dt
+		clock += dt
+		if k < times.size() and clock >= times[k]:
+			rings.append(p + Vector3(0, 0.9, 0))
+			hs = minf(hs + RING_ADD * FlowChain.bonus(CHAIN0 + k + 1), maxf(RING_CAP, hs))
+			k += 1
+	return {"rings": rings, "landing": Vector3(0.0, target_y, p.z), "time": total, "speed": hs}
+
+
+# ---- pits: a launch arc + rings (flow), stepping plates (safe), a track bed with a mag-lift pad ----------------
+
+## Build the launch arc on island `a`, size the pit from the flight it gives at speed `hs0`, build the next
+## island `b_len` long (sloping `b_slope` m down), the stepping plates and the track bed, and both routes.
+## `drop` is how much lower the far island's near end is (negative = higher). Returns the far island.
+func _cross(a: Dictionary, sx: float, drop: float, b_len: float, hs0: float, b_slope: float = 0.0) -> Dictionary:
 	var ac: Vector3 = a["c"]
 	var front: float = ac.z - float(a["hz"])
-	var from0 := Vector3(sx, ac.y, front + 0.35)
-	if plates.is_empty():
-		_hop_from(from0, b, Vector3(sx, 0, float(b["hz"]) - 2.0))
-	else:
-		_hop_from(from0, plates[0])
-		for i: int in range(1, plates.size()):
-			var pc: Vector3 = (plates[i - 1] as Dictionary)["c"]
-			_hop_from(Vector3(pc.x, pc.y, pc.z - STONE * 0.5 + 0.35), plates[i])
-		var lc: Vector3 = (plates[plates.size() - 1] as Dictionary)["c"]
-		_hop_from(Vector3(lc.x, lc.y, lc.z - STONE * 0.5 + 0.35), b, Vector3(sx, 0, float(b["hz"]) - 2.0))
+	var y_a: float = ac.y
+	var pitch_rad: float = deg_to_rad(RAMP_PITCH)
+	var foot := Vector3(0.0, y_a, front + RAMP_LEN * cos(pitch_rad))
+	var lip := Vector3(0.0, y_a + RAMP_LEN * sin(pitch_rad), front)
+	var fl: Dictionary = _flight(lip, hs0, y_a - drop)
+	var land: Vector3 = fl["landing"]
+	var near_z: float = land.z + PEN
+	var pit_w: float = front - near_z
+	# --- the flow kit pieces
+	var arc: LaunchArc = kit.launch_arc(_w(foot), _yaw, RAMP_PITCH, RAMP_W, RAMP_LEN)
+	var ring_pts: Array[Vector3] = []
+	for rp: Vector3 in (fl["rings"] as Array):
+		ring_pts.append(_w(rp))
+	kit.ring_line(ring_pts, {"add_speed": RING_ADD, "radius": RING_R, "cap": RING_CAP})
+	_arcs.append(arc)
+	_pulse(a, foot.z + 2.5)
+	# --- the far island
+	var b: Dictionary = _island(near_z, b_len, y_a - drop, b_slope)
+	# --- the safe route: stepping plates across the pit
+	var dy_total: float = -drop
+	var n: int = 1
+	var gap: float = pit_w
+	while n < 8:
+		gap = (pit_w - float(n - 1) * STONE) / float(n)
+		var dy_hop: float = dy_total / float(n)
+		if (gap + 0.75) / _reach(dy_hop) <= 0.72:
+			break
+		n += 1
+	var dyh: float = dy_total / float(n)
+	var cursor: float = front
+	var from_pt := Vector3(sx, y_a, front + 0.35)
+	for i: int in n - 1:
+		var pc := Vector3(sx, y_a + dyh * float(i + 1), cursor - gap - STONE * 0.5)
+		_plate(pc)
+		_hop_to(from_pt, pc)
+		from_pt = Vector3(sx, pc.y, pc.z - STONE * 0.5 + 0.35)
+		cursor = pc.z - STONE * 0.5
+	var grade: float = b_slope / maxf(b_len, 1.0)
+	var land_to := Vector3(sx, y_a - drop - 2.0 * grade, near_z - 2.0)
+	_hop_to(from_pt, land_to)
 	_bed(a, b)
+	# --- the flow route
+	if route_variant == 1:
+		_poly.append(_w(Vector3(0.0, y_a, foot.z + 2.5)))
+		r_flow(_poly.duplicate())
+		r_launch(arc, _w(land + Vector3(0, 0, -1.0)))
+		_poly = [_w(land)]
+		_flow_speed = float(fl["speed"])
 	return b
 
 
@@ -211,20 +312,19 @@ func _cross(a: Dictionary, sx: float, hops: Array, drop: float, b_len: float, b_
 func _bed(a: Dictionary, b: Dictionary) -> void:
 	var ac: Vector3 = a["c"]
 	var bcn: Vector3 = b["c"]
+	var by: float = float(b.get("y0", bcn.y))
 	var near_z: float = ac.z - float(a["hz"])
 	var far_z: float = bcn.z + float(b["hz"])
-	var low_y: float = minf(ac.y, bcn.y) - 3.4
+	var low_y: float = minf(ac.y, by) - 3.4
 	var span: float = near_z - far_z
 	var depth: float = span + 6.0
 	var bed_w: float = ISL_W + 6.0
 	var bed_c := Vector3(0.0, low_y, (near_z + far_z) * 0.5)
 	_blk(bed_c, bed_w, depth, "alt", ISL_THICK)
-	# two glowing rail strips along the bed
 	for sx: float in [-1.0, 1.0]:
 		kit.glow_strip(_w(Vector3(sx * 2.2, low_y + 0.03, bed_c.z)), Vector3(0.18, 0.05, depth - 1.0), CYAN, _yaw)
-	# the mag-lift pad: just short of the far island's near face, aimed up and forward onto it
 	var pad_at := Vector3(0.0, low_y, far_z + 1.6)
-	var target := Vector3(0.0, bcn.y, far_z - 3.5)
+	var target := Vector3(0.0, by, far_z - 3.5)
 	var sol: Vector2 = _pad_solve(pad_at, target)
 	kit.pad(_w(pad_at), sol.y, sol.x, _yaw, 1.5)
 
@@ -241,7 +341,6 @@ func _pad_solve(from: Vector3, to: Vector3) -> Vector2:
 			var land: Vector3 = Ballistics.landing_point(_tuning, from + Vector3(0, 0.5, 0), v0, to.y)
 			if land.y <= to.y + 0.05:
 				var err: float = absf(land.z - to.z) + absf(land.x - to.x)
-				# prefer the lower throw when two are equally good
 				err += s * 0.01
 				if err < best_err:
 					best_err = err
@@ -249,6 +348,18 @@ func _pad_solve(from: Vector3, to: Vector3) -> Vector2:
 			s += 0.5
 		pitch += 2.0
 	return best
+
+
+## A lane of chevron lights down the middle of island `a` from its near end to local z `to_z`.
+func _pulse(a: Dictionary, to_z: float, from_z: float = INF) -> void:
+	var ac: Vector3 = a["c"]
+	var z_start: float = (ac.z + float(a["hz"])) if from_z == INF else from_z
+	var y0: float = float(a.get("y0", ac.y))
+	var pts: Array[Vector3] = []
+	pts.append(_w(Vector3(0, y0, z_start - 1.0)))
+	pts.append(_w(Vector3(0, y0, to_z)))
+	if absf(z_start - to_z) > 6.0:
+		HyperloopPulse.lay(self, pts, 3.2, 2.0, 0.07, CYAN)
 
 
 # ---- the course ---------------------------------------------------------------------------------
@@ -260,136 +371,178 @@ func _build() -> void:
 	_restyle_environment()
 	set_spawn(Vector3(0, 0.1, 2.0), 0.0)
 	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9]
-	var last: int = stages.size() if DEV_LAST <= 0 else mini(DEV_LAST, stages.size())
-	var starts: Array[int] = []
-	var origins: Array[Vector3] = []
 	var yaws: Array[float] = []
 	for i: int in 10:
 		yaws.append(30.0 * float(i))
 	_frame(Vector3.ZERO, yaws[0])
 	# hub 0 is the start plate
 	_hub(Vector3.ZERO, 0)
-	for i: int in last:
+	for i: int in stages.size():
 		_next_yaw = yaws[i + 1]
-		starts.append(route.size())
-		origins.append(_o)
 		_stage_frames.append({"origin": _o, "yaw": _yaw})
 		var end: Vector3 = stages[i].call()
 		stage_lengths.append(-end.z)
 		_frame(_w(end), yaws[i + 1])
-	starts.append(route.size())
-	origins.append(_o)
 	_stage_frames.append({"origin": _o, "yaw": _yaw})
-	if last == stages.size():
-		_stage_10()
-	else:
-		_dev_finish()
+	_stage_10()
 	_surroundings()
 	_deck_materials()
-	if DEV_START > 1:
-		set_spawn(origins[DEV_START - 1] + Vector3(0, 0.1, 0), yaws[DEV_START - 1])
-		route = route.slice(starts[DEV_START - 1])
 
 
-## (dev) the finish right after the last stage built.
-func _dev_finish() -> void:
-	var f: Dictionary = _island(-HUB_IN, 14.0, 0.05)
-	kit.finish(_w(Vector3(0, 0.05, -HUB_IN - 12.0)), _yaw)
-	_finish_pos = _w(Vector3(0, 0.05, -HUB_IN - 12.0))
-	r_walk(_w(Vector3(0, 0.05, -HUB_IN - 12.0)))
-	if f.is_empty():
-		return
-
-
-## The common tail of a stage: the island ends, the hub is laid HUB_IN beyond it, the safe route walks
-## to the hub centre and banks the checkpoint. Returns the hub centre (local).
+## The common tail of a stage: the hub is laid HUB_IN beyond the last island, the routes reach its
+## centre and bank the checkpoint. Returns the hub centre (local).
 func _end_at_hub(last: Dictionary, index: int) -> Vector3:
 	var lc: Vector3 = last["c"]
 	var z1: float = lc.z - float(last["hz"])
 	var hub := Vector3(lc.x, lc.y - 0.05, z1 - HUB_IN)
 	_hub(hub, index)
-	r_walk(_w(Vector3(hub.x, hub.y, hub.z + 0.0)))
+	_pulse(last, z1 + 1.0)
+	if route_variant == 0:
+		r_walk(_w(hub))
+	else:
+		_poly.append(_w(Vector3(hub.x, lc.y, hub.z)))
+		r_flow(_poly.duplicate())
 	r_checkpoint()
 	return hub
 
 
-## The first island of a stage: starts HUB_IN short of the hub centre, 5 cm above the hub plate.
-func _first(length: float) -> Dictionary:
-	return _island(-HUB_IN, length, 0.05)
+## The first island of a stage: starts HUB_IN short of the hub centre, 5 cm above the hub plate. The
+## flow route leaves the hub through a chain of three gates (20 -> 25 m/s) on it.
+func _first(length: float, sx: float) -> Dictionary:
+	var a: Dictionary = _island(-HUB_IN, length, 0.05)
+	var speeds: Array[float] = [20.0, 22.5, 25.0]
+	var pts: Array[Vector3] = [_w(Vector3(0, 0.05, 0))]
+	for i: int in 3:
+		var gp := Vector3(0, 0.05, -10.0 - 6.0 * float(i))
+		kit.boost_gate(_w(gp), _yaw, speeds[i], 5.0)
+		pts.append(_w(gp))
+	if route_variant == 1:
+		_poly = pts
+		_flow_speed = 25.0
+	else:
+		# the safe route keeps to its side lane, clear of the gates
+		r_walk(_w(Vector3(sx, 0.05, -8.0)))
+	return a
 
 
-# ---- stage 1: Terminal Concourse -------------------------------------------------------------------
+## A middle island's gate (restores the speed at least to `speed`) just after the landing.
+func _gate_after_landing(b: Dictionary, speed: float = 28.0) -> void:
+	var bc: Vector3 = b["c"]
+	var near: float = bc.z + float(b["hz"])
+	var gp := Vector3(0, float(b.get("y0", bc.y)), near - PEN - 5.0)
+	kit.boost_gate(_w(gp), _yaw, speed, 5.0)
+	if route_variant == 1:
+		_poly.append(_w(gp))
+
+
+# ---- the stages ---------------------------------------------------------------------------------------
 
 func _stage_1() -> Vector3:
-	var i1: Dictionary = _first(34.0)
-	var i2: Dictionary = _cross(i1, LANE, [0.60, 0.64], 1.4, 30.0)
-	var i3: Dictionary = _cross(i2, -LANE, [0.64, 0.66, 0.64], 2.4, 16.0)
+	var sx: float = LANE
+	var i1: Dictionary = _first(30.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 1.4, 26.0, 25.0)
+	_gate_after_landing(i2)
+	var i3: Dictionary = _cross(i2, sx, 2.4, 18.0, 29.0)
 	return _end_at_hub(i3, 1)
 
 
 func _stage_2() -> Vector3:
-	var i1: Dictionary = _first(28.0)
-	var i2: Dictionary = _cross(i1, -LANE, [0.66, 0.68], 2.0, 24.0)
-	var i3: Dictionary = _cross(i2, LANE, [0.62, 0.70, 0.62], 3.0, 22.0)
-	return _end_at_hub(i3, 2)
+	var sx: float = -LANE
+	var i1: Dictionary = _first(30.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 2.0, 38.0, 25.0, 6.0)
+	return _end_at_hub(i2, 2)
 
 
 func _stage_3() -> Vector3:
-	var i1: Dictionary = _first(22.0)
-	var i2: Dictionary = _cross(i1, LANE, [0.62, 0.64, 0.64, 0.62], 3.0, 18.0)
-	var i3: Dictionary = _cross(i2, -LANE, [0.70, 0.70, 0.70], 3.0, 26.0)
+	var sx: float = LANE
+	var i1: Dictionary = _first(30.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 3.0, 26.0, 25.0)
+	_gate_after_landing(i2)
+	var i3: Dictionary = _cross(i2, sx, 3.0, 16.0, 29.0)
 	return _end_at_hub(i3, 3)
 
 
 func _stage_4() -> Vector3:
-	var i1: Dictionary = _first(18.0)
-	var i2: Dictionary = _cross(i1, LANE, [0.66, 0.68], 2.5, 64.0)
+	var sx: float = -LANE
+	var i1: Dictionary = _first(30.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 2.5, 44.0, 25.0)
 	return _end_at_hub(i2, 4)
 
 
 func _stage_5() -> Vector3:
-	var i1: Dictionary = _first(24.0)
-	var i2: Dictionary = _cross(i1, -LANE, [0.62, 0.66, 0.62], 2.0, 20.0)
-	var i3: Dictionary = _cross(i2, LANE, [0.64, 0.64, 0.64], 1.0, 30.0)
-	return _end_at_hub(i3, 5)
+	var sx: float = LANE
+	var i1: Dictionary = _first(30.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 2.0, 28.0, 25.0)
+	return _end_at_hub(i2, 5)
 
 
 func _stage_6() -> Vector3:
-	var i1: Dictionary = _first(24.0)
-	var i2: Dictionary = _cross(i1, LANE, [0.70, 0.62, 0.70], 3.0, 20.0)
-	var i3: Dictionary = _cross(i2, -LANE, [0.66, 0.66, 0.66], 3.5, 22.0)
+	var sx: float = -LANE
+	var i1: Dictionary = _first(30.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 3.0, 26.0, 25.0)
+	_gate_after_landing(i2)
+	var i3: Dictionary = _cross(i2, sx, 3.5, 18.0, 29.0)
 	return _end_at_hub(i3, 6)
 
 
 func _stage_7() -> Vector3:
-	var i1: Dictionary = _first(26.0)
-	var i2: Dictionary = _cross(i1, -LANE, [0.68, 0.68], -2.4, 22.0)
-	var i3: Dictionary = _cross(i2, LANE, [0.70, 0.70], -2.4, 26.0)
-	return _end_at_hub(i3, 7)
+	var sx: float = LANE
+	var i1: Dictionary = _first(30.0, sx)
+	var i2: Dictionary = _cross(i1, sx, -2.4, 28.0, 25.0)
+	return _end_at_hub(i2, 7)
 
 
 func _stage_8() -> Vector3:
-	var i1: Dictionary = _first(20.0)
-	var i2: Dictionary = _cross(i1, LANE, [0.70, 0.70], 3.0, 74.0)
+	var sx: float = -LANE
+	var i1: Dictionary = _first(30.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 3.0, 52.0, 25.0, 8.0)
 	return _end_at_hub(i2, 8)
 
 
 func _stage_9() -> Vector3:
-	var i1: Dictionary = _first(40.0)
-	var i2: Dictionary = _cross(i1, -LANE, [0.66, 0.68, 0.66], 3.0, 32.0)
-	var i3: Dictionary = _cross(i2, LANE, [0.68, 0.68], 3.0, 24.0)
+	var sx: float = LANE
+	var i1: Dictionary = _first(30.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 3.0, 26.0, 25.0)
+	_gate_after_landing(i2)
+	var i3: Dictionary = _cross(i2, sx, 3.0, 18.0, 29.0)
 	return _end_at_hub(i3, 9)
 
 
+## The finale, THE GREAT RING: a first launch over a wide pit, then one long descending slope with a ring
+## line racing down it, onto the finish deck with its bumper wall.
 func _stage_10() -> void:
-	var i1: Dictionary = _first(60.0)
-	var i2: Dictionary = _cross(i1, LANE, [0.66, 0.68], 4.0, 100.0)
-	var lc: Vector3 = i2["c"]
-	var fz: float = lc.z - float(i2["hz"]) + 5.0
-	var fin_at := Vector3(lc.x, lc.y, fz)
-	kit.finish(_w(fin_at), _yaw)
-	_finish_pos = _w(fin_at)
-	r_walk(_w(fin_at))
+	var i1: Dictionary = _first(30.0, -LANE)
+	var i2: Dictionary = _cross(i1, -LANE, 4.0, 100.0, 25.0, 17.0)
+	var bc: Vector3 = i2["c"]
+	var y0: float = float(i2["y0"])
+	var near: float = bc.z + float(i2["hz"])
+	var z_end: float = bc.z - float(i2["hz"])
+	var y_end: float = bc.y
+	# the ring line down the slope: nine rings, ~9.5 m apart, 1.4 m over the surface
+	var pts: Array[Vector3] = []
+	var rpts: Array[Vector3] = []
+	for k: int in 9:
+		var u: float = (14.0 + 9.5 * float(k)) / 100.0
+		var rz: float = near - 100.0 * u
+		var ry: float = y0 - 17.0 * u + 1.4
+		rpts.append(_w(Vector3(0, ry, rz)))
+	kit.ring_line(rpts, {"add_speed": 2.0, "radius": RING_R, "cap": RING_CAP})
+	_pulse(i2, z_end, near - PEN)
+	# the run-out deck, the finish gate and a bumper wall
+	_island(z_end, 46.0, y_end)
+	var fin_z: float = z_end - 18.0
+	kit.finish(_w(Vector3(0, y_end, fin_z)), _yaw)
+	_finish_pos = _w(Vector3(0, y_end, fin_z))
+	kit.block(_w(Vector3(0, y_end + 1.6, z_end - 47.5)), Vector3(ISL_W + 2.0, 3.2, 1.6), Color(0.9, 0.95, 1.0), true, _yaw)
+	deco.gantry(_w(Vector3(0, y_end, fin_z + 6.0)), _yaw, 11.0, 9.0, CORAL)
+	if route_variant == 0:
+		r_walk(_w(Vector3(-LANE, y_end, z_end + 1.0)))
+		r_walk(_w(Vector3(0, y_end, fin_z)))
+	else:
+		_poly.append(_w(Vector3(0, y0 - 17.0 * 0.12, near - 12.0)))
+		_poly.append(_w(Vector3(0, y_end, z_end)))
+		_poly.append(_w(Vector3(0, y_end, fin_z)))
+		r_flow(_poly.duplicate())
 
 
 # ---- environment ----------------------------------------------------------------------------------
