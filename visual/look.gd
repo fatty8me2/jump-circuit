@@ -363,14 +363,17 @@ const THEMES: Dictionary = {
 		"decor": Color(0.80, 0.86, 0.92), "decor2": Color(0.25, 0.88, 1.00), "metal": Color(0.82, 0.86, 0.90),
 		"cloud_light": Color(1.00, 0.96, 0.94), "cloud_shade": Color(0.60, 0.77, 0.92),
 	},
-	"lotus": {  # PLACEHOLDER palette - the Flow level agent owns and retunes this entry
-		"sky_top": Color(0.10, 0.12, 0.30), "sky_horizon": Color(0.55, 0.80, 0.85), "sky_bottom": Color(0.20, 0.25, 0.35),
-		"sun": Color(0.85, 0.95, 1.00), "sun_energy": 1.0, "sun_rot": Vector3(-45, 150, 0),
-		"ambient": Color(0.60, 0.62, 0.70), "ambient_energy": 0.8, "fog": Color(0.45, 0.60, 0.70), "fog_density": 0.002,
-		"top": Color(0.85, 0.92, 0.98), "side": Color(0.40, 0.50, 0.65), "trim": Color(0.40, 0.95, 0.85),
-		"alt_top": Color(0.55, 0.75, 0.95), "accent": Color(0.40, 0.95, 0.85), "accent2": Color(0.85, 0.50, 1.00),
-		"decor": Color(0.25, 0.32, 0.45), "decor2": Color(0.50, 0.90, 0.80), "metal": Color(0.70, 0.74, 0.80),
-		"cloud_light": Color(0.70, 0.85, 0.90), "cloud_shade": Color(0.20, 0.25, 0.35),
+	# Lotus Drift: a misty water garden at dusk - grey-lavender flagstone furred with moss, lantern gold
+	# and lotus pink, dark teal water, an indigo sky with a peach glow. (levels/level_36_lotus.gd swaps
+	# in its own dusk sky with a moon and ridges, the pond water, the lotus tile shaders and the lights.)
+	"lotus": {
+		"sky_top": Color(0.07, 0.08, 0.22), "sky_horizon": Color(1.00, 0.62, 0.45), "sky_bottom": Color(0.03, 0.08, 0.11),
+		"sun": Color(1.00, 0.72, 0.52), "sun_energy": 0.95, "sun_rot": Vector3(-16, 150, 0),
+		"ambient": Color(0.55, 0.5, 0.78), "ambient_energy": 0.9, "fog": Color(0.62, 0.44, 0.52), "fog_density": 0.0034,
+		"top": Color(0.6, 0.58, 0.62), "side": Color(0.3, 0.3, 0.4), "trim": Color(1.00, 0.66, 0.25),
+		"alt_top": Color(0.8, 0.76, 0.7), "accent": Color(1.00, 0.56, 0.24), "accent2": Color(1.00, 0.5, 0.7),
+		"decor": Color(0.2, 0.42, 0.28), "decor2": Color(0.86, 0.3, 0.16), "metal": Color(0.72, 0.58, 0.34),
+		"cloud_light": Color(1.0, 0.7, 0.62), "cloud_shade": Color(0.4, 0.28, 0.46),
 	},
 	"ascent": {
 		"sky_top": Color(0.02, 0.03, 0.10), "sky_horizon": Color(0.20, 0.30, 0.58), "sky_bottom": Color(0.05, 0.08, 0.20),
