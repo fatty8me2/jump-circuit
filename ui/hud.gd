@@ -371,8 +371,9 @@ func show_results(time: float, prev_best: float, is_best: bool, deaths: int, pre
 	elif prev_ff >= 0:
 		falls_text += "   (fewest ever: %d)" % prev_ff
 	box.add_child(UiKit.label(falls_text, 18, UiKit.GOLD if falls_record else Color(0.7, 0.74, 0.85), HORIZONTAL_ALIGNMENT_CENTER))
-	var last: bool = Game.level_index == Game.LEVELS.size() - 1
-	var next: Button = UiKit.button("Finale" if last else "Next Level", func() -> void: Game.next_level())
+	var last: bool = Game.level_index == Game.finale_index()
+	var flow_end: bool = Game.is_flow(Game.level_index) and Game.level_index == Game.LEVELS.size() - 1
+	var next: Button = UiKit.button("Finale" if last else ("Back to Flow" if flow_end else "Next Level"), func() -> void: Game.next_level())
 	var buttons: Array[Button] = [next,
 		UiKit.button("Run It Again  (%s)" % Game.prompt("restart"), func() -> void: Game.restart_level()),
 		UiKit.button("Level Select", func() -> void: Game.goto_title("levels"))]

@@ -88,7 +88,7 @@ static func favourite_course(levels: Dictionary) -> Array:
 static func stats_rows() -> Array[PackedStringArray]:
 	var levels: Dictionary = SaveData.data.get("levels", {})
 	var rows: Array[PackedStringArray] = []
-	rows.append(PackedStringArray(["Courses beaten", "%d / %d" % [Cosmetics.completed_count(levels), Game.LEVELS.size()]]))
+	rows.append(PackedStringArray(["Courses beaten", "%d / %d" % [Cosmetics.completed_count(levels), Game.campaign_size()]]))
 	rows.append(PackedStringArray(["Total runs", str(Cosmetics.total_runs(levels))]))
 	rows.append(PackedStringArray(["Total falls", str(SaveData.stat("falls_total"))]))
 	rows.append(PackedStringArray(["Time played", play_time_text(SaveData.stat("play_secs"))]))
