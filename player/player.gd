@@ -301,6 +301,8 @@ func _surface_move(hv: Vector3, wish: Vector3, dt: float) -> Vector3:
 	var bias: Vector3 = _slip_bias()
 	var grip: float = 1.0
 	var fb: Object = floor_body if (floor_body != null and is_instance_valid(floor_body)) else null
+	if fb != null and fb.has_method("flow"):   # flow kit surface (docs/FLOW_KIT.md): its own ground rules
+		return _flow_move(hv, wish, dt, fb.call("flow") as Dictionary)
 	if fb != null:
 		if fb.has_method("surface_velocity"):
 			bias += fb.call("surface_velocity") as Vector3
@@ -320,6 +322,44 @@ func _surface_move(hv: Vector3, wish: Vector3, dt: float) -> Vector3:
 		var target: float = float(b["speed"])
 		if along < target:
 			hv += dir * minf(float(b["accel"]) * dt, target - along)
+	return hv
+
+
+## Ground rules on a flow-kit surface (FlowSurface.flow(): {gain, cap, carve}), docs/FLOW_KIT.md:
+##  * no over-speed bleed: carried speed is kept, and steered by turning the heading at a rate that eases
+##    with speed (lateral acceleration `carve` m/s^2, scaled by the stick), not by a clamp
+##  * a downhill grade adds speed (gravity_fall * sin(pitch) * gain, never past `cap`); climbing costs 35%
+##    of that, so carving a half-pipe keeps speed instead of draining it
+## At walking pace it is the normal ground move (plus the grade), so a flow slope is still easy to stand on.
+func _flow_move(hv: Vector3, wish: Vector3, dt: float, f: Dictionary) -> Vector3:
+	var top: float = tuning.max_speed * speed_mult
+	var speed: float = hv.length()
+	if speed <= top or (wish.length() >= 0.01 and hv.dot(wish) < 0.0):
+		hv = _ground_move(hv, wish, dt)
+	elif wish.length() >= 0.01:
+		var want: Vector3 = wish.normalized()
+		var ang: float = hv.angle_to(want)
+		var turn: float = minf(float(f.get("carve", 30.0)) / speed * minf(wish.length(), 1.0) * dt, ang)
+		if ang > 0.0001:
+			var axis: Vector3 = hv.cross(want)
+			if axis.length() < 0.0001:
+				axis = Vector3.UP
+			hv = hv.rotated(axis.normalized(), turn)
+	var n: Vector3 = get_floor_normal()
+	var downhill := Vector3(n.x, 0.0, n.z)
+	var gain: float = float(f.get("gain", 0.5))
+	if gain > 0.0 and downhill.length() > 0.02:
+		var steep: float = sqrt(maxf(1.0 - n.y * n.y, 0.0))
+		var push: Vector3 = downhill.normalized() * tuning.gravity_fall * steep * gain
+		var heading: Vector3 = hv.normalized() if hv.length() > 0.1 else Vector3.ZERO
+		var along: float = push.dot(heading)
+		if along < 0.0:
+			push -= heading * along * 0.65
+		var before: float = hv.length()
+		hv += push * dt
+		var cap: float = maxf(float(f.get("cap", 30.0)), before)
+		if hv.length() > cap:
+			hv = hv.normalized() * cap
 	return hv
 
 
@@ -677,6 +717,18 @@ func knockback(v: Vector3) -> void:
 	_begin_flight_stats()
 	_nf_knock_until = Time.get_ticks_msec() + int(MoveFlags.EVENT_HOLD * 1000.0)
 	knocked.emit(v)
+
+
+## A flow-kit launch (LaunchArc lip): fly off with exactly `v`, like a pad launch but the caller
+## picks the whole velocity. Drops coyote time and snap so nothing overwrites or re-grounds the throw.
+func flow_launch(v: Vector3) -> void:
+	_cancel_moves()
+	velocity = v
+	_jumping = false
+	_coyote = 0.0
+	_no_snap = maxf(_no_snap, 0.15)
+	grounded = false
+	_begin_flight_stats()
 
 
 func teleport(xform: Transform3D) -> void:

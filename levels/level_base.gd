@@ -667,6 +667,20 @@ func r_zipline(zip: Zipline, point: Vector3, radius: float, to: Vector3) -> void
 	route.append({"kind": "k_zip", "zip": zip, "point": point, "radius": radius, "to": to})
 
 
+## Flow kit (docs/FLOW_KIT.md): follow a path at speed by pure pursuit, on the ground or in the air.
+## `pts` are world points along the line (ring centres, gate floor points, slope and half-pipe waypoints);
+## the step ends when the last one is reached or passed within `tol` metres. Use it for every high-speed
+## stretch: rings, gates, flow slopes, half-pipe carving. Keep path curves wider than ~25 m radius at 25 m/s.
+func r_flow(pts: Array[Vector3], tol: float = 2.0) -> void:
+	route.append({"kind": "f_line", "pts": pts, "tol": tol})
+
+
+## Flow kit: run up a launch arc's ramp, get thrown at the lip, steer to `to` (a feet position on the
+## landing). Wire it after an r_flow that ends on the ramp's centre line, 10 m or more before the lip.
+func r_launch(arc: LaunchArc, to: Vector3) -> void:
+	route.append({"kind": "f_launch", "arc": arc, "to": to})
+
+
 # ---- run it again (race laps) ---------------------------------------------------------
 # After your first race finish the results offer "Run It Again": you go back to the start
 # and run lap after lap. The first finish time, the save and your placing never change;

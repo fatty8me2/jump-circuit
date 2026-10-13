@@ -142,6 +142,7 @@ func _physics_process(dt: float) -> void:
 		"desert_fly": _do_desert_fly(step)
 		"candy_board", "candy_ride": _do_candy(step)
 		"k_barrel", "k_zip": _do_kit(step)
+		"f_line", "f_launch", "f_rail": _do_flow(step, dt)
 		"toybox_pick": _do_toybox(step)
 		"carnival_board": _do_carnival_board(step)
 	# a bounce handed over by the previous step (_air_phase) is for the step that follows it: pad /
@@ -906,3 +907,94 @@ func _do_carnival_board(step: Dictionary) -> void:
 				return
 		return
 	_do_candy({"kind": "candy_board", "local": step.get("local", Vector3(0, 0.3, 0)), "cars": step["cars"], "to": step.get("to", Vector3.ZERO)})
+
+
+# ---- flow kit steps (additive; docs/FLOW_KIT.md) --------------------------------------------------------
+# High-speed steering. Walking at a point overshoots at 25 m/s, so these follow a path by pure pursuit: aim a
+# lookahead (about 0.4 s of travel, 3..12 m) ahead of the nearest point on a polyline, full stick.
+#   f_line   {pts: Array[Vector3], tol}   follow the polyline on the ground or in the air; done when the last point
+#                                          is reached or passed (within `tol` m). Rings, gates, flow slopes, half-pipe
+#                                          carving and airborne ring lines are all just f_line.
+#   f_launch {arc: LaunchArc, to}         run up the ramp's centre line, get thrown at the lip, air-steer to `to`
+#                                          (done on landing). The speed carried into the ramp sets the arc.
+#   f_rail   {rail, ...}                  board a grind rail, ride it, dismount (see _do_rail)
+
+## Pure-pursuit progress on a polyline from segment `seg`: [aim point, segment, reached the end].
+func _flow_aim(pts: Array, seg: int, look: float, tol: float) -> Array:
+	var p: Vector3 = _flat(player.global_position)
+	var n: int = pts.size()
+	# advance past segments whose far end we have passed
+	while seg < n - 2:
+		var a: Vector3 = _flat(pts[seg])
+		var b: Vector3 = _flat(pts[seg + 1])
+		var d: Vector3 = b - a
+		if d.length() < 0.01 or (p - b).dot(d.normalized()) >= -tol * 0.5:
+			seg += 1
+		else:
+			break
+	var a2: Vector3 = _flat(pts[seg])
+	var b2: Vector3 = _flat(pts[mini(seg + 1, n - 1)])
+	var d2: Vector3 = b2 - a2
+	var len2: float = d2.length()
+	var dir2: Vector3 = d2 / len2 if len2 > 0.01 else Vector3.FORWARD
+	var passed: bool = seg >= n - 2 and ((p - b2).dot(dir2) >= -tol or (p - b2).length() < tol)
+	# walk `look` metres along the path from the nearest point on this segment
+	var cur: Vector3 = a2 + dir2 * clampf((p - a2).dot(dir2), 0.0, len2)
+	var remaining: float = look
+	var i: int = seg
+	while true:
+		var end_pt: Vector3 = _flat(pts[mini(i + 1, n - 1)])
+		var to_end: float = (end_pt - cur).length()
+		if remaining <= to_end:
+			cur += (end_pt - cur).normalized() * remaining if to_end > 0.001 else Vector3.ZERO
+			break
+		remaining -= to_end
+		cur = end_pt
+		if i >= n - 2:
+			cur += dir2 * remaining   # past the last point: carry on along the last segment
+			break
+		i += 1
+	return [cur, seg, passed]
+
+
+func _flow_look() -> float:
+	return clampf(_flat(player.velocity).length() * 0.4 + 2.0, 3.0, 12.0)
+
+
+func _do_flow(step: Dictionary, dt: float) -> void:
+	if _step_time < 0.03:
+		step["_seg"] = 0
+	match str(step["kind"]):
+		"f_line":
+			var pts: Array = step["pts"]
+			var r: Array = _flow_aim(pts, int(step.get("_seg", 0)), _flow_look(), float(step.get("tol", 2.0)))
+			step["_seg"] = r[1]
+			var off: Vector3 = (r[0] as Vector3) - _flat(player.global_position)
+			if player.velocity.y <= 0.0:
+				player.cmd_jump = false
+			if off.length() > 0.01:
+				_set_wish(off.normalized())
+			if bool(r[2]):
+				_next()
+		"f_launch":
+			var arc: LaunchArc = step["arc"]
+			if _phase == 0:
+				var fwd: Vector3 = arc.forward()
+				var lip: Vector3 = _flat(arc.lip())
+				var s_along: float = (_flat(player.global_position) - lip).dot(fwd)
+				# the centre line through the lip, aimed `look` metres further along than we are
+				var aim: Vector3 = lip + fwd * (s_along + _flow_look())
+				_set_wish((aim - _flat(player.global_position)).normalized())
+				if arc.launched_within(0.3):
+					_phase = 1
+				elif s_along > 6.0:
+					log_lines.append("f_launch %d: ran past the lip without a launch at %s" % [step_index, str(player.global_position.snapped(Vector3.ONE * 0.01))])
+					level.respawn()
+			else:
+				_air_phase(step["to"])
+		"f_rail":
+			_do_rail(step, dt)
+
+
+func _do_rail(_step: Dictionary, _dt: float) -> void:
+	pass
