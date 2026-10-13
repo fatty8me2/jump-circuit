@@ -32,7 +32,7 @@ SR = ga.SR
 TAU = ga.TAU
 PEAK_DB = ga.SFX_PEAK_DB
 OUT = ga.OUT
-SIZE_BUDGET = 52.0e6
+SIZE_BUDGET = 60.0e6
 
 THEMES = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent", "xeno", "volcano", "glacier", "desert",
           "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void",
@@ -264,6 +264,22 @@ for _n, _d in (("arcane_checkpoint", 2.4), ("arcane_finish", 3.0), ("arcane_ink_
     _reg(_n, _d)
 for _n, _d in (("arcane_book_flap", 2.0), ("arcane_ink_flow", 2.0)):
     _reg(_n, _d, True)
+# the flow set: the kit's and the meter's clips (gen_flow), then the aurora, hyperloop and lotus levels' (gen_aurora / gen_hyperloop / gen_lotus)
+for _n, _d in (("flow_ring_pass", 0.8), ("flow_ring_chain", 0.8), ("flow_gate_pass", 0.6), ("flow_launch", 1.0),
+               ("flow_rail_land", 0.5), ("flow_rail_leave", 0.4), ("flow_tier_up", 0.6), ("flow_zen_enter", 2.0),
+               ("flow_zen_exit", 1.0),
+               ("aurora_checkpoint", 1.4), ("aurora_finish", 2.4), ("aurora_draft_enter", 0.8), ("aurora_mote", 0.3),
+               ("hyperloop_pod_go", 1.0), ("hyperloop_train_pass", 1.6), ("hyperloop_checkpoint", 1.2),
+               ("lotus_pad_dip", 0.6), ("lotus_chime", 1.2), ("lotus_koi_splash", 0.8), ("lotus_bloom", 2.0),
+               ("lotus_finish", 3.0)):
+    _reg(_n, _d)
+for _n, _d in (("flow_wind_loop", 2.0), ("flow_rail_grind", 2.0), ("aurora_draft_loop", 2.0),
+               ("hyperloop_pod_hum", 2.0)):
+    _reg(_n, _d, True)
+# the Sky Surf level's clips (gen_skysurf): one-shots only, called by the lead's wiring
+for _n, _d in (("skysurf_checkpoint", 1.2), ("skysurf_finish", 2.4), ("skysurf_puff", 0.8),
+               ("skysurf_ribbon", 1.0)):
+    _reg(_n, _d)
 
 
 # ---------------------------------------------------------------------------
@@ -7244,6 +7260,337 @@ def gen_arcane():
     save(name, x, fin=0.002, fout=0.25)
 
 
+# ===========================================================================
+# The flow set: the kit's and the meter's clips (gen_flow), and the aurora, hyperloop and lotus levels' mechanics
+# (gen_aurora, gen_hyperloop, gen_lotus). Each is called by name from mechanics/*.gd, flow_meter.gd or the level.
+# Loops are built circularly (cyc() frequencies and clfo / crand modulation), so they repeat without a seam.
+# ===========================================================================
+def _loop_tones(n, base, parts):
+    """A loop-safe tone stack: each (ratio, amp) partial of `base` (Hz, snapped to whole cycles)."""
+    t = np.arange(n) / SR
+    f0 = cyc(base, n)
+    x = np.zeros(n)
+    for ratio, a in parts:
+        x += a * np.sin(TAU * cyc(f0 * ratio, n) * t)
+    return x
+
+
+def gen_flow():
+    # the ring: a bright airy whoosh through the hoop, and a chime struck as it is passed
+    name = "flow_ring_pass"
+    r = rng(name)
+    x = 0.6 * whoosh(r, dur(name), 1200.0, 5200.0, 2800.0, 0.22, 0.2, 1.2)
+    place(x, 0.06, fm_glass(midi(84), 0.7, 0.32, 0.7, 2.76, 0.002), 0.7)
+    place(x, 0.14, fm_glass(midi(91), 0.6, 0.3, 0.6, 2.76, 0.002), 0.45)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # the ring chain (four or more in a row): the same chime climbing, quicker and brighter, with sparkles over it
+    name = "flow_ring_chain"
+    r = rng(name)
+    n = ns(dur(name))
+    x = np.zeros(n)
+    for k, m in enumerate((84, 88, 91, 96)):
+        place(x, 0.02 + 0.055 * k, fm_glass(midi(m), 0.5, 0.26, 0.8, 2.76, 0.002), 0.45 + 0.12 * k)
+    grains(r, x, 36, 0.0, 0.6, 2200.0, 9000.0, 0.002, 0.005, gain=0.3, decay=0.35)
+    x += 0.35 * whoosh(r, dur(name), 1800.0, 6000.0, 3500.0, 0.2, 0.18, 1.2)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # the boost gate: an electric zip, a fast sweep up through a hiss of static and a few snaps
+    name = "flow_gate_pass"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    zip_ = unit(tone(glide(420.0, 2600.0, t, 0.34), t) + 0.35 * tone(glide(840.0, 5200.0, t, 0.34), t)
+                + 0.15 * tone(glide(1260.0, 7800.0, t, 0.34), t)) * env(t, 0.004, 0.22)
+    hiss = unit(svf(r.standard_normal(n), glide(900.0, 6000.0, t, 0.3), 3.0)) * env(t, 0.003, 0.18)
+    x = 0.8 * taper(zip_) + 0.5 * taper(hiss)
+    grains(r, x, 10, 0.0, 0.35, 3000.0, 9000.0, 0.001, 0.003, gain=0.25, decay=0.2)
+    save(name, x, fin=0.001, fout=0.12)
+
+    # the launch arc: a spring lets go and the air rises to a rush as the rider is thrown
+    name = "flow_launch"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    rise = np.clip(t / 0.95, 0.0, 1.0)
+    air = svf(r.standard_normal(n), 300.0 * (4000.0 / 300.0) ** rise, 1.5)
+    x = 0.9 * unit(air) * rise ** 1.8 * np.minimum(t / 0.05, 1.0)
+    x += 0.5 * tone(glide(180.0, 520.0, t, 0.3), t) * env(t, 0.005, 0.22)
+    save(name, x, fin=0.002, fout=0.08)
+
+    # the rider locks onto the rail: a metal clank, then the rail ringing with a bright ting
+    name = "flow_rail_land"
+    r = rng(name)
+    t = tv(dur(name))
+    ring = modes(t, [(620.0, 1.0, 0.13), (1480.0, 0.55, 0.07), (2310.0, 0.35, 0.045), (3950.0, 0.2, 0.025)],
+                 r, 0.003, hard=5000.0)
+    x = ring + 0.6 * click(r, dur(name), 1500.0, 8000.0, 0.003) + 0.4 * thud(t, 150.0, 70.0, 0.02, 0.05, harm=(0.2,))
+    save(name, x, fin=0.001, fout=0.08)
+
+    # on the rail (loop): a smooth metal grind, a hiss of steel on steel and a few tiny sparks
+    name = "flow_rail_grind"
+    r = rng(name)
+    n = ns(dur(name))
+    hiss = cnoise(r, n, 2000.0, 8000.0) * (0.75 + 0.25 * crand(r, n, 5))
+    grind = cnoise(r, n, 350.0, 1200.0) * (0.7 + 0.3 * clfo(n, 6))
+    spk = np.zeros(n)
+    for _ in range(14):
+        cplace(spk, r.uniform(0.0, dur(name)), noise(r, ns(0.01), 2500.0, 6000.0) * np.exp(-tv(0.01) / 0.002),
+               r.uniform(0.2, 0.5))
+    save_loop(name, unit(hiss) + 0.6 * unit(grind) + 0.3 * unit(spk))
+
+    # the rider lets go: a short release ting
+    name = "flow_rail_leave"
+    r = rng(name)
+    x = 0.8 * fm_glass(midi(96), dur(name), 0.1, 0.6, 2.76, 0.002)
+    x += 0.35 * click(r, dur(name), 3000.0, 8000.0, 0.002)
+    save(name, x, fin=0.001, fout=0.08)
+
+    # the flow tier goes up: three soft chime notes climbing
+    name = "flow_tier_up"
+    x = np.zeros(ns(dur(name)))
+    for t0, m, g in ((0.0, 79, 0.7), (0.09, 86, 0.6), (0.18, 91, 0.55)):
+        place(x, t0, fm_glass(midi(m), 0.5, 0.3, 0.5, 2.0, 0.004), g)
+    save(name, x, fin=0.003, fout=0.15)
+
+    # the zen state begins: a lush pad swells up through a few detuned voices, with a shimmer over it
+    name = "flow_zen_enter"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    swell = np.minimum(t / 0.8, 1.0) ** 1.5 * np.clip((dur(name) - t) / 0.5, 0.0, 1.0)
+    pad = np.zeros(n)
+    for m, g in ((62, 1.0), (67, 0.7), (69, 0.6), (74, 0.5), (76, 0.35)):
+        f = midi(m)
+        for det in (-0.0025, 0.0025):
+            pad += g * tone(f * (1.0 + det), t) + 0.25 * g * tone(2.0 * f * (1.0 + det), t)
+    pad = unit(pad) * swell
+    shim = unit(svf(r.standard_normal(n), glide(3000.0, 9000.0, t, dur(name)), 5.0)) * swell
+    sparkle = np.zeros(n)
+    grains(r, sparkle, 30, 0.2, 1.8, 3000.0, 9000.0, 0.002, 0.006, gain=0.25)
+    save(name, 0.8 * pad + 0.35 * shim + 0.3 * unit(sparkle), fin=0.2, fout=0.3)
+
+    # the zen state ends: a soft fall-off, a tone sinking away with the air settling behind it
+    name = "flow_zen_exit"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    f = glide(880.0, 330.0, t, 0.9)
+    x = unit(tone(f, t) + 0.3 * tone(2.0 * f, t)) * env(t, 0.02, 0.45)
+    x += 0.25 * unit(svf(r.standard_normal(n), glide(2500.0, 600.0, t, 0.9), 2.0)) * env(t, 0.05, 0.4)
+    save(name, x, fin=0.005, fout=0.15)
+
+    # the wind rush (loop, speed-driven pitch): broadband air that sounds right at any pitch, so no tones in it
+    name = "flow_wind_loop"
+    r = rng(name)
+    n = ns(dur(name))
+    rush = unit(tilt(cnoise(r, n, 60.0, 7000.0), -3.0, circular=True)) * (0.6 + 0.4 * crand(r, n, 4))
+    body = cnoise(r, n, 180.0, 1600.0) * (0.7 + 0.3 * crand(r, n, 3))
+    save_loop(name, unit(rush) + 0.5 * unit(body))
+
+
+def gen_aurora():
+    # the checkpoint: a crystal chime, four glassy strikes climbing, with a glint of light over them
+    name = "aurora_checkpoint"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for k, (m, g) in enumerate(((88, 0.7), (95, 0.55), (100, 0.6), (103, 0.4))):
+        place(x, 0.03 + 0.11 * k, fm_glass(midi(m), 1.2, 0.5, 0.6, 2.76, 0.002), g)
+    t = tv(dur(name))
+    x += 0.4 * unit(svf(r.standard_normal(len(t)), 4500.0 + 4000.0 * np.minimum(t / dur(name), 1.0), 6.0)) \
+        * env(t, 0.02, 0.5)
+    save(name, x, fin=0.002, fout=0.15)
+
+    # the finish: a shimmer that grows into a crescendo, glassy notes rising through it, and a bright chord at the top
+    name = "aurora_finish"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    u = np.clip(t / dur(name), 0.0, 1.0)
+    shim = unit(svf(r.standard_normal(n), 1800.0 + 7200.0 * u ** 1.5, 6.0)) * u ** 2
+    pad = np.zeros(n)
+    for m, g in ((60, 1.0), (67, 0.7), (72, 0.6), (76, 0.4)):
+        pad += g * (tone(midi(m), t) + 0.3 * tone(2.0 * midi(m), t))
+    x = 0.8 * shim + 0.4 * unit(pad) * u ** 2.5
+    for k, m in enumerate((72, 76, 79, 84)):
+        place(x, 0.1 + 0.2 * k, fm_glass(midi(m), 1.5, 0.6, 0.6, 2.76, 0.003), 0.45)
+    for m in (84, 88, 91):
+        place(x, 1.3, fm_glass(midi(m), 1.1, 0.8, 0.5, 2.76, 0.003), 0.5)
+    save(name, x, fin=0.005, fout=0.25)
+
+    # the draft (loop): a soft singing ribbon of air - a flute-like tone with breath under it, all in whole cycles
+    name = "aurora_draft_loop"
+    r = rng(name)
+    n = ns(dur(name))
+    ribbon = _loop_tones(n, midi(76), ((1.0, 1.0), (2.0, 0.35), (3.0, 0.2), (4.0, 0.08)))
+    ribbon *= 0.8 + 0.2 * clfo(n, 4)
+    breath = cnoise(r, n, 1200.0, 5000.0) * (0.6 + 0.4 * clfo(n, 3, 1.0))
+    save_loop(name, unit(ribbon) + 0.25 * unit(breath))
+
+    # the air takes you into the draft: a whoosh that rises and falls, and a bright ping as you catch it
+    name = "aurora_draft_enter"
+    r = rng(name)
+    x = whoosh(r, dur(name), 400.0, 2400.0, 1600.0, 0.35, 0.2, 1.2)
+    place(x, 0.3, fm_glass(midi(91), 0.5, 0.2, 0.5, 2.76, 0.003), 0.35)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # a mote of light is caught: a tiny glassy ping
+    name = "aurora_mote"
+    r = rng(name)
+    x = fm_glass(midi(100), dur(name), 0.07, 0.5, 2.76, 0.001)
+    x += 0.3 * click(r, dur(name), 4000.0, 9000.0, 0.001)
+    save(name, x, fin=0.001, fout=0.05)
+
+
+def gen_hyperloop():
+    # the pod's hum (loop): a clean maglev whine, two close partials beating slowly, with a little air over it
+    name = "hyperloop_pod_hum"
+    r = rng(name)
+    n = ns(dur(name))
+    whine = _loop_tones(n, 960.0, ((1.0, 1.0), (2.0, 0.3), (3.0, 0.12)))
+    whine += 0.3 * _loop_tones(n, 964.0, ((1.0, 1.0),))
+    whine *= 0.9 + 0.1 * clfo(n, 8)
+    air = cnoise(r, n, 2000.0, 6000.0)
+    save_loop(name, unit(whine) + 0.2 * unit(air))
+
+    # the pod leaves its dock: a maglev chirp rising from a low whine, with a thump at the start and a whoosh up
+    name = "hyperloop_pod_go"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    f = glide(260.0, 1500.0, t, 0.9)
+    chirp = tone(f, t) + 0.4 * tone(2.0 * f, t) + 0.15 * tone(3.0 * f, t)
+    x = unit(chirp) * np.minimum(t / 0.25, 1.0) ** 1.2 * np.clip((dur(name) - t) / 0.2, 0.0, 1.0)
+    x += 0.7 * thud(t, 90.0, 45.0, 0.15, 0.12, harm=(0.3,))
+    x += 0.4 * unit(svf(r.standard_normal(n), glide(900.0, 4000.0, t, 0.9), 2.0)) * np.minimum(t / 0.3, 1.0)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # a train streaks through a tube nearby: a doppler whoosh and the pressure wave pushing ahead of it
+    name = "hyperloop_train_pass"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    rush = whoosh(r, dur(name), 300.0, 2600.0, 500.0, 0.8, 0.35, 1.3)
+    push = noise(r, n, 40.0, 260.0) * np.exp(-((t - 0.8) / 0.35) ** 2)
+    save(name, rush + 0.6 * push, fin=0.002, fout=0.2)
+
+    # the station chime: two bright notes rising a fourth, ringing on over a soft whoosh
+    name = "hyperloop_checkpoint"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    place(x, 0.0, fm_glass(midi(76), 1.0, 0.45, 0.4, 2.0, 0.003), 0.8)
+    place(x, 0.22, fm_glass(midi(81), 1.0, 0.5, 0.4, 2.0, 0.003), 0.7)
+    x += 0.35 * whoosh(r, dur(name), 800.0, 3000.0, 1500.0, 0.25, 0.2, 1.2)
+    save(name, x, fin=0.002, fout=0.25)
+
+
+def gen_lotus():
+    # a leaf presses into the water: a soft wet pat, and a few drops off its edge
+    name = "lotus_pad_dip"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    body = thud(t, 180.0, 90.0, 0.1, 0.08, harm=(0.2,))
+    wet = noise(r, n, 300.0, 1500.0) * env(t, 0.01, 0.12)
+    x = 0.8 * body + 0.6 * wet
+    grains(r, x, 6, 0.04, 0.3, 1800.0, 6000.0, 0.002, 0.006, gain=0.3, decay=0.15)
+    save(name, x, fin=0.002, fout=0.1)
+
+    # the wind chime: five pentatonic glass-and-bronze tubes struck in turn, each ringing on
+    name = "lotus_chime"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = np.zeros(n)
+    for t0, m in ((0.0, 79), (0.19, 72), (0.41, 84), (0.6, 76), (0.88, 81)):
+        tube = modes(t, bar_modes(midi(m), 0.9, (1.0, 0.25, 0.1, 0.04), 0.9), r, 0.001, hard=6000.0)
+        place(x, t0, tube + 0.2 * click(r, dur(name), 2000.0, 8000.0, 0.002), 0.6 + 0.4 * r.uniform())
+    x += 0.05 * noise(r, n, 1500.0, 6000.0) * env(t, 0.3, 0.6)
+    save(name, x, fin=0.002, fout=0.15)
+
+    # a koi falls back into the pond: a soft splash, droplets flying off it, and a small bubble
+    name = "lotus_koi_splash"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    x = 0.8 * noise(r, n, 600.0, 6000.0) * env(t, 0.003, 0.12)
+    grains(r, x, 26, 0.05, 0.6, 1500.0, 6000.0, 0.002, 0.006, gain=0.35, decay=0.3)
+    place(x, 0.1, bubble(220.0, 0.12, 0.03, 0.8), 0.4)
+    save(name, x, fin=0.002, fout=0.15)
+
+    # the lotus blooms (one-shot): a soft, warm major chord opening up, low-passed like the sound through petals
+    name = "lotus_bloom"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    chord = np.zeros(n)
+    for m, g in ((60, 1.0), (64, 0.8), (67, 0.7), (72, 0.5)):
+        f = midi(m)
+        chord += g * (tone(f * 0.998, t) + tone(f * 1.002, t) + 0.3 * tone(2.0 * f, t))
+    x = band(unit(chord) * np.minimum(t / 0.35, 1.0) ** 1.5 * np.clip((dur(name) - t) / 0.9, 0.0, 1.0), None, 3000.0)
+    place(x, 0.0, fm_glass(midi(84), 1.0, 0.4, 0.4, 2.76, 0.003), 0.2)
+    save(name, x, fin=0.2, fout=0.4)
+
+    # the lotus opens fully: a chord rising a whole tone, a temple bell struck at the top, and a shower of chimes
+    name = "lotus_finish"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    u = np.clip(t / 2.2, 0.0, 1.0)
+    chord = np.zeros(n)
+    for m, g in ((60, 1.0), (64, 0.7), (67, 0.7), (72, 0.6), (76, 0.4)):
+        f = midi(m) * 2.0 ** (2.0 * u / 12.0)
+        chord += g * (tone(f) + 0.3 * tone(2.0 * f))
+    swell = np.minimum(t / 0.6, 1.0) * np.clip((dur(name) - t) / 0.7, 0.0, 1.0)
+    x = 0.55 * unit(chord) * swell
+    x += 0.8 * modes(t, bell_modes(midi(57), 1.6), r, 0.002, hard=7000.0)
+    for k, m in enumerate((84, 88, 91, 96, 100)):
+        place(x, 1.0 + 0.09 * k, fm_glass(midi(m), 1.6, 0.6, 0.6, 2.76, 0.002), 0.45 * (0.8 + 0.2 * k / 4.0))
+    grains(r, x, 40, 1.2, 2.8, 2500.0, 8000.0, 0.002, 0.005, gain=0.2)
+    save(name, x, fin=0.01, fout=0.3)
+
+
+def gen_skysurf():
+    # the checkpoint: an airy chime over a light gust of wind
+    name = "skysurf_checkpoint"
+    r = rng(name)
+    x = np.zeros(ns(dur(name)))
+    for t0, m, g in ((0.0, 84, 0.7), (0.16, 91, 0.55)):
+        place(x, t0, fm_glass(midi(m), 0.9, 0.35, 0.5, 2.76, 0.003), g)
+    x += 0.4 * whoosh(r, dur(name), 500.0, 2200.0, 1200.0, 0.4, 0.3, 1.1)
+    save(name, x, fin=0.003, fout=0.2)
+
+    # the finish: a bright flourish that climbs and soars away on the air
+    name = "skysurf_finish"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    u = np.clip(t / 1.2, 0.0, 1.0)
+    soar = unit(svf(r.standard_normal(n), 800.0 + 4200.0 * u ** 1.5, 2.5))
+    x = 0.7 * soar * np.minimum(t / 0.4, 1.0) * np.clip((dur(name) - t) / 0.6, 0.0, 1.0)
+    for k, m in enumerate((72, 76, 79, 84, 88)):
+        place(x, 0.06 + 0.11 * k, fm_glass(midi(m), 1.4, 0.55, 0.5, 2.76, 0.002), 0.4 + 0.08 * k)
+    place(x, 0.7, fm_glass(midi(91), 1.8, 0.8, 0.5, 2.76, 0.002), 0.45)
+    grains(r, x, 30, 0.5, 2.0, 2500.0, 8000.0, 0.002, 0.005, gain=0.2)
+    save(name, x, fin=0.003, fout=0.3)
+
+    # a cloud puff throws you: a soft whumpf of air and a small chime
+    name = "skysurf_puff"
+    r = rng(name)
+    n = ns(dur(name))
+    t = tv(dur(name))
+    body = thud(t, 120.0, 60.0, 0.08, 0.1, harm=(0.2,))
+    air = noise(r, n, 200.0, 1400.0) * env(t, 0.005, 0.15)
+    x = 0.7 * body + 0.5 * air
+    place(x, 0.12, fm_glass(midi(88), 0.6, 0.3, 0.5, 2.76, 0.003), 0.45)
+    save(name, x, fin=0.002, fout=0.12)
+
+    # a gentle wind ribbon: a soft whoosh that rises and drifts away
+    name = "skysurf_ribbon"
+    r = rng(name)
+    save(name, whoosh(r, dur(name), 350.0, 1600.0, 700.0, 0.5, 0.35, 1.0), fin=0.01, fout=0.2)
+
+
 def verify():
     ok = True
     total = 0
@@ -7302,7 +7649,8 @@ GENERATORS = (gen_steps, gen_wall, gen_movement_loops, gen_lasers, gen_crusher_p
               gen_foundry, gen_reef, gen_orbital, gen_clockwork, gen_balance, gen_gardens, gen_ascent, gen_xeno,
               gen_volcano, gen_glacier, gen_desert, gen_manor, gen_armada, gen_candy, gen_carrier,
               gen_sakura, gen_jungle, gen_frontier, gen_neon, gen_doom, gen_abyss, gen_tempest, gen_void, gen_kit, gen_emotes,
-              gen_toybox, gen_olympus, gen_arcade, gen_siege, gen_fungal, gen_dino, gen_carnival, gen_arcane)
+              gen_toybox, gen_olympus, gen_arcade, gen_siege, gen_fungal, gen_dino, gen_carnival, gen_arcane,
+              gen_flow, gen_aurora, gen_hyperloop, gen_lotus, gen_skysurf)
 
 
 def main():

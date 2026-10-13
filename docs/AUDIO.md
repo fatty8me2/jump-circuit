@@ -42,10 +42,11 @@ the wrap-around must be no larger than ordinary steps inside the file). It also
 checks the total size budget (currently about 14 MB of the 25 MB allowed).
 
 Size budgets for the soundscape generators (after the fifth set of worlds): `gen_ambience.py` 56 MB,
-now about 47.4 MB (54 beds 34.0 MB, 449 one-shots 13.4 MB); `gen_world_sfx.py` 52 MB, now about
-51.9 MB across 729 clips. The flow set (Aurora Peak, Skysurf Ridge, Hyperloop, Lotus Pond) added its four
-beds and their one-shots to the ambience, and its footsteps and landings to the world SFX, which is now
-nearly full: the budget was not raised. To regenerate just some themes, `python tools/gen_ambience.py --only=toybox`
+now about 47.4 MB (54 beds 34.0 MB, 449 one-shots 13.4 MB); `gen_world_sfx.py` 60 MB (raised from 52 MB for the
+flow set), now about 55.2 MB across 758 clips. The flow set (Aurora Peak, Skysurf Ridge, Hyperloop, Lotus Pond)
+added its four beds and their one-shots to the ambience, and its footsteps and landings to the world SFX. Its
+mechanic clips went in with `gen_flow` (the kit and meter: rings, gates, launch, rails, the wind loop, the zen
+state), `gen_aurora`, `gen_hyperloop`, `gen_lotus` and `gen_skysurf`, which together add about 2.8 MB. To regenerate just some themes, `python tools/gen_ambience.py --only=toybox`
 renders the names containing that text (it skips the full verify, so run `--verify` after), and
 `python tools/gen_world_sfx.py --themes=toybox,fungal` re-renders only those surfaces' footsteps and
 landings and then verifies everything.
