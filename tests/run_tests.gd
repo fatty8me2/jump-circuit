@@ -3432,7 +3432,14 @@ const WORLD_CLIPS: Array[String] = ["wallstep", "wallkick", "mantle", "wallrun_l
 	"carnival_mole_rumble", "carnival_mole_whistle", "carnival_mole_pop",
 	# the Arcane Library (gen_arcane)
 	"arcane_checkpoint", "arcane_finish", "arcane_ink_bubble", "arcane_ink_surge", "arcane_circle_charge",
-	"arcane_circle_cast", "arcane_hourglass_warn", "arcane_hourglass_shut", "arcane_hourglass_open"]
+	"arcane_circle_cast", "arcane_hourglass_warn", "arcane_hourglass_shut", "arcane_hourglass_open",
+	# the flow set: the kit and the meter (gen_flow), then the aurora, hyperloop, lotus and sky surf levels
+	"flow_ring_pass", "flow_ring_chain", "flow_gate_pass", "flow_launch", "flow_rail_land", "flow_rail_leave",
+	"flow_tier_up", "flow_zen_enter", "flow_zen_exit",
+	"aurora_checkpoint", "aurora_finish", "aurora_draft_enter", "aurora_mote",
+	"hyperloop_pod_go", "hyperloop_train_pass", "hyperloop_checkpoint",
+	"lotus_pad_dip", "lotus_chime", "lotus_koi_splash", "lotus_bloom", "lotus_finish",
+	"skysurf_checkpoint", "skysurf_finish", "skysurf_puff", "skysurf_ribbon"]
 const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "laser_hum", "conveyor_hum",
 	"wind_loop", "motor_hum", "warp_hum", "ladle_pour", "vent_loop", "surge_loop", "thruster_burn", "flare_roar",
 	"gravity_hum", "scanner_servo", "trolley_run", "pulley_rattle", "trimmer_buzz", "billboard_buzz",
@@ -3456,7 +3463,9 @@ const WORLD_LOOPS: Array[String] = ["air_rush", "wallrun_scrape", "ice_slide", "
 	# Carnival Chaos (gen_carnival)
 	"carnival_coaster_rumble", "carnival_carousel_loop", "carnival_wheel_creak",
 	# the Arcane Library (gen_arcane)
-	"arcane_book_flap", "arcane_ink_flow"]
+	"arcane_book_flap", "arcane_ink_flow",
+	# the flow set's loops (the wind rush and the rail grind) and the aurora draft and hyperloop pod hum
+	"flow_wind_loop", "flow_rail_grind", "aurora_draft_loop", "hyperloop_pod_hum"]
 
 
 func test_z_world_sounds() -> void:
