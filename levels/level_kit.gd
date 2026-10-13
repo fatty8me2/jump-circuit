@@ -800,3 +800,158 @@ func hammer(floor_top: Vector3, arm_length: float = 5.0, period: float = 4.8, ph
 		h.set(key, opts[key])
 	_add(h, floor_top)
 	return h
+
+
+# ---- flow kit (docs/FLOW_KIT.md): momentum pieces for the Flow levels --------------------------
+# Rings, boost gates and flow surfaces keep and build speed (the player reads FlowSurface.flow());
+# every one reports to a per-level chain counter. Positions are where feet / ring centres go.
+
+var _flow_chain: FlowChain
+
+
+## The level's ring chain counter (made on first use). Rings and gates built by the kit share it.
+func flow_chain() -> FlowChain:
+	if _flow_chain == null or not is_instance_valid(_flow_chain):
+		_flow_chain = FlowChain.new()
+		_flow_chain.name = "FlowChain"
+		root.add_child(_flow_chain)
+	return _flow_chain
+
+
+func _yaw_for(dir: Vector3) -> float:
+	return rad_to_deg(atan2(-dir.x, -dir.z))
+
+
+## Speed ring: a hoop of `radius` centred on `center`, axis along local -Z turned by `yaw_deg`.
+## Passing it going the right way adds `add_speed` m/s (more along a chain), never past `cap`.
+## opts: pitch (deg, axis rises toward -Z), assist (0..1), next (world point for the guide).
+## Route: put it on the path of an r_flow / r_rings step. Clips: flow_ring_pass, flow_ring_chain.
+func speed_ring(center: Vector3, yaw_deg: float = 0.0, add_speed: float = 6.0, radius: float = 2.2, cap: float = 30.0, opts: Dictionary = {}) -> SpeedRing:
+	var r := SpeedRing.new()
+	r.add_speed = add_speed
+	r.radius = radius
+	r.cap = cap
+	r.chain = flow_chain()
+	for key: String in opts:
+		if key != "pitch":
+			r.set(key if key != "next" else "next_point", opts[key])
+	r.rotation_degrees = Vector3(float(opts.get("pitch", 0.0)), yaw_deg, 0.0)
+	_add(r, center)
+	return r
+
+
+## A line of rings through `points` (ring centres), each facing the next, each guiding to it.
+## opts: add_speed, radius, cap, tilt (bool, default true: axes follow the rise and fall), assist.
+func ring_line(points: Array[Vector3], opts: Dictionary = {}) -> Array[SpeedRing]:
+	var out: Array[SpeedRing] = []
+	for i: int in points.size():
+		var a: Vector3 = points[i]
+		var to: Vector3 = points[i + 1] - a if i + 1 < points.size() else a - points[i - 1]
+		var flat := Vector3(to.x, 0.0, to.z)
+		var pitch: float = rad_to_deg(atan2(to.y, maxf(flat.length(), 0.001))) if bool(opts.get("tilt", true)) else 0.0
+		var o: Dictionary = {"pitch": pitch}
+		if i + 1 < points.size():
+			o["next"] = points[i + 1]
+		if opts.has("assist"):
+			o["assist"] = opts["assist"]
+		out.append(speed_ring(a, _yaw_for(flat), float(opts.get("add_speed", 6.0)), float(opts.get("radius", 2.2)), float(opts.get("cap", 30.0)), o))
+	return out
+
+
+## Boost gate: an arch standing on `floor_pos`, axis along local -Z turned by `yaw_deg`. Passing it
+## lifts your speed to `speed` m/s along the axis (never slows you). opts: assist, reach, height,
+## counts_chain, next. Route: on the path of an r_flow step. Clip: flow_gate_pass.
+func boost_gate(floor_pos: Vector3, yaw_deg: float = 0.0, speed: float = 20.0, width: float = 5.0, opts: Dictionary = {}) -> BoostGate:
+	var g := BoostGate.new()
+	g.speed = speed
+	g.width = width
+	for key: String in opts:
+		g.set(key if key != "next" else "next_point", opts[key])
+	if g.counts_chain:
+		g.chain = flow_chain()
+	g.rotation_degrees.y = yaw_deg
+	_add(g, floor_pos)
+	return g
+
+
+## A line of gates on the floor points `points`, each facing the next. Speed runs from `speed` at
+## the first to opts.speed_end at the last (default the same). opts: width, plus any boost_gate opt.
+func boost_chain(points: Array[Vector3], speed: float = 22.0, width: float = 5.0, opts: Dictionary = {}) -> Array[BoostGate]:
+	var out: Array[BoostGate] = []
+	var end_speed: float = float(opts.get("speed_end", speed))
+	for i: int in points.size():
+		var a: Vector3 = points[i]
+		var to: Vector3 = points[i + 1] - a if i + 1 < points.size() else a - points[i - 1]
+		var o: Dictionary = {}
+		for key: String in opts:
+			if key != "speed_end":
+				o[key] = opts[key]
+		if i + 1 < points.size() and not o.has("next"):
+			o["next"] = points[i + 1] + Vector3(0, 1.0, 0)
+		var k: float = float(i) / float(maxi(points.size() - 1, 1))
+		out.append(boost_gate(a, _yaw_for(Vector3(to.x, 0.0, to.z)), lerpf(speed, end_speed, k), width, o))
+	return out
+
+
+func _flow_mat(size: Vector3, speed: float) -> ShaderMaterial:
+	var m := ShaderMaterial.new()
+	m.shader = preload("res://visual/strip.gdshader")
+	m.set_shader_parameter("half_size", size * 0.5)
+	var col: Color = Look.c("accent2").lerp(Color(0.55, 1.0, 0.9), 0.3)
+	m.set_shader_parameter("arrow_color", Color(col.r, col.g, col.b))
+	m.set_shader_parameter("base_color", Look.c("alt_top").darkened(0.55))
+	m.set_shader_parameter("scroll_speed", speed)
+	m.set_shader_parameter("glow", 1.0)
+	return m
+
+
+## Flow slope: a slab whose surface keeps speed (no over-speed bleed) and adds speed downhill.
+## `top` is the middle of its top face; it DESCENDS toward local -Z by `pitch_deg` (negative = climbs),
+## yaw turns it. size = (width, thickness, length along the slope). opts: gain (0.55), cap (30), carve.
+## Join it to neighbours so the tops meet (flow_slope_between does that from two end points).
+## Route: r_flow steps along it. No clips of its own (the player's wind is workstream S3).
+func flow_slope(top: Vector3, size: Vector3, pitch_deg: float = 12.0, yaw_deg: float = 0.0, opts: Dictionary = {}) -> FlowSurface:
+	var body := FlowSurface.new()
+	for key: String in opts:
+		body.set(key, opts[key])
+	var shape := BoxShape3D.new()
+	shape.size = size
+	var cs := CollisionShape3D.new()
+	cs.shape = shape
+	body.add_child(cs)
+	var bm := BoxMesh.new()
+	bm.size = size
+	var mi := MeshInstance3D.new()
+	mi.mesh = bm
+	mi.material_override = _flow_mat(size, 3.5)
+	body.add_child(mi)
+	body.rotation_degrees = Vector3(-pitch_deg, yaw_deg, 0)
+	_add(body, top)
+	body.translate_object_local(Vector3(0, -size.y * 0.5, 0))
+	return body
+
+
+## Flow slope from the middle of its top edge at `a` to the middle of its far top edge at `b`
+## (so a is where it starts, b where it ends; a above b = downhill). Length and angle follow.
+func flow_slope_between(a: Vector3, b: Vector3, width: float = 8.0, thick: float = 0.6, opts: Dictionary = {}) -> FlowSurface:
+	var d: Vector3 = b - a
+	var flat := Vector3(d.x, 0.0, d.z)
+	var pitch: float = rad_to_deg(atan2(-d.y, maxf(flat.length(), 0.001)))
+	return flow_slope((a + b) * 0.5, Vector3(width, thick, d.length()), pitch, _yaw_for(flat), opts)
+
+
+## Launch arc: a ramp starting at `foot` (middle of its low edge, on a deck at feet height), climbing
+## `pitch_deg` over `length` m toward local -Z (turned by `yaw_deg`) to a lip `length * sin(pitch)` higher.
+## Whoever reaches the lip leaves with their speed kept and an upward kick: arc.lip(),
+## arc.launch_velocity(hs), arc.landing(hs, y). opts: min_speed, cap, lift.
+## Route: r_launch(arc, landing). Clip: flow_launch.
+func launch_arc(foot: Vector3, yaw_deg: float = 0.0, pitch_deg: float = 24.0, width: float = 6.0, length: float = 9.0, opts: Dictionary = {}) -> LaunchArc:
+	var a := LaunchArc.new()
+	a.pitch_deg = pitch_deg
+	a.width = width
+	a.length = length
+	for key: String in opts:
+		a.set(key, opts[key])
+	a.rotation_degrees.y = yaw_deg
+	_add(a, foot)
+	return a
