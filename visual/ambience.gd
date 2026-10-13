@@ -877,10 +877,29 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 			]
 		"hyperloop":
 			return [
-				# PLACEHOLDER - the Hyperloop level agent replaces this case (near / mid / far layers)
-				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
-					"color": Color(0.70, 0.95, 1.00), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+				# near: fine motes of light and the odd bright speck streaming past, as if the air itself were ionised
+				{"depth": "near", "amount": 70, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.09,
+					"pick": PackedColorArray([Color(0.7, 2.0, 2.6), Color(2.2, 2.4, 2.6), Color(2.6, 1.6, 1.4)]),
+					"speed": Vector2(0.05, 0.4), "spread": 180.0, "curve": "pop",
 					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "near", "amount": 26, "lifetime": 0.8, "facing": "velocity", "tex": Fx.Tex.SPARK,
+					"size": Vector2(0.02, 0.7), "color": Color(0.8, 2.2, 2.8, 0.55), "dir": Vector3(0.0, -0.1, 1.0),
+					"spread": 4.0, "speed": Vector2(14.0, 20.0), "fade": PackedFloat32Array([0.0, 1.0, 0.0])},
+				# mid: slow ribbons of cool mist sliding between the decks
+				{"depth": "mid", "amount": 34, "lifetime": 9.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 9.0,
+					"radius": 40.0, "pick": PackedColorArray([Color(1.0, 1.0, 1.0, 0.16), Color(0.82, 0.94, 1.0, 0.14)]),
+					"speed": Vector2(0.3, 0.9), "dir": Vector3(1.0, 0.1, 0.3), "spread": 20.0, "angle": Vector2(0, 360),
+					"curve": "puff", "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 60, "lifetime": 6.0, "tex": Fx.Tex.STAR, "size": 0.32, "radius": 28.0,
+					"pick": PackedColorArray([Color(0.6, 2.0, 2.6), Color(2.4, 2.2, 2.2)]),
+					"dir": Vector3.UP, "spread": 25.0, "speed": Vector2(0.4, 1.2), "curve": "pop"},
+				# far: train headlamps streaking through the distant tubes, and a dust of light round the spire
+				{"depth": "far", "amount": 9, "lifetime": 1.6, "facing": "velocity", "tex": Fx.Tex.SPARK,
+					"size": Vector2(0.5, 14.0), "radius": 120.0, "color": Color(1.6, 2.4, 2.8, 0.8), "dir": Vector3(1.0, 0.0, 0.2),
+					"spread": 3.0, "speed": Vector2(80.0, 110.0), "fade": PackedFloat32Array([0.0, 1.0, 0.0])},
+				{"depth": "far", "amount": 90, "lifetime": 8.0, "tex": Fx.Tex.STAR, "size": 1.2, "radius": 90.0,
+					"pick": PackedColorArray([Color(1.2, 2.2, 2.8), Color(2.8, 2.0, 1.8)]),
+					"dir": Vector3.UP, "spread": 30.0, "speed": Vector2(1.0, 3.0), "curve": "pop"},
 			]
 		"lotus":
 			return [
