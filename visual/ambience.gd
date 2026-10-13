@@ -849,10 +849,24 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 			]
 		"aurora":
 			return [
-				# PLACEHOLDER - the Aurora Run level agent replaces this case (near / mid / far layers)
-				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
-					"color": Color(0.55, 1.00, 0.80), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+				# near: fine diamond dust glittering in the aurora light, a few slow flakes
+				{"depth": "near", "amount": 120, "lifetime": 3.0, "tex": Fx.Tex.STAR, "size": 0.1,
+					"color": Color(1.6, 2.2, 2.6), "speed": Vector2(0.05, 0.3), "spread": 180.0, "turbulence": 0.5, "curve": "pop"},
+				{"depth": "near", "amount": 90, "lifetime": 3.5, "tex": Fx.Tex.DOT, "additive": false, "size": 0.07,
+					"color": Color(1.0, 1.0, 1.0, 0.85), "dir": Vector3(0.3, -1, 0.2), "spread": 25.0, "speed": Vector2(0.5, 1.2),
+					"gravity": Vector3(0.1, -0.25, 0.0), "turbulence": 0.6, "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# mid: lazy motes of green, teal and violet light drifting up the mountain
+				{"depth": "mid", "amount": 50, "lifetime": 6.0, "tex": Fx.Tex.DOT, "size": 0.3,
+					"pick": PackedColorArray([Color(0.5, 2.4, 1.4, 0.6), Color(1.6, 0.8, 2.6, 0.6), Color(0.6, 1.8, 2.4, 0.6)]),
+					"dir": Vector3.UP, "spread": 40.0, "speed": Vector2(0.2, 0.8), "turbulence": 0.9, "curve": "pop",
 					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# far: faint veils of spindrift sweeping the skyline and bigger lights rising off the ridges
+				{"depth": "far", "amount": 30, "lifetime": 10.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 16.0, "radius": 80.0,
+					"color": Color(0.35, 0.7, 0.8, 0.12), "speed": Vector2(1.0, 2.0), "dir": Vector3(0.6, 0.1, 0.4), "spread": 15.0,
+					"angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.7, 0.7, 0.0])},
+				{"depth": "far", "amount": 60, "lifetime": 8.0, "tex": Fx.Tex.DOT, "size": 1.2, "radius": 70.0,
+					"pick": PackedColorArray([Color(0.5, 2.4, 1.4, 0.5), Color(1.5, 0.8, 2.6, 0.5)]),
+					"dir": Vector3.UP, "spread": 30.0, "speed": Vector2(0.3, 1.0), "curve": "pop"},
 			]
 		"skysurf":
 			return [
