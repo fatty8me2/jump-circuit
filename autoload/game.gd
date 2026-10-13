@@ -34,10 +34,10 @@ const LEVELS: Array[Dictionary] = [
 	{"id": "arcade", "name": "Pixel Panic", "scene": "res://levels/level_28_arcade.tscn", "blurb": "Inside a retro arcade cabinet. Blocks fall, chompers chase, and the screen keeps scrolling.", "medals": {"gold": 145, "silver": 175, "bronze": 220}},
 	{"id": "siege", "name": "Castle Siege", "scene": "res://levels/level_32_siege.tscn", "blurb": "Storm a castle mid-siege. Boulders fall, rams swing, oil pours - and the trebuchet is your ride in.", "medals": {"gold": 135, "silver": 165, "bronze": 205}},
 	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_24_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon.", "medals": {"gold": 180, "silver": 215, "bronze": 270}},
-	{"id": "aurora", "name": "Aurora Run", "scene": "res://levels/level_33_aurora.tscn", "blurb": "A clear night descent under a rippling aurora. Carve the slopes, grind the ridgelines, find your flow.", "medals": {"gold": 120, "silver": 150, "bronze": 190}, "flow": true},  # PROVISIONAL
-	{"id": "skysurf", "name": "Sky Surf", "scene": "res://levels/level_34_skysurf.tscn", "blurb": "A pastel sunrise cloudscape. Chain the rings, ride the wind ribbons, never touch down.", "medals": {"gold": 120, "silver": 150, "bronze": 190}, "flow": true},  # PROVISIONAL
-	{"id": "hyperloop", "name": "Hyperloop", "scene": "res://levels/level_35_hyperloop.tscn", "blurb": "Chrome transit tubes and mag-rails at dawn. Rail to rail, gate to gate, at full speed.", "medals": {"gold": 120, "silver": 150, "bronze": 190}, "flow": true},  # PROVISIONAL
-	{"id": "lotus", "name": "Lotus Drift", "scene": "res://levels/level_36_lotus.tscn", "blurb": "A misty water garden at dusk. Slide the streams, ride the lantern rings, stay calm.", "medals": {"gold": 120, "silver": 150, "bronze": 190}, "flow": true},  # PROVISIONAL
+	{"id": "aurora", "name": "Aurora Run", "scene": "res://levels/level_33_aurora.tscn", "blurb": "A clear night descent under a rippling aurora. Carve the slopes, grind the ridgelines, find your flow.", "medals": {"gold": 55, "silver": 75, "bronze": 150}, "flow": true},
+	{"id": "skysurf", "name": "Sky Surf", "scene": "res://levels/level_34_skysurf.tscn", "blurb": "A pastel sunrise cloudscape. Chain the rings, ride the wind ribbons, never touch down.", "medals": {"gold": 55, "silver": 80, "bronze": 145}, "flow": true},
+	{"id": "hyperloop", "name": "Hyperloop", "scene": "res://levels/level_35_hyperloop.tscn", "blurb": "Chrome transit tubes and mag-rails at dawn. Rail to rail, gate to gate, at full speed.", "medals": {"gold": 55, "silver": 75, "bronze": 160}, "flow": true},
+	{"id": "lotus", "name": "Lotus Drift", "scene": "res://levels/level_36_lotus.tscn", "blurb": "A misty water garden at dusk. Slide the streams, ride the lantern rings, stay calm.", "medals": {"gold": 50, "silver": 75, "bronze": 160}, "flow": true},
 ]
 ## Medal targets ("medals" in each LEVELS entry, whole seconds) come from the route bot:
 ## Gold = the fastest bot route x 1.12, Silver x 1.35, Bronze x 1.7, each rounded UP to 5 s.
@@ -78,6 +78,10 @@ const BOT_TIMES: Dictionary = {
 	"arcade": 127.6,
 	"siege": 119.8,
 	"ascent": 158.7,
+	"lotus": 43.9,
+	"hyperloop": 46.1,
+	"skysurf": 47.0,
+	"aurora": 45.2,
 }
 const MEDAL_MULT: Dictionary = {"gold": 1.12, "silver": 1.35, "bronze": 1.7}
 const TITLE_SCENE: String = "res://ui/title.tscn"

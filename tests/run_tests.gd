@@ -4061,7 +4061,7 @@ func test_zc_remote_racer_cosmetics() -> void:
 const _FLOW_HATLESS: Array[String] = ["aurora", "skysurf", "hyperloop", "lotus"]
 
 ## The four worlds still being built carry provisional medal times (no bot time yet).
-const _ZM_PROVISIONAL: Array[String] = ["aurora", "skysurf", "hyperloop", "lotus"]
+const _ZM_PROVISIONAL: Array[String] = []
 
 
 ## A levels dict with these bests (id -> seconds), as SaveData stores them.
@@ -4117,6 +4117,15 @@ func test_zm_medal_targets_follow_bot_times() -> void:
 		var bot: float = float(Game.BOT_TIMES[id])
 		var m: Dictionary = info["medals"]
 		check(float(m["gold"]) >= bot, "%s: Gold %d is never below the fastest bot route (%.1f s)" % [id, int(m["gold"]), bot])
+		if bool(info.get("flow", false)):
+			# Flow courses: Gold from the flow line (x 1.12), Silver x 1.6 of it, Bronze at about the
+			# safe line's pace, so a clean safe-line run still earns a medal
+			var g_raw: float = bot * float(Game.MEDAL_MULT["gold"])
+			check(float(m["gold"]) >= g_raw - 0.001 and float(m["gold"]) < g_raw + 5.0 and int(m["gold"]) % 5 == 0,
+				"%s gold = flow bot x 1.12 rounded up to 5 s (%d vs %.1f)" % [id, int(m["gold"]), g_raw])
+			check(int(m["gold"]) < int(m["silver"]) and int(m["silver"]) < int(m["bronze"]) and int(m["silver"]) % 5 == 0 and int(m["bronze"]) % 5 == 0,
+				"%s flow medals ascend in whole 5 s (%s)" % [id, m])
+			continue
 		for k: String in ["gold", "silver", "bronze"]:
 			var raw: float = bot * float(Game.MEDAL_MULT[k])
 			check(float(m[k]) >= raw - 0.001 and float(m[k]) < raw + 5.0 and int(m[k]) % 5 == 0,
