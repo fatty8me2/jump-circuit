@@ -894,15 +894,7 @@ func boost_chain(points: Array[Vector3], speed: float = 22.0, width: float = 5.0
 
 
 func _flow_mat(size: Vector3, speed: float) -> ShaderMaterial:
-	var m := ShaderMaterial.new()
-	m.shader = preload("res://visual/strip.gdshader")
-	m.set_shader_parameter("half_size", size * 0.5)
-	var col: Color = Look.c("accent2").lerp(Color(0.55, 1.0, 0.9), 0.3)
-	m.set_shader_parameter("arrow_color", Color(col.r, col.g, col.b))
-	m.set_shader_parameter("base_color", Look.c("alt_top").darkened(0.55))
-	m.set_shader_parameter("scroll_speed", speed)
-	m.set_shader_parameter("glow", 1.0)
-	return m
+	return FlowSurface.material(size, speed)
 
 
 ## Flow slope: a slab whose surface keeps speed (no over-speed bleed) and adds speed downhill.
@@ -955,3 +947,42 @@ func launch_arc(foot: Vector3, yaw_deg: float = 0.0, pitch_deg: float = 24.0, wi
 	a.rotation_degrees.y = yaw_deg
 	_add(a, foot)
 	return a
+
+
+## Grind rail: a smooth Catmull-Rom path through `points` (world positions of the line the rider's feet
+## follow; 2 or more, in the direction of travel; an Array[Vector3] or a PackedVector3Array). Land on it or
+## jump at it within `snap` (1.2 m) and the rider is carried along it: faster downhill, slower uphill, never
+## under `min_speed` (9), up to `max_speed` (30). Jump to leave (tangent velocity + `hop` 6), or reach the end
+## (tangent velocity + `end_hop` 2). Catch rails under it with a deck or net: missing a rail never kills.
+## opts: snap, min_speed, max_speed, slope_accel, hop, end_hop, lean, post_to_y (run support posts down to this
+## world y), post_every.
+## Route: r_rail(rail, board_point, {from, leave, to, chain, chain_next}). Clips: flow_rail_land,
+## flow_rail_grind (loop), flow_rail_leave.
+func rail(points: Variant, opts: Dictionary = {}) -> GrindRail:
+	var r := GrindRail.new()
+	r.points = PackedVector3Array(points)
+	for key: String in opts:
+		r.set(key, opts[key])
+	root.add_child(r)
+	return r
+
+
+## Half-pipe: a carved trough from `start` to `end` (world points on the bottom centre line, the end can be
+## lower for a pipe that descends), `width` across and `depth` deep at its deepest, easing in from the ground
+## over `taper` m at each end (so you enter and leave flush with decks at the start / end height). It keeps and
+## builds speed (a FlowSurface). opts: taper (8), flat (0..0.6, a flat floor that wide), shelf (1.5), guard
+## (true), slices (20), gain, cap, carve. Depth is limited so the walls stay walkable (about 41 degrees).
+## Route: r_flow(pipe.carve_points(swings, reach)) or any points from pipe.surface_point(u, side).
+func halfpipe(start: Vector3, end: Vector3, width: float = 10.0, depth: float = 2.0, opts: Dictionary = {}) -> HalfPipe:
+	var h := HalfPipe.new()
+	var d: Vector3 = end - start
+	var flat := Vector3(d.x, 0.0, d.z)
+	h.width = width
+	h.depth = depth
+	h.length = d.length()
+	h.pitch_deg = rad_to_deg(atan2(-d.y, maxf(flat.length(), 0.001)))
+	for key: String in opts:
+		h.set(key, opts[key])
+	h.rotation_degrees = Vector3(-h.pitch_deg, _yaw_for(flat), 0.0)
+	_add(h, start)
+	return h

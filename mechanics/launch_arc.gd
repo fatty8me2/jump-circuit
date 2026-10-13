@@ -23,7 +23,7 @@ var ramp: FlowSurface
 var launches: int = 0
 
 const EARLY: int = -50
-const REARM_TICKS: int = 36
+const REARM_SECONDS: float = 0.6
 
 var _lip_local: Vector3 = Vector3.ZERO
 var _area: Area3D
@@ -127,7 +127,7 @@ func _physics_process(dt: float) -> void:
 	if p == null:
 		return
 	var now: int = Engine.get_physics_frames()
-	if now - _last_tick < REARM_TICKS:
+	if now - _last_tick < int(REARM_SECONDS * float(Engine.physics_ticks_per_second)):
 		return
 	var fwd: Vector3 = forward()
 	var hv := Vector3(p.velocity.x, 0.0, p.velocity.z)
