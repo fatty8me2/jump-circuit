@@ -682,6 +682,32 @@ func r_zipline(zip: Zipline, point: Vector3, radius: float, to: Vector3) -> void
 	route.append({"kind": "k_zip", "zip": zip, "point": point, "radius": radius, "to": to})
 
 
+## Flow kit (docs/FLOW_KIT.md): follow a path at speed by pure pursuit, on the ground or in the air.
+## `pts` are world points along the line (ring centres, gate floor points, slope and half-pipe waypoints);
+## the step ends when the last one is reached or passed within `tol` metres. Use it for every high-speed
+## stretch: rings, gates, flow slopes, half-pipe carving. Keep path curves wider than ~25 m radius at 25 m/s.
+func r_flow(pts: Array[Vector3], tol: float = 2.0) -> void:
+	route.append({"kind": "f_line", "pts": pts, "tol": tol})
+
+
+## Flow kit: run up a launch arc's ramp, get thrown at the lip, steer to `to` (a feet position on the
+## landing). Wire it after an r_flow that ends on the ramp's centre line, 10 m or more before the lip.
+func r_launch(arc: LaunchArc, to: Vector3) -> void:
+	route.append({"kind": "f_launch", "arc": arc, "to": to})
+
+
+## Flow kit grind rail (docs/FLOW_KIT.md). `board` is a world point on the rail to aim for. opts:
+##   from        a spot to jump from toward `board` (omit to walk / slide onto the rail start)
+##   leave       a world point on the rail to jump off at (omit to ride to the end)
+##   to          the landing (a feet position) after leaving; required unless chain_next
+##   chain       true when the previous r_rail had chain_next: this one starts in the air
+##   chain_next  true to be done as soon as another rail catches you (rail to rail)
+func r_rail(rail: GrindRail, board: Vector3, opts: Dictionary = {}) -> void:
+	var step: Dictionary = {"kind": "f_rail", "rail": rail, "board": board}
+	step.merge(opts, true)
+	route.append(step)
+
+
 # ---- run it again (race laps) ---------------------------------------------------------
 # After your first race finish the results offer "Run It Again": you go back to the start
 # and run lap after lap. The first finish time, the save and your placing never change;
