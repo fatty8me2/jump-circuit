@@ -2611,6 +2611,7 @@ def stingers():
                                   B.add(0.36, me.synth_pluck(r, float(mtof(83)), 0.5, 0.8), 0.35, 0.0, {"hall": 0.4}),
                                   B.add(0.0, me.fm_bell(r, float(mtof(95)), 1.0, 0.4), 0.12, 0.0, {"hall": 0.4})))
     stingers_new()
+    stingers_flow()
     # a new personal best: a rising sparkle (effects bus, over the results music)
     r = me.rng_for("new_best")
     B = me.Buffer(2.4, 120.0)
@@ -3385,6 +3386,503 @@ def stingers_new():
                                  B.add(0.2, me.brass(r, float(mtof(77)), 0.5, 0.9, "trumpet", voices=2, fp=True), 0.26, 0.2, {"hall": 0.3})))
 
 
+# ==========================================================================
+# THE FLOW WORLDS (v2.1): aurora, skysurf, hyperloop, lotus. Speed-and-flow levels: the scores
+# are steady, driving and hypnotic. Each is 64 bars (intro 8, A 8, A2 8, JUMP theme A 8,
+# JUMP theme B 8, break 8, A reprise 8, outro 8). The outro is the intro's texture, so the loop
+# breathes. The hi layer is the ZEN layer: it can swell in over any bar, so it is a
+# continuous lush bed (sustained strings + choir + shimmer) with a soaring line over the top,
+# never tied to one section.
+# ==========================================================================
+FLOW_SEC = (("intro", 0, 8), ("a", 8, 8), ("a2", 16, 8), ("jumpA", 24, 8), ("jumpB", 32, 8),
+            ("break", 40, 8), ("a3", 48, 8), ("outro", 56, 8))
+
+
+def _flow_sections(ch_a, ch_a2, ch_jump_a, ch_jump_b, ch_brk):
+    chs = {"intro": ch_a, "a": ch_a, "a2": ch_a2, "jumpA": ch_jump_a, "jumpB": ch_jump_b, "break": ch_brk,
+           "a3": ch_a, "outro": ch_a}
+    return [(n, b, nb, chs[n]) for n, b, nb in FLOW_SEC]
+
+
+def _jump_ev(T, layer, bus, which, bar0, inst, gain, sends, transpose, **kw):
+    """The leitmotif's A or B phrase (with its run-up pickup) from bar0."""
+    body = JUMP_A if which == "A" else JUMP_B
+    line(T, layer, bus, JUMP_PICKUP + " | " + body, bar0, inst, gain, sends, pickup=1.0, transpose=transpose, **kw)
+
+
+# --------------------------------------------------------------------------
+# AURORA RUN - F# minor (the JUMP theme in its relative A major), 124 bpm. A clear night
+# descent under rippling lights: wide shimmering pads, a pulsing sidechained arpeggio, a soft
+# four-on-the-floor and a glassy lead. Hi layer (ZEN): a high string/choir bed, glass shimmer, a
+# glockenspiel cascade and a violin line that doubles the tune.
+# --------------------------------------------------------------------------
+AUR_CH = "| F#m | D | A | E | F#m | D | A | E |"
+AUR_A2_CH = "| D | A | E | F#m | D | A | Bm | E7 |"
+AUR_BRK_CH = "| F#m | D | Bm | E7 |"
+AUR_A = ("C#6q. B5e A5q F#5q | A5q. B5e D6h | C#6q. D6e E6q C#6q | B5h. r q | "
+         "A5q C#6q F#6h | E6q. D6e C#6q A5q | C#6q. D6e E6q F#6q | E6h r h |")
+AUR_A2 = ("F#5q A5q D6h | E6q. C#6e A5q E5q | G#5q B5q E6h | F#6q. E6e C#6h | "
+          "A5q D6q F#6h | E6q. C#6e A5q E6q | D6q. F#6e B6q A6q | G#6h. r q |")
+AUR_BRK = "C#6w | A5w | B5w | G#5w | C#6h E6h | F#6w | F#6h D6h | G#6w |"
+
+
+def piece_aurora():
+    T = me.Track("aurora", 124, 64, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("sky", me.make_ir(r, rt60=4.4, predelay=0.03, damp=5600, er=0.3, er_span=0.09))
+    T.reverb("room", me.make_ir(r, rt60=0.9, predelay=0.008, damp=6500, er=0.7, er_span=0.02))
+    T.delay("echo", beats=0.75, fb=0.45, damp=4500, ret=0.4)
+    for b_, e in (("lead", std_eq(220, 11000)), ("keys", std_eq(150, 12000)), ("drums", std_eq(35, 14000)),
+                  ("strings", std_eq(60, 10500)), ("choir", std_eq(100, 8500)), ("air", std_eq(200, 14000))):
+        T.bus(b_, eq=e)
+    T.bus("pad", eq=std_eq(110, 11000), pump=0.4, chorus=(2.0, 0.4, 10.0, 0.35))
+    T.bus("arp", eq=std_eq(250, 12500), pump=0.25)
+    T.bus("bass", eq=std_eq(30, 2200), pump=0.6)
+    SK = {"sky": 0.4}
+    AR = {"sky": 0.3, "echo": 0.3}
+    LD = {"sky": 0.4, "echo": 0.25}
+    kck = bank("kick_soft", lambda r: me.kick(r, "soft"), 2)
+    hat = bank("hat_closed", lambda r: me.hat(r, "closed"), 4)
+    ohat = bank("hat_open", lambda r: me.hat(r, "open"), 2)
+    clp = bank("clap_tight", lambda r: me.clap(r, 1.0, True), 3)
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    LEAD = I(me.synth_lead, wave="saw", cutoff=2600.0, vib=0.004, att=0.03)
+    for name, bar0, nb, ch in _flow_sections(AUR_CH, AUR_A2_CH, tx_chords(JUMP_A_CHORDS, -3), tx_chords(JUMP_B_CHORDS, -3),
+                                             AUR_BRK_CH):
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        quiet = name in ("intro", "outro", "break")
+        pad(T, "base", "pad", P, I(me.pad_warm, att=0.9, rel=1.6, cutoff=1500.0), center=58, count=3, gain=0.11, sends=SK, vel=0.55)
+        pad(T, "base", "pad", P, I(me.pad_glass, att=1.0, rel=2.0), center=71, count=3, gain=0.08, sends=SK, vel=0.6)
+        arp(T, "base", "arp", P, [0, 1, 2, 3, 2, 1, 3, 2] if quiet else [0, 1, 2, 3, 4, 3, 2, 1, 0, 2, 1, 3, 2, 4, 3, 1],
+            0.5 if quiet else 0.25, M_SPLUCK, lo=60, hi=90, gain=0.08 if quiet else 0.07, sends=AR,
+            vels=(0.9, 0.45, 0.65, 0.45) if not quiet else (0.8, 0.5), pan_fn=lambda k: 0.35 * (1 if k % 2 else -1))
+        if not quiet:
+            bass(T, "base", "bass", P, [(0, 0, 0.45, 0.9), (0.5, 12, 0.3, 0.5), (1, 0, 0.45, 0.8), (1.5, 0, 0.3, 0.5),
+                                        (2, 0, 0.45, 0.85), (2.5, 12, 0.3, 0.5), (3, 0, 0.45, 0.8), (3.5, 7, 0.3, 0.5)],
+                 M_SUB, lo=30, hi=42, gain=0.3)
+            kit(T, "base", "drums", bars, {"kick": (kck, "x...x...x...x...", 0.5), "oh": (ohat, "..x...x...x...x.", 0.09),
+                                          "hat": (hat, "g.g.g.g.g.g.g.g.", 0.08)}, sends={"room": 0.1}, pump=("kick",))
+            if name != "a":
+                kit(T, "base", "drums", bars, {"clp": (clp, "....x.......x...", 0.2),
+                                              "hat2": (hat, ".g.g.g.g.g.g.g.g", 0.06)}, sends={"room": 0.1})
+        else:
+            kit(T, "base", "drums", bars, {"hat": (hat, "..g...g...g...g.", 0.07)}, sends={"room": 0.1})
+            if name == "break":   # a heartbeat of soft kicks keeps the pump alive
+                kit(T, "base", "drums", bars, {"kick": (kck, "x.......x.......", 0.34)}, sends={"room": 0.1}, pump=("kick",))
+        # hi: a continuous bed that can swell in anywhere
+        pad(T, "hi", "strings", P, I(me.strings, att=0.5, rel=0.9, bright=0.5, voices=3), center=69, count=3, gain=0.12,
+            sends={"sky": 0.5}, vel=0.6)
+        pad(T, "hi", "choir", P, CHOIR_A, center=62, count=3, gain=0.1, sends={"sky": 0.65}, vel=0.6)
+        pad(T, "hi", "air", P, I(me.pad_glass, att=0.8, rel=1.6, shimmer=True), center=84, count=2, gain=0.06, sends={"sky": 0.6},
+            vel=0.6)
+        arp(T, "hi", "air", P, [0, 1, 2, 3, 4, 3, 2, 1], 0.5, M_GLOCK, lo=84, hi=106, gain=0.035,
+            sends={"sky": 0.4, "echo": 0.4}, vels=(0.8, 0.45, 0.6, 0.45), pan_fn=lambda k: 0.5 * (1 if k % 2 else -1))
+        if bar0 not in (0, 56):
+            ring(T, "hi", "air", bar0 * 4 - 3, me.reverse_swell(r, 3, T.spb, float(mtof(78)), 0.7), 0.14, 0.0, SK)
+    # the tune
+    line(T, "base", "lead", AUR_A, 8, LEAD, 0.24, LD)
+    line(T, "base", "keys", AUR_A, 8, M_VIBES, 0.09, LD, legato=False, transpose=12)
+    line(T, "base", "lead", AUR_A2, 16, LEAD, 0.24, LD)
+    line(T, "base", "keys", AUR_A2, 16, M_VIBES, 0.1, LD, legato=False, transpose=12)
+    _jump_ev(T, "base", "lead", "A", 24, LEAD, 0.26, LD, -3)
+    _jump_ev(T, "base", "keys", "A", 24, M_VIBES, 0.09, LD, -3 + 12, legato=False)
+    _jump_ev(T, "base", "lead", "B", 32, LEAD, 0.26, LD, -3)
+    _jump_ev(T, "base", "keys", "B", 32, M_VIBES, 0.09, LD, -3 + 12, legato=False)
+    line(T, "base", "lead", AUR_BRK, 40, M_VIBES, 0.2, {"sky": 0.6, "echo": 0.4}, legato=False)
+    line(T, "base", "lead", AUR_A, 48, LEAD, 0.26, LD)
+    line(T, "base", "keys", AUR_A, 48, M_VIBES, 0.1, LD, legato=False, transpose=12)
+    line(T, "base", "keys", AUR_A, 48, M_GLOCK, 0.05, LD, legato=False, transpose=24)
+    # builds into the JUMP theme, the break's return and the last A
+    for bar in (24, 32, 48):
+        T.add("base", "drums", bar * 4 - 8, me.riser(r, 8, T.spb, 0.7, 400.0, 7000.0), 0.12, 0.0, SK, 0.0)
+        kit(T, "base", "drums", [bar - 1], {"snr": (clp, "xxxxxxxxxxxxxxxx", 0.17)})
+    for bar in (8, 16, 24, 32, 48):
+        ring(T, "base", "drums", bar * 4, crash[bar % 2], 0.12, 0.3, SK)
+    ring(T, "base", "keys", 0, me.bell(r, float(mtof(78)), 6.0, 0.55, kind="church"), 0.08, 0.3, SK)
+    # hi: the violins carry the tune in a lush unison above everything
+    for bar0, txt in ((8, AUR_A), (16, AUR_A2), (40, AUR_BRK), (48, AUR_A)):
+        line(T, "hi", "strings", txt, bar0, VIOLINS, 0.17, SK)
+    _jump_ev(T, "hi", "strings", "A", 24, VIOLINS, 0.17, SK, -3)
+    _jump_ev(T, "hi", "strings", "B", 32, VIOLINS, 0.17, SK, -3)
+    _jump_ev(T, "hi", "air", "A", 24, M_GLOCK, 0.07, LD, -3 + 12, legato=False)
+    _jump_ev(T, "hi", "air", "B", 32, M_GLOCK, 0.07, LD, -3 + 12, legato=False)
+    T.render(rms_db=-14.5, hi_gain=1.25)
+
+
+# --------------------------------------------------------------------------
+# SKY SURF - D major, 128 bpm. Airy pop at sunrise: steel-string plucks and strums, a whistle
+# and flute tune, a bright electric piano, a light breakbeat and a bouncing sub bass; the JUMP
+# theme as a whistled hook in D. Hi layer (ZEN): strings and "ooh" choir bed, harp cascades,
+# piccolo and glockenspiel sparkle, ride and tambourine.
+# --------------------------------------------------------------------------
+SKY_CH = "| D | A | Bm | G | D | A | G | A |"
+SKY_A2_CH = "| G | D | Em | A | G | D | Bm | A |"
+SKY_BRK_CH = "| Bm | G | D | A |"
+SKY_A = ("F#5e A5e D6e A5e F#5q A5q | E5e A5e C#6e A5e E6h | D6q. C#6e B5q F#5q | G5e B5e D6e B5e G5q B5q | "
+         "A5e D6e F#6e D6e A5q F#5q | E6e C#6e A5e C#6e E6h | D6q B5q G5q B5q | A5q E5q A5h |")
+SKY_A2 = ("B5q. A5e G5q D6q | A5q. F#5e A5h | G5e B5e E6e B5e G5q E6q | E6q. C#6e A5h | "
+          "D6q. B5e G5q B5q | A5q. F#5e D5q F#5q | D6e F#6e B6e F#6e D6q B5q | C#6h. E6q |")
+SKY_BRK = "F#5w | G5w | A5w | C#6w | F#6h D6h | D6w | F#6h A6h | E6w |"
+
+
+def piece_skysurf():
+    T = me.Track("skysurf", 128, 64, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("air", me.make_ir(r, rt60=2.6, predelay=0.025, damp=7000, er=0.5, er_span=0.06))
+    T.reverb("room", me.make_ir(r, rt60=0.8, predelay=0.006, damp=7500, er=0.7, er_span=0.02))
+    T.delay("echo", beats=0.75, fb=0.35, damp=5000, ret=0.3)
+    for b_, e in (("guitar", lambda f: me.hp(f, 100) * me.bump(f, 3200, 2, 0.8)), ("lead", std_eq(220, 12000)),
+                  ("keys", std_eq(140, 12000)), ("drums", std_eq(35, 14000)), ("strings", std_eq(60, 11000)),
+                  ("choir", std_eq(100, 8500)), ("harp", std_eq(80, 12000)), ("pad", std_eq(100, 11000))):
+        T.bus(b_, eq=e)
+    T.bus("bass", eq=std_eq(30, 2400), pump=0.3)
+    AIR = {"air": 0.3}
+    LD = {"air": 0.35, "echo": 0.2}
+    kck = bank("kick_soft", lambda r: me.kick(r, "soft"), 2)
+    snr = bank("snare_piccolo", lambda r: me.snare(r, "piccolo"), 3)
+    brush = bank("snare_brush", lambda r: me.snare(r, "brush"), 3)
+    hat = bank("hat_closed", lambda r: me.hat(r, "closed"), 4)
+    ohat = bank("hat_open", lambda r: me.hat(r, "open"), 2)
+    ride = bank("ride", lambda r: me.cymbal(r, "ride"), 2)
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    EP = I(me.epiano, trem=0.3)
+    for name, bar0, nb, ch in _flow_sections(SKY_CH, SKY_A2_CH, tx_chords(JUMP_A_CHORDS, 2), tx_chords(JUMP_B_CHORDS, 2),
+                                             SKY_BRK_CH):
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        quiet = name in ("intro", "outro", "break")
+        pad(T, "base", "pad", P, I(me.pad_glass, att=0.7, rel=1.4), center=66, count=3, gain=0.09, sends=AIR, vel=0.55)
+        pad(T, "base", "strings", P, STRINGS_SOFT, center=62, count=3, gain=0.07, sends=AIR, vel=0.5)
+        if name in ("a", "jumpA", "break", "intro", "outro"):
+            arp(T, "base", "guitar", P, [0, 2, 1, 3, 2, 1, 3, 2], 0.5, M_GUITAR_STEEL, lo=55, hi=79, gain=0.2, sends=AIR,
+                vels=(0.85, 0.5, 0.65, 0.5), pan_fn=lambda k: 0.25 * (1 if k % 2 else -1))
+        else:
+            strum(T, "base", "guitar", P, "D.xUD.xUD.xU.xDU", M_GUITAR_STEEL, center=62, gain=0.24, sends=AIR, step=0.25, vel=0.7)
+            arp(T, "base", "guitar", P, [0, 2, 1, 3, 2, 1, 3, 2], 0.5, M_GUITAR_STEEL, lo=67, hi=85, gain=0.1, sends=AIR,
+                vels=(0.7, 0.45))
+        if not quiet:
+            stabs(T, "base", "keys", P, (1.5, 3.0), EP, center=64, count=3, gain=0.07, sends=AIR, vel=0.65, dur=0.35)
+            bass(T, "base", "bass", P, [(0, 0, 0.9, 0.9), (1.5, 0, 0.4, 0.6), (2, 7, 0.9, 0.8), (3.5, 12, 0.4, 0.55)],
+                 M_SUB, lo=30, hi=42, gain=0.3)
+            # a light breakbeat: ghosted snare, kick on the "and"
+            kit(T, "base", "drums", bars, {"kick": (kck, "x.....x...x....." if name != "a3" else "x.....x.x.x..x..", 0.45),
+                                          "snr": (snr, "....x..g.g..x..g", 0.26), "hat": (hat, "x.o.x.o.x.o.x.o.", 0.1),
+                                          "oh": (ohat, "......x.......x.", 0.07)}, sends={"room": 0.15}, pump=("kick",))
+        else:
+            kit(T, "base", "drums", bars, {"brush": (brush, "....x.......x...", 0.12), "hat": (hat, "g.g.g.g.g.g.g.g.", 0.07)},
+                sends={"room": 0.15})
+            if name == "break":
+                kit(T, "base", "drums", bars, {"kick": (kck, "x.......x.......", 0.34)}, sends={"room": 0.15}, pump=("kick",))
+        # hi: a continuous bed that can swell in anywhere
+        pad(T, "hi", "strings", P, I(me.strings, att=0.4, rel=0.8, bright=0.55, voices=3), center=70, count=3, gain=0.12,
+            sends={"air": 0.5}, vel=0.6)
+        pad(T, "hi", "choir", P, CHOIR_O, center=64, count=3, gain=0.09, sends={"air": 0.65}, vel=0.6)
+        arp(T, "hi", "harp", P, [0, 1, 2, 3, 4, 3, 2, 1], 0.25, M_HARP, lo=74, hi=100, gain=0.07, sends={"air": 0.45, "echo": 0.25},
+            vels=(0.8, 0.45, 0.6, 0.45), pan_fn=lambda k: 0.45 * (1 if k % 2 else -1))
+        kit(T, "hi", "drums", bars, {"ride": (ride, "x.x.x.x.x.x.x.x.", 0.08), "tamb": (TAMB, "..x...x...x...x.", 0.1)},
+            sends={"room": 0.15})
+        if bar0 not in (0, 56):
+            ring(T, "hi", "harp", bar0 * 4, crash[bar0 % 2], 0.12, 0.3, AIR)
+    WH = I(me.woodwind, kind="whistle", vib=0.007)
+    line(T, "base", "lead", SKY_A, 8, WH, 0.3, LD)
+    line(T, "base", "keys", SKY_A, 8, M_GLOCK, 0.1, LD, legato=False, transpose=12)
+    line(T, "base", "lead", SKY_A2, 16, FLUTE, 0.34, LD)
+    line(T, "base", "keys", SKY_A2, 16, M_KALIMBA, 0.12, LD, legato=False, transpose=12)
+    _jump_ev(T, "base", "lead", "A", 24, WH, 0.32, LD, 2)
+    _jump_ev(T, "base", "guitar", "A", 24, M_GUITAR_STEEL, 0.16, AIR, 2 - 12, legato=False)
+    _jump_ev(T, "base", "lead", "B", 32, FLUTE, 0.34, LD, 2)
+    _jump_ev(T, "base", "keys", "B", 32, EP, 0.1, LD, 2 - 12, legato=False)
+    line(T, "base", "lead", SKY_BRK, 40, M_KALIMBA, 0.24, {"air": 0.5, "echo": 0.35}, legato=False)
+    line(T, "base", "lead", SKY_A, 48, WH, 0.3, LD)
+    line(T, "base", "lead", SKY_A, 48, FLUTE, 0.16, LD, transpose=12)
+    line(T, "base", "guitar", SKY_A, 48, M_GUITAR_STEEL, 0.12, AIR, legato=False, transpose=-12)
+    for bar in (24, 32, 48):
+        T.add("base", "drums", bar * 4 - 8, me.riser(r, 8, T.spb, 0.6, 500.0, 8000.0), 0.1, 0.0, AIR, 0.0)
+        kit(T, "base", "drums", [bar - 1], {"fill": (snr, "xxxxxxxxxxxxxxxx", 0.13)}, sends={"room": 0.15})
+    # hi: violins and piccolo soar over the tune
+    for bar0, txt in ((8, SKY_A), (16, SKY_A2), (40, SKY_BRK), (48, SKY_A)):
+        line(T, "hi", "strings", txt, bar0, VIOLINS, 0.16, AIR)
+    _jump_ev(T, "hi", "strings", "A", 24, VIOLINS, 0.17, AIR, 2)
+    _jump_ev(T, "hi", "strings", "B", 32, VIOLINS, 0.17, AIR, 2)
+    line(T, "hi", "lead", SKY_A2, 16, PICCOLO, 0.11, AIR, transpose=12)
+    _jump_ev(T, "hi", "lead", "A", 24, M_GLOCK, 0.08, LD, 2 + 12, legato=False)
+    _jump_ev(T, "hi", "lead", "B", 32, PICCOLO, 0.1, AIR, 2)
+    T.render(rms_db=-14.5, hi_gain=1.25)
+
+
+# --------------------------------------------------------------------------
+# HYPERLOOP - C minor (the JUMP theme in its relative Eb major), 134 bpm. A sleek mag-rail pulse:
+# a punchy four-on-the-floor, an offbeat bass that ducks to the kick, 16th arpeggiated leads, chord
+# stabs and risers. Hi layer (ZEN): a wide supersaw bed, violins and bell arps over the tune,
+# and a choir over the same changes.
+# --------------------------------------------------------------------------
+HYP_CH = "| Cm | Ab | Eb | Bb | Cm | Ab | Fm | G |"
+HYP_A2_CH = "| Ab | Eb | Bb | Cm | Ab | Eb | Fm | G |"
+HYP_BRK_CH = "| Cm | Ab | Fm | G |"
+HYP_A = ("G5q. Eb5e G5q C6q | Eb6q. C6e Ab5h | G5q. Bb5e Eb6q G5q | D6q. Bb5e F5h | "
+         "C6q. G5e Eb5q G5q | C6q. Eb6e Ab6h | F6q. Ab5e C6q F6q | D6h. B5q |")
+HYP_A2 = ("Eb6q. C6e Ab5q C6q | Bb5q. G5e Eb5h | D6q. F6e Bb6q F6q | G6h Eb6h | "
+          "Eb6q. C6e Ab5q Eb6q | Bb5q G5q Eb6h | C6e Ab5e F5e Ab5e C6q F6q | D6h. G5q |")
+HYP_BRK = "Eb6w | Eb6w | C6w | D6w | G6h Eb6h | Eb6w | F6h C6h | B5w |"
+
+
+def piece_hyperloop():
+    T = me.Track("hyperloop", 134, 64, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("tube", me.make_ir(r, rt60=2.0, predelay=0.012, damp=6500, er=0.8, er_span=0.03))
+    T.reverb("room", me.make_ir(r, rt60=0.7, predelay=0.005, damp=7500, er=0.8, er_span=0.015))
+    T.delay("echo", beats=0.75, fb=0.4, damp=5500, ret=0.35)
+    for b_, e in (("lead", std_eq(250, 12500)), ("drums", std_eq(35, 15000)), ("strings", std_eq(60, 11000)),
+                  ("choir", std_eq(100, 8500)), ("air", std_eq(200, 14000))):
+        T.bus(b_, eq=e)
+    T.bus("pad", eq=std_eq(110, 10000), pump=0.55, chorus=(2.0, 0.35, 11.0, 0.3))
+    T.bus("arp", eq=std_eq(300, 13000), pump=0.3)
+    T.bus("stab", eq=std_eq(200, 11000), pump=0.45)
+    T.bus("bass", eq=std_eq(30, 2600), pump=0.7)
+    T.bus("sub", eq=std_eq(28, 220), pump=0.8)
+    TB = {"tube": 0.3}
+    AR = {"tube": 0.25, "echo": 0.3}
+    LD = {"tube": 0.35, "echo": 0.25}
+    kck = bank("kick_punch", lambda r: me.kick(r, "punch"), 2)
+    hat = bank("hat_closed", lambda r: me.hat(r, "closed"), 4)
+    ohat = bank("hat_open", lambda r: me.hat(r, "open"), 2)
+    clp = bank("clap_tight", lambda r: me.clap(r, 1.0, True), 3)
+    crash = bank("crash", lambda r: me.cymbal(r, "crash"), 2)
+    ride = bank("ride", lambda r: me.cymbal(r, "ride"), 2)
+    STAB = I(me.supersaw, voices=5, detune=18.0, cutoff=3400.0, att=0.004, rel=0.12, sub=0.0)
+    ARPM = me.memo(I(me.synth_pluck, cutoff=6000.0, decay=0.2, wave="saw"), 3, "hyp_arp")
+    LEAD = I(me.supersaw, voices=3, detune=10.0, cutoff=3300.0, att=0.02, rel=0.2, sub=0.0)
+    for name, bar0, nb, ch in _flow_sections(HYP_CH, HYP_A2_CH, tx_chords(JUMP_A_CHORDS, 3), tx_chords(JUMP_B_CHORDS, 3),
+                                             HYP_BRK_CH):
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        quiet = name in ("intro", "outro", "break")
+        pad(T, "base", "pad", P, I(me.pad_warm, att=0.4, rel=1.0, cutoff=1900.0), center=58, count=3, gain=0.1, sends=TB, vel=0.55)
+        arp(T, "base", "arp", P, [0, 1, 2, 3, 2, 1, 4, 2] if quiet else [0, 2, 1, 3, 2, 4, 3, 1, 0, 2, 1, 4, 3, 2, 4, 3],
+            0.5 if quiet else 0.25, ARPM, lo=60, hi=91, gain=0.08, sends=AR, vels=(0.9, 0.45, 0.65, 0.45),
+            pan_fn=lambda k: 0.4 * (1 if k % 3 == 0 else -1 if k % 3 == 1 else 0))
+        bass(T, "base", "sub", P, [(0, 0, 3.9, 0.8)], M_SUB, lo=24, hi=36, gain=0.3)
+        if not quiet:
+            bass(T, "base", "bass", P, [(0.5, 0, 0.35, 0.9), (1.5, 0, 0.35, 0.8), (2.5, 12, 0.35, 0.7), (3.5, 0, 0.35, 0.8),
+                                        (0.75, 0, 0.18, 0.5), (3.75, 7, 0.18, 0.5)], M_SBASS, lo=31, hi=43, gain=0.2)
+            if name != "a":
+                stabs(T, "base", "stab", P, (1.5, 3.0), STAB, center=66, count=3, gain=0.07, sends=TB, vel=0.7, dur=0.28)
+            kit(T, "base", "drums", bars, {"kick": (kck, "x...x...x...x...", 0.55), "oh": (ohat, "..x...x...x...x.", 0.1),
+                                          "hat": (hat, "xoxoxoxoxoxoxoxo", 0.08), "clp": (clp, "....x.......x...", 0.22)},
+                sends={"room": 0.1}, pump=("kick",))
+        else:
+            kit(T, "base", "drums", bars, {"hat": (hat, "g.g.g.g.g.g.g.g.", 0.07)}, sends={"room": 0.1})
+            kit(T, "base", "drums", bars, {"kick": (kck, "x.......x......." if name == "break" else "x...............", 0.4)},
+                sends={"room": 0.1}, pump=("kick",))
+        # hi: a continuous bed that can swell in anywhere
+        pad(T, "hi", "strings", P, I(me.supersaw, voices=5, detune=24.0, cutoff=2600.0, att=0.5, rel=0.9, sub=0.0, spread=1.0),
+            center=69, count=3, gain=0.1, sends={"tube": 0.5}, vel=0.6)
+        pad(T, "hi", "choir", P, CHOIR_A, center=62, count=3, gain=0.09, sends={"tube": 0.6}, vel=0.6)
+        arp(T, "hi", "air", P, [0, 1, 2, 3, 4, 3, 2, 1], 0.25, M_GLOCK, lo=84, hi=108, gain=0.035,
+            sends={"tube": 0.35, "echo": 0.4}, vels=(0.8, 0.45, 0.6, 0.45), pan_fn=lambda k: 0.5 * (1 if k % 2 else -1))
+        kit(T, "hi", "drums", bars, {"ride": (ride, "x.x.x.x.x.x.x.x.", 0.07)}, sends={"room": 0.1})
+        if bar0 not in (0, 56):
+            ring(T, "hi", "air", bar0 * 4 - 3, me.reverse_swell(r, 3, T.spb, float(mtof(79)), 0.7), 0.14, 0.0, TB)
+    # the tune
+    line(T, "base", "lead", HYP_A, 8, LEAD, 0.17, LD)
+    line(T, "base", "lead", HYP_A2, 16, LEAD, 0.17, LD)
+    line(T, "base", "lead", HYP_A2, 16, M_SPLUCK, 0.12, LD, legato=False, transpose=12)
+    _jump_ev(T, "base", "lead", "A", 24, LEAD, 0.18, LD, 3)
+    _jump_ev(T, "base", "lead", "A", 24, M_SPLUCK, 0.1, LD, 3 + 12, legato=False)
+    _jump_ev(T, "base", "lead", "B", 32, LEAD, 0.18, LD, 3)
+    _jump_ev(T, "base", "lead", "B", 32, M_SPLUCK, 0.1, LD, 3 + 12, legato=False)
+    line(T, "base", "lead", HYP_BRK, 40, M_VIBES, 0.2, {"tube": 0.5, "echo": 0.4}, legato=False)
+    line(T, "base", "lead", HYP_A, 48, LEAD, 0.18, LD)
+    line(T, "base", "lead", HYP_A, 48, M_SPLUCK, 0.12, LD, legato=False, transpose=12)
+    for bar in (24, 32, 48):
+        T.add("base", "drums", bar * 4 - 8, me.riser(r, 8, T.spb, 0.7, 300.0, 9000.0), 0.13, 0.0, TB, 0.0)
+        kit(T, "base", "drums", [bar - 1], {"snr": (clp, "xxxxxxxxxxxxxxxx", 0.17)})
+    for bar in (8, 16, 24, 32, 48):
+        ring(T, "base", "drums", bar * 4, crash[bar % 2], 0.13, 0.3, TB)
+    # hi: violins carry the tune above the saws, bells cascade over it
+    for bar0, txt in ((8, HYP_A), (16, HYP_A2), (40, HYP_BRK), (48, HYP_A)):
+        line(T, "hi", "strings", txt, bar0, VIOLINS, 0.17, TB)
+    _jump_ev(T, "hi", "strings", "A", 24, VIOLINS, 0.17, TB, 3)
+    _jump_ev(T, "hi", "strings", "B", 32, VIOLINS, 0.17, TB, 3)
+    _jump_ev(T, "hi", "air", "A", 24, M_GLOCK, 0.07, LD, 3 + 12, legato=False)
+    _jump_ev(T, "hi", "air", "B", 32, M_GLOCK, 0.07, LD, 3 + 12, legato=False)
+    T.render(rms_db=-14.5, hi_gain=1.25)
+
+
+# --------------------------------------------------------------------------
+# LOTUS DRIFT - A minor (the JUMP theme in plain C / A minor), 120 bpm. A misty water garden at
+# dusk: interlocking koto and harp ostinatos, a soft taiko heartbeat, a shakuhachi and flute
+# melody, pizzicato bass, a low string bed, wind chimes and a temple bell. Hi layer (ZEN): a
+# string and choir bed, a flute descant, vibraphone shimmer, a gentle taiko swell and gongs.
+# --------------------------------------------------------------------------
+LOT_CH = "| Am | F | C | G | Am | F | Dm | E |"
+LOT_A2_CH = "| F | C | G | Am | F | C | Dm | E |"
+LOT_BRK_CH = "| Am | F | Dm | E |"
+LOT_A = ("A5h C6q E6q | C6q. A5e F5h | G5q. A5e C6h | D6h. B5q | "
+         "E6q. D6e C6q A5q | F6q. E6e C6h | D6q F6q A6h | G#5h. B5q |")
+LOT_A2 = ("A5q C6q F6h | E6q. D6e C6h | D6q B5q G5h | A5q. C6e E6h | "
+          "F6q C6q A5q F5q | G5q C6q E6h | F6q. E6e D6q A5q | G#5h. B5q |")
+LOT_BRK = "E6w | C6w | A5w | B5w | A6h E6h | F6w | F6h D6h | G#6w |"
+
+
+def piece_lotus():
+    T = me.Track("lotus", 120, 64, 4, layers=("base", "hi"))
+    r = T.rng
+    T.reverb("pond", me.make_ir(r, rt60=3.6, predelay=0.035, damp=4800, er=0.4, er_span=0.08))
+    T.delay("echo", beats=0.75, fb=0.35, damp=3800, ret=0.35)
+    for b_, e in (("koto", std_eq(120, 11000)), ("harp", std_eq(100, 11000)), ("lead", std_eq(220, 9500)),
+                  ("strings", std_eq(50, 10500)), ("choir", std_eq(100, 8000)), ("perc", std_eq(30, 12000)),
+                  ("bass", std_eq(30, 3000)), ("air", std_eq(200, 13000))):
+        T.bus(b_, eq=e)
+    PD = {"pond": 0.4}
+    LD = {"pond": 0.45, "echo": 0.25}
+    od = bank("odaiko", lambda r: me.taiko(r, "odaiko"), 3)
+    ka = bank("ka", lambda r: me.taiko(r, "ka"), 4)
+    na = bank("nagado", lambda r: me.taiko(r, "nagado"), 3)
+    shime = bank("shime", lambda r: me.taiko(r, "shime"), 4)
+    for name, bar0, nb, ch in _flow_sections(LOT_CH, LOT_A2_CH, JUMP_A_CHORDS, JUMP_B_CHORDS, LOT_BRK_CH):
+        P = _section(ch, bar0, nb)
+        bars = range(bar0, bar0 + nb)
+        quiet = name in ("intro", "outro", "break")
+        # two interlocking ostinati: koto on the beat, harp on the offbeats
+        arp(T, "base", "koto", P, [0, 1, 2, 3, 2, 1, 4, 2], 0.5, M_KOTO, lo=62, hi=88, gain=0.12, sends=PD,
+            vels=(0.85, 0.5, 0.65, 0.5), pan_fn=lambda k: -0.3)
+        Po = [(b + 0.25, d - 0.25, sym) for b, d, sym in P]
+        arp(T, "base", "harp", Po, [4, 3, 2, 1, 3, 2, 1, 0] if not quiet else [2, 1, 3, 2], 0.5, M_HARP, lo=69, hi=96,
+            gain=0.08 if not quiet else 0.06, sends=PD, vels=(0.7, 0.45, 0.55, 0.45), pan_fn=lambda k: 0.35)
+        pad(T, "base", "strings", P, STRINGS_SOFT, center=57, count=3, gain=0.08, sends=PD, vel=0.5)
+        bass(T, "base", "bass", P, [(0, 0, 1.7, 0.85), (1.5, 7, 0.4, 0.5), (2.5, 0, 1.3, 0.7)], M_PIZZ, lo=36, hi=48, gain=0.3,
+             sends=PD)
+        # a soft taiko heartbeat: lub-dub
+        kit(T, "base", "perc", bars, {"od": (od, "x..o....x..o....", 0.26 if not quiet else 0.2),
+                                     "ka": (ka, "....g.......g.o.", 0.05)}, sends=PD)
+        if name in ("a2", "jumpB", "a3"):
+            kit(T, "base", "perc", bars, {"shk": (SHK, "g.o.g.o.g.o.g.o.", 0.1)}, sends=PD)
+        # hi: a continuous bed that can swell in anywhere
+        pad(T, "hi", "strings", P, I(me.strings, att=0.6, rel=1.0, bright=0.5, voices=3), center=67, count=3, gain=0.12,
+            sends={"pond": 0.55}, vel=0.6)
+        pad(T, "hi", "choir", P, CHOIR_O, center=60, count=3, gain=0.1, sends={"pond": 0.65}, vel=0.6)
+        arp(T, "hi", "air", P, [0, 1, 2, 3, 4, 3, 2, 1], 0.5, M_VIBES, lo=81, hi=105, gain=0.035,
+            sends={"pond": 0.5, "echo": 0.35}, vels=(0.8, 0.45, 0.6, 0.45), pan_fn=lambda k: 0.45 * (1 if k % 2 else -1))
+        if bar0 not in (0, 56):
+            kit(T, "hi", "perc", bars, {"na": (na, "x.......x..x....", 0.18), "shime": (shime, "g.g.o.g.g.g.o.gg", 0.05)}, sends=PD)
+            ring(T, "hi", "perc", bar0 * 4, me.gong(r, 0.8, 6.0, 57.0), 0.14, 0.0, PD)
+    # the tune: shakuhachi first, flute answering, the leitmotif on both
+    line(T, "base", "lead", LOT_A, 8, SHAKUHACHI, 0.34, LD)
+    line(T, "base", "koto", LOT_A, 8, M_KOTO, 0.14, LD, legato=False, transpose=-12)
+    line(T, "base", "lead", LOT_A2, 16, FLUTE, 0.34, LD)
+    line(T, "base", "koto", LOT_A2, 16, M_KOTO, 0.18, LD, legato=False)
+    _jump_ev(T, "base", "lead", "A", 24, SHAKUHACHI, 0.34, LD, 0)
+    _jump_ev(T, "base", "koto", "A", 24, M_KOTO, 0.16, LD, 0 - 12, legato=False)
+    _jump_ev(T, "base", "lead", "B", 32, FLUTE, 0.34, LD, 0)
+    _jump_ev(T, "base", "koto", "B", 32, M_KOTO, 0.16, LD, 0 - 12, legato=False)
+    line(T, "base", "lead", LOT_BRK, 40, SHAKUHACHI, 0.3, {"pond": 0.55, "echo": 0.4})
+    line(T, "base", "lead", LOT_A, 48, SHAKUHACHI, 0.34, LD)
+    line(T, "base", "lead", LOT_A, 48, FLUTE, 0.16, LD, transpose=12)
+    line(T, "base", "koto", LOT_A, 48, M_KOTO, 0.16, LD, legato=False)
+    for bar in (0, 16, 32, 48):
+        ring(T, "base", "perc", bar * 4, me.bell(r, float(mtof(57)), 6.0, 0.55, kind="church"), 0.1, -0.3, {"pond": 0.6})
+    # wind chimes, scattered but fixed
+    chime_beats = (6.5, 22.0, 41.5, 58.5, 77.0, 94.5, 118.0, 135.5, 163.0, 181.5, 205.0, 229.5)
+    for i, bt in enumerate(chime_beats):
+        for j in range(4):
+            m = (84, 88, 91, 93, 96, 100)[(i * 5 + j * 3) % 6]
+            ring(T, "base", "air", bt + 0.18 * j, me.mallet(r, float(mtof(m)), 0.5, 0.7, "glockenspiel"), 0.05 - 0.008 * j,
+                 (j - 1.5) * 0.3, {"pond": 0.6})
+    # hi: violins and a high flute descant glow over the tune
+    for bar0, txt in ((8, LOT_A), (16, LOT_A2), (40, LOT_BRK), (48, LOT_A)):
+        line(T, "hi", "strings", txt, bar0, VIOLINS, 0.16, PD)
+    _jump_ev(T, "hi", "strings", "A", 24, VIOLINS, 0.16, PD, 0)
+    _jump_ev(T, "hi", "strings", "B", 32, VIOLINS, 0.16, PD, 0)
+    line(T, "hi", "lead", LOT_A2, 16, FLUTE, 0.12, PD, transpose=12)
+    _jump_ev(T, "hi", "lead", "B", 32, PICCOLO, 0.1, PD, 0)
+    T.render(rms_db=-14.5, hi_gain=1.2)
+
+
+# ---- stingers for the flow worlds ----------------------------------------
+def _ff_aurora(B, r, k):
+    run = JUMP_PICKUP + " C5h G5h"
+    B.notes(mel(">-3 " + run + " E6w", 4, 0, 0), I(me.synth_pluck, cutoff=5200.0, decay=0.3), r, 0.3, sends={"hall": 0.5})
+    B.notes(mel(">-3 " + run + " E6w", 4, 0, 0), I(me.mallet, kind="vibraphone"), r, 0.16, sends={"hall": 0.5})
+    for m in (54, 61, 66, 73, 78):
+        B.add(2.0, me.pad_glass(r, float(mtof(m)), 3.6 * B.spb, 0.8, att=0.4, rel=1.6), 0.13, sends={"hall": 0.5})
+    B.add(0.0, me.reverse_swell(r, 2, B.spb, float(mtof(78)), 0.7), 0.12, 0.0, {"hall": 0.4})
+    for i, m in enumerate((90, 93, 97, 100, 105)):
+        B.add(2.1 + 0.12 * i, me.mallet(r, float(mtof(m)), 0.6, 0.8, "glockenspiel"), 0.1, (i / 4 - 0.5), {"hall": 0.5})
+    B.add(2.0, me.kick(r, "soft"), 0.3)
+
+
+def _ff_skysurf(B, r, k):
+    run = JUMP_PICKUP + " C5h G5h"
+    B.notes(mel(">2 " + run + " D6h. F#6q A6w", 4, 0, 0), I(me.woodwind, kind="whistle", vib=0.008), r, 0.36, sends={"hall": 0.4})
+    for j, m in enumerate((50, 57, 62, 66, 69)):
+        B.add(2.0 + 0.03 * j, M_GUITAR_STEEL(r, float(mtof(m)), 1.0, 0.85), 0.28, sends={"hall": 0.3})
+    for i, m in enumerate((86, 90, 93, 98)):
+        B.add(2.2 + 0.1 * i, me.mallet(r, float(mtof(m)), 0.6, 0.8, "glockenspiel"), 0.12, (i / 3 - 0.5), {"hall": 0.4})
+    for m in (62, 66, 69, 74):
+        B.add(2.0, me.strings(r, float(mtof(m)), 3.0 * B.spb, 0.7, att=0.15, rel=0.8, voices=3), 0.1, sends={"hall": 0.4})
+    for t0 in (0.0, 0.5, 1.0, 1.5):
+        B.add(t0, me.hat(r, "closed"), 0.12, 0.2)
+    B.add(2.0, me.kick(r, "soft"), 0.3)
+    B.add(2.0, me.cymbal(r, "crash"), 0.14, 0.2, {"hall": 0.3})
+
+
+def _ff_hyperloop(B, r, k):
+    run = JUMP_PICKUP + " C5h G5h"
+    B.notes(mel(">3 " + run + " Eb6w", 4, 0, 0), I(me.supersaw, voices=3, detune=10.0, cutoff=3300.0, att=0.01, rel=0.2, sub=0.0), r,
+            0.18, sends={"hall": 0.4})
+    for t0 in (0.0, 0.5, 1.0, 1.5, 2.0):
+        B.add(t0, me.kick(r, "punch"), 0.38 if t0 < 2.0 else 0.5)
+    B.add(0.0, me.riser(r, 2, B.spb, 0.7, 300.0, 9000.0), 0.14, 0.0, {"hall": 0.3})
+    for j, m in enumerate((60, 63, 67, 70, 72, 75, 79, 82)):
+        B.add(2.0 + 0.125 * j, me.synth_pluck(r, float(mtof(m)), 0.3, 0.9, 6000.0), 0.1, (j % 3 - 1) * 0.3, {"hall": 0.3})
+    for m in (48, 55, 60, 63, 67, 70):
+        B.add(2.0, me.supersaw(r, float(mtof(m)), 3.4 * B.spb, 0.8, voices=5, detune=18.0, cutoff=2800.0, att=0.01, rel=1.0, sub=0.0),
+              0.07, sends={"hall": 0.4})
+    B.add(2.0, me.cymbal(r, "crash"), 0.2, 0.3, {"hall": 0.3})
+    B.add(2.0, me.sub_bass(r, float(mtof(36)), 3.0 * B.spb, 0.9), 0.3)
+
+
+def _ff_lotus(B, r, k):
+    run = JUMP_PICKUP + " C5h G5h"
+    B.notes(mel(run + " A5h. C6q E6w", 4, 0, 0), M_KOTO, r, 0.3, sends={"hall": 0.4})
+    for j, m in enumerate((57, 60, 64, 69, 72, 76, 81, 84)):
+        B.add(2.0 + 0.09 * j, me.harp(r, float(mtof(m)), 1.0, 0.8), 0.14, (j / 7 - 0.5) * 0.8, {"hall": 0.5})
+    B.add(2.0, me.woodwind(r, float(mtof(81)), 2.4 * B.spb, 0.8, "panflute"), 0.2, 0.0, {"hall": 0.5})
+    for m in (57, 64, 69, 72, 76):
+        B.add(2.0, me.strings(r, float(mtof(m)), 3.0 * B.spb, 0.7, att=0.2, rel=1.0, voices=3), 0.09, sends={"hall": 0.5})
+    B.add(0.0, me.taiko(r, "odaiko"), 0.4, 0.0, {"hall": 0.3})
+    B.add(0.5, me.taiko(r, "odaiko", 0.6), 0.25, 0.0, {"hall": 0.3})
+    B.add(2.0, me.taiko(r, "odaiko"), 0.45, 0.0, {"hall": 0.3})
+    B.add(2.0, me.gong(r, 0.8, 6.0, 57.0), 0.18, 0.0, {"hall": 0.4})
+    B.add(2.0, me.bell(r, float(mtof(81)), 3.0, 0.5, kind="church"), 0.08, 0.2, {"hall": 0.5})
+
+
+def stingers_flow():
+    """Fanfares and checkpoint chimes for the four v2.1 flow worlds (also run by `stingers`)."""
+    fanfare("aurora", 54, _ff_aurora, 5.2, bpm=124.0)
+    fanfare("skysurf", 62, _ff_skysurf, 4.6, bpm=128.0)
+    fanfare("hyperloop", 60, _ff_hyperloop, 4.6, bpm=134.0)
+    fanfare("lotus", 57, _ff_lotus, 5.4, bpm=120.0)
+    chime("aurora", lambda B, r: (B.add(0, me.mallet(r, float(mtof(78)), 1.0, 0.85, "vibraphone"), 0.36, -0.2, {"hall": 0.5}),
+                                  B.add(0.16, me.mallet(r, float(mtof(85)), 1.0, 0.85, "vibraphone"), 0.32, 0.2, {"hall": 0.5}),
+                                  B.add(0.3, me.pad_glass(r, float(mtof(90)), 0.6, 0.7, att=0.15, rel=0.9), 0.1, 0.0, {"hall": 0.6}),
+                                  B.add(0.0, me.fm_bell(r, float(mtof(97)), 1.0, 0.3), 0.08, 0.0, {"hall": 0.5})))
+    chime("skysurf", lambda B, r: (B.add(0, M_GUITAR_STEEL(r, float(mtof(74)), 0.6, 0.9), 0.36, -0.2, {"hall": 0.4}),
+                                   B.add(0.14, M_GUITAR_STEEL(r, float(mtof(81)), 0.6, 0.9), 0.34, 0.2, {"hall": 0.4}),
+                                   B.add(0.0, me.mallet(r, float(mtof(86)), 0.6, 0.8, "glockenspiel"), 0.18, 0.0, {"hall": 0.4}),
+                                   B.add(0.3, me.woodwind(r, float(mtof(93)), 0.4, 0.5, "whistle"), 0.1, 0.0, {"hall": 0.5})))
+    chime("hyperloop", lambda B, r: (B.add(0, me.synth_pluck(r, float(mtof(79)), 0.4, 0.9, 6000.0), 0.36, -0.2, {"hall": 0.3}),
+                                     B.add(0.125, me.synth_pluck(r, float(mtof(86)), 0.4, 0.9, 6000.0), 0.34, 0.2, {"hall": 0.3}),
+                                     B.add(0.25, me.synth_pluck(r, float(mtof(91)), 0.5, 0.9, 6000.0), 0.3, 0.0, {"hall": 0.4}),
+                                     B.add(0.0, me.kick(r, "punch"), 0.2)))
+    chime("lotus", lambda B, r: (B.add(0, M_KOTO(r, float(mtof(76)), 1.0, 0.85), 0.4, -0.2, {"hall": 0.5}),
+                                 B.add(0.16, M_KOTO(r, float(mtof(83)), 1.0, 0.85), 0.36, 0.2, {"hall": 0.5}),
+                                 B.add(0.0, me.taiko(r, "odaiko", 0.5), 0.18, 0.0, {"hall": 0.3}),
+                                 B.add(0.3, me.bell(r, float(mtof(88)), 1.0, 0.35, kind="church"), 0.08, 0.0, {"hall": 0.6})))
+
+
 PIECES = {
     "gardens": piece_gardens,
     "foundry": piece_foundry,
@@ -3417,15 +3915,21 @@ PIECES = {
     "arcane": piece_arcane,
     "arcade": piece_arcade,
     "siege": piece_siege,
+    "aurora": piece_aurora,
+    "skysurf": piece_skysurf,
+    "hyperloop": piece_hyperloop,
+    "lotus": piece_lotus,
     "title": piece_title,
     "lobby": piece_lobby,
     "results": piece_results,
     "victory": piece_victory,
     "stingers": stingers,
     "stingers_new": stingers_new,
+    "stingers_flow": stingers_flow,
 }
 LAYERED = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert", "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void", "ascent",
-           "toybox", "fungal", "carnival", "olympus", "dino", "arcane", "arcade", "siege")
+           "toybox", "fungal", "carnival", "olympus", "dino", "arcane", "arcade", "siege",
+           "aurora", "skysurf", "hyperloop", "lotus")
 
 
 def verify():
