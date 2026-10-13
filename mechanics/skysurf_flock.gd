@@ -37,6 +37,29 @@ func build() -> void:
 	var ext: float = radius * 1.3 + 4.0
 	mmi.custom_aabb = AABB(Vector3(-ext, height - 8.0, -ext), Vector3(ext * 2.0, 16.0, ext * 2.0))
 	add_child(mmi)
+	if WorldAudio.enabled():
+		var tm := Timer.new()
+		tm.wait_time = 0.12
+		tm.timeout.connect(_poll_listener)
+		add_child(tm)
+		tm.autostart = true
+
+
+var _inside: bool = false
+
+
+## SOUND: skysurf_ribbon - a soft whoosh of wings and air as you sweep into the flock's sky (one-shot,
+## once per visit)
+func _poll_listener() -> void:
+	var l: Vector3 = WorldAudio.listener(self)
+	if l == Vector3.INF:
+		return
+	var d: float = l.distance_to(global_position)
+	if d < radius + 8.0 and not _inside:
+		_inside = true
+		WorldAudio.at(self, "skysurf_ribbon", global_position + Vector3(0, height, 0), 0.6, radius * 3.0 + 30.0)
+	elif d > radius + 35.0:
+		_inside = false
 
 
 static func _material(tint_col: Color) -> ShaderMaterial:

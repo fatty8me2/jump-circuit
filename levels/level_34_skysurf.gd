@@ -84,6 +84,12 @@ func fail(cause: String = "fall") -> void:
 	super(cause)
 
 
+func _finish_sequence() -> void:
+	# SOUND: skysurf_finish - a bright flourish that climbs and soars away on the air (one-shot)
+	WorldAudio.at(self, "skysurf_finish", _finish_pos + Vector3(0, 3.0, 0), 1.0, 120.0)
+	await super._finish_sequence()
+
+
 func _on_checkpoint(cp: Checkpoint) -> void:
 	if OS.has_environment("SKYSURF_DEBUG") and cp.index > current_checkpoint:
 		print("skysurf checkpoint %d at t=%.1f: top speed since the last one %.1f m/s (overall %.1f)" % [cp.index, run_time, _stage_top, _top_speed])
@@ -320,6 +326,8 @@ func _checkpoint_at(deck: Dictionary) -> void:
 	_cp_bursts[cp] = fx
 	cp.reached.connect(func(which: Checkpoint) -> void:
 		if which.index > current_checkpoint:
+			# SOUND: skysurf_checkpoint - an airy chime over a light gust (one-shot)
+			WorldAudio.at(self, "skysurf_checkpoint", which.global_position + Vector3(0, 1.5, 0), 1.0, 60.0)
 			for pt2: GPUParticles3D in (_cp_bursts[which] as Array):
 				pt2.restart()
 				pt2.emitting = true)
@@ -941,6 +949,7 @@ func _skin_islands() -> void:
 
 ## Dress the flow line: wind ribbons streaming along every gate run, slope, rail and ring flight.
 func _dress_flow() -> void:
+	var rail_loop: bool = false
 	for i: int in _flow_paths.size():
 		var f: Dictionary = _flow_paths[i]
 		var pts: PackedVector3Array = f["pts"]
@@ -969,6 +978,13 @@ func _dress_flow() -> void:
 			rb.phase = float(i) * 0.7 + off
 			rb.build()
 			add_child(rb)
+			# SOUND: skysurf_ribbon_loop - the streaming air of a ribbon; only the air flights and the first rail
+			if (air or (bool(f["rail"]) and not rail_loop)) and off == offsets[0]:
+				rail_loop = rail_loop or bool(f["rail"])
+				var spot := Marker3D.new()
+				spot.position = pts[pts.size() / 2] + Vector3(0, 1.0, 0)
+				add_child(spot)
+				WorldAudio.loop("skysurf_ribbon_loop", spot, -15.0, 45.0, 9.0)
 
 
 ## Horizontal distance from `p` to the nearest chord (the straight line between consecutive decks).

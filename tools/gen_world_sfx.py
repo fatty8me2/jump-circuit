@@ -276,10 +276,11 @@ for _n, _d in (("flow_ring_pass", 0.8), ("flow_ring_chain", 0.8), ("flow_gate_pa
 for _n, _d in (("flow_wind_loop", 2.0), ("flow_rail_grind", 2.0), ("aurora_draft_loop", 2.0),
                ("hyperloop_pod_hum", 2.0)):
     _reg(_n, _d, True)
-# the Sky Surf level's clips (gen_skysurf): one-shots only, called by the lead's wiring
+# the Sky Surf level's clips (gen_skysurf): one-shots, and the ribbons' streaming loop
 for _n, _d in (("skysurf_checkpoint", 1.2), ("skysurf_finish", 2.4), ("skysurf_puff", 0.8),
                ("skysurf_ribbon", 1.0)):
     _reg(_n, _d)
+_reg("skysurf_ribbon_loop", 2.0, True)
 
 
 # ---------------------------------------------------------------------------
@@ -7589,6 +7590,15 @@ def gen_skysurf():
     name = "skysurf_ribbon"
     r = rng(name)
     save(name, whoosh(r, dur(name), 350.0, 1600.0, 700.0, 0.5, 0.35, 1.0), fin=0.01, fout=0.2)
+
+    # the ribbons streaming (loop): soft airy air with a slow swell and a faint high shimmer, all circular
+    name = "skysurf_ribbon_loop"
+    r = rng(name)
+    n = ns(dur(name))
+    air = unit(tilt(cnoise(r, n, 250, 3200, 1), -2.0, circular=True)) * (0.65 + 0.35 * crand(r, n, 3))
+    stream = unit(csvf(r.standard_normal(n), 900 * 2.0 ** (0.8 * crand(r, n, 2)), 2.5)) * (0.6 + 0.4 * crand(r, n, 4))
+    shimmer = cnoise(r, n, 3000, 7000, 1) * (0.5 + 0.5 * crand(r, n, 6))
+    save_loop(name, air + 0.5 * stream + 0.12 * shimmer)
 
 
 def verify():
