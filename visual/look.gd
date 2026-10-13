@@ -349,14 +349,17 @@ const THEMES: Dictionary = {
 		"decor": Color(0.25, 0.32, 0.45), "decor2": Color(0.50, 0.90, 0.80), "metal": Color(0.70, 0.74, 0.80),
 		"cloud_light": Color(0.70, 0.85, 0.90), "cloud_shade": Color(0.20, 0.25, 0.35),
 	},
-	"hyperloop": {  # PLACEHOLDER palette - the Flow level agent owns and retunes this entry
-		"sky_top": Color(0.10, 0.12, 0.30), "sky_horizon": Color(0.55, 0.80, 0.85), "sky_bottom": Color(0.20, 0.25, 0.35),
-		"sun": Color(0.85, 0.95, 1.00), "sun_energy": 1.0, "sun_rot": Vector3(-45, 150, 0),
-		"ambient": Color(0.60, 0.62, 0.70), "ambient_energy": 0.8, "fog": Color(0.45, 0.60, 0.70), "fog_density": 0.002,
-		"top": Color(0.85, 0.92, 0.98), "side": Color(0.40, 0.50, 0.65), "trim": Color(0.40, 0.95, 0.85),
-		"alt_top": Color(0.55, 0.75, 0.95), "accent": Color(0.40, 0.95, 0.85), "accent2": Color(0.85, 0.50, 1.00),
-		"decor": Color(0.25, 0.32, 0.45), "decor2": Color(0.50, 0.90, 0.80), "metal": Color(0.70, 0.74, 0.80),
-		"cloud_light": Color(0.70, 0.85, 0.90), "cloud_shade": Color(0.20, 0.25, 0.35),
+	# Hyperloop: a megastructure of white ceramic decks, chrome tubes and mag-rails floating over a cloud sea
+	# at dawn - clean white and cool cyan, a pale rose-gold sun low on the horizon.
+	# (levels/level_35_hyperloop.gd swaps in its own sky and deck shader.)
+	"hyperloop": {
+		"sky_top": Color(0.05, 0.18, 0.40), "sky_horizon": Color(0.93, 0.96, 1.00), "sky_bottom": Color(0.60, 0.78, 0.92),
+		"sun": Color(1.00, 0.93, 0.86), "sun_energy": 1.45, "sun_rot": Vector3(-22, 200, 0),
+		"ambient": Color(0.72, 0.84, 0.98), "ambient_energy": 0.95, "fog": Color(0.80, 0.91, 0.98), "fog_density": 0.0011,
+		"top": Color(0.94, 0.97, 1.00), "side": Color(0.52, 0.62, 0.74), "trim": Color(0.22, 0.92, 1.00),
+		"alt_top": Color(0.78, 0.88, 0.96), "accent": Color(0.20, 0.86, 1.00), "accent2": Color(1.00, 0.60, 0.48),
+		"decor": Color(0.80, 0.86, 0.92), "decor2": Color(0.25, 0.88, 1.00), "metal": Color(0.82, 0.86, 0.90),
+		"cloud_light": Color(1.00, 0.96, 0.94), "cloud_shade": Color(0.60, 0.77, 0.92),
 	},
 	"lotus": {  # PLACEHOLDER palette - the Flow level agent owns and retunes this entry
 		"sky_top": Color(0.10, 0.12, 0.30), "sky_horizon": Color(0.55, 0.80, 0.85), "sky_bottom": Color(0.20, 0.25, 0.35),
