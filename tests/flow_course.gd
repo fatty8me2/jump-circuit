@@ -8,7 +8,7 @@ var slope: FlowSurface
 var arc: LaunchArc
 var rings: Array[SpeedRing] = []
 ## Speed (m/s) the course expects at the launch lip; the air rings are placed on that arc.
-const LIP_SPEED: float = 27.0
+const LIP_SPEED: float = 26.0
 var landing: Vector3 = Vector3.ZERO
 
 
@@ -27,9 +27,12 @@ func _build() -> void:
 	# 2. a long flow slope: 9 m of drop over 44 m, no bleed, speed builds
 	slope = kit.flow_slope_between(Vector3(0, 0, -38), Vector3(0, -9, -82), 10.0)
 	# 3. the foot of a launch ramp on the run-out deck
-	kit.plat(Vector3(0, -9, -90), Vector3(14, 2, 16))
+	kit.plat(Vector3(0, -9, -101), Vector3(14, 2, 38))
 	kit.checkpoint(Vector3(0, -9, -86), 0.0)
-	arc = kit.launch_arc(Vector3(0, -9, -96), 0.0, 24.0, 6.0, 9.0)
+	# a gate just before the ramp restores the speed after a stop at the checkpoint (a route must not
+	# depend on arriving at the checkpoint with speed: a respawn starts from standing still)
+	kit.boost_gate(Vector3(0, -9, -107), 0.0, LIP_SPEED, 5.0)
+	arc = kit.launch_arc(Vector3(0, -9, -112), 0.0, 24.0, 6.0, 9.0)
 	# 4. rings flown along the predicted arc (the same rule the ring uses is simulated here)
 	var ring_pts: Array[Vector3] = _ring_points()
 	rings = kit.ring_line(ring_pts, {"add_speed": 4.0, "radius": 2.4})
@@ -39,10 +42,10 @@ func _build() -> void:
 	kit.finish(Vector3(landing.x, -9, landing.z - 20), 0.0)
 
 	var run: Array[Vector3] = [Vector3(0, 0, -2), Vector3(0, 0, -8), Vector3(0, 0, -18), Vector3(0, 0, -28),
-		Vector3(0, 0, -38), Vector3(0, -9, -82), Vector3(0, -9, -85)]
+		Vector3(0, 0, -38), Vector3(0, -9, -82), Vector3(0, -9, -86)]
 	r_flow(run)
 	r_checkpoint()
-	var to_ramp: Array[Vector3] = [Vector3(0, -9, -85), Vector3(0, -9, -91)]
+	var to_ramp: Array[Vector3] = [Vector3(0, -9, -86), Vector3(0, -9, -107), Vector3(0, -9, -108)]
 	r_flow(to_ramp)
 	r_launch(arc, landing + Vector3(0, 0, -1))
 	r_checkpoint()
