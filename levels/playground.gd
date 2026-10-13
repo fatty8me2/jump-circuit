@@ -145,7 +145,7 @@ func _gallery_label(pos: Vector3, text: String) -> void:
 
 func _build_flow_gallery() -> void:
 	kit.plat(Vector3(188, 0, -8), Vector3(16, 2, 12), "main", 0.0)
-	kit.plat(Vector3(285, 0, -45), Vector3(180, 2, 140), "main", 3.0)
+	kit.plat(Vector3(305, 0, -45), Vector3(220, 2, 140), "main", 3.0)
 	_gallery_label(Vector3(197, 3.2, -2), "FLOW GALLERY")
 	# 1 boost gate chain: three arches, each lifts you to its speed
 	var gates: Array[Vector3] = [Vector3(212, 0, -6), Vector3(212, 0, -16), Vector3(212, 0, -26)]
@@ -175,3 +175,19 @@ func _build_flow_gallery() -> void:
 	if air.size() >= 2:
 		kit.ring_line(air)
 	_gallery_label(Vector3(290, 6.0, -2), "4  Launch arc")
+	# 5 half-pipe: up a ramp to a deck, then a descending carved trough (the stick carves wall to wall)
+	kit.ramp(Vector3(320, 4.1, 4.7), Vector3(8, 0.8, 24), 20.0, 0.0)
+	kit.plat(Vector3(320, 8.2, -9.0), Vector3(10, 1, 12), "accent", 0.0)
+	kit.halfpipe(Vector3(320, 8.2, -15.0), Vector3(320, 0.4, -85.0), 12.0, 2.4)
+	_gallery_label(Vector3(320, 12.0, -4), "5  Half-pipe")
+	# 6 grind rail: jump onto its start, ride it (jump to leave; the end throws you off)
+	var rail_pts: Array[Vector3] = [Vector3(345, 1.7, -6), Vector3(345, 2.4, -28), Vector3(352, 3.2, -48),
+		Vector3(360, 2.2, -70), Vector3(360, 1.3, -92)]
+	kit.rail(rail_pts, {"post_to_y": 0.0})
+	_gallery_label(Vector3(345, 6.0, -2), "6  Grind rail  (jump onto it)")
+	# 7 rail to rail: jump off the upper rail near its end and the lower one catches you
+	var up_rail: Array[Vector3] = [Vector3(376, 3.4, -8), Vector3(376, 3.4, -44)]
+	var low_rail: Array[Vector3] = [Vector3(376, 1.9, -42), Vector3(376, 1.3, -100)]
+	kit.rail(up_rail, {"post_to_y": 0.0})
+	kit.rail(low_rail, {"post_to_y": 0.0})
+	_gallery_label(Vector3(376, 7.0, -2), "7  Rail to rail")

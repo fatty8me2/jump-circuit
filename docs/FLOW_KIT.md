@@ -1,9 +1,5 @@
 # Flow kit (v2.1, workstream F2)
 
-> **Status:** slice 1 (rings, gates, chain, flow slopes, launch arcs, `r_flow` / `r_launch`, Flow Gallery rows 1-4) is
-> committed. Slice 2 (grind rails: section 9, half-pipes: section 7, `r_rail`) follows; its API below is final but not
-> in the branch yet.
-
 Momentum mechanics for the Flow levels: speed rings and boost gates (with a per-level chain counter), flow slopes,
 half-pipes, grind rails and launch arcs. Built like the obstacle kit (`docs/KIT_OBSTACLES.md`): `kit.<name>(...)` in a
 level's `_build()`, `r_*` route helpers, bot steps, clips named `flow_*`. See every piece in the **Flow Gallery** (dev
@@ -21,6 +17,8 @@ playground: walk east past the Kit Gallery) and wired into routes in `tests/flow
   zipline). Nothing changes on any existing surface or level; `movement_tuning` is untouched.
 - **Sound** is a side effect only (`WorldAudio`), missing clips are skipped silently, headless plays nothing.
 - **Reset**: the rail joins `resettable` and lets go of its rider on respawn; the chain forgets itself on respawn.
+- **Physics runs at 120 Hz**, not 60: anything per-tick in a route or mechanic must use `dt` or
+  `Engine.physics_ticks_per_second` (the kit's re-arm and cooldown timers are in seconds).
 
 ## Player hooks (all additive, in `player/player.gd`)
 
@@ -61,7 +59,13 @@ Wiring rules of thumb:
   End a flow stretch with a launch arc, a rail, or a plain deck you can afford to slow on.
 - **Rings in the air**: the bot cannot change height in the air, so put air rings **on the ballistic path**
   (`arc.arc_points(hs)`), not where you would like the path to be.
-- **0 respawns**: run each route with `test_n_bot` normally and with the temporary 1.0 s pause hook.
+- **0 respawns**: run each route with `test_n_bot` normally and with the temporary 1.0 s pause hook. The pause stops the
+  bot dead after every checkpoint, so **a checkpoint must be followed by room to get going again** (a boost gate chain,
+  a slope, a downhill rail) *before* anything that needs speed (a launch arc, an air ring line), and the checkpoint needs
+  a run-out: stopping from 30 m/s takes ~6 m on a plain deck. The two test courses are built this way.
+- **Measured** (the test courses, bot): gate chain 20 to 24 m/s; an 11 degree flow slope 44 m long takes 23 to 30 m/s;
+  an 8 degree 90 m half-pipe carved wall to wall takes 18 to 27 m/s; rails 17 to 22 m/s; the bot tops out at the 30 m/s cap
+  on both courses with 0 respawns, with and without the 1.0 s checkpoint pause.
 
 ## The kit
 
@@ -131,7 +135,7 @@ speed (at least `min_speed` 9, so a slow rider is taken up to it). **Riding:** f
 (`slope_accel` 16 m/s^2 per unit of slope), 9 to 30 m/s; sparks fly; steering only leans you up to `lean` (0.3 m).
 **Leaving:** jump to leave with the full tangent velocity plus a `hop` (6) upward; or reach the end and be thrown off
 with the end tangent velocity plus `end_hop` (2). **Rail to rail:** another rail near the flight path catches you (the
-rail you just left ignores you for 0.4 s). **Safety:** a respawn lets go at once; nothing kills; keep a deck or net
+rail you just left ignores you for 0.7 s). **Safety:** a respawn lets go at once; nothing kills; keep a deck or net
 under it. opts: `snap`, `min_speed`, `max_speed`, `slope_accel`, `hop`, `end_hop`, `lean`, `post_to_y`, `post_every`.
 Helpers: `length()`, `point_at(s)`, `tangent_at(s)`, `offset_of(world_point)`, `start_point()`, `end_point()`,
 `speed_at(v0, s0, s1)`, `ride_time(v0, s0, s1)`, `jump_velocity(v0, s0, s)`, `exit_velocity(v0)`, `is_riding()`,
