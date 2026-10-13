@@ -3,23 +3,25 @@ extends LevelBase
 ## floating islands hung in a peach-and-lilac sky above a sea of cloud, kites and birds on the
 ## wind, and the sun just clearing the horizon dead ahead. You are running TOWARD the sunrise.
 ##
-## Two ways through every stage, which part and rejoin at the checkpoint decks:
+## Two ways through every stage, which part and rejoin at the checkpoint decks (the flow line runs
+## straight between two decks; the safe line bows out to one side of it and comes in from the side):
 ##   route 0, the SAFE line: friendly hops between wide islands, boardwalks and cloud ramps.
 ##     Landings 2 m and more, nothing timed, nothing that waits. Nine checkpoints.
 ##   route 1, the FLOW line: one long breath through the same sky on speed rings, boost gates,
-##     wind-ribbon grind rails, cloud slopes and the half-pipe, launched over the gaps by arcs.
-##     Missing a ring or a rail costs speed, never life: the safe islands lie under the line.
+##     wind-ribbon grind rails, a cloud slide and a half-pipe, launched over the gaps by arcs.
+##     Missing a ring costs speed, a missed rail drops you onto a boardwalk under it.
+##   Every stage starts with a run-out deck after the checkpoint and a gate chain to get going again.
 ##
-##  1 Dawn Pier          a pier out of the start isle and a handful of cloud hops (first ring chain)
-##  2 Meadow Slide       a long grassy cloud slope down to the next isle
-##  3 Ribbon Row         two wind-ribbon rails across a wide gap
-##  4 Kite Valley        a launch arc and a chain of rings strung between the kites
-##  5 Cloud Canyon      a half-pipe carved between two cloud walls
-##  6 Cumulus Skim       a launch arc and rings over the cloud tops
-##  7 Updraft Terraces   the climb back up through the cloud: terraces and puffs | a rising ribbon
-##  8 Gale Run           boost gates, a slope and a rail along the ridge
-##  9 Rainbow Bridge     a ring chain along the rainbow
-## 10 Sunrise Surge      SET PIECE: pure flow into the sun
+##  1 Dawn Pier          gates, a launch arc and a first chain of five rings | a pier and cloud hops
+##  2 Meadow Slide       a long grassy slide strung with six rings | steps down beside it
+##  3 Ribbon Row         two wind-ribbon rails caught one off the other | boardwalks and hops
+##  4 Kite Valley        a launch arc and seven rings strung between the kites | hops through the kites
+##  5 Cloud Canyon       a half-pipe carved wall to wall | boardwalks along the rim
+##  6 Cumulus Skim       a launch arc and six rings over the cloud tops | hops between cumulus
+##  7 Updraft Terraces   two rails climbing back up through the cloud | a cloud ramp and two cloud PUFFS
+##  8 Gale Run           gates and one long swinging ridge rail | boardwalks along the ridge
+##  9 Rainbow Bridge     a high launch and a chain of eight rings under the rainbow | the rainbow's boardwalks
+## 10 Sunrise Surge      SET PIECE, pure flow: two rails up to a floating isle, then a ten-ring flight into the sun
 ##
 ## Skysurf mechanics (own scripts): SkysurfPuff (a cloud puff that springs you up), SkysurfRibbon
 ## (streaming wind ribbons that dress the flow line and show where it goes), SkysurfFlock (a flock of
@@ -34,6 +36,8 @@ var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
 var _yaw: float = 0.0
 var _next_yaw: float = 0.0
+## Which side of the next stage's chord its safe line leaves to (+1 right, -1 left).
+var _next_side: float = 1.0
 var _tuning: MovementTuning
 ## World-space checkpoint positions in build order.
 var _cp_world: Array[Vector3] = []
@@ -306,7 +310,8 @@ func _trace(a: Dictionary, chord: float, side: float, amp: float, items: Array) 
 
 ## Make `deck` the stage's checkpoint (facing the next stage) and close the safe route with it.
 func _checkpoint_at(deck: Dictionary) -> void:
-	var cp: Checkpoint = kit.checkpoint(_w(deck["c"]), _next_yaw)
+	# face a little toward the side the next safe line departs to (the flow line is still straight ahead)
+	var cp: Checkpoint = kit.checkpoint(_w(deck["c"]), _next_yaw - _next_side * 22.0)
 	_cp_world.append(_w(deck["c"]))
 	var fx: Array[GPUParticles3D] = SkysurfFx.cp_burst(deco.palette(_cp_world.size() + 1))
 	for pt: GPUParticles3D in fx:
@@ -315,8 +320,6 @@ func _checkpoint_at(deck: Dictionary) -> void:
 	_cp_bursts[cp] = fx
 	cp.reached.connect(func(which: Checkpoint) -> void:
 		if which.index > current_checkpoint:
-			# SOUND: skysurf_checkpoint - a bright wind-chime flourish
-			WorldAudio.at(self, "skysurf_checkpoint", which.global_position, 0.9, 40.0)
 			for pt2: GPUParticles3D in (_cp_bursts[which] as Array):
 				pt2.restart()
 				pt2.emitting = true)
@@ -690,9 +693,11 @@ func _build() -> void:
 	var stages: Array[Callable] = [_stage_1, _stage_2, _stage_3, _stage_4, _stage_5, _stage_6, _stage_7, _stage_8, _stage_9, _stage_10]
 	var dev_last: int = DEV_LAST if not OS.has_environment("SKYSURF_LAST") else int(OS.get_environment("SKYSURF_LAST"))
 	var last: int = stages.size() if dev_last <= 0 else mini(dev_last, stages.size())
+	var sides: Array[float] = [1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0, -1.0, 1.0]
 	_frame(Vector3.ZERO, yaws[0])
 	for i: int in last:
 		_next_yaw = yaws[i + 1]
+		_next_side = sides[i + 1]
 		var first_step: int = route.size()
 		var end: Vector3 = stages[i].call()
 		if OS.has_environment("SKYSURF_DEBUG"):

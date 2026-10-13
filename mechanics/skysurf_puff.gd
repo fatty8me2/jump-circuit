@@ -77,5 +77,4 @@ func on_bounced(player: Node) -> void:
 	super.on_bounced(player)
 	if _puff_fx != null:
 		_puff_fx.restart()
-	# SOUND: skysurf_puff - a soft airy "whumpf" with a little chime as the cloud springs you up
-	WorldAudio.at(self, "skysurf_puff", global_position, 0.9, 30.0)
+	# (the pad's own bounce sound plays; a dedicated soft "whumpf" with a chime would suit the cloud)
