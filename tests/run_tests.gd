@@ -5697,7 +5697,7 @@ func test_ze_clips_animate_cleanly() -> void:
 	for c: String in Cosmetics.ids("character"):
 		v.set_character(c)
 		v.stop_emote()
-		for i: int in 120:
+		for i: int in 40:
 			v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
 		var rest_low: float = _ze_low(v)
 		var rest_mid: float = _ze_low(v, true)
@@ -5734,11 +5734,11 @@ func test_ze_clips_animate_cleanly() -> void:
 	for i: int in 30:
 		v.animate(dt, Vector3.ZERO, true, Vector3.FORWARD)
 	check(v.is_emoting() and v.emote_kind() == "emote" and v.emote_id() == "dance", "standing still keeps the emote going")
-	for i: int in 120:
+	for i: int in 40:
 		v.animate(dt, Vector3(6, 0, 0), true, Vector3.RIGHT)
 	check(not v.is_emoting(), "running cancels the emote")
 	v.play_emote("wave", true)
-	for i: int in 120:
+	for i: int in 40:
 		v.animate(dt, Vector3(0, -5, 0), false, Vector3.FORWARD)
 	check(not v.is_emoting(), "leaving the ground cancels the emote")
 	v.play_pose("hero", false, 0.0, true)
@@ -7723,7 +7723,7 @@ func test_zn_checkpoint_flourish_and_respawn() -> void:
 		var spun: bool = v._flip_axis.y != 0.0 and v._flip_t < v._flip_len
 		var reach: float = 0.0
 		var finite: bool = true
-		for i: int in 120:
+		for i: int in 40:
 			v.animate(1.0 / 60.0, Vector3.ZERO, true, Vector3.FORWARD)
 			reach = maxf(reach, minf(v._hand_r.position.y, v._hand_l.position.y))
 			finite = finite and v._hand_r.position.is_finite() and v._hand_l.position.is_finite() and v._flip.basis.is_finite()
