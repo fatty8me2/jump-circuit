@@ -870,10 +870,31 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 			]
 		"lotus":
 			return [
-				# PLACEHOLDER - the Lotus Drift level agent replaces this case (near / mid / far layers)
-				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
-					"color": Color(1.00, 0.80, 0.55), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+				# near: fireflies pulsing round you, and pollen-gold motes lifting off the water
+				{"depth": "near", "amount": 70, "lifetime": 3.8, "tex": Fx.Tex.DOT, "size": 0.1,
+					"pick": PackedColorArray([Color(2.2, 2.6, 0.9), Color(2.6, 1.9, 0.7), Color(1.8, 2.6, 1.4)]),
+					"speed": Vector2(0.05, 0.35), "spread": 180.0, "turbulence": 1.0, "turbulence_scale": 3.0, "curve": "pop"},
+				{"depth": "near", "amount": 90, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.05, "additive": false,
+					"color": Color(1.0, 0.92, 0.82, 0.55), "speed": Vector2(0.05, 0.25), "dir": Vector3.UP, "spread": 70.0,
+					"gravity": Vector3(0.0, 0.05, 0.0), "turbulence": 0.7, "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# mid: lotus petals sliding down the wind, and a low drift of mist
+				{"depth": "mid", "amount": 55, "lifetime": 7.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.22,
+					"pick": PackedColorArray([Color(1.0, 0.74, 0.84), Color(1.0, 0.88, 0.92), Color(0.96, 0.62, 0.78)]),
+					"speed": Vector2(0.5, 1.4), "dir": Vector3(1, -0.4, 0.3), "spread": 35.0, "gravity": Vector3(0.2, -0.3, 0.05),
+					"turbulence": 1.1, "angle": Vector2(0, 360), "spin": Vector2(-180, 180),
 					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 28, "lifetime": 9.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 7.0,
+					"color": Color(0.9, 0.74, 0.82, 0.14), "speed": Vector2(0.4, 1.0), "dir": Vector3(1, 0.02, 0.3), "spread": 20.0,
+					"angle": Vector2(0, 360), "spin": Vector2(-5, 5), "curve": "puff", "radius": 28.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# far: paper sky-lanterns lifting into the dusk, and bands of mist
+				{"depth": "far", "amount": 60, "lifetime": 12.0, "tex": Fx.Tex.DOT, "size": 1.2, "radius": 90.0,
+					"pick": PackedColorArray([Color(3.0, 1.9, 0.8), Color(2.8, 1.4, 0.6), Color(3.0, 2.4, 1.4)]),
+					"dir": Vector3.UP, "spread": 12.0, "speed": Vector2(1.5, 3.5), "gravity": Vector3(0.3, 0.0, 0.15),
+					"turbulence": 0.4, "curve": "pop"},
+				{"depth": "far", "amount": 36, "lifetime": 11.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 22.0,
+					"radius": 80.0, "color": Color(0.9, 0.62, 0.7, 0.2), "speed": Vector2(0.8, 2.0), "dir": Vector3(1, 0.02, 0.3),
+					"spread": 14.0, "angle": Vector2(0, 360), "curve": "puff", "fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
 			]
 		"ascent":
 			return [

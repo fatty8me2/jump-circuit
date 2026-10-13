@@ -47,10 +47,6 @@ func _ready() -> void:
 	m.set_shader_parameter("half_size", Vector3(radius, THICK * 0.5, radius))
 	_mesh = Look.mesh_node(cm, m, Vector3(0, -THICK * 0.5, 0))
 	add_child(_mesh)
-	# a thin dark skirt of root and water just under the leaf
-	_ripple = LotusFx.ripple()
-	_ripple.position = Vector3(0, -THICK + 0.18, 0)
-	add_child(_ripple)
 	add_to_group("resettable")
 	reset_physics_interpolation()
 
@@ -71,6 +67,11 @@ func _physics_process(dt: float) -> void:
 		# a landing presses it down: a harder one, a deeper dip
 		var hit: float = clampf(absf(_player.velocity.y) / 14.0 + 0.45, 0.45, 1.0)
 		_vel = 3.2 * hit
+		if _ripple == null:
+			# (built on the first landing: most pads are never stood on in a given run)
+			_ripple = LotusFx.ripple()
+			_ripple.position = Vector3(0, -THICK + 0.18, 0)
+			add_child(_ripple)
 		_ripple.restart()
 		_ripple.emitting = true
 		# SOUND: lotus_pad_dip - a soft wet pat of a leaf pressing into the water

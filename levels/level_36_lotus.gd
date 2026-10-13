@@ -124,8 +124,8 @@ func _restyle(body: Node, kind: int) -> void:
 				(ch as MeshInstance3D).material_override = _tile_mat(kind, half, bool(old.get_shader_parameter("is_round")))
 
 
-func _note_floor(top: Vector3, size: Vector3, yaw: float) -> void:
-	_floors.append({"top": top, "r": maxf(size.x, size.z) * 0.5, "yaw": yaw, "size": size})
+func _note_floor(top: Vector3, size: Vector3, yaw: float, kind: int = -1) -> void:
+	_floors.append({"top": top, "r": maxf(size.x, size.z) * 0.5, "yaw": yaw, "size": size, "kind": kind})
 
 
 ## A straight slab from the cursor along the heading: `len` long, `w` wide, flush with the last.
@@ -136,7 +136,7 @@ func _slab(len: float, w: float = 3.6, kind: int = 0, thick: float = 0.8) -> voi
 	var size := Vector3(w, thick, len)
 	var body: StaticBody3D = kit.plat(c, size, "main", 0.0, _yaw)
 	_restyle(body, kind)
-	_note_floor(c, size, _yaw)
+	_note_floor(c, size, _yaw, kind)
 	var end: Vector3 = start + f * len
 	if _have_jump:
 		_go(start + f * minf(1.2, len * 0.5))
@@ -221,7 +221,7 @@ func _pads(n: int, pct: float, r: float = 1.3, curve: float = 0.0, s_bend: bool 
 		pad.radius = r
 		pad.position = c
 		add_child(pad)
-		_note_floor(c, Vector3(r * 2.0, 0.5, r * 2.0), _yaw)
+		_note_floor(c, Vector3(r * 2.0, 0.5, r * 2.0), _yaw, 1)
 		_go(c)
 		_tier_note(c)
 		_pos = c
@@ -336,11 +336,13 @@ func _isle(radius: float, next_yaw: float, with_cp: bool = true, shrine: bool = 
 	else:
 		r_walk(c)
 	_tier_note(c)
+	var cp: Checkpoint = null
 	if with_cp:
-		var cp: Checkpoint = kit.checkpoint(c, next_yaw)
+		cp = kit.checkpoint(c, next_yaw)
 		_cp_world.append(c)
 		_cp_nodes.append(cp)
 		r_checkpoint()
+	_isles.append({"c": c, "r": radius, "yaw_in": _yaw, "yaw_out": next_yaw, "cp": with_cp, "node": cp})
 	_yaw = next_yaw
 	_pos = c + _fwd(_yaw) * (radius - 0.6) - Vector3(0, HUB_RISE, 0)
 	_edge_r = 0.0
@@ -510,19 +512,9 @@ func _stage_10() -> void:
 	r_walk(fin + f * 0.2)
 
 
-# ---- dressing (filled in below) -------------------------------------------------------------------
-
-func _deck_dress(a: Vector3, b: Vector3, w: float) -> void:
-	pass
 
 
-func _arch_dress(a: Vector3, b: Vector3, rise: float) -> void:
-	pass
-
-
-func _dress() -> void:
-	pass
-
+# ---- environment --------------------------------------------------------------------------------
 
 func _restyle_environment() -> void:
 	for n: Node in get_children():
@@ -533,3 +525,438 @@ func _restyle_environment() -> void:
 				_sun = n as DirectionalLight3D
 			else:
 				_fill = n as DirectionalLight3D
+	_env.background_mode = Environment.BG_SKY
+	_env.sky = LotusSky.make()
+	_env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	_env.ambient_light_color = Color(0.56, 0.5, 0.78)
+	_env.ambient_light_energy = 0.66
+	_env.reflected_light_source = Environment.REFLECTION_SOURCE_SKY
+	_env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	_env.tonemap_exposure = 1.05
+	_env.tonemap_white = 6.0
+	_env.fog_enabled = true
+	_env.fog_light_color = Color(0.66, 0.46, 0.56)
+	_env.fog_density = 0.0036
+	_env.fog_aerial_perspective = 0.55
+	_env.fog_sky_affect = 0.1
+	_env.fog_sun_scatter = 0.35
+	_env.glow_enabled = true
+	_env.glow_intensity = 0.8
+	_env.glow_bloom = 0.1
+	_env.glow_hdr_threshold = 1.0
+	_env.adjustment_enabled = true
+	_env.adjustment_saturation = 1.12
+	_env.adjustment_contrast = 1.06
+	# a low, warm key light from the glowing horizon, and a cool violet fill from the dark side
+	_sun.light_color = Color(1.0, 0.72, 0.54)
+	_sun.light_energy = 1.05
+	_sun.rotation_degrees = Vector3(-17, 160, 0)
+	_fill.light_color = Color(0.5, 0.5, 0.95)
+	_fill.light_energy = 0.34
+	_fill.rotation_degrees = Vector3(-30, -20, 0)
+
+
+# ---- dressing -------------------------------------------------------------------------------------
+
+## Width either side of a tier's path that is pond.
+const POND_M: float = 13.0
+
+var _spiral_center: Vector3 = Vector3.ZERO
+var _isles: Array[Dictionary] = []
+
+
+func _dress() -> void:
+	_isles_from_cps()
+	_build_water()
+	_dress_cascades()
+	_dress_path()
+	_dress_isles()
+	_dress_start_and_finish()
+	_dress_banks()
+	_dress_life()
+	_dress_far()
+	_kill_nets()
+
+
+func _isles_from_cps() -> void:
+	var sum := Vector3.ZERO
+	for p: Vector3 in _cp_world:
+		sum += p
+	_spiral_center = sum / maxf(float(_cp_world.size()), 1.0)
+
+
+## A stone deck rail (railing posts, lanterns) along a boardwalk segment.
+func _deck_dress(a: Vector3, b: Vector3, w: float) -> void:
+	deco.bridge_rails(a, b, w * 0.5 - 0.05, true)
+
+
+## The ring of the moon bridge under the flat top (two stone rings, one each side of the deck).
+func _arch_dress(a: Vector3, b: Vector3, rise: float) -> void:
+	var mid: Vector3 = (a + b) * 0.5
+	var r: float = rise + 0.5 + 0.6
+	var n := Node3D.new()
+	n.position = Vector3(mid.x, mid.y - 0.5 - r + 0.12, mid.z)
+	n.rotation.y = deg_to_rad(_yaw)
+	add_child(n)
+	var tm := TorusMesh.new()
+	tm.inner_radius = r - 0.2
+	tm.outer_radius = r
+	tm.rings = 36
+	tm.ring_segments = 8
+	var stone := Look.flat(Color(0.52, 0.5, 0.56), 0.9)
+	for sx: float in [-1.0, 1.0]:
+		var ring := Look.mesh_node(tm, stone, Vector3(sx * 1.45, 0, 0))
+		ring.rotation.z = PI * 0.5
+		n.add_child(ring)
+	# a dark band of stone under the deck between the rings
+	n.add_child(Look.box(Vector3(3.0, 0.3, 4.6), Look.flat(Color(0.34, 0.33, 0.4), 0.9), Vector3(0, r - 0.12, 0)))
+
+
+# ---- the water ----------------------------------------------------------------------------------
+
+func _patch(c: Vector3, yaw: float, lat: float, half_len: float, y: float, skirt: float) -> void:
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(lat * 2.0, half_len * 2.0)
+	var mi := Look.mesh_node(pm, LotusDecor.water_material(), Vector3(c.x, y, c.z))
+	mi.rotation.y = yaw
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	if skirt > 0.0:
+		var sk := Look.box(Vector3(lat * 2.0 - 0.4, skirt, half_len * 2.0 - 0.4), Look.flat(Color(0.12, 0.13, 0.17), 0.95), Vector3(c.x, y - 0.15 - skirt * 0.5, c.z))
+		sk.rotation.y = yaw
+		sk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(sk)
+
+
+func _build_water() -> void:
+	var lowest: float = INF
+	for ti: int in _tiers.size():
+		var t: Dictionary = _tiers[ti]
+		var pts: PackedVector3Array = t["pts"]
+		var y: float = float(t["y"]) - WATER_DROP
+		var next_y: float = (float(_tiers[ti + 1]["y"]) - WATER_DROP) if ti + 1 < _tiers.size() else y - 24.0
+		var skirt: float = y - next_y + 3.0
+		lowest = minf(lowest, y)
+		if pts.size() < 2:
+			continue
+		for i: int in range(pts.size() - 1):
+			var a: Vector3 = pts[i]
+			var b: Vector3 = pts[i + 1]
+			var d := Vector3(b.x - a.x, 0.0, b.z - a.z)
+			var len: float = d.length()
+			if len < 0.6:
+				continue
+			var yaw: float = atan2(-d.x, -d.z)
+			_patch((a + b) * 0.5, yaw, POND_M, len * 0.5, y, skirt)
+			if i > 0:
+				_patch(a, 0.0, POND_M, POND_M, y, skirt)
+		# the first tier also reaches back behind the start isle
+		if ti == 0:
+			_patch(pts[0] + Vector3(0, 0, 4.0), 0.0, POND_M + 4.0, POND_M + 6.0, y, skirt)
+		# and the last one all round the great lotus
+		if ti == _tiers.size() - 1:
+			_patch(pts[pts.size() - 1], 0.0, POND_M + 6.0, POND_M + 8.0, y, skirt)
+	# the lake: one great sheet far below everything, reaching the horizon
+	var lake := PlaneMesh.new()
+	lake.size = Vector2(4000, 4000)
+	var lm := Look.mesh_node(lake, LotusDecor.water_material(), Vector3(_spiral_center.x, lowest - 3.5, _spiral_center.z))
+	lm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(lm)
+
+
+## Catch nets: invisible kill boxes just under each pond's water, wherever the pond surface is.
+func _kill_nets() -> void:
+	for ti: int in _tiers.size():
+		var t: Dictionary = _tiers[ti]
+		var pts: PackedVector3Array = t["pts"]
+		var y: float = float(t["y"]) - 0.55
+		for i: int in range(pts.size() - 1):
+			var a: Vector3 = pts[i]
+			var b: Vector3 = pts[i + 1]
+			var d := Vector3(b.x - a.x, 0.0, b.z - a.z)
+			var len: float = d.length()
+			if len < 0.6:
+				continue
+			var k := KillZone.new()
+			k.size = Vector3(POND_M * 2.0 - 1.0, 0.8, len)
+			k.show_mesh = false
+			k.rotation.y = atan2(-d.x, -d.z)
+			k.position = Vector3((a.x + b.x) * 0.5, y - 0.4, (a.z + b.z) * 0.5)
+			add_child(k)
+			if i > 0:
+				var k2 := KillZone.new()
+				k2.size = Vector3(POND_M * 2.0 - 1.0, 0.8, POND_M * 2.0 - 1.0)
+				k2.show_mesh = false
+				k2.position = Vector3(a.x, y - 0.4, a.z)
+				add_child(k2)
+
+
+# ---- cascades: weirs, waterfalls, the ramp's stone bank ------------------------------------------------
+
+func _dress_cascades() -> void:
+	var stone := Look.flat(Color(0.42, 0.42, 0.5), 0.95)
+	var cap := Look.flat(Color(0.6, 0.58, 0.62), 0.85)
+	for c: Dictionary in _cascades:
+		var a: Vector3 = c["a"]
+		var b: Vector3 = c["b"]
+		var yaw: float = float(c["yaw"])
+		var w: float = float(c["w"])
+		var f: Vector3 = _fwd(yaw)
+		var r: Vector3 = _right(yaw)
+		var y_u: float = a.y - WATER_DROP
+		var y_l: float = b.y - WATER_DROP
+		var gap_half: float = w * 0.5 + 0.9
+		var outer: float = POND_M
+		var wall_len: float = (outer - gap_half)
+		var wall_h: float = (y_u + 0.3) - (y_l - 1.2)
+		for sgn: float in [-1.0, 1.0]:
+			var lat: float = sgn * (gap_half + wall_len * 0.5)
+			var wc: Vector3 = a + f * 1.6 + r * lat
+			var wall := Look.box(Vector3(wall_len, wall_h, 3.2), stone, Vector3(wc.x, (y_u + 0.3 + y_l - 1.2) * 0.5, wc.z))
+			wall.rotation.y = deg_to_rad(yaw)
+			add_child(wall)
+			var topc := Look.box(Vector3(wall_len + 0.2, 0.22, 3.6), cap, Vector3(wc.x, y_u + 0.3 - 0.0, wc.z))
+			topc.rotation.y = deg_to_rad(yaw)
+			add_child(topc)
+			# a waterfall curtain on the front face, off to each side of the walkway
+			var off: float = sgn * (gap_half + 3.4)
+			var fall_top: Vector3 = a + f * 3.15 + r * off
+			deco.waterfall(Vector3(fall_top.x, y_u + 0.1, fall_top.z), 3.6, y_u - y_l + 0.2, yaw + 180.0)
+			LotusFx.spray(self, Vector3(fall_top.x, y_l + 0.25, fall_top.z) + f * 0.8, Vector3(1.8, 0.2, 0.7), 26)
+		# the stepped stone bank under the ramp, and a low parapet along both sides
+		var run: float = Vector2(b.x - a.x, b.z - a.z).length()
+		var n_steps: int = maxi(int(run / 1.8), 2)
+		var dx: float = run / float(n_steps)
+		for i: int in n_steps:
+			var s0: float = float(i) * dx
+			var surf_far_y: float = a.y - (float(i + 1) * dx) * tan(deg_to_rad(CASCADE_DEG))
+			var top_y: float = surf_far_y - 0.62
+			var bot_y: float = y_l - 1.2
+			if top_y <= bot_y + 0.2:
+				continue
+			var ctr: Vector3 = a + f * (s0 + dx * 0.5)
+			var blk := Look.box(Vector3(w + 0.5, top_y - bot_y, dx), stone, Vector3(ctr.x, (top_y + bot_y) * 0.5, ctr.z))
+			blk.rotation.y = deg_to_rad(yaw)
+			add_child(blk)
+		for sgn2: float in [-1.0, 1.0]:
+			var side: Vector3 = r * sgn2 * (w * 0.5 + 0.2)
+			deco.rod(a + side + Vector3(0, 0.3, 0), b + side + Vector3(0, 0.3, 0), 0.17, cap, null, 6)
+			deco.stone_lantern(a + side * 1.5 + f * 0.8 + Vector3(0, 0.0, 0), 1.0, true)
+			deco.stone_lantern(b + side * 1.5 - f * 0.6, 1.0, true)
+
+
+# ---- the path: lanterns, chimes, flowers --------------------------------------------------------------
+
+func _dress_path() -> void:
+	var rng: RandomNumberGenerator = kit.rng
+	var chime_i: int = 0
+	for fl: Dictionary in _floors:
+		var kind: int = int(fl.get("kind", -1))
+		var size: Vector3 = fl["size"]
+		var top: Vector3 = fl["top"]
+		var yaw: float = float(fl["yaw"])
+		var f: Vector3 = _fwd(yaw)
+		var r: Vector3 = _right(yaw)
+		if kind == 0 and size.z >= 9.0 and size.x < 5.0:
+			# a stone lantern in the water beside every ~11 m of path, alternating sides
+			var count: int = int(size.z / 11.0)
+			for i: int in count:
+				var along: float = (-0.5 + (float(i) + 0.5) / float(maxi(count, 1))) * size.z
+				var sgn: float = 1.0 if (i + int(top.x)) % 2 == 0 else -1.0
+				var p: Vector3 = top + f * along + r * sgn * (size.x * 0.5 + 0.9)
+				deco.stone_lantern(Vector3(p.x, top.y - 0.15, p.z), 1.0, true)
+				deco.slab(Vector3(p.x, top.y - 0.9, p.z), Vector3(0.9, 1.5, 0.9), Look.flat(Color(0.34, 0.34, 0.4), 0.95))
+			if size.z >= 20.0 and chime_i < 40:
+				_chime(top + r * (size.x * 0.5 + 0.7) + f * size.z * 0.15, chime_i)
+				chime_i += 1
+		elif kind == 2 and size.z >= 12.0 and chime_i < 40:
+			_chime(top + r * (size.x * 0.5 + 0.5) - f * size.z * 0.2, chime_i)
+			chime_i += 1
+		elif kind == 1:
+			# some pads carry a lotus flower at their edge
+			if rng.randf() < 0.28:
+				var side_dir: Vector3 = r * (1.0 if rng.randf() < 0.5 else -1.0)
+				var rr: float = float(fl["r"])
+				deco.lotus_flower(Vector3(top.x, top.y - 0.35, top.z) + side_dir * (rr + 0.9), rng.randf_range(0.8, 1.3), 1.0 if rng.randf() < 0.8 else 0.0, 0.7)
+
+
+## A chime on a post: a short post with an arm, the LotusChime hanging from its end.
+func _chime(pos: Vector3, idx: int) -> void:
+	var wood := Look.flat(Color(0.26, 0.16, 0.12), 0.8)
+	var h: float = 3.2
+	var post := Look.cylinder(0.09, h + 1.0, wood, Vector3(pos.x, pos.y + (h - 1.0) * 0.5, pos.z), 0.07, 6)
+	add_child(post)
+	var arm_end := Vector3(pos.x + 0.9, pos.y + h, pos.z)
+	deco.rod(Vector3(pos.x, pos.y + h, pos.z), arm_end, 0.05, wood, null, 5)
+	var ch := LotusChime.new()
+	ch.note = idx % 5
+	ch.height = 1.5
+	ch.position = arm_end
+	add_child(ch)
+
+
+# ---- isles: lotus, lanterns, rocks, a tree ------------------------------------------------------------
+
+func _dress_isles() -> void:
+	var rng: RandomNumberGenerator = kit.rng
+	for i: int in _isles.size():
+		var d: Dictionary = _isles[i]
+		var c: Vector3 = d["c"]
+		var rad: float = float(d["r"])
+		var yin: float = float(d["yaw_in"])
+		var yout: float = float(d["yaw_out"])
+		var fin: Vector3 = _fwd(yin)
+		var rin: Vector3 = _right(yin)
+		var fout: Vector3 = _fwd(yout)
+		var is_cp: bool = bool(d["cp"])
+		if is_cp:
+			# the lotus bud in its basin on the left-hand rim, a pair of toro at the entrance
+			var bloom := LotusBloom.new()
+			bloom.scale_k = 2.2
+			var bp: Vector3 = c + (-fin * 0.45 - rin * 0.9).normalized() * (rad - 1.3)
+			bloom.position = Vector3(bp.x, c.y, bp.z)
+			add_child(bloom)
+			bloom.bind(d["node"], self)
+			for sgn: float in [-1.0, 1.0]:
+				var lp: Vector3 = c - fin * (rad - 0.9) + rin * sgn * 2.4
+				deco.stone_lantern(Vector3(lp.x, c.y, lp.z), 1.1, true)
+		# rocks and reeds at the water's edge, away from the entrance and exit
+		for k: int in 5:
+			var ang: float = rng.randf() * TAU
+			var dir := Vector3(cos(ang), 0, sin(ang))
+			if dir.dot(fin) < -0.6 or dir.dot(fout) > 0.6:
+				continue
+			var p: Vector3 = c + dir * (rad + rng.randf_range(0.2, 1.2))
+			deco.rock(Vector3(p.x, c.y - 0.5, p.z), rng.randf_range(0.7, 1.4))
+			deco.reeds(Vector3(p.x, c.y - 0.5, p.z) + dir * 0.9, 7, 0.9, 2.0)
+		# a tree on the isle's far side
+		var back: Vector3 = c - fout * (rad * 0.55) + (rin * (1.0 if i % 2 == 0 else -1.0)) * (rad * 0.4)
+		match i % 3:
+			0: deco.maple(Vector3(back.x, c.y, back.z), 1.2)
+			1: deco.pine(Vector3(back.x, c.y, back.z), 1.1)
+			2: deco.willow(Vector3(back.x, c.y, back.z), 1.0)
+
+
+func _dress_start_and_finish() -> void:
+	# the moon gate across the first stone path
+	deco.moon_gate(Vector3(0, 0, -11.5), 3.7, 0.0, 8.0)
+	deco.lantern_string(Vector3(-6.5, 5.8, -3.0), Vector3(6.5, 5.9, -3.0), 9, 1.1)
+	# the great lotus round the finish dais
+	var f: Vector3 = _fwd(_yaw)
+	var c: Vector3 = _finish_pos - f * 1.5
+	var big := MeshInstance3D.new()
+	big.mesh = LotusDecor.flower_mesh(1.0)
+	big.scale = Vector3.ONE * 15.0
+	big.position = Vector3(c.x, c.y - 1.0, c.z)
+	big.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(big)
+	# lanterns round the dais rim
+	for i: int in 10:
+		var a: float = TAU * float(i) / 10.0
+		var p: Vector3 = c + Vector3(cos(a), 0, sin(a)) * 6.4
+		if Vector3(cos(a), 0, sin(a)).dot(f) < -0.8:
+			continue
+		deco.stone_lantern(Vector3(p.x, c.y, p.z), 1.15, true)
+
+
+# ---- banks, trees, far scenery ----------------------------------------------------------------------
+
+## Clear of the walkable path by more than `dist` in plan.
+func _clear_of_path(p: Vector3, dist: float) -> bool:
+	for fl: Dictionary in _floors:
+		var t: Vector3 = fl["top"]
+		if Vector2(p.x - t.x, p.z - t.z).length() < dist + float(fl["r"]):
+			return false
+	return true
+
+
+func _dress_banks() -> void:
+	var rng: RandomNumberGenerator = kit.rng
+	for ti: int in _tiers.size():
+		var t: Dictionary = _tiers[ti]
+		var pts: PackedVector3Array = t["pts"]
+		var y: float = float(t["y"]) - WATER_DROP
+		var last_pt := Vector3.INF
+		for i: int in range(pts.size()):
+			var p: Vector3 = pts[i]
+			if last_pt != Vector3.INF and Vector2(p.x - last_pt.x, p.z - last_pt.z).length() < 16.0:
+				continue
+			last_pt = p
+			var nxt: Vector3 = pts[mini(i + 1, pts.size() - 1)]
+			var d := Vector3(nxt.x - p.x, 0, nxt.z - p.z)
+			if d.length() < 0.5:
+				d = Vector3(p.x - pts[maxi(i - 1, 0)].x, 0, p.z - pts[maxi(i - 1, 0)].z)
+			if d.length() < 0.5:
+				continue
+			d = d.normalized()
+			var side := Vector3(-d.z, 0, d.x)
+			for sgn: float in [-1.0, 1.0]:
+				var bp: Vector3 = p + side * sgn * (POND_M - 1.0 + rng.randf_range(-1.5, 1.5)) + d * rng.randf_range(-4.0, 4.0)
+				if not _clear_of_path(bp, 7.0):
+					continue
+				var rad: float = rng.randf_range(4.0, 7.5)
+				deco.mound(Vector3(bp.x, y - 0.3, bp.z), rad, rng.randf_range(2.0, 3.6), rad * rng.randf_range(0.8, 1.2))
+				var top := Vector3(bp.x, y + 2.0, bp.z)
+				match rng.randi_range(0, 4):
+					0: deco.willow(top, rng.randf_range(1.0, 1.5))
+					1: deco.maple(top, rng.randf_range(1.2, 1.9))
+					2: deco.pine(top, rng.randf_range(1.2, 1.7))
+					3: deco.bamboo(top, 9, 7.0, 1.6)
+					4:
+						deco.maple(top, 1.4)
+						deco.stone_lantern(top + side * sgn * -2.5, 1.2, true)
+
+
+func _dress_far() -> void:
+	var rng: RandomNumberGenerator = kit.rng
+	var lowest: float = INF
+	for t: Dictionary in _tiers:
+		lowest = minf(lowest, float(t["y"]))
+	# the central isle in the lake: the tall pagoda
+	var cc := Vector3(_spiral_center.x, lowest - 4.0, _spiral_center.z)
+	deco.mound(cc, 34.0, 14.0, 34.0, Color(0.14, 0.3, 0.2))
+	deco.pagoda(cc + Vector3(0, 12.0, 0), 7, 2.0, 0.4, true)
+	for i: int in 6:
+		var a: float = TAU * float(i) / 6.0 + 0.3
+		deco.pine(cc + Vector3(cos(a) * 22.0, 11.0, sin(a) * 22.0), 2.2)
+	# a ring of dark wooded hills round the whole garden, each with a lit pagoda or a torii
+	for i: int in 16:
+		var a2: float = TAU * (float(i) + rng.randf() * 0.5) / 16.0
+		var rr: float = rng.randf_range(420.0, 640.0)
+		var base := Vector3(_spiral_center.x + cos(a2) * rr, lowest - 6.0 + rng.randf_range(-4.0, 8.0), _spiral_center.z + sin(a2) * rr)
+		var hr: float = rng.randf_range(60.0, 120.0)
+		deco.mound(base, hr, rng.randf_range(40.0, 90.0), hr * rng.randf_range(0.7, 1.2), Color(0.1, 0.22, 0.2))
+		if i % 2 == 0:
+			deco.pagoda(base + Vector3(0, rng.randf_range(30.0, 50.0), 0), rng.randi_range(3, 5), rng.randf_range(2.5, 4.0), rng.randf() * TAU, true)
+
+
+# ---- life: koi, fireflies, mist, lanterns --------------------------------------------------------------
+
+func _dress_life() -> void:
+	var rng: RandomNumberGenerator = kit.rng
+	for ti: int in _tiers.size():
+		var t: Dictionary = _tiers[ti]
+		var pts: PackedVector3Array = t["pts"]
+		if pts.size() < 2:
+			continue
+		var y: float = float(t["y"]) - WATER_DROP
+		var mid: Vector3 = pts[pts.size() / 2]
+		# koi round the middle of the tier, and a drift of fireflies, mist and petals above it
+		var koi := LotusKoi.new()
+		koi.count = 4 + ti % 3
+		koi.extent = Vector2(9.0, 5.0)
+		koi.position = Vector3(mid.x, y, mid.z)
+		koi.rotation.y = rng.randf() * TAU
+		add_child(koi)
+		for k: int in 5:
+			var p: Vector3 = pts[rng.randi_range(0, pts.size() - 1)]
+			var dir := Vector3(rng.randf_range(-1, 1), 0, rng.randf_range(-1, 1)).normalized()
+			var cp: Vector3 = Vector3(p.x, y, p.z) + dir * rng.randf_range(5.0, 11.0)
+			if _clear_of_path(cp, 3.0):
+				deco.lily_cluster(cp, rng.randi_range(4, 7), 2.2, rng.randi_range(0, 2))
+		LotusFx.fireflies(self, Vector3(mid.x, y + 1.6, mid.z), Vector3(26.0, 1.6, 26.0), 40)
+		LotusFx.mist(self, Vector3(mid.x, y + 0.9, mid.z), Vector3(30.0, 0.5, 30.0), 10)
+		LotusFx.petals(self, Vector3(mid.x, y + 4.0, mid.z), Vector3(28.0, 3.0, 28.0), 14)
+	# sky lanterns lifting off at the start and round the great lotus
+	LotusFx.sky_lanterns(self, Vector3(0, 6, -8), Vector3(18, 2, 18), 10)
+	LotusFx.sky_lanterns(self, _finish_pos + Vector3(0, 4, 0), Vector3(22, 2, 22), 24)
