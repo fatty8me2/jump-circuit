@@ -870,10 +870,27 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 			]
 		"skysurf":
 			return [
-				# PLACEHOLDER - the Sky Surf level agent replaces this case (near / mid / far layers)
-				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
-					"color": Color(1.00, 0.85, 0.80), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+				# near: petals and sunlit glints streaming past on the wind
+				{"depth": "near", "amount": 110, "lifetime": 3.0, "tex": Fx.Tex.PETAL, "additive": false, "size": 0.22,
+					"pick": PackedColorArray([Color(1.0, 0.62, 0.7), Color(1.0, 0.84, 0.62), Color(1.0, 0.96, 0.78), Color(0.76, 0.94, 0.86), Color(0.86, 0.78, 1.0)]),
+					"dir": Vector3(0.3, 0.05, 0.6), "spread": 40.0, "speed": Vector2(0.8, 2.2), "gravity": Vector3(0.1, -0.2, 0.3),
+					"turbulence": 1.0, "turbulence_scale": 5.0, "angle": Vector2(0, 360), "spin": Vector2(-200, 200),
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0]), "scale": Vector2(0.6, 1.2)},
+				{"depth": "near", "amount": 70, "lifetime": 2.2, "tex": Fx.Tex.STAR, "size": 0.12,
+					"color": Color(2.2, 1.7, 1.1), "speed": Vector2(0.0, 0.25), "spread": 180.0, "curve": "pop",
 					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				# mid: long pale wind streaks and soft cloud wisps drifting between the islands
+				{"depth": "mid", "amount": 75, "lifetime": 1.4, "facing": "velocity", "tex": Fx.Tex.SPARK,
+					"size": Vector2(0.03, 1.6), "color": Color(1.5, 1.35, 1.35, 0.55), "dir": Vector3(0.1, -0.02, 0.9), "spread": 6.0,
+					"speed": Vector2(9.0, 14.0), "fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+				{"depth": "mid", "amount": 36, "lifetime": 8.0, "tex": Fx.Tex.SMOKE, "additive": false, "size": 7.0,
+					"color": Color(1.0, 0.92, 0.9, 0.3), "dir": Vector3(0.2, 0.0, 0.5), "spread": 30.0, "speed": Vector2(0.4, 1.2),
+					"angle": Vector2(0, 360), "spin": Vector2(-8, 8), "fade": PackedFloat32Array([0.0, 0.7, 0.7, 0.0]),
+					"scale": Vector2(0.7, 1.4)},
+				# far: big glowing seeds of light high over the cloud sea
+				{"depth": "far", "amount": 70, "lifetime": 10.0, "tex": Fx.Tex.STAR, "size": 1.4, "radius": 65.0,
+					"color": Color(1.8, 1.4, 1.5), "dir": Vector3.UP, "spread": 25.0, "speed": Vector2(0.6, 2.0), "curve": "pop",
+					"fade": PackedFloat32Array([0.0, 0.8, 0.8, 0.0])},
 			]
 		"hyperloop":
 			return [
