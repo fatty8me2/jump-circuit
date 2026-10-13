@@ -240,15 +240,19 @@ func _trace(a: Dictionary, chord: float, side: float, amp: float, items: Array) 
 			"span", "climb":
 				adv = float(it["len"])
 		var p: float = -c.z - p0
-		var xt: float = side * amp * pow(sin(PI * clampf((p + adv) / chord, 0.0, 1.0)), 0.5)
+		# bow out to `amp` early and hold it until the final approach, which comes in from the side
+		var xt: float = side * amp * pow(sin(PI * clampf((p + adv) / chord, 0.0, 0.5)), 0.5)
 		var ang: float = clampf(rad_to_deg(atan2(-(xt - c.x), adv)), -55.0, 55.0)
 		# the path turns gradually: a hop that follows a boardwalk leaves along it
-		var max_turn: float = 8.0 if (prev_t == "span" or prev_t == "climb") and str(it["t"]) == "hop" else 30.0
+		var max_turn: float = 8.0 if (prev_t == "span" or prev_t == "climb") else 30.0
 		if ii == 0:
 			# leave the start deck sideways, out of the flow line's way
 			ang = -side * 55.0
 		else:
-			ang = prev_ang + clampf(ang - prev_ang, -max_turn, max_turn)
+			var raw: float = ang
+			if ii >= n_items - 3:
+				raw = side * [25.0, 55.0, 85.0][ii - (n_items - 3)]
+			ang = prev_ang + clampf(raw - prev_ang, -max_turn, max_turn)
 		prev_ang = ang
 		prev_t = str(it["t"])
 		var style: String = str(it.get("style", "main"))
@@ -262,6 +266,8 @@ func _trace(a: Dictionary, chord: float, side: float, amp: float, items: Array) 
 				cur = _climb(cur, ang, float(it["len"]), float(it["dy"]), float(it["w"]), style)
 			"cp":
 				cur = _hop(cur, ang, float(it["pct"]), float(it["dy"]), {"r": it["r"]}, str(it.get("style", "goal")), 1.0, 7.0)
+				# we came in from the side: step to the middle of the deck before the next stage's walk
+				r_walk(_w(cur["c"]))
 	return cur
 
 
@@ -447,7 +453,7 @@ func _flow_rails(a: Vector3, b: Vector3, opts: Dictionary = {}) -> Dictionary:
 	for k: int in n1:
 		var s: float = lerpf(s0, s_mid, float(k) / float(n1 - 1))
 		var t: float = (s - s0) / (s_end - s0)
-		var p: Vector3 = a + u * s + side * (swing * sin(TAU * t))
+		var p: Vector3 = a + u * s + side * (swing * sin(TAU * t) * sin(PI * t))
 		p.y = lerpf(y0, y1, t)
 		r1.append(p)
 	var rail1: GrindRail = kit.rail(r1, {"post_to_y": minf(a.y, b.y) - 12.0})
@@ -464,7 +470,7 @@ func _flow_rails(a: Vector3, b: Vector3, opts: Dictionary = {}) -> Dictionary:
 		for k: int in range(1, n2 + 1):
 			var s: float = lerpf((p2 - a).dot(u), s_end, float(k) / float(n2))
 			var t: float = (s - s0) / (s_end - s0)
-			var p: Vector3 = a + u * s + side * (swing * sin(TAU * t))
+			var p: Vector3 = a + u * s + side * (swing * sin(TAU * t) * sin(PI * t))
 			p.y = lerpf(p2.y, y1, float(k) / float(n2))
 			r2.append(p)
 		rail2 = kit.rail(r2, {"post_to_y": minf(a.y, b.y) - 12.0})
@@ -621,7 +627,7 @@ func _stage_3() -> Vector3:
 	var s0: int = route.size()
 	var cp: Dictionary = _trace(a, 90.0, 1.0, 15.0, items)
 	_checkpoint_at(cp)
-	_use_flow(s0, _flow_rails(_o, _w(cp["c"]), {"two": true, "swing": 4.0}))
+	_use_flow(s0, _flow_rails(_o, _w(cp["c"]), {"two": true, "swing": 6.0}))
 	r_checkpoint()
 	return cp["c"]
 
@@ -681,7 +687,7 @@ func _stage_7() -> Vector3:
 	var cp: Dictionary = _trace(a, 90.0, 1.0, 15.0, items)
 	_checkpoint_at(cp)
 	# the rising ribbon: two rails climbing back up through the cloud
-	_use_flow(s0, _flow_rails(_o, _w(cp["c"]), {"two": true, "swing": 5.0}))
+	_use_flow(s0, _flow_rails(_o, _w(cp["c"]), {"two": true, "swing": 7.0}))
 	r_checkpoint()
 	return cp["c"]
 
@@ -695,7 +701,7 @@ func _stage_8() -> Vector3:
 	var s0: int = route.size()
 	var cp: Dictionary = _trace(a, 90.0, -1.0, 15.0, items)
 	_checkpoint_at(cp)
-	_use_flow(s0, _flow_rails(_o, _w(cp["c"]), {"two": false, "swing": 7.0}))
+	_use_flow(s0, _flow_rails(_o, _w(cp["c"]), {"two": false, "swing": 10.0}))
 	r_checkpoint()
 	return cp["c"]
 
@@ -721,17 +727,17 @@ func _stage_10() -> Vector3:
 	var a: Dictionary = {"c": Vector3.ZERO, "r": 6.0}
 	var s0: int = route.size()
 	# first half: to a floating mid isle (no checkpoint), second half: on to the sun isle with the finish gate
-	var items1: Array = [_S(10.0, 3.4), _H(0.70, -0.5, 1.9), _B(0.72, -0.5, 3.0, 3.0), _S(10.0, 3.2), _H(0.70, -0.5, 1.9),
-		_B(0.72, -0.5, 3.2, 3.2), {"t": "cp", "pct": 0.72, "dy": -0.5, "r": 6.0, "style": "accent"}]
-	var mid: Dictionary = _trace(a, 85.0, -1.0, 15.0, items1)
-	var items2: Array = [_S(10.0, 3.4), _C(30.0, -4.5, 3.6), _H(0.70, -0.5, 1.9), _B(0.72, -0.5, 3.0, 3.0), _S(8.0, 3.2),
-		_H(0.70, -0.5, 1.9), _B(0.72, -0.5, 3.2, 3.2), {"t": "cp", "pct": 0.72, "dy": -0.4, "r": 7.0}]
-	var fin: Dictionary = _trace(mid, 95.0, 1.0, 15.0, items2)
+	var items1: Array = [_S(14.0, 3.4), _H(0.70, -0.5, 1.9), _B(0.72, -0.5, 3.0, 3.0), _S(14.0, 3.2), _H(0.70, -0.5, 1.9),
+		_B(0.72, -0.5, 3.2, 3.2), _S(12.0, 3.2), _H(0.70, -0.5, 1.9), _B(0.72, -0.5, 3.0, 3.0), {"t": "cp", "pct": 0.72, "dy": -0.5, "r": 6.0, "style": "accent"}]
+	var mid: Dictionary = _trace(a, 100.0, -1.0, 15.0, items1)
+	var items2: Array = [_S(12.0, 3.4), _C(30.0, -4.5, 3.6), _H(0.70, -0.5, 1.9), _B(0.72, -0.5, 3.0, 3.0), _S(14.0, 3.2),
+		_H(0.70, -0.5, 1.9), _B(0.72, -0.5, 3.2, 3.2), _H(0.72, -0.4, 1.9), {"t": "cp", "pct": 0.72, "dy": -0.4, "r": 7.0}]
+	var fin: Dictionary = _trace(mid, 105.0, 1.0, 15.0, items2)
 	kit.finish(_w(fin["c"]), _yaw)
 	_finish_pos = _w(fin["c"])
 	# the flow line: ribbons up to the mid isle, then the great ring flight into the sun
 	var m_w: Vector3 = _w(mid["c"])
-	var leg1: Dictionary = _flow_rails(_o, m_w, {"two": true, "swing": 6.0})
+	var leg1: Dictionary = _flow_rails(_o, m_w, {"two": true, "swing": 7.0})
 	var leg2: Dictionary = _flow_arc(m_w, _w(fin["c"]), {"rings": 10, "ring_add": 3.0, "pitch": 28.0, "deck": 12.0})
 	var all_steps: Array[Dictionary] = []
 	all_steps.append_array(leg1["steps"] as Array[Dictionary])
