@@ -284,10 +284,11 @@ static func medal_of(levels: Dictionary, id: String) -> int:
 	return Game.medal_for(id, medal_time(levels, id))
 
 
-## Courses with tier `tier` or better.
+## Campaign courses with tier `tier` or better (Flow courses are optional and never count).
 static func medal_count(levels: Dictionary, tier: int) -> int:
 	var n: int = 0
-	for info: Dictionary in Game.LEVELS:
+	for ci: int in Game.campaign_levels():
+		var info: Dictionary = Game.LEVELS[ci]
 		if medal_of(levels, str(info["id"])) >= tier:
 			n += 1
 	return n
@@ -330,7 +331,8 @@ static func rule_met(rule: Dictionary, levels: Dictionary, stats: Variant = null
 		"levels":
 			return completed_count(levels) >= int(rule.get("n", 1))
 		"all":
-			for info: Dictionary in Game.LEVELS:
+			for ci: int in Game.campaign_levels():
+				var info: Dictionary = Game.LEVELS[ci]
 				if not _completed(levels, str(info["id"])):
 					return false
 			return true
@@ -347,7 +349,7 @@ static func rule_met(rule: Dictionary, levels: Dictionary, stats: Variant = null
 		"medals":
 			return medal_count(levels, int(rule.get("tier", 3))) >= int(rule.get("n", 1))
 		"all_medals":
-			return medal_count(levels, int(rule.get("tier", 3))) >= Game.LEVELS.size()
+			return medal_count(levels, int(rule.get("tier", 3))) >= Game.campaign_size()
 		"stat":
 			return stat_value(str(rule.get("key", "")), levels, _stats_or_save(stats)) >= int(rule.get("n", 1))
 		"challenges":
@@ -362,10 +364,11 @@ static func _completed(levels: Dictionary, id: String) -> bool:
 	return e is Dictionary and bool((e as Dictionary).get("completed", false))
 
 
-## Courses of the circuit beaten (the playground doesn't count).
+## Campaign courses beaten (the playground and the optional Flow courses don't count).
 static func completed_count(levels: Dictionary) -> int:
 	var n: int = 0
-	for info: Dictionary in Game.LEVELS:
+	for ci: int in Game.campaign_levels():
+		var info: Dictionary = Game.LEVELS[ci]
 		if _completed(levels, str(info["id"])):
 			n += 1
 	return n
@@ -403,7 +406,7 @@ static func hint(kind: String, id: String) -> String:
 		"levels":
 			return "Beat %d different courses" % int(rule.get("n", 1))
 		"all":
-			return "Beat all %d courses" % Game.LEVELS.size()
+			return "Beat all %d courses" % Game.campaign_size()
 		"runs":
 			return "Finish %d runs" % int(rule.get("n", 1))
 		"flawless":
@@ -453,7 +456,7 @@ static func progress(kind: String, id: String, levels: Variant = null, stats: Va
 		"levels":
 			return "%d/%d" % [mini(completed_count(lv), int(rule["n"])), int(rule["n"])]
 		"all":
-			return "%d/%d" % [completed_count(lv), Game.LEVELS.size()]
+			return "%d/%d" % [completed_count(lv), Game.campaign_size()]
 		"runs":
 			return "%d/%d" % [mini(total_runs(lv), int(rule["n"])), int(rule["n"])]
 		"medals":
@@ -461,7 +464,7 @@ static func progress(kind: String, id: String, levels: Variant = null, stats: Va
 			return "%ss %d/%d" % [MEDAL_NAMES[clampi(tier, 1, 3)], mini(medal_count(lv, tier), int(rule["n"])), int(rule["n"])]
 		"all_medals":
 			var t: int = int(rule.get("tier", 3))
-			return "%ss %d/%d" % [MEDAL_NAMES[clampi(t, 1, 3)], medal_count(lv, t), Game.LEVELS.size()]
+			return "%ss %d/%d" % [MEDAL_NAMES[clampi(t, 1, 3)], medal_count(lv, t), Game.campaign_size()]
 		"medal":
 			var have: int = medal_of(lv, str(rule.get("level", "")))
 			return "best: %s" % (MEDAL_NAMES[have] if have > 0 else "no medal")

@@ -293,14 +293,24 @@ func _main_screen() -> Control:
 	spacer.custom_minimum_size = Vector2(0, 14)
 	box.add_child(spacer)
 	var next_index: int = 0
-	for i: int in Game.LEVELS.size():
+	for i: int in Game.campaign_levels():
 		if SaveData.is_completed(Game.LEVELS[i]["id"]):
-			next_index = mini(i + 1, Game.LEVELS.size() - 1)
+			next_index = mini(i + 1, Game.finale_index())
 	var play_text: String = "Play" if next_index == 0 and not SaveData.is_completed("gardens") else "Continue  -  %s" % Game.LEVELS[next_index]["name"]
 	var play: Button = UiKit.button(play_text, func() -> void: Game.play_level(next_index), 380)
 	box.add_child(play)
-	var levels_btn: Button = UiKit.button("Level Select", func() -> void: show_screen("levels"), 380)
-	box.add_child(levels_btn)
+	# Level Select and the Flow section share a row so the column keeps its height
+	var levels_row: HBoxContainer = UiKit.hbox(8)
+	var levels_btn: Button = UiKit.button("Level Select", func() -> void:
+		_levels_to_flow = false
+		show_screen("levels"), 186)
+	var flow_btn: Button = UiKit.button("Flow", func() -> void:
+		_levels_to_flow = true
+		show_screen("levels"), 186)
+	flow_btn.name = "FlowButton"
+	levels_row.add_child(levels_btn)
+	levels_row.add_child(flow_btn)
+	box.add_child(levels_row)
 	# Challenges and Stats share a row so the column keeps its height
 	var extras: HBoxContainer = UiKit.hbox(8)
 	var challenges_btn: Button = UiKit.button("Challenges", func() -> void: show_screen("challenges"), 186)
@@ -355,9 +365,26 @@ func _main_screen() -> Control:
 	# Godot's geometric focus search skips the half-width Challenges button (Down from Level Select lands on
 	# Stats and Left from Stats jumps up to Level Select), so wire the Challenges / Stats row explicitly.
 	_wire_extras_row.call_deferred(levels_btn, challenges_btn, stats_btn, race_btn)
-	var openers: Dictionary = {"levels": levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn, "practice": practice_btn, "locker": locker_btn, "challenges": challenges_btn, "stats": stats_btn, "partycpu": partycpu_btn}
+	_wire_flow_row.call_deferred(levels_btn, flow_btn, challenges_btn, stats_btn)
+	var openers: Dictionary = {"levels": flow_btn if _levels_to_flow else levels_btn, "race": race_btn, "lobby": race_btn, "settings": settings_btn, "practice": practice_btn, "locker": locker_btn, "challenges": challenges_btn, "stats": stats_btn, "partycpu": partycpu_btn}
 	_focus_pref = openers.get(_prev_screen, play)
+	_levels_to_flow = false
 	return _left_column(box)
+
+
+## Pad / keyboard focus links for the main menu's Level Select + Flow row (runs once the screen is in the tree).
+func _wire_flow_row(levels_btn: Button, flow_btn: Button, challenges_btn: Button, stats_btn: Button) -> void:
+	for b: Button in [levels_btn, flow_btn, challenges_btn, stats_btn]:
+		if not is_instance_valid(b) or not b.is_inside_tree():
+			return
+	levels_btn.focus_neighbor_right = levels_btn.get_path_to(flow_btn)
+	flow_btn.focus_neighbor_left = flow_btn.get_path_to(levels_btn)
+	levels_btn.focus_neighbor_left = levels_btn.get_path_to(levels_btn)
+	flow_btn.focus_neighbor_right = flow_btn.get_path_to(flow_btn)
+	levels_btn.focus_neighbor_bottom = levels_btn.get_path_to(challenges_btn)
+	flow_btn.focus_neighbor_bottom = flow_btn.get_path_to(stats_btn)
+	challenges_btn.focus_neighbor_top = challenges_btn.get_path_to(levels_btn)
+	stats_btn.focus_neighbor_top = stats_btn.get_path_to(flow_btn)
 
 
 ## Pad / keyboard focus links for the main menu's Challenges + Stats row (runs once the screen is in the tree).
@@ -450,6 +477,10 @@ func _on_update_failed(message: String) -> void:
 	_on_update_status_changed(message)
 
 
+## The main menu's Flow button asks the next Level Select to open on the Flow section.
+var _levels_to_flow: bool = false
+
+
 func _levels_screen() -> Control:
 	var box: VBoxContainer = UiKit.vbox(10)
 	box.add_child(UiKit.shadowed(UiKit.label("LEVEL SELECT", 40, Color.WHITE), 8))
@@ -462,17 +493,33 @@ func _levels_screen() -> Control:
 	var list: VBoxContainer = UiKit.vbox(10)
 	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scroll.add_child(list)
-	var rows_h: float = float(Game.LEVELS.size()) * 58.0
+	var rows_h: float = float(Game.LEVELS.size()) * 58.0 + 70.0
 	scroll.custom_minimum_size = Vector2(772, clampf(rows_h, 180.0, get_viewport().get_visible_rect().size.y - 250.0))
 	box.add_child(scroll)
+	var first_flow: Button = null
+	var first_flow_open: Button = null
+	var last_flow_unlocked: Button = null
 	for i: int in Game.LEVELS.size():
 		var info: Dictionary = Game.LEVELS[i]
+		var is_flow: bool = Game.is_flow(i)
+		if is_flow and first_flow == null and list.get_child_count() > 0 and not list.has_node("FlowHeader"):
+			# the optional Flow section: momentum courses that open from campaign progress
+			var head: Label = UiKit.shadowed(UiKit.label("FLOW", 30, UiKit.TEAL), 6)
+			head.name = "FlowHeader"
+			list.add_child(head)
+			var sub: Label = UiKit.shadowed(UiKit.label("Optional momentum courses. Easy to finish, hard to master - the clock is the challenge.", 15, UiKit.SOFT), 4)
+			sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			sub.custom_minimum_size = Vector2(740, 0)
+			list.add_child(sub)
 		var unlocked: bool = Game.is_level_unlocked(i)
 		var best: float = SaveData.best_time(info["id"])
-		var text: String = "%d   %s" % [i + 1, info["name"]]
+		var text: String = ("F%d   %s" % [i - Game.campaign_size() + 1, info["name"]]) if is_flow else ("%d   %s" % [i + 1, info["name"]])
 		var medal: int = SaveData.medal(info["id"])
 		if not unlocked:
-			text += "     (clear %s to unlock)" % Game.LEVELS[i - 1]["name"]
+			if is_flow:
+				text += "     (beat %d courses to unlock)" % Game.flow_unlock_need(i)
+			else:
+				text += "     (clear %s to unlock)" % Game.LEVELS[i - 1]["name"]
 		else:
 			if best >= 0.0:
 				text += "     best %s" % SaveData.format_time(best)
@@ -489,12 +536,24 @@ func _levels_screen() -> Control:
 		b.tooltip_text = info["blurb"]
 		_add_challenge_pips(b, info["id"])
 		list.add_child(b)
-		if unlocked:
+		if is_flow:
+			if first_flow == null:
+				first_flow = b
+			if unlocked:
+				last_flow_unlocked = b
+				if first_flow_open == null and not SaveData.is_completed(info["id"]):
+					first_flow_open = b
+		elif unlocked:
 			last_unlocked = b
 			if first_open == null and not SaveData.is_completed(info["id"]):
 				first_open = b
 	# start on the first level still to clear (else the last unlocked one)
 	_focus_pref = first_open if first_open != null else last_unlocked
+	if _levels_to_flow:
+		# the main menu's Flow entry: start in the Flow section (the scroll follows focus)
+		var flow_pref: Button = first_flow_open if first_flow_open != null else last_flow_unlocked
+		if flow_pref != null:
+			_focus_pref = flow_pref
 	box.add_child(UiKit.button("Back", func() -> void: show_screen("main"), 760))
 	return _left_column(box, 780)
 

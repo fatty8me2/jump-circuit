@@ -34,6 +34,10 @@ const LEVELS: Array[Dictionary] = [
 	{"id": "arcade", "name": "Pixel Panic", "scene": "res://levels/level_28_arcade.tscn", "blurb": "Inside a retro arcade cabinet. Blocks fall, chompers chase, and the screen keeps scrolling.", "medals": {"gold": 145, "silver": 175, "bronze": 220}},
 	{"id": "siege", "name": "Castle Siege", "scene": "res://levels/level_32_siege.tscn", "blurb": "Storm a castle mid-siege. Boulders fall, rams swing, oil pours - and the trebuchet is your ride in.", "medals": {"gold": 135, "silver": 165, "bronze": 205}},
 	{"id": "ascent", "name": "The Final Ascent", "scene": "res://levels/level_24_ascent.tscn", "blurb": "Everything you know, at its nastiest, up to the beacon.", "medals": {"gold": 180, "silver": 215, "bronze": 270}},
+	{"id": "aurora", "name": "Aurora Run", "scene": "res://levels/level_33_aurora.tscn", "blurb": "A clear night descent under a rippling aurora. Carve the slopes, grind the ridgelines, find your flow.", "medals": {"gold": 120, "silver": 150, "bronze": 190}, "flow": true},  # PROVISIONAL
+	{"id": "skysurf", "name": "Sky Surf", "scene": "res://levels/level_34_skysurf.tscn", "blurb": "A pastel sunrise cloudscape. Chain the rings, ride the wind ribbons, never touch down.", "medals": {"gold": 120, "silver": 150, "bronze": 190}, "flow": true},  # PROVISIONAL
+	{"id": "hyperloop", "name": "Hyperloop", "scene": "res://levels/level_35_hyperloop.tscn", "blurb": "Chrome transit tubes and mag-rails at dawn. Rail to rail, gate to gate, at full speed.", "medals": {"gold": 120, "silver": 150, "bronze": 190}, "flow": true},  # PROVISIONAL
+	{"id": "lotus", "name": "Lotus Drift", "scene": "res://levels/level_36_lotus.tscn", "blurb": "A misty water garden at dusk. Slide the streams, ride the lantern rings, stay calm.", "medals": {"gold": 120, "silver": 150, "bronze": 190}, "flow": true},  # PROVISIONAL
 ]
 ## Medal targets ("medals" in each LEVELS entry, whole seconds) come from the route bot:
 ## Gold = the fastest bot route x 1.12, Silver x 1.35, Bronze x 1.7, each rounded UP to 5 s.
@@ -413,17 +417,96 @@ func restart_level() -> void:
 		_load_level()
 
 
-func next_level() -> void:
+## ---- campaign vs. Flow section -----------------------------------------------------------
+## The Flow courses ("flow": true in LEVELS) come after the campaign finale. Campaign counts,
+## the finale and the "beat every course" rewards ignore them; they unlock from campaign progress.
+
+## Campaign courses beaten needed to open each Flow course, in Flow order.
+const FLOW_UNLOCKS: Array[int] = [3, 8, 14, 20]
+
+
+static func is_flow(index: int) -> bool:
+	return index >= 0 and index < LEVELS.size() and bool(LEVELS[index].get("flow", false))
+
+
+## Index of the last non-flow course: The Final Ascent, the finale.
+static func finale_index() -> int:
+	for i: int in range(LEVELS.size() - 1, -1, -1):
+		if not bool(LEVELS[i].get("flow", false)):
+			return i
+	return 0
+
+
+## Number of campaign (non-flow) courses.
+static func campaign_size() -> int:
+	return finale_index() + 1
+
+
+## Indices of the campaign courses / of the Flow courses, in order.
+static func campaign_levels() -> Array[int]:
+	var out: Array[int] = []
+	for i: int in LEVELS.size():
+		if not is_flow(i):
+			out.append(i)
+	return out
+
+
+static func flow_levels() -> Array[int]:
+	var out: Array[int] = []
+	for i: int in LEVELS.size():
+		if is_flow(i):
+			out.append(i)
+	return out
+
+
+## Campaign courses the save has beaten (the Flow unlock counter).
+static func campaign_completed() -> int:
+	var n: int = 0
+	for i: int in campaign_levels():
+		if SaveData.is_completed(LEVELS[i]["id"]):
+			n += 1
+	return n
+
+
+## Campaign courses to beat before Flow course `index` opens (0 for a campaign course).
+static func flow_unlock_need(index: int) -> int:
+	if not is_flow(index):
+		return 0
+	var k: int = clampi(index - campaign_size(), 0, FLOW_UNLOCKS.size() - 1)
+	return FLOW_UNLOCKS[k]
+
+
+## Where "Next Level" leads from the current course: a level index, NEXT_VICTORY after the
+## campaign finale, or NEXT_FLOW_SELECT after the last Flow course (or a Flow course not yet open).
+const NEXT_VICTORY: int = -1
+const NEXT_FLOW_SELECT: int = -2
+
+
+func next_level_target() -> int:
 	if party != null:
 		var n: int = level_index + 1
 		if n >= LEVELS.size() or not is_level_unlocked(n):
 			n = 0
-		play_party_practice(n)
-		return
-	if level_index + 1 < LEVELS.size():
-		play_level(level_index + 1)
-	else:
+		return n
+	if is_flow(level_index):
+		# the next Flow course, or back to the Flow section after the last one
+		var f: int = level_index + 1
+		return f if f < LEVELS.size() and is_level_unlocked(f) else NEXT_FLOW_SELECT
+	if level_index < finale_index():
+		return level_index + 1
+	return NEXT_VICTORY
+
+
+func next_level() -> void:
+	var target: int = next_level_target()
+	if party != null:
+		play_party_practice(target)
+	elif target == NEXT_VICTORY:
 		goto_title("victory")
+	elif target == NEXT_FLOW_SELECT:
+		goto_title("levels")
+	else:
+		play_level(target)
 
 
 func goto_title(screen: String = "main") -> void:
@@ -481,4 +564,6 @@ static func medal_target(level_id: String, tier: int) -> float:
 
 
 func is_level_unlocked(index: int) -> bool:
+	if is_flow(index):
+		return dev_mode or SaveData.is_completed(LEVELS[index]["id"]) or campaign_completed() >= flow_unlock_need(index)
 	return index == 0 or dev_mode or SaveData.is_completed(LEVELS[index - 1]["id"]) or SaveData.is_completed(LEVELS[index]["id"])

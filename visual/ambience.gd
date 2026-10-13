@@ -847,6 +847,34 @@ static func recipe(theme_id: String) -> Array[Dictionary]:
 					"pick": PackedColorArray([Color(2.6, 0.8, 0.2, 0.4), Color(2.2, 0.4, 0.1, 0.35), Color(2.8, 1.5, 0.5, 0.35)]),
 					"dir": Vector3.UP, "spread": 30.0, "speed": Vector2(0.4, 1.4), "curve": "pop"},
 			]
+		"aurora":
+			return [
+				# PLACEHOLDER - the Aurora Run level agent replaces this case (near / mid / far layers)
+				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
+					"color": Color(0.55, 1.00, 0.80), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
+		"skysurf":
+			return [
+				# PLACEHOLDER - the Sky Surf level agent replaces this case (near / mid / far layers)
+				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
+					"color": Color(1.00, 0.85, 0.80), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
+		"hyperloop":
+			return [
+				# PLACEHOLDER - the Hyperloop level agent replaces this case (near / mid / far layers)
+				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
+					"color": Color(0.70, 0.95, 1.00), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
+		"lotus":
+			return [
+				# PLACEHOLDER - the Lotus Drift level agent replaces this case (near / mid / far layers)
+				{"depth": "near", "amount": 80, "lifetime": 3.0, "tex": Fx.Tex.DOT, "size": 0.1, "additive": false,
+					"color": Color(1.00, 0.80, 0.55), "speed": Vector2(0.05, 0.3), "spread": 180.0,
+					"fade": PackedFloat32Array([0.0, 1.0, 1.0, 0.0])},
+			]
 		"ascent":
 			return [
 				# near: neon rain slanting down, data glints blinking

@@ -656,7 +656,7 @@ func test_j2_steep_boards_slide() -> void:
 
 func test_q_final_win_condition() -> void:
 	SaveData.wipe()
-	var lvl: LevelBase = await load_level(Game.LEVELS.size() - 1)
+	var lvl: LevelBase = await load_level(Game.finale_index())
 	var finished_time: Array[float] = [-1.0]
 	lvl.level_finished.connect(func(t: float) -> void: finished_time[0] = t)
 	await seconds(0.5)
@@ -3465,6 +3465,7 @@ func test_z_world_sounds() -> void:
 	for th: String in ["gardens", "foundry", "balance", "clockwork", "reef", "orbital", "xeno", "volcano", "glacier", "desert",
 			"manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void",
 			"toybox", "fungal", "olympus", "arcade", "carnival", "dino", "arcane", "siege",
+			"aurora", "skysurf", "hyperloop", "lotus",
 			"ascent"]:
 		Sfx.set_theme(th)
 		check(Sfx.themed("step") == "step_" + th and Sfx.themed("land") == "land_" + th,
@@ -3482,12 +3483,14 @@ func test_z_world_sounds() -> void:
 	# files exist, so a map whose mechanics land later (the frontier's, Doom Fortress's) is covered
 	# once they do.
 	var prefixes: Array[String] = ["manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon",
-		"doom", "abyss", "tempest", "void", "toybox", "fungal", "olympus", "arcade", "carnival", "dino", "arcane", "siege"]
+		"doom", "abyss", "tempest", "void", "toybox", "fungal", "olympus", "arcade", "carnival", "dino", "arcane", "siege",
+		"aurora", "skysurf", "hyperloop", "lotus"]
 	var srcs: Array[String] = []
 	for f: String in ["level_11_manor.gd", "level_12_armada.gd", "level_13_candy.gd", "level_14_carrier.gd",
 			"level_16_sakura.gd", "level_17_jungle.gd", "level_18_frontier.gd", "level_19_neon.gd",
 			"level_20_doom.gd", "level_21_abyss.gd", "level_22_tempest.gd", "level_23_void.gd",
-			"level_25_toybox.gd", "level_26_fungal.gd", "level_27_olympus.gd", "level_28_arcade.gd", "level_29_carnival.gd", "level_30_dino.gd", "level_31_arcane.gd", "level_32_siege.gd"]:
+			"level_25_toybox.gd", "level_26_fungal.gd", "level_27_olympus.gd", "level_28_arcade.gd", "level_29_carnival.gd", "level_30_dino.gd", "level_31_arcane.gd", "level_32_siege.gd",
+			"level_33_aurora.gd", "level_34_skysurf.gd", "level_35_hyperloop.gd", "level_36_lotus.gd"]:
 		srcs.append("res://levels/" + f)
 	for f: String in DirAccess.get_files_at("res://mechanics"):
 		if f.ends_with(".gd") and prefixes.any(func(p: String) -> bool: return f.begins_with(p + "_")):
@@ -3496,7 +3499,8 @@ func test_z_world_sounds() -> void:
 	# maps' visual/ scripts stay out of this scan; armada_storm.gd now plays the ambience's thunder)
 	for f: String in DirAccess.get_files_at("res://visual"):
 		if f.ends_with(".gd") and ["sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void",
-				"toybox", "fungal", "olympus", "arcade", "carnival", "dino", "arcane", "siege"].any(
+				"toybox", "fungal", "olympus", "arcade", "carnival", "dino", "arcane", "siege",
+				"aurora", "skysurf", "hyperloop", "lotus"].any(
 				func(p: String) -> bool: return f.begins_with(p + "_")):
 			srcs.append("res://visual/" + f)
 	var re := RegEx.create_from_string("\"((?:%s)_[a-z0-9_]+)\"" % "|".join(prefixes))
@@ -4053,8 +4057,11 @@ func test_zc_remote_racer_cosmetics() -> void:
 
 # ---- medal times and rewards (characters, hats, paints, titles) --------------------------------
 
+## Flow courses that don't have their Silver world hat yet (the hats agent adds them; drop ids as they land).
+const _FLOW_HATLESS: Array[String] = ["aurora", "skysurf", "hyperloop", "lotus"]
+
 ## The four worlds still being built carry provisional medal times (no bot time yet).
-const _ZM_PROVISIONAL: Array[String] = []
+const _ZM_PROVISIONAL: Array[String] = ["aurora", "skysurf", "hyperloop", "lotus"]
 
 
 ## A levels dict with these bests (id -> seconds), as SaveData stores them.
@@ -4218,7 +4225,7 @@ func test_zm_reward_rules_hints_progress() -> void:
 	var one_short: Dictionary = every_gold.duplicate(true)
 	one_short["ascent"]["best"] = Game.medal_target("ascent", 2)
 	check(not Cosmetics.is_unlocked("character", "golden", one_short), "one Silver among the Golds: no Golden Volt")
-	check(Cosmetics.progress("character", "golden", one_short) == "Golds %d/%d" % [Game.LEVELS.size() - 1, Game.LEVELS.size()],
+	check(Cosmetics.progress("character", "golden", one_short) == "Golds %d/%d" % [Game.campaign_size() - 1, Game.campaign_size()],
 		"all_medals progress: %s" % Cosmetics.progress("character", "golden", one_short))
 	check(Cosmetics.hint("character", "golden") == "Gold on every course", "all_medals hint: %s" % Cosmetics.hint("character", "golden"))
 	check(Cosmetics.is_unlocked("hat", "crown", every_gold) and Cosmetics.is_unlocked("title", "globetrotter", every_gold), "and the Crown and Globetrotter")
@@ -4266,9 +4273,16 @@ func test_zm_catalogue_and_kinds() -> void:
 			worlds[r["level"]] = id
 		elif r["type"] == "medal":
 			check(int(r["tier"]) == 3 and not Game.level_by_id(str(r["level"])).is_empty(), "hat %s: a Gold medal hat on %s" % [id, r["level"]])
+	# the Flow courses get their Silver hats from the hats agent later: skip them until then
 	for info: Dictionary in Game.LEVELS:
+		if str(info["id"]) in _FLOW_HATLESS and not worlds.has(info["id"]):
+			continue
 		check(worlds.has(info["id"]), "%s has its own Silver hat" % info["name"])
-	check(worlds.size() == Game.LEVELS.size(), "%d world hats for %d worlds" % [worlds.size(), Game.LEVELS.size()])
+	var hatless: int = 0
+	for fid: String in _FLOW_HATLESS:
+		if not worlds.has(fid):
+			hatless += 1
+	check(worlds.size() + hatless == Game.LEVELS.size(), "%d world hats for %d worlds (%d Flow worlds still without)" % [worlds.size(), Game.LEVELS.size(), hatless])
 	for id: String in ["crown", "halo", "party"]:
 		check(Cosmetics.has_item("hat", id), "special hat %s" % id)
 	# every rule names a real course
@@ -5416,7 +5430,7 @@ func test_zx_stats_rows() -> void:
 	check(by["Total runs"] == "8" and by["Total falls"] == "14" and by["Time played"] == "1h 02m", "runs, falls and time (%s)" % str(by))
 	check(by["Medals"] == "Gold 1   Silver 1   Bronze 1", "medals by tier, each course once (%s)" % by["Medals"])
 	check(by["Favourite course"] == "Bounce Foundry  (5 runs)", "favourite course is the one with most runs (%s)" % by["Favourite course"])
-	check(by["Courses beaten"] == "3 / %d" % Game.LEVELS.size() and by["Challenges done"].begins_with("%d / " % Challenges.count()), "courses beaten and challenges done")
+	check(by["Courses beaten"] == "3 / %d" % Game.campaign_size() and by["Challenges done"].begins_with("%d / " % Challenges.count()), "courses beaten and challenges done")
 	SaveData.wipe()
 
 
@@ -9827,3 +9841,218 @@ func test_zflow_settings_toggles_and_pad() -> void:
 		Settings.set(p, snap[p])
 	Settings.apply()
 	await ticks(2)
+
+
+# ---- F1: the Flow section (flow-section) ---------------------------------------------------------------
+
+const _FLOW_IDS: Array[String] = ["aurora", "skysurf", "hyperloop", "lotus"]
+
+
+## Marks the first `n` campaign courses beaten in a clean save.
+func _f1_beat_campaign(n: int) -> void:
+	SaveData.wipe()
+	var camp: Array[int] = Game.campaign_levels()
+	for k: int in mini(n, camp.size()):
+		SaveData.data["levels"][Game.LEVELS[camp[k]]["id"]] = {"completed": true, "runs": 1}
+
+
+func test_zf1_helpers_and_registration() -> void:
+	check(Game.finale_index() == 30 and str(Game.LEVELS[Game.finale_index()]["id"]) == "ascent", "the finale is The Final Ascent at index 30")
+	check(Game.campaign_size() == 31 and Game.campaign_levels().size() == 31 and Game.flow_levels().size() == 4, "31 campaign courses and 4 Flow courses")
+	check(Game.LEVELS.size() == Game.campaign_size() + 4, "Flow courses are appended after the campaign")
+	var ids: Array[String] = []
+	for i: int in Game.flow_levels():
+		ids.append(str(Game.LEVELS[i]["id"]))
+		check(Game.is_flow(i) and i > Game.finale_index(), "%s is a Flow course after the finale" % Game.LEVELS[i]["id"])
+	check(ids == _FLOW_IDS, "the Flow order is aurora, skysurf, hyperloop, lotus (%s)" % str(ids))
+	check(not Game.is_flow(0) and not Game.is_flow(30) and not Game.is_flow(-1) and not Game.is_flow(99), "campaign and out-of-range indices are not Flow")
+	for i: int in Game.campaign_levels():
+		check(i <= Game.finale_index() and not bool(Game.LEVELS[i].get("flow", false)), "campaign index %d is not flow" % i)
+	for id: String in _FLOW_IDS:
+		check(SaveData.LAYOUT_REV.has(id) and Look.THEMES.has(id) and not Ambience.recipe(id).is_empty(), "%s: layout rev, palette and ambience registered" % id)
+		check(ResourceLoader.exists(str(Game.level_by_id(id)["scene"])), "%s: scene exists" % id)
+
+
+func test_zf1_unlock_thresholds() -> void:
+	var old_dev: bool = Game.dev_mode
+	Game.dev_mode = false
+	var first: int = Game.campaign_size()
+	var need: Array[int] = [3, 8, 14, 20]
+	for k: int in 4:
+		check(Game.flow_unlock_need(first + k) == need[k], "Flow %d needs %d campaign courses" % [k + 1, need[k]])
+	check(Game.flow_unlock_need(0) == 0, "a campaign course needs no count")
+	for n: int in [0, 2, 3, 7, 8, 13, 14, 19, 20, 31]:
+		_f1_beat_campaign(n)
+		for k: int in 4:
+			check(Game.is_level_unlocked(first + k) == (n >= need[k]), "with %d courses beaten Flow %d is %s" % [n, k + 1, "open" if n >= need[k] else "locked"])
+	# a completed flow course stays open even if the count is lower; flow completions never count towards the thresholds
+	_f1_beat_campaign(0)
+	SaveData.data["levels"]["lotus"] = {"completed": true, "runs": 1}
+	check(Game.is_level_unlocked(first + 3), "a completed Flow course is unlocked")
+	check(not Game.is_level_unlocked(first), "Flow completions do not open other Flow courses")
+	check(Game.campaign_completed() == 0, "Flow completions are not campaign progress")
+	# dev mode opens everything
+	Game.dev_mode = true
+	check(Game.is_level_unlocked(first + 1), "dev mode opens Flow")
+	Game.dev_mode = false
+	# the campaign chain is unchanged: course n opens when n-1 is beaten, flow doesn't matter
+	_f1_beat_campaign(0)
+	check(Game.is_level_unlocked(0) and not Game.is_level_unlocked(1), "campaign: only the first course at the start")
+	SaveData.data["levels"]["gardens"] = {"completed": true, "runs": 1}
+	check(Game.is_level_unlocked(1) and not Game.is_level_unlocked(2), "campaign: beating one opens the next")
+	Game.dev_mode = old_dev
+	SaveData.wipe()
+
+
+func test_zf1_next_level_and_finale() -> void:
+	var old_idx: int = Game.level_index
+	var old_party: PartyRules = Game.party
+	var old_dev: bool = Game.dev_mode
+	Game.dev_mode = false
+	Game.party = null
+	var first: int = Game.campaign_size()
+	Game.level_index = 29
+	check(Game.next_level_target() == 30, "course 30 leads to the finale")
+	Game.level_index = Game.finale_index()
+	check(Game.next_level_target() == Game.NEXT_VICTORY, "the finale leads to the victory screen, not into Flow")
+	_f1_beat_campaign(31)
+	Game.level_index = first
+	check(Game.next_level_target() == first + 1, "a Flow course leads to the next Flow course")
+	Game.level_index = first + 3
+	check(Game.next_level_target() == Game.NEXT_FLOW_SELECT, "the last Flow course leads back to the Flow section")
+	_f1_beat_campaign(3)
+	Game.level_index = first
+	check(Game.next_level_target() == Game.NEXT_FLOW_SELECT, "a Flow course whose successor is still locked leads back to the Flow section")
+	Game.level_index = old_idx
+	Game.party = old_party
+	Game.dev_mode = old_dev
+	SaveData.wipe()
+
+
+func test_zf1_cosmetics_ignore_flow() -> void:
+	var camp_ids: Array = []
+	for i: int in Game.campaign_levels():
+		camp_ids.append(Game.LEVELS[i]["id"])
+	var every: Dictionary = _cos_levels(camp_ids)
+	check(Cosmetics.completed_count(every) == Game.campaign_size(), "completed_count counts the campaign (%d)" % Cosmetics.completed_count(every))
+	check(Cosmetics.is_unlocked("trail", "rainbow", every), "beating every campaign course earns Rainbow without any Flow course")
+	var with_flow: Dictionary = every.duplicate(true)
+	for id: String in _FLOW_IDS:
+		with_flow[id] = {"completed": true, "runs": 1}
+	check(Cosmetics.completed_count(with_flow) == Game.campaign_size(), "Flow completions add nothing to completed_count")
+	var short: Dictionary = _cos_levels(_FLOW_IDS)
+	check(Cosmetics.completed_count(short) == 0 and not Cosmetics.is_unlocked("trail", "rainbow", short), "Flow alone never satisfies the campaign rules")
+	# medals: every campaign Gold earns the all-medals rewards; Flow medals neither help nor hurt
+	var gold: Dictionary = {}
+	for i: int in Game.campaign_levels():
+		gold[Game.LEVELS[i]["id"]] = Game.medal_target(str(Game.LEVELS[i]["id"]), 3)
+	var golds: Dictionary = _zm_levels(gold)
+	check(Cosmetics.medal_count(golds, 3) == Game.campaign_size(), "medal_count is campaign only")
+	check(Cosmetics.is_unlocked("character", "golden", golds), "every campaign Gold earns Golden Volt with no Flow medals")
+	check(Cosmetics.progress("character", "golden", golds) == "Golds %d/%d" % [Game.campaign_size(), Game.campaign_size()], "progress reads campaign counts: %s" % Cosmetics.progress("character", "golden", golds))
+	check(Cosmetics.hint("trail", "rainbow") == "Beat all %d courses" % Game.campaign_size(), "the hint names the campaign count")
+	# challenges still cover every course, Flow included
+	check(Challenges.total() == Game.LEVELS.size() * Challenges.KINDS.size(), "challenges include the Flow courses")
+
+
+func test_zf1_level_select_pad_and_main_menu() -> void:
+	if world != null:
+		world.queue_free()
+		world = null
+		await ticks(2)
+	var old_dev: bool = Game.dev_mode
+	Game.dev_mode = false
+	_f1_beat_campaign(9)   # Flow 1 and 2 open, 3 and 4 locked
+	var first: int = Game.campaign_size()
+	var title: Node = (load(Game.TITLE_SCENE) as PackedScene).instantiate()
+	add_child(title)
+	title.call("show_screen", "levels")
+	await ticks(3)
+	var screen: Control = title.get("_screen")
+	var header: Node = screen.find_child("FlowHeader", true, false)
+	check(header != null and header is Label and (header as Label).text == "FLOW", "level select has a FLOW header")
+	var rows: Array[Button] = []
+	for n: Node in screen.find_children("*", "Button", true, false):
+		if n.has_meta("challenges"):
+			rows.append(n as Button)
+	check(rows.size() == Game.LEVELS.size(), "every course has a row, Flow included (%d)" % rows.size())
+	if rows.size() == Game.LEVELS.size():
+		check(not rows[first].disabled and not rows[first + 1].disabled and rows[first + 2].disabled and rows[first + 3].disabled, "rows follow the unlock thresholds")
+		check(rows[first + 2].text.contains("beat 14 courses to unlock") and rows[first + 3].text.contains("beat 20 courses to unlock"), "a locked row says how many courses to beat (%s)" % rows[first + 2].text)
+		check(rows[first].text.begins_with("F1 "), "Flow rows are labelled F1..F4 (%s)" % rows[first].text)
+		check(header.get_index() > rows[first - 1].get_index() and header.get_index() < rows[first].get_index(), "the header sits between the campaign list and the Flow rows")
+	# pad: walk down the list to the Flow section; the scroll follows focus
+	var f: Control = get_viewport().gui_get_focus_owner()
+	check(f is Button and (f as Button).text.begins_with("10 "), "starts on the first unbeaten course (%s)" % _focused_text())
+	var reached: bool = false
+	for i: int in 80:
+		if _focused_text().begins_with("F1 "):
+			reached = true
+			break
+		await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(reached, "the D-pad reaches the Flow section (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(_focused_text().begins_with("F2 "), "and steps to Flow 2 (%s)" % _focused_text())
+	for i: int in 3:
+		if _focused_text() == "Back":
+			break
+		await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(_focused_text() == "Back", "the D-pad runs past the locked Flow rows to Back (%s)" % _focused_text())
+	var scroll: ScrollContainer = screen.find_children("*", "ScrollContainer", true, false)[0] as ScrollContainer
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_UP))
+	await ticks(4)
+	check(scroll.scroll_vertical > 0, "the list scrolled to follow focus (%d)" % scroll.scroll_vertical)
+	await _zp_press(_zp_pad(JOY_BUTTON_B))
+	await ticks(3)
+	check(Game.title_screen == "main", "B backs out to the main menu")
+	# the main menu's Flow entry opens level select on the Flow section, and B returns onto it
+	title.call("show_screen", "main")
+	await ticks(3)
+	var flow_btn: Node = (title.get("_screen") as Control).find_child("FlowButton", true, false)
+	check(flow_btn is Button and (flow_btn as Button).text == "Flow", "the main menu has a Flow entry")
+	var got: bool = false
+	for i: int in 6:
+		if _focused_text() == "Flow":
+			got = true
+			break
+		await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+		if _focused_text() == "Level Select":
+			await _zp_press(_zp_pad(JOY_BUTTON_DPAD_RIGHT))
+	check(got, "the pad reaches the Flow entry (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_A))
+	await ticks(3)
+	check(Game.title_screen == "levels" and _focused_text().begins_with("F1 "), "A on Flow opens level select on the first open Flow course (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_B))
+	await ticks(3)
+	check(Game.title_screen == "main" and _focused_text() == "Flow", "B returns onto the Flow entry (%s)" % _focused_text())
+	# Level Select still opens at the campaign
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_LEFT))
+	check(_focused_text() == "Level Select", "left from Flow reaches Level Select (%s)" % _focused_text())
+	await _zp_press(_zp_pad(JOY_BUTTON_DPAD_DOWN))
+	check(_focused_text() == "Challenges", "down from Level Select reaches Challenges (%s)" % _focused_text())
+	# Continue never points into Flow
+	_f1_beat_campaign(31)
+	title.call("show_screen", "main")
+	await ticks(3)
+	var cont: Button = null
+	for n: Node in (title.get("_screen") as Control).find_children("*", "Button", true, false):
+		if (n as Button).text.begins_with("Continue"):
+			cont = n as Button
+	check(cont != null and cont.text.ends_with("The Final Ascent"), "with the campaign beaten, Continue stays on the finale (%s)" % (cont.text if cont != null else "none"))
+	title.queue_free()
+	await ticks(2)
+	Game.title_screen = "main"
+	Game.dev_mode = old_dev
+	SaveData.wipe()
+
+
+func test_zf1_party_pickers_list_flow() -> void:
+	var old_dev: bool = Game.dev_mode
+	Game.dev_mode = false
+	_f1_beat_campaign(3)
+	var open: Array[int] = CpuMenu.unlocked_courses()
+	check(open.has(Game.campaign_size()) and not open.has(Game.campaign_size() + 1), "Party vs CPU lists the open Flow course and not the locked ones")
+	Game.dev_mode = true
+	check(CpuMenu.unlocked_courses().size() == Game.LEVELS.size(), "with everything open the picker lists all %d courses" % Game.LEVELS.size())
+	Game.dev_mode = old_dev
+	SaveData.wipe()
