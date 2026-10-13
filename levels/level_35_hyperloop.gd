@@ -4,28 +4,31 @@ extends LevelBase
 ## spire at the centre of it all, and a rose-gold sun on the horizon. Clean white and cool cyan - not
 ## Neon City's rain, not Orbital Drift's dark metal.
 ##
-## The course is a long descending SPIRAL round the central spire: ten stages, each ~105 m, every one
-## turning 30 degrees at a HUB (a round station plate with a checkpoint). Between hubs the track is a
-## run of wide ISLANDS (10 m decks) separated by PITS (a glowing track bed 3 m down, with a mag-lift
-## pad that throws a faller back up to the next island - nothing here is a death trap).
+## The course is a long descending SPIRAL round the central spire: ten stages, every one turning 30
+## degrees at a HUB (a round station plate with a checkpoint). Between hubs the track is a run of ISLANDS
+## (10 m decks: a FLOW slab down the middle that keeps your speed, plain white lanes at the sides)
+## separated by PITS (a glowing track bed 3.4 m down, with a mag-lift pad that throws a faller back up
+## onto the next island - nothing here is a death trap).
 ##
 ## Two lines through the same track:
-##  - the SAFE line (route 0) walks the islands and hops the pits on stepping plates (hardest jump
-##    <= 82% of max reach, every landing >= 2 m, nothing to wait for);
-##  - the FLOW line (route 1) takes the same track at 18-30 m/s: boost-gate chains off every hub, flow
-##    slabs that keep the speed, launch arcs over the pits with ring chains, grind rails, open tubes
-##    (half-pipes) and the finale's Great Ring. Missing any of it drops you onto the safe line.
+##  - the SAFE line (route 0) keeps to the side lanes and hops each pit on stepping plates (hardest jump
+##    <= 82% of max reach, every landing >= 2 m, nothing hazardous to wait for; two pits carry a transit pod);
+##  - the FLOW line (route 1) takes the middle at 18-30 m/s: a chain of three boost gates off every hub,
+##    launch arcs over the pits with a 4-ring chain in the air (the pit is sized from the flight), grind
+##    rails, open tubes (half-pipes), a long flow slope and the finale's Great Ring. Missing any of it
+##    drops you onto the safe line.
 ##
-##  1 Terminal Concourse   the station: gates, a first launch arc and a ring chain
-##  2 Ring Road            a long flow slope and ring gantries
-##  3 Mag-Rail Yard        three grind rails, rail to rail over a wide pit
-##  4 Loop Tube            an open tube (half-pipe) to carve
-##  5 Pod Station          transit pods carry you over the gap (safe); arcs and rails (flow)
-##  6 Switchyard           a web of rails, switching lines
-##  7 Spire Lift           a climb: mag-lift pads (safe) and an uphill launch (flow)
-##  8 Great Tube           a long descending tube
-##  9 Overdrive            a gate chain that ramps to 30 m/s
-## 10 THE GREAT RING       finale - a pure-flow plunge through the megastructure's ring to the finish
+##  1 Terminal Concourse   gates, a first launch arc and a ring chain
+##  2 Ring Road            an arc, then a long flow slope down to the hub
+##  3 Mag-Rail Yard        an arc, then a long grind rail over a wide pit
+##  4 Loop Tube            an arc into an open tube (half-pipe) to carve
+##  5 Pod Station          an arc; the safe line crosses on a transit pod
+##  6 Switchyard           an arc, then a rail-to-rail switch
+##  7 Spire Lift           two launches UP onto higher decks
+##  8 Great Tube           an arc into a longer, wider tube
+##  9 Overdrive            an arc, then a long rail, flat out
+## 10 THE GREAT RING       finale - a wide launch, then a plunge down a long slope through three great
+##                         hoops and a line of rings to the finish
 ##
 ## Hyperloop mechanics (own scripts): HyperloopPod (rideable pods), HyperloopPulse (lanes of chevron
 ## lights that show the way), HyperloopTrain (trains in the far tubes). Route variants for the bot:
@@ -52,7 +55,7 @@ const STONE: float = 2.6
 const SLAB_W: float = 5.6
 const SIDE_W: float = 2.0
 ## The launch arcs over the pits, and what the ring chain does in the air.
-const RAMP_PITCH: float = 28.0
+const RAMP_PITCH: float = 25.0
 const RAMP_LEN: float = 9.0
 const RAMP_W: float = 5.0
 ## How far past the pit's near edge the flight is meant to come down.
@@ -62,6 +65,9 @@ const RING_CAP: float = 30.0
 const RING_R: float = 2.4
 ## Chain length assumed when the rings of a flight are reached (gates and earlier rings count).
 const CHAIN0: int = 5
+## The speed and hop the rail-to-rail switch is laid for.
+const SWITCH_SPEED: float = 27.0
+const SWITCH_HOP: float = 4.0
 
 var _o: Vector3 = Vector3.ZERO
 var _b: Basis = Basis.IDENTITY
@@ -87,6 +93,9 @@ var stage_lengths: Array[float] = []
 ## The flow route's polyline being built (world points), and every launch arc in build order.
 var _poly: Array[Vector3] = []
 var _arcs: Array[LaunchArc] = []
+var _rails: Array[GrindRail] = []
+var _pipes: Array[HalfPipe] = []
+var _pods: Array[HyperloopPod] = []
 var _flow_speed: float = 25.0
 
 
@@ -253,7 +262,7 @@ func _flight(lip: Vector3, hs0: float, target_y: float, ring_count: int = 4) -> 
 ## Build the launch arc on island `a`, size the pit from the flight it gives at speed `hs0`, build the next
 ## island `b_len` long (sloping `b_slope` m down), the stepping plates and the track bed, and both routes.
 ## `drop` is how much lower the far island's near end is (negative = higher). Returns the far island.
-func _cross(a: Dictionary, sx: float, drop: float, b_len: float, hs0: float, b_slope: float = 0.0) -> Dictionary:
+func _cross(a: Dictionary, sx: float, drop: float, b_len: float, hs0: float, b_slope: float = 0.0, pod: bool = false) -> Dictionary:
 	var ac: Vector3 = a["c"]
 	var front: float = ac.z - float(a["hz"])
 	var y_a: float = ac.y
@@ -272,9 +281,32 @@ func _cross(a: Dictionary, sx: float, drop: float, b_len: float, hs0: float, b_s
 	kit.ring_line(ring_pts, {"add_speed": RING_ADD, "radius": RING_R, "cap": RING_CAP})
 	_arcs.append(arc)
 	_pulse(a, foot.z + 2.5)
-	# --- the far island
+	# --- the far island, and the safe way over the pit
 	var b: Dictionary = _island(near_z, b_len, y_a - drop, b_slope)
-	# --- the safe route: stepping plates across the pit
+	_safe_across(a, b, sx, drop, pit_w, b_len, b_slope, pod)
+	# --- the flow route
+	if route_variant == 1:
+		_poly.append(_w(Vector3(0.0, y_a, foot.z + 2.5)))
+		r_flow(_poly.duplicate())
+		r_launch(arc, _w(land + Vector3(0, 0, -1.0)))
+		_poly = [_w(land)]
+		_flow_speed = float(fl["speed"])
+	return b
+
+
+## The safe line over a pit: stepping plates (or a pod) along lane `sx`, the track bed underneath.
+func _safe_across(a: Dictionary, b: Dictionary, sx: float, drop: float, pit_w: float, b_len: float, b_slope: float, pod: bool) -> void:
+	var ac: Vector3 = a["c"]
+	var front: float = ac.z - float(a["hz"])
+	var y_a: float = ac.y
+	var near_z: float = front - pit_w
+	var grade: float = b_slope / maxf(b_len, 1.0)
+	var land_to := Vector3(sx, y_a - drop - 2.0 * grade, near_z - 2.0)
+	var from_pt := Vector3(sx, y_a, front + 0.35)
+	if pod:
+		_pod_across(sx, y_a, drop, front, pit_w, from_pt, land_to)
+		_bed(a, b)
+		return
 	var dy_total: float = -drop
 	var n: int = 1
 	var gap: float = pit_w
@@ -286,25 +318,162 @@ func _cross(a: Dictionary, sx: float, drop: float, b_len: float, hs0: float, b_s
 		n += 1
 	var dyh: float = dy_total / float(n)
 	var cursor: float = front
-	var from_pt := Vector3(sx, y_a, front + 0.35)
 	for i: int in n - 1:
 		var pc := Vector3(sx, y_a + dyh * float(i + 1), cursor - gap - STONE * 0.5)
 		_plate(pc)
 		_hop_to(from_pt, pc)
 		from_pt = Vector3(sx, pc.y, pc.z - STONE * 0.5 + 0.35)
 		cursor = pc.z - STONE * 0.5
-	var grade: float = b_slope / maxf(b_len, 1.0)
-	var land_to := Vector3(sx, y_a - drop - 2.0 * grade, near_z - 2.0)
 	_hop_to(from_pt, land_to)
 	_bed(a, b)
-	# --- the flow route
+
+
+## A transit pod shuttling over the pit along lane `sx` (the safe line's ride). Period 9 s, docked 1.8 s
+## at each end; the route waits for a dock with 1.5 s still to run, steps on and steps off.
+func _pod_across(sx: float, y_a: float, drop: float, front: float, pit_w: float, from_pt: Vector3, land_to: Vector3) -> void:
+	var travel: float = pit_w - 5.8
+	var p := HyperloopPod.new()
+	p.size = Vector3(2.6, 0.5, 5.0)
+	var pts: Array[Vector3] = [Vector3.ZERO, _d(Vector3(0.0, -drop, -travel))]
+	p.points = pts
+	p.period = 8.0
+	p.dwell = 0.22
+	p.phase = 0.0
+	p.rotation_degrees.y = _yaw
+	p.position = _w(Vector3(sx, y_a - 0.25, front - 2.9))
+	add_child(p)
+	_pods.append(p)
+	if route_variant != 0:
+		return
+	var dock_a: Vector3 = p.position
+	var dock_b: Vector3 = p.position + _d(Vector3(0.0, -drop, -travel))
+	r_walk(_w(from_pt))
+	r_until(func() -> bool: return _docked(p, 1.5))
+	r_jump_onto(_w(from_pt), p, Vector3(0, 0.25, 0))
+	r_jump_from_ride(p, dock_b, 0.9, _w(land_to), true, Vector3(0, 0.25, 0))
+	if dock_a == dock_b:
+		return
+
+
+## The pod is parked at its start end for the next `secs` seconds.
+static func _docked(p: HyperloopPod, secs: float) -> bool:
+	var s: float = 0.0
+	while s <= secs:
+		if p.offset_at(Game.course_time + s).length() > 0.03:
+			return false
+		s += 0.05
+	return true
+
+
+# ---- grind rails across a pit -------------------------------------------------------------------------
+
+## A pit crossed by one long rail (flow) or a rail-to-rail pair (`switch`), `pit_w` wide: the flow route jumps
+## on at the near island's end, grinds across and is thrown off onto the far island. The safe route is the
+## usual stepping plates.
+func _cross_rail(a: Dictionary, sx: float, drop: float, b_len: float, pit_w: float, switch: bool = false) -> Dictionary:
+	var ac: Vector3 = a["c"]
+	var front: float = ac.z - float(a["hz"])
+	var y_a: float = ac.y
+	var y_b: float = y_a - drop
+	var near_z: float = front - pit_w
+	var b: Dictionary = _island(near_z, b_len, y_b)
+	_safe_across(a, b, sx, drop, pit_w, b_len, 0.0, false)
+	var away: float = -signf(sx)
+	var low_y: float = minf(y_a, y_b) - 3.4
+	var h0: float = 1.3
+	var r1: Array[Vector3] = []
+	var r2: Array[Vector3] = []
+	var leave := Vector3.ZERO
+	var land_to := Vector3(0.0, y_b, near_z - 12.0)
+	if not switch:
+		var zs: Array[float] = [front + 4.0, front - 4.0, front - pit_w * 0.5, near_z + 4.0, near_z - 3.0]
+		var xs: Array[float] = [0.0, 0.0, away * 2.0, away * 0.6, 0.0]
+		for i: int in zs.size():
+			var t: float = clampf((front + 4.0 - zs[i]) / (pit_w + 10.0), 0.0, 1.0)
+			r1.append(Vector3(xs[i], y_a + h0 - drop * t, zs[i]))
+	else:
+		# rail 1 weaves out a little; the rider jumps off it and is caught by rail 2, which is laid ALONG
+		# the flight (a hair under it) and then settles onto the far island
+		var j: float = away * 3.0
+		var zs1: Array[float] = [front + 4.0, front - 4.0, front - 12.0]
+		var xs1: Array[float] = [0.0, 0.0, j]
+		for i: int in zs1.size():
+			var t1: float = clampf((front + 4.0 - zs1[i]) / (pit_w + 10.0), 0.0, 1.0)
+			r1.append(Vector3(xs1[i], y_a + h0 - drop * t1, zs1[i]))
+		leave = r1[r1.size() - 1]
+		var te: Vector3 = (r1[2] - r1[1]).normalized()
+		var vel: Vector3 = te * SWITCH_SPEED + Vector3(0.0, SWITCH_HOP, 0.0)
+		var fp: Vector3 = leave
+		var clock: float = 0.0
+		var want: Array[float] = [0.12, 0.26]
+		var k: int = 0
+		while k < want.size() and clock < 2.0:
+			var g: float = _tuning.gravity_rise if vel.y > 0.0 else _tuning.gravity_fall
+			vel.y -= g / 120.0
+			fp += vel / 120.0
+			clock += 1.0 / 120.0
+			if clock >= want[k]:
+				r2.append(fp - Vector3(0.0, 0.3, 0.0))
+				k += 1
+		r2.append(Vector3(r2[1].x * 0.35, (r2[1].y + y_b + 1.0) * 0.5, front - 22.0))
+		r2.append(Vector3(0.0, y_b + 1.0, near_z - 3.0))
+	var w1: Array[Vector3] = []
+	for p: Vector3 in r1:
+		w1.append(_w(p))
+	var rail1: GrindRail = kit.rail(w1, {"post_to_y": _w(Vector3(0, low_y, 0)).y, "post_every": 12.0, "hop": SWITCH_HOP if switch else 6.0})
+	_rails.append(rail1)
+	var rail2: GrindRail = null
+	if switch:
+		var w2: Array[Vector3] = []
+		for p2: Vector3 in r2:
+			w2.append(_w(p2))
+		rail2 = kit.rail(w2, {"post_to_y": _w(Vector3(0, low_y, 0)).y, "post_every": 12.0})
+		_rails.append(rail2)
+	_pulse(a, front + 14.0)
 	if route_variant == 1:
-		_poly.append(_w(Vector3(0.0, y_a, foot.z + 2.5)))
+		_poly.append(_w(Vector3(0.0, y_a, front + 12.0)))
 		r_flow(_poly.duplicate())
-		r_launch(arc, _w(land + Vector3(0, 0, -1.0)))
-		_poly = [_w(land)]
-		_flow_speed = float(fl["speed"])
+		var from_pt: Vector3 = _w(Vector3(0.0, y_a, front + 7.0))
+		if not switch:
+			r_rail(rail1, rail1.start_point(), {"from": from_pt, "to": _w(land_to)})
+		else:
+			r_rail(rail1, rail1.start_point(), {"from": from_pt, "leave": _w(leave), "chain_next": true, "to": rail2.start_point()})
+			r_rail(rail2, rail2.start_point(), {"chain": true, "to": _w(land_to)})
+		_poly = [_w(land_to)]
 	return b
+
+
+# ---- open tubes (half-pipes) -----------------------------------------------------------------------------
+
+## A half-pipe run after island `a`: `length` m of tube dropping `drop`, the safe route on a stepped walkway beside it.
+## Returns the world HalfPipe; the caller continues from the matching local end point.
+func _pipe_after(a: Dictionary, sx: float, length: float, drop: float, width: float, depth: float) -> HalfPipe:
+	var ac: Vector3 = a["c"]
+	var z0: float = ac.z - float(a["hz"])
+	var y0: float = ac.y
+	var start := Vector3(0.0, y0, z0)
+	var end := Vector3(0.0, y0 - drop, z0 - length)
+	var pipe: HalfPipe = kit.halfpipe(_w(start), _w(end), width, depth, {"taper": 8.0, "shelf": 0.6, "guard": false})
+	_pipes.append(pipe)
+	# the safe walkway: stepped decks down the side
+	var steps: int = int(round(length / 8.0))
+	var step_len: float = length / float(steps)
+	var side: float = signf(sx) * (width * 0.5 + 0.6 + 1.5)
+	var dy: float = drop / float(steps)
+	for k: int in steps:
+		var top := Vector3(side, y0 - dy * float(k), z0 - step_len * (float(k) + 0.5))
+		_blk(top, 2.8, step_len + 0.05, "main", ISL_THICK)
+	if route_variant == 0:
+		r_walk(_w(Vector3(sx, y0, z0 - 0.2)))
+		r_walk(_w(Vector3(side, y0, z0 - 1.5)))
+		r_walk(_w(Vector3(side, y0 - dy * float(steps - 1), z0 - length + 1.0)))
+		r_walk(_w(Vector3(sx, y0 - drop, z0 - length - 1.5)))
+	else:
+		_poly.append(pipe.centre_point(0.0))
+		r_flow(_poly.duplicate())
+		r_flow(pipe.carve_points(2, 0.55))
+		_poly = [pipe.centre_point(1.0)]
+	return pipe
 
 
 ## The track bed under a pit: a catch deck 3.4 m down with two glowing rails, and a mag-lift pad at
@@ -323,30 +492,41 @@ func _bed(a: Dictionary, b: Dictionary) -> void:
 	_blk(bed_c, bed_w, depth, "alt", ISL_THICK)
 	for sx: float in [-1.0, 1.0]:
 		kit.glow_strip(_w(Vector3(sx * 2.2, low_y + 0.03, bed_c.z)), Vector3(0.18, 0.05, depth - 1.0), CYAN, _yaw)
-	var pad_at := Vector3(0.0, low_y, far_z + 1.6)
-	var target := Vector3(0.0, by, far_z - 3.5)
-	var sol: Vector2 = _pad_solve(pad_at, target)
+	var pad_at := Vector3(0.0, low_y, far_z + 5.5)
+	var target := Vector3(0.0, by, far_z - 5.0)
+	var sol: Vector2 = _pad_solve(pad_at, target, far_z)
 	kit.pad(_w(pad_at), sol.y, sol.x, _yaw, 1.5)
 
 
-## The (pitch deg, strength) of a pad at local `from` that lands a faller on local `to`.
-func _pad_solve(from: Vector3, to: Vector3) -> Vector2:
-	var best := Vector2(66.0, 24.0)
+## The (pitch deg from vertical, strength) of a pad at local `from` that carries a faller up over the far
+## island's near face (at local z `face_z`, top at `to.y`) and lands him on local `to`.
+func _pad_solve(from: Vector3, to: Vector3, face_z: float) -> Vector2:
+	var best := Vector2(15.0, 24.0)
 	var best_err: float = INF
-	var pitch: float = 56.0
-	while pitch <= 82.0:
+	# (BouncePad pitch is measured from the vertical: 0 = straight up)
+	var pitch: float = 4.0
+	while pitch <= 40.0:
 		var s: float = 14.0
 		while s <= 34.0:
-			var v0 := Vector3(0.0, s * sin(deg_to_rad(pitch)), -s * cos(deg_to_rad(pitch)))
-			var land: Vector3 = Ballistics.landing_point(_tuning, from + Vector3(0, 0.5, 0), v0, to.y)
-			if land.y <= to.y + 0.05:
-				var err: float = absf(land.z - to.z) + absf(land.x - to.x)
-				err += s * 0.01
+			var v0 := Vector3(0.0, s * cos(deg_to_rad(pitch)), -s * sin(deg_to_rad(pitch)))
+			var pts: PackedVector3Array = Ballistics.arc(_tuning, from + Vector3(0, 0.5, 0), v0, 4.0, 1.0 / 60.0)
+			var clear: bool = false
+			var land := Vector3.INF
+			for i: int in range(1, pts.size()):
+				if not clear and pts[i].z <= face_z - 0.6:
+					clear = pts[i].y >= to.y + 0.8
+					if not clear:
+						break
+				if clear and pts[i].y <= to.y + 0.05 and pts[i].y < pts[i - 1].y:
+					land = pts[i]
+					break
+			if clear and land != Vector3.INF:
+				var err: float = absf(land.z - to.z) + absf(land.x - to.x) + s * 0.01
 				if err < best_err:
 					best_err = err
 					best = Vector2(pitch, s)
 			s += 0.5
-		pitch += 2.0
+		pitch += 1.5
 	return best
 
 
@@ -413,7 +593,7 @@ func _first(length: float, sx: float) -> Dictionary:
 	var speeds: Array[float] = [20.0, 22.5, 25.0]
 	var pts: Array[Vector3] = [_w(Vector3(0, 0.05, 0))]
 	for i: int in 3:
-		var gp := Vector3(0, 0.05, -10.0 - 6.0 * float(i))
+		var gp := Vector3(0, 0.05, -9.0 - 5.0 * float(i))
 		kit.boost_gate(_w(gp), _yaw, speeds[i], 5.0)
 		pts.append(_w(gp))
 	if route_variant == 1:
@@ -439,80 +619,100 @@ func _gate_after_landing(b: Dictionary, speed: float = 28.0) -> void:
 
 func _stage_1() -> Vector3:
 	var sx: float = LANE
-	var i1: Dictionary = _first(30.0, sx)
-	var i2: Dictionary = _cross(i1, sx, 1.4, 26.0, 25.0)
-	_gate_after_landing(i2)
-	var i3: Dictionary = _cross(i2, sx, 2.4, 18.0, 29.0)
-	return _end_at_hub(i3, 1)
+	var i1: Dictionary = _first(26.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 4.0, 30.0, 25.0)
+	return _end_at_hub(i2, 1)
 
 
+## 2 RING ROAD: an arc and ring chain, then a long flow slope down to the hub.
 func _stage_2() -> Vector3:
 	var sx: float = -LANE
-	var i1: Dictionary = _first(30.0, sx)
-	var i2: Dictionary = _cross(i1, sx, 2.0, 38.0, 25.0, 6.0)
+	var i1: Dictionary = _first(26.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 3.5, 32.0, 25.0, 6.0)
 	return _end_at_hub(i2, 2)
 
 
+## 3 MAG-RAIL YARD: an arc and rings, then one long grind rail over a wide pit.
 func _stage_3() -> Vector3:
 	var sx: float = LANE
-	var i1: Dictionary = _first(30.0, sx)
-	var i2: Dictionary = _cross(i1, sx, 3.0, 26.0, 25.0)
+	var i1: Dictionary = _first(26.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 3.5, 24.0, 25.0)
 	_gate_after_landing(i2)
-	var i3: Dictionary = _cross(i2, sx, 3.0, 16.0, 29.0)
+	var i3: Dictionary = _cross_rail(i2, sx, 4.5, 20.0, 20.0)
 	return _end_at_hub(i3, 3)
 
 
+## 4 LOOP TUBE: an arc, then an open tube (half-pipe) to carve down.
 func _stage_4() -> Vector3:
 	var sx: float = -LANE
-	var i1: Dictionary = _first(30.0, sx)
-	var i2: Dictionary = _cross(i1, sx, 2.5, 44.0, 25.0)
-	return _end_at_hub(i2, 4)
+	var i1: Dictionary = _first(26.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 3.0, 14.0, 25.0)
+	var pipe: HalfPipe = _pipe_after(i2, sx, 52.0, 6.0, 8.0, 1.7)
+	var lc: Vector3 = i2["c"]
+	var z_end: float = lc.z - float(i2["hz"]) - 52.0
+	var e: Dictionary = _island(z_end, 12.0, lc.y - 6.0)
+	if pipe == null:
+		return Vector3.ZERO
+	return _end_at_hub(e, 4)
 
 
+## 5 POD STATION: an arc and rings over a pit that the safe line crosses on a transit pod.
 func _stage_5() -> Vector3:
 	var sx: float = LANE
-	var i1: Dictionary = _first(30.0, sx)
-	var i2: Dictionary = _cross(i1, sx, 2.0, 28.0, 25.0)
+	var i1: Dictionary = _first(26.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 3.5, 30.0, 25.0, 0.0, true)
 	return _end_at_hub(i2, 5)
 
 
+## 6 SWITCHYARD: an arc, then a rail-to-rail switch over a wide pit.
 func _stage_6() -> Vector3:
 	var sx: float = -LANE
-	var i1: Dictionary = _first(30.0, sx)
-	var i2: Dictionary = _cross(i1, sx, 3.0, 26.0, 25.0)
+	var i1: Dictionary = _first(26.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 3.5, 24.0, 25.0)
 	_gate_after_landing(i2)
-	var i3: Dictionary = _cross(i2, sx, 3.5, 18.0, 29.0)
+	var i3: Dictionary = _cross_rail(i2, sx, 4.0, 18.0, 24.0, true)
 	return _end_at_hub(i3, 6)
 
 
+## 7 SPIRE LIFT: two launches UP onto higher decks.
 func _stage_7() -> Vector3:
 	var sx: float = LANE
-	var i1: Dictionary = _first(30.0, sx)
-	var i2: Dictionary = _cross(i1, sx, -2.4, 28.0, 25.0)
-	return _end_at_hub(i2, 7)
+	var i1: Dictionary = _first(26.0, sx)
+	var i2: Dictionary = _cross(i1, sx, -2.4, 24.0, 25.0)
+	_gate_after_landing(i2)
+	var i3: Dictionary = _cross(i2, sx, -2.0, 14.0, 29.0)
+	return _end_at_hub(i3, 7)
 
 
+## 8 GREAT TUBE: an arc into a longer, wider tube.
 func _stage_8() -> Vector3:
 	var sx: float = -LANE
-	var i1: Dictionary = _first(30.0, sx)
-	var i2: Dictionary = _cross(i1, sx, 3.0, 52.0, 25.0, 8.0)
-	return _end_at_hub(i2, 8)
+	var i1: Dictionary = _first(26.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 3.5, 14.0, 25.0)
+	var pipe: HalfPipe = _pipe_after(i2, sx, 60.0, 10.0, 9.0, 1.9)
+	var lc: Vector3 = i2["c"]
+	var z_end: float = lc.z - float(i2["hz"]) - 60.0
+	var e: Dictionary = _island(z_end, 12.0, lc.y - 10.0)
+	if pipe == null:
+		return Vector3.ZERO
+	return _end_at_hub(e, 8)
 
 
+## 9 OVERDRIVE: an arc, then a long rail over the last pit, flat out.
 func _stage_9() -> Vector3:
 	var sx: float = LANE
-	var i1: Dictionary = _first(30.0, sx)
-	var i2: Dictionary = _cross(i1, sx, 3.0, 26.0, 25.0)
+	var i1: Dictionary = _first(26.0, sx)
+	var i2: Dictionary = _cross(i1, sx, 3.5, 24.0, 25.0)
 	_gate_after_landing(i2)
-	var i3: Dictionary = _cross(i2, sx, 3.0, 18.0, 29.0)
+	var i3: Dictionary = _cross_rail(i2, sx, 4.5, 20.0, 22.0)
 	return _end_at_hub(i3, 9)
 
 
 ## The finale, THE GREAT RING: a first launch over a wide pit, then one long descending slope with a ring
 ## line racing down it, onto the finish deck with its bumper wall.
 func _stage_10() -> void:
-	var i1: Dictionary = _first(30.0, -LANE)
-	var i2: Dictionary = _cross(i1, -LANE, 4.0, 100.0, 25.0, 17.0)
+	var i1: Dictionary = _first(26.0, -LANE)
+	var i2: Dictionary = _cross(i1, -LANE, 5.0, 84.0, 25.0, 15.0)
 	var bc: Vector3 = i2["c"]
 	var y0: float = float(i2["y0"])
 	var near: float = bc.z + float(i2["hz"])
@@ -522,24 +722,27 @@ func _stage_10() -> void:
 	var pts: Array[Vector3] = []
 	var rpts: Array[Vector3] = []
 	for k: int in 9:
-		var u: float = (14.0 + 9.5 * float(k)) / 100.0
-		var rz: float = near - 100.0 * u
-		var ry: float = y0 - 17.0 * u + 1.4
+		var u: float = (12.0 + 8.0 * float(k)) / 84.0
+		var rz: float = near - 84.0 * u
+		var ry: float = y0 - 15.0 * u + 1.4
 		rpts.append(_w(Vector3(0, ry, rz)))
 	kit.ring_line(rpts, {"add_speed": 2.0, "radius": RING_R, "cap": RING_CAP})
+	# three great hoops of white ceramic stand round the line: THE GREAT RING you plunge through
+	for hk: int in [1, 4, 7]:
+		deco.giant_ring(rpts[hk] + Vector3(0, 0.4, 0), 7.5, 0.4, Vector3(90.0, _yaw, 0.0))
 	_pulse(i2, z_end, near - PEN)
 	# the run-out deck, the finish gate and a bumper wall
-	_island(z_end, 46.0, y_end)
+	_island(z_end, 40.0, y_end)
 	var fin_z: float = z_end - 18.0
 	kit.finish(_w(Vector3(0, y_end, fin_z)), _yaw)
 	_finish_pos = _w(Vector3(0, y_end, fin_z))
-	kit.block(_w(Vector3(0, y_end + 1.6, z_end - 47.5)), Vector3(ISL_W + 2.0, 3.2, 1.6), Color(0.9, 0.95, 1.0), true, _yaw)
+	kit.block(_w(Vector3(0, y_end + 1.6, z_end - 41.5)), Vector3(ISL_W + 2.0, 3.2, 1.6), Color(0.9, 0.95, 1.0), true, _yaw)
 	deco.gantry(_w(Vector3(0, y_end, fin_z + 6.0)), _yaw, 11.0, 9.0, CORAL)
 	if route_variant == 0:
 		r_walk(_w(Vector3(-LANE, y_end, z_end + 1.0)))
 		r_walk(_w(Vector3(0, y_end, fin_z)))
 	else:
-		_poly.append(_w(Vector3(0, y0 - 17.0 * 0.12, near - 12.0)))
+		_poly.append(_w(Vector3(0, y0 - 15.0 * 0.12, near - 12.0)))
 		_poly.append(_w(Vector3(0, y_end, z_end)))
 		_poly.append(_w(Vector3(0, y_end, fin_z)))
 		r_flow(_poly.duplicate())

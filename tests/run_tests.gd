@@ -10348,3 +10348,50 @@ func test_zfk_pipe() -> void:
 
 func test_zfk_bot_slice2() -> void:
 	await _flow_bot("res://tests/flow_course2.gd", 120.0, "the bot carves half-pipes, grinds rail to rail, launches and flies a ring chain", 22.0, 0.5)
+
+
+# ---- Hyperloop (flow level, levels/level_35_hyperloop.gd) ---------------------------------------------------
+
+func _hyperloop_index() -> int:
+	for i: int in Game.LEVELS.size():
+		if str(Game.LEVELS[i]["id"]) == "hyperloop":
+			return i
+	return -1
+
+
+func test_zhl_content() -> void:
+	var idx: int = _hyperloop_index()
+	var lvl: LevelBase = await load_level(idx)
+	var rings: int = lvl.find_children("*", "SpeedRing", true, false).size()
+	var rails: int = lvl.find_children("*", "GrindRail", true, false).size()
+	var pipes: int = lvl.find_children("*", "HalfPipe", true, false).size()
+	var arcs: int = lvl.find_children("*", "LaunchArc", true, false).size()
+	var gates: int = lvl.find_children("*", "BoostGate", true, false).size()
+	var pods: int = lvl.find_children("*", "HyperloopPod", true, false).size()
+	check(lvl.checkpoints.size() >= 7 and lvl.checkpoints.size() <= 10, "Hyperloop: %d checkpoints (7-10)" % lvl.checkpoints.size())
+	check(rings >= 16, "Hyperloop: %d speed rings (4+ chains of 4+)" % rings)
+	check(rails >= 3, "Hyperloop: %d grind rails" % rails)
+	check(pipes >= 2, "Hyperloop: %d half-pipes" % pipes)
+	check(arcs >= 2, "Hyperloop: %d launch arcs" % arcs)
+	check(gates >= 10, "Hyperloop: %d boost gates" % gates)
+	check(pods >= 1, "Hyperloop: %d transit pods" % pods)
+	check(lvl.route_variants == 2, "Hyperloop: a safe line and a flow line")
+	check(bool(Game.LEVELS[idx].get("flow", false)), "Hyperloop is a Flow level")
+
+
+## Every mag-lift pad in a pit throws a faller back up onto the next island (a fall is never a death).
+func test_zhl_mag_lift_pads() -> void:
+	var idx: int = _hyperloop_index()
+	var lvl: LevelBase = await load_level(idx)
+	var pads: Array[Node] = lvl.find_children("*", "BouncePad", true, false)
+	check(pads.size() >= 8, "Hyperloop: %d mag-lift pads" % pads.size())
+	var bad: int = 0
+	for n: Node in pads:
+		var pad: BouncePad = n as BouncePad
+		var at: Vector3 = pad.global_position
+		lvl.player.teleport(Transform3D(Basis(), at + Vector3(0, 0.7, 0)))
+		await seconds(3.0)
+		if not (lvl.player.grounded and lvl.player.global_position.y > at.y + 1.5) or lvl.deaths > 0:
+			bad += 1
+			print("        pad at ", at.snapped(Vector3.ONE * 0.1), " left the player at ", lvl.player.global_position.snapped(Vector3.ONE * 0.1))
+	check(bad == 0, "every mag-lift pad lands a faller on the next island (%d of %d did not)" % [bad, pads.size()])
