@@ -153,6 +153,10 @@ the score) and by the title diorama (`"title"`). An unknown theme builds a silen
 | `amb_arcane.ogg` | 64 s | A library at night: a candle flame's hum (700-2600 Hz), about 120 soft wax pops, page flutters every 6-12 s and a shimmer of A minor pads (A3 C4 E4 A4, tremolo) with glass glints. Pops are kept off the loop's first and last tenth so the seam stays quiet, and the bed sits 1.5 dB under the usual level so its transients do not overshoot in the Ogg. |
 | `amb_arcade.ogg` | 64 s | A dim arcade hall: a 120 Hz mains hum (with 240 and 360 Hz) under the fans' hush (1.2-5 kHz pink noise), and attract-mode square-wave bleeps every 4-9 s. |
 | `amb_siege.ogg` | 64 s | A castle at dusk: wind over the battlements (120-1400 Hz, a 180 / 360 Hz whistle as it gusts), fires crackling in the yard (400-2500 Hz with crackles), and crows calling far off every 12-20 s. |
+| `amb_aurora.ogg` | 64 s | Still night mountain air: a thin high wind over the peaks (900-3400 Hz, a faint 300-480 Hz whistle as it gusts), distant ice cracks every 7-15 s, and a soft crystalline shimmer of pentatonic glints. |
+| `amb_skysurf.ogg` | 64 s | High above the clouds: a gentle wind (500-2600 Hz), distant doves and songbirds far below, wind chimes on a balcony and soft whooshes as the gusts pass. |
+| `amb_hyperloop.ogg` | 64 s | A clean underground station: a low hum of the rails (110, 220 and 330 Hz), the air of a far hall, magnetic trains gliding past every 14-24 s (a whine and an air rush through a Doppler pass) and soft chime announcements on a major triad. |
+| `amb_lotus.ogg` | 64 s | A temple garden at dusk: a stream trickling over its stones, frogs calling from the lotus pond, wind chimes under the eaves, a temple bell (about 147 Hz) far off every 22-30 s and crickets in the grass. |
 
 ## One-shots
 
@@ -319,6 +323,18 @@ the score) and by the title diorama (`"title"`). An unknown theme builds a silen
 | `amb_siege_drum_1..3` | Battle drums beating far off: 1 a slow march of three beats; 2 a roll swelling to a boom; 3 one heavy drum, then a second answering it. |
 | `amb_siege_fire_1..3` | A fire crackling in an iron brazier: 1 a few sharp pops over a roar of flame; 2 a log splitting; 3 a steady crackle, the flames sighing. |
 | `amb_siege_crow_1..3` | Crows over the field: 1 a single caw; 2 two cawing back and forth; 3 a squabbling flock. |
+| `amb_aurora_ice_1..3` | Ice cracking far off on a glacier: 1 a single crack; 2 a crack and a sheet's pew after it; 3 two cracks a second apart. |
+| `amb_aurora_shimmer_1..2` | A crystalline shimmer on the cold air: 1 a rising sparkle of glints; 2 a soft swell gliding down and away. |
+| `amb_aurora_gust_1..2` | A gust of thin wind over the peaks: 1 a long swell and pass; 2 the same gust with a low whistle in it. |
+| `amb_skysurf_bird_1..2` | Birds far below the clouds: 1 a dove's coo; 2 a robin's song floating up. |
+| `amb_skysurf_chime_1..3` | Wind chimes on a high balcony: 1 a short cluster of tines; 2 a tumble of chimes; 3 one deep chime ringing on. |
+| `amb_skysurf_whoosh_1..2` | Soft air whooshes as a gust passes: 1 a quick swish; 2 a long, slow sweep past. |
+| `amb_hyperloop_pass_1..2` | A magnetic train sliding through the station: 1 a fast pass close by; 2 a slower train passing far off. |
+| `amb_hyperloop_tone_1..3` | A station's soft announcement chime: 1 a two-note ding-dong; 2 a three-note chime; 3 one bright tone, ringing on. |
+| `amb_hyperloop_hiss_1..2` | The air seal of a station door: 1 a sharp hiss that sighs away; 2 a longer hiss ending on a soft clunk. |
+| `amb_lotus_frog_1..3` | Frogs calling from the lotus pond: 1 one croak; 2 a chorus of frogs; 3 a deep croak, answered by a higher one. |
+| `amb_lotus_bell_1..2` | A temple bell rung far off across the valley: 1 one strike, ringing on; 2 a strike and a lower one answering. |
+| `amb_lotus_drip_1..2` | Water on the stones of a stream: 1 a single drip into a pool; 2 a splash, then drips tumbling down the stones. |
 
 ## Scheduling tables (`Soundscape.THEMES`)
 

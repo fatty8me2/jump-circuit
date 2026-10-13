@@ -28,7 +28,7 @@ checks that the first and last samples are near zero. For loops it checks the se
 * the curvature (second difference) across the wrap must pass the same test;
 * the 40 ms window across the wrap must be no quieter than the quietest windows in the loop (a faded-out end would fail).
 
-It also checks the total size, which is about 35.1 MB of a 52 MB budget (the eight new worlds' footsteps and landings add 1.3 MB).
+It also checks the total size, which is about 51.9 MB of a 52 MB budget (the four flow sets' footsteps and landings add 0.65 MB).
 
 ## Formats and levels
 
@@ -148,6 +148,10 @@ model struck harder, with a heavier body, longer tails and more debris.
 | Arcane Library | `step_arcane_*`, `land_arcane_*` | An old library floor of planks over a stone flag: a dry creak (a narrow 900-1100 -> 500-650 Hz glide), a hollow wood knock (200-250 Hz modes), a 160-190 -> 90 Hz stone thud and dust sifting from the shelves. |
 | Pixel Panic | `step_arcade_*`, `land_arcade_*` | A pixel tap on a rubber mat: a short square-wave bleep (780-1000 Hz, odd harmonics) with its pitch decay, and a plastic click on contact. The landing bleeps lower. |
 | Castle Siege | `step_siege_*`, `land_siege_*` | A flagstone of the castle yard: a dull slab slap (330-380 Hz plate modes), a crisp chip off its edge, grit crunching in the mortar joint and a 100-120 -> 55 Hz stone thud. |
+| Aurora Peak | `step_aurora_*`, `land_aurora_*` | Packed snow under a boot: a dense burst of tiny high grains (2.5-9 kHz) as the crystals grind, a squeak gliding 2000-2400 -> 1500-1800 Hz and a soft 110-130 -> 60 Hz thump. The landing packs the snow harder. |
+| Skysurf Ridge | `step_skysurf_*`, `land_skysurf_*` | A footfall on a cushion of cloud: a soft, low puff (150-1200 Hz), a fine vapour hiss and a muffled 80-95 -> 45 Hz body. The landing throws up a bigger puff. |
+| Hyperloop | `step_hyperloop_*`, `land_hyperloop_*` | A steel panel in a station floor, tapped: a crisp bright tick (3-10 kHz), the short ring of the plate (1150-4200 Hz modes) and a small knock beneath. The landing rings the plate longer. |
+| Lotus Pond | `step_lotus_*`, `land_lotus_*` | A wet flagstone in a temple garden: a damp, dull slap (600-3000 Hz), a patter of drops (1.8-6 kHz grains) and a low 110-130 -> 55 Hz stone body. The landing splashes the water about. |
 
 ## Player: movement
 

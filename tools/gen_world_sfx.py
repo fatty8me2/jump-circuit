@@ -36,7 +36,8 @@ SIZE_BUDGET = 52.0e6
 
 THEMES = ("gardens", "foundry", "balance", "clockwork", "reef", "orbital", "ascent", "xeno", "volcano", "glacier", "desert",
           "manor", "armada", "candy", "carrier", "sakura", "jungle", "frontier", "neon", "doom", "abyss", "tempest", "void",
-          "toybox", "fungal", "carnival", "olympus", "dino", "arcane", "arcade", "siege")
+          "toybox", "fungal", "carnival", "olympus", "dino", "arcane", "arcade", "siege",
+          "aurora", "skysurf", "hyperloop", "lotus")
 
 # ---------------------------------------------------------------------------
 # clip table: name -> (seconds, loop).  The verifier checks the files against it.
@@ -1112,6 +1113,58 @@ def surface_hit(theme, r, k, dur):
         if k:
             place(x, 0.0, thud(t, 80, 38, 0.12, 0.12), 0.8)
         x = space(r, x, 0.9 + 0.4 * k, 0.18 + 0.07 * k, 200, 6000)
+    elif theme == "aurora":
+        # packed snow under a boot: the crystals grinding together (a dense burst of tiny high grains), a squeak
+        # as the snow is pressed through, its pitch gliding down, and a soft compacted thump (k: the landing
+        # packs the snow harder and squeaks louder)
+        squeak = svf(r.standard_normal(n), glide(r.uniform(2000, 2400), r.uniform(1500, 1800), t, 0.05 + 0.03 * k), 8.0)
+        squeak = unit(squeak) * env(t, 0.004, 0.02 + 0.03 * k)
+        body = thud(t, r.uniform(110, 130), 60, 0.04, 0.04 + 0.03 * k, harm=(0.2,))
+        both(click(r, dur, 1800, 8000, 0.0009) * 0.4 + 0.45 * squeak + 0.6 * body)
+        crunch = np.zeros(n)
+        grains(r, crunch, int(40 + 60 * k), 0.0, 0.05 + 0.08 * k, 2500, 9000, 0.0008, 0.002, 1.0,
+               decay=0.02 + 0.03 * k)
+        x += 0.35 * unit(crunch)
+        x = band(x, None, 9000)
+        if k:
+            place(x, 0.0, thud(t, 90, 42, 0.1, 0.1), 0.7)
+        x = space(r, x, 0.3, 0.1, 200, 8000)
+    elif theme == "skysurf":
+        # a footfall on a cushion of cloud: a soft, low puff of air as the cloud gives way, a fine hiss of the
+        # vapour around it and a muffled body beneath (k: the landing throws up a bigger puff)
+        puff = noise(r, n, 150, 1200) * env(t, 0.02, 0.05 + 0.08 * k)
+        vapour = noise(r, n, 2000, 6000) * env(t, 0.02, 0.03 + 0.03 * k)
+        body = thud(t, r.uniform(80, 95), 45, 0.06, 0.05 + 0.05 * k, harm=(0.1,))
+        both(puff + 0.15 * vapour + 0.3 * body)
+        x = band(x, None, 3000)
+        if k:
+            place(x, 0.0, thud(t, 75, 40, 0.12, 0.12), 0.6)
+        x = space(r, x, 0.6, 0.18, 150, 4000)
+    elif theme == "hyperloop":
+        # a steel panel in a station floor, tapped with a fingertip: a crisp, bright tick, the short ring of the
+        # plate (two clean modes) and a small knock beneath (k: the landing rings the plate longer)
+        plate = modes(t, [(r.uniform(1150, 1350), 1.0, 0.03 + 0.04 * k), (r.uniform(2300, 2700), 0.45, 0.02 + 0.02 * k),
+                          (r.uniform(3700, 4200), 0.2, 0.01)], r, 0.0)
+        knock = thud(t, r.uniform(160, 190), 110, 0.02, 0.012 + 0.01 * k, harm=(0.2,))
+        both(click(r, dur, 3000, 10000, 0.0006) * 0.9 + 0.5 * plate + 0.3 * knock)
+        x = band(x, None, 10000)
+        if k:
+            place(x, 0.0, thud(t, 110, 60, 0.05, 0.06), 0.5)
+        x = space(r, x, 0.5, 0.12, 300, 9000)
+    elif theme == "lotus":
+        # a wet flagstone in a temple garden: a damp, dull slap of the stone, a patter of drops that scatter off
+        # its surface and a low stone body beneath (k: the landing splashes the water about)
+        slap = noise(r, n, 600, 3000) * env(t, 0.002, 0.012 + 0.02 * k)
+        body = thud(t, r.uniform(110, 130), 55, 0.04, 0.035 + 0.03 * k, harm=(0.2,))
+        both(0.8 * slap + 0.6 * body + 0.4 * click(r, dur, 800, 3500, 0.0015))
+        drops = np.zeros(n)
+        grains(r, drops, int(14 + 36 * k), 0.0, 0.08 + 0.1 * k, 1800, 6000, 0.0008, 0.003, 1.0,
+               decay=0.03 + 0.04 * k)
+        x += 0.3 * unit(drops)
+        x = band(x, None, 5000)
+        if k:
+            place(x, 0.0, thud(t, 85, 40, 0.1, 0.1), 0.6)
+        x = space(r, x, 0.5, 0.15, 150, 4500)
     return x
 
 

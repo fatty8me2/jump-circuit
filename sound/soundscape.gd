@@ -553,6 +553,50 @@ const THEMES: Dictionary = {
 				"dist": Vector2(120.0, 220.0), "height": Vector2(-60.0, 20.0), "travel": 120.0},
 		],
 	},
+	"aurora": {
+		"bed": "amb_aurora", "bed_db": 0.0,
+		"events": [
+			{"clip": "amb_aurora_ice", "every": Vector2(14.0, 34.0), "db": Vector2(-22.0, -14.0), "pitch": 0.04,
+				"dist": Vector2(60.0, 160.0), "height": Vector2(-30.0, 30.0), "chance": Vector2(1.0, 0.5)},
+			{"clip": "amb_aurora_shimmer", "every": Vector2(25.0, 55.0), "db": Vector2(-20.0, -14.0), "pitch": 0.0,
+				"dist": Vector2(10.0, 30.0), "height": Vector2(0.0, 12.0)},
+			{"clip": "amb_aurora_gust", "every": Vector2(20.0, 45.0), "db": Vector2(-22.0, -15.0), "pitch": 0.05,
+				"dist": Vector2(20.0, 50.0), "height": Vector2(-4.0, 8.0), "travel": 20.0},
+		],
+	},
+	"skysurf": {
+		"bed": "amb_skysurf", "bed_db": 0.0,
+		"events": [
+			{"clip": "amb_skysurf_bird", "every": Vector2(12.0, 26.0), "db": Vector2(-22.0, -14.0), "pitch": 0.08,
+				"dist": Vector2(60.0, 140.0), "height": Vector2(-30.0, -10.0), "answer": 0.3},
+			{"clip": "amb_skysurf_chime", "every": Vector2(10.0, 24.0), "db": Vector2(-22.0, -15.0), "pitch": 0.04,
+				"dist": Vector2(4.0, 12.0), "height": Vector2(2.0, 8.0)},
+			{"clip": "amb_skysurf_whoosh", "every": Vector2(12.0, 28.0), "db": Vector2(-22.0, -15.0), "pitch": 0.05,
+				"dist": Vector2(10.0, 40.0), "height": Vector2(-4.0, 4.0), "travel": 30.0},
+		],
+	},
+	"hyperloop": {
+		"bed": "amb_hyperloop", "bed_db": 0.0,
+		"events": [
+			{"clip": "amb_hyperloop_pass", "every": Vector2(30.0, 60.0), "db": Vector2(-16.0, -10.0), "pitch": 0.02,
+				"dist": Vector2(30.0, 80.0), "height": Vector2(-6.0, -2.0), "travel": 90.0},
+			{"clip": "amb_hyperloop_tone", "every": Vector2(20.0, 40.0), "db": Vector2(-22.0, -15.0), "pitch": 0.0,
+				"dist": Vector2(4.0, 12.0), "height": Vector2(2.0, 6.0)},
+			{"clip": "amb_hyperloop_hiss", "every": Vector2(15.0, 35.0), "db": Vector2(-22.0, -15.0), "pitch": 0.05,
+				"dist": Vector2(4.0, 15.0), "height": Vector2(-2.0, 2.0)},
+		],
+	},
+	"lotus": {
+		"bed": "amb_lotus", "bed_db": 0.0,
+		"events": [
+			{"clip": "amb_lotus_frog", "every": Vector2(6.0, 14.0), "db": Vector2(-22.0, -14.0), "pitch": 0.07,
+				"dist": Vector2(6.0, 20.0), "height": Vector2(-2.0, 2.0), "answer": 0.4},
+			{"clip": "amb_lotus_bell", "every": Vector2(60.0, 110.0), "db": Vector2(-18.0, -12.0), "pitch": 0.02,
+				"dist": Vector2(150.0, 300.0), "height": Vector2(-10.0, 30.0), "chance": Vector2(1.0, 0.5)},
+			{"clip": "amb_lotus_drip", "every": Vector2(8.0, 18.0), "db": Vector2(-22.0, -15.0), "pitch": 0.08,
+				"dist": Vector2(3.0, 10.0), "height": Vector2(-3.0, -1.0)},
+		],
+	},
 }
 
 var theme: String = ""

@@ -2944,6 +2944,153 @@ def bed_siege():
 
 
 # ==========================================================================
+# the flow set (speed and flow levels): Aurora Peak, Skysurf Ridge, Hyperloop, Lotus Pond
+# ==========================================================================
+def ice_crack(r, sr=SR):
+    """A distant ice crack: a sharp snap of broadband noise over a short ring of the sheet."""
+    dur = 0.6
+    snap = noise_hit(r, dur, 1200.0, 7000.0, 0.004, sr, att=0.0008)
+    ring = modal([r.uniform(1400.0, 1700.0), r.uniform(2600.0, 3100.0)], [1.0, 0.4], [0.05, 0.03], dur, sr, r=r)
+    return unit(snap) + 0.3 * unit(ring)
+
+
+def shimmer_note(r, f, dur, sr=BSR, tau=1.6):
+    """A crystal glint: a pure note with two faint inharmonic partials, ringing and dying away."""
+    t = tv(dur, sr)
+    out = np.zeros(len(t))
+    for q, a, ts in ((1.0, 1.0, 1.0), (2.76, 0.3, 0.45), (5.4, 0.12, 0.25)):
+        if f * q < 0.45 * sr:
+            out += a * np.sin(TAU * f * q * t + r.uniform(0, TAU)) * np.exp(-t / (tau * ts))
+    return out * np.minimum(t / 0.001, 1.0) * rcos_env(len(t), 0.0, min(0.3 * dur, 0.5), sr)
+
+
+def mag_pass(r, dur, v, d, t_close, sr=BSR):
+    """A magnetic train gliding past on its rail: a soft whine and an air rush through the Doppler model
+    (dull while it is far, bright as it passes)."""
+    n = int(dur * sr)
+    t = np.arange(n) / sr
+    whine = tone(np.full(n, r.uniform(520.0, 640.0)), ((1, 1.0), (2, 0.25)), sr) * (0.7 + 0.3 * np.sin(TAU * 3.0 * t))
+    air = bp(r.standard_normal(n), 700.0, 3000.0, 2, sr)
+    src = 0.5 * unit(whine) + 0.6 * unit(air)
+    y, close = doppler_pass(src, sr, v, d, t_close)
+    dark = lp(y, 900.0, 2, sr)
+    return dark + (y - dark) * close ** 1.5
+
+
+def soft_whoosh(r, dur, sr=BSR):
+    """A soft air whoosh: band-passed noise swelling and fading in a slow arc."""
+    n = int(dur * sr)
+    t = np.arange(n) / sr
+    x = bp(r.standard_normal(n), r.uniform(400.0, 800.0), r.uniform(2500.0, 4500.0), 2, sr)
+    return unit(x) * np.sin(np.pi * t / dur) ** 2
+
+
+def frog_croak(r, sr=BSR, f=None, pulses=None):
+    """A frog's croak: a short run of pulsed, nasal notes."""
+    f = f if f is not None else r.uniform(320.0, 460.0)
+    pulses = pulses if pulses is not None else int(r.integers(3, 6))
+    prate = r.uniform(18.0, 26.0)
+    dur = pulses / prate + 0.1
+    n = int(dur * sr)
+    t = np.arange(n) / sr
+    gate = (t < pulses / prate) * np.sin(np.pi * ((t * prate) % 1.0)) ** 2
+    voice = unit(tone(np.full(n, f), ((1, 1.0), (2, 0.5), (3, 0.25)), sr)) + 0.3 * unit(bp(r.standard_normal(n), 900.0, 1500.0, 2, sr))
+    return unit(voice) * gate
+
+
+def chime_phrase(r, sr=BSR):
+    """A station announcement's chime: two or three soft, bright bells on a major triad."""
+    phrase = np.zeros(int(5.5 * sr))
+    notes = (79, 76) if r.random() < 0.5 else (79, 76, 72)
+    for j, m in enumerate(notes):
+        place(phrase, 0.7 * j, glock(r, ga.mtof(m), 3.5, 1.4, sr), sr, 0.8)
+    return phrase
+
+
+@bed("amb_aurora", -27.0)
+def bed_aurora():
+    mix = Mix("amb_aurora", 64.0)
+    r, n, T = mix.r, mix.n, mix.T
+    # a still night high in the mountains: the thin wind over the peaks, the ice far off cracking as the
+    # cold deepens, and a soft crystalline shimmer hanging in the air
+    wind_layer(mix, "wind", r, gusts(r, n, 0.03), 900.0, 3400.0, howl=(300.0, 480.0), howl_gain=0.12, spread_s=0.6)
+    for tb in spaced_times(r, T, 7.0, 15.0):
+        mix.add("ice", tb, ice_crack(r, BSR), gain=r.uniform(0.25, 0.5), pan=r.uniform(-0.9, 0.9), rev=0.7)
+    for tb in spaced_times(r, T, 8.0, 14.0):
+        for j in range(int(r.integers(2, 4))):
+            mix.add("shimmer", tb + j * 0.4, shimmer_note(r, penta(84, int(r.integers(0, 10))), 4.0, BSR),
+                    gain=r.uniform(0.3, 0.7), pan=r.uniform(-0.8, 0.8), rev=0.9)
+    levels = {"wind": -4.0, "ice": -30.0, "shimmer": -20.0}
+    mix.render(BEDS["amb_aurora"][1], levels, t60=3.0, damp=4000.0, wet=0.5, predelay=0.04, hp_hz=40.0, lp_hz=9000.0)
+
+
+@bed("amb_skysurf", -26.5)
+def bed_skysurf():
+    mix = Mix("amb_skysurf", 64.0)
+    r, n, T = mix.r, mix.n, mix.T
+    # high above the clouds: a gentle wind on the open air, distant birds far below, wind chimes on a
+    # balcony and soft whooshes as the gusts pass
+    wind_layer(mix, "wind", r, gusts(r, n, 0.05), 500.0, 2600.0, howl=(260.0, 420.0), howl_gain=0.1, spread_s=0.5)
+    far_birds(mix, 8, 0.6 + 0.4 * cbeat(n, 3, r.uniform(0, TAU)), gain=(0.04, 0.12), lp_hz=5000.0, include_dove=True)
+    for tb in spaced_times(r, T, 6.0, 12.0):
+        for j in range(int(r.integers(3, 6))):
+            mix.add("chimes", tb + j * r.uniform(0.25, 0.5), tine(r, penta(84, int(r.integers(0, 10))), 3.0, 1.6, BSR),
+                    gain=r.uniform(0.3, 0.7), pan=r.uniform(-0.9, 0.9), rev=0.6)
+    for tb in spaced_times(r, T, 12.0, 22.0):
+        mix.add("whoosh", tb, soft_whoosh(r, r.uniform(3.0, 5.0), BSR), gain=r.uniform(0.3, 0.6),
+                pan=r.uniform(-0.8, 0.8), rev=0.4)
+    levels = {"wind": -4.0, "birds": -14.0, "chimes": -13.0, "whoosh": -12.0}
+    mix.render(BEDS["amb_skysurf"][1], levels, t60=2.5, damp=5000.0, wet=0.35, predelay=0.03, hp_hz=50.0, lp_hz=9000.0)
+
+
+@bed("amb_hyperloop", -27.0)
+def bed_hyperloop():
+    mix = Mix("amb_hyperloop", 64.0)
+    r, n, T = mix.r, mix.n, mix.T
+    # a clean, cool underground station: the low hum of the magnetic rails, the air of a far hall, trains
+    # sliding past every so often and the soft tones of the announcements
+    hum = 0.6 * csine(110.0, n, phase=r.uniform(0, TAU)) + 0.3 * csine(220.0, n, phase=r.uniform(0, TAU)) \
+        + 0.12 * csine(330.0, n, phase=r.uniform(0, TAU))
+    mix.add_loop("hum", st(hum * (0.85 + 0.15 * cbeat(n, 4, 0.0)), 0.0), rev=0.1)
+    for ch in range(2):
+        chans = np.zeros((n, 2))
+        chans[:, ch] = rmsn(cband(pink(r, n, BSR, slope=-0.6), 1500.0, 6000.0, 2)) * (0.6 + 0.4 * gusts(r, n, 0.04))
+        mix.add_loop("air", chans)
+    for tb in spaced_times(r, T, 14.0, 24.0):
+        mix.add("trains", tb, mag_pass(r, 6.0, r.uniform(70.0, 110.0), r.uniform(60.0, 120.0), 3.0, BSR),
+                gain=r.uniform(0.6, 1.0), pan=r.uniform(-0.6, 0.6), rev=0.3)
+    for tb in spaced_times(r, T, 16.0, 28.0):
+        mix.add("announce", tb, chime_phrase(r, BSR), gain=r.uniform(0.5, 0.8), pan=0.0, rev=0.6)
+    levels = {"hum": -20.0, "air": -14.0, "trains": -11.0, "announce": -15.0}
+    mix.render(BEDS["amb_hyperloop"][1], levels, t60=2.0, damp=5000.0, wet=0.25, predelay=0.02, hp_hz=60.0, lp_hz=9000.0)
+
+
+@bed("amb_lotus", -26.5)
+def bed_lotus():
+    mix = Mix("amb_lotus", 64.0)
+    r, n, T = mix.r, mix.n, mix.T
+    # a temple garden at dusk: a stream trickling over its stones, frogs calling from the lotus pond, wind
+    # chimes under the eaves, a far temple bell and the crickets in the grass
+    rush = cband(pink(r, n, BSR, slope=-0.4), 600.0, 3200.0, 2) * (0.5 + 0.5 * gusts(r, n, 0.05))
+    mix.add_loop("stream", rmsn(rush))
+    for tb in density_times(r, T, 120, 0.5 + 0.5 * cbeat(n, 6, r.uniform(0, TAU))):
+        mix.add("stream", tb, bubble(r, r.uniform(500.0, 1500.0), r.uniform(0.005, 0.012), 0.6, BSR),
+                gain=r.uniform(0.1, 0.35), pan=r.uniform(-0.9, 0.9), rev=0.3)
+    for tb in density_times(r, T, 40, 0.5 + 0.5 * cbeat(n, 2, r.uniform(0, TAU))):
+        mix.add("frogs", tb, frog_croak(r, BSR), gain=r.uniform(0.3, 0.7), pan=r.uniform(-0.8, 0.8), rev=0.3)
+    for tb in spaced_times(r, T, 5.0, 10.0):
+        for j in range(3):
+            mix.add("chimes", tb + j * 0.35, tine(r, penta(84, int(r.integers(0, 10))), 3.0, 1.6, BSR),
+                    gain=r.uniform(0.3, 0.6), pan=r.uniform(-0.9, 0.9), rev=0.6)
+    for tb in spaced_times(r, T, 22.0, 30.0):
+        mix.add("bell", tb, ga.bell(ga.mtof(50), 7.0, BSR, 2.6), gain=r.uniform(0.5, 0.8),
+                pan=r.uniform(-0.5, 0.5), rev=0.8)
+    crickets(mix, "crickets", r, 4)
+    levels = {"stream": -11.0, "frogs": -15.0, "chimes": -14.0, "bell": -16.0, "crickets": -17.0}
+    mix.render(BEDS["amb_lotus"][1], levels, t60=2.5, damp=4000.0, wet=0.35, predelay=0.03, hp_hz=50.0, lp_hz=9000.0)
+
+
+# ==========================================================================
 # the one-shots
 # ==========================================================================
 SHOTS = {}   # name -> (function(r, i), variants)
@@ -6567,6 +6714,157 @@ def shot_siege_crow(r, i):
         for _ in range(7):
             place(x, r.uniform(0.02, 3.6), crow_caw(r, r.uniform(0.4, 0.8), SR), SR, r.uniform(0.3, 0.8))
     return cap(trim(far(x, r, 5000.0, 1.0, 0.25, damp=3000.0, predelay=0.03), db_floor=-55.0))
+
+
+# ---- the flow set (Aurora Peak, Skysurf Ridge, Hyperloop, Lotus Pond) -------------------------
+@shots("amb_aurora_ice", 3)
+def shot_aurora_ice(r, i):
+    # ice cracking far off on a glacier: 1 a single crack; 2 a crack, and a sheet's pew after it; 3 two cracks
+    # a second apart, the second one echoing down the valley
+    x = zeros(4.0)
+    place(x, 0.05, ice_crack(r, SR), SR, 0.8)
+    if i == 1:
+        place(x, 0.7, ice_pew(r, 0.9, 3200.0, 900.0, SR), SR, 0.35)
+    if i == 2:
+        place(x, 1.4, ice_crack(r, SR), SR, 0.5)
+    return cap(trim(far(x, r, 6000.0, 2.2, 0.35, damp=3000.0, predelay=0.03), db_floor=-55.0))
+
+
+@shots("amb_aurora_shimmer", 2)
+def shot_aurora_shimmer(r, i):
+    # a crystalline shimmer on the cold air: 1 a rising sparkle of glints; 2 a soft swell of shimmer that
+    # glides down and away
+    x = zeros(5.0)
+    if i == 0:
+        for j in range(6):
+            place(x, 0.03 + 0.22 * j, glass_note(r, penta(84, j), 2.5, 1.0), SR, 0.7)
+    else:
+        m = int(4.5 * SR)
+        t = np.arange(m) / SR
+        ph = TAU * np.cumsum(2200.0 * 0.5 ** (t / 4.5)) / SR
+        y = (np.sin(ph) + 0.3 * np.sin(2.76 * ph)) * np.sin(np.pi * t / 4.5) ** 2 * 0.4
+        place(x, 0.02, y, SR)
+    return cap(trim(reverb(x, r, 3.0, 4000.0, 0.5, predelay=0.04)))
+
+
+@shots("amb_aurora_gust", 2)
+def shot_aurora_gust(r, i):
+    # a gust of thin wind over the peaks: 1 a long gust swelling and passing; 2 the same gust with a low
+    # whistle in it
+    dur = 4.5
+    n = int(dur * SR)
+    t = np.arange(n) / SR
+    env_ = np.sin(np.pi * t / dur) ** 2
+    x = unit(bp(r.standard_normal(n), 900.0, 3200.0, 2, SR)) * env_
+    if i == 1:
+        x = x + 0.25 * unit(bp(r.standard_normal(n), 340.0, 420.0, 4, SR)) * env_
+    return cap(trim(far(x, r, 5000.0, 1.2, 0.2, damp=3500.0, predelay=0.02), db_floor=-55.0))
+
+
+@shots("amb_skysurf_bird", 2)
+def shot_skysurf_bird(r, i):
+    # birds far below the clouds: 1 a dove's coo; 2 a robin's song floating up
+    x = (bird_dove, bird_robin)[i](r, SR)
+    return far(hp(x, 1000.0), r, 7000.0, 1.0, 0.2, damp=4000.0)
+
+
+@shots("amb_skysurf_chime", 3)
+def shot_skysurf_chime(r, i):
+    # wind chimes on a high balcony: 1 a short cluster of tines; 2 a tumble of chimes; 3 one deep chime ringing on
+    x = zeros(5.0)
+    if i == 0:
+        for j in range(4):
+            place(x, 0.02 + 0.3 * j, tine(r, penta(84, int(r.integers(0, 10))), 2.5, 1.2, SR), SR, 0.7)
+    elif i == 1:
+        for _ in range(9):
+            place(x, r.uniform(0.02, 3.5), tine(r, penta(79, int(r.integers(0, 10))), 2.5, 1.2, SR), SR,
+                  r.uniform(0.3, 0.8))
+    else:
+        place(x, 0.02, tine(r, penta(72, 0), 4.5, 2.2, SR), SR, 0.8)
+    return cap(trim(far(x, r, 7000.0, 2.0, 0.3, damp=3500.0, predelay=0.03), db_floor=-55.0))
+
+
+@shots("amb_skysurf_whoosh", 2)
+def shot_skysurf_whoosh(r, i):
+    # soft air whooshes as a gust passes: 1 a quick swish; 2 a long, slow sweep past
+    x = soft_whoosh(r, 2.0 if i == 0 else 4.0, SR)
+    return cap(trim(far(x, r, 7000.0, 1.2, 0.25, damp=4000.0, predelay=0.02), db_floor=-55.0))
+
+
+@shots("amb_hyperloop_pass", 2)
+def shot_hyperloop_pass(r, i):
+    # a magnetic train sliding through the station: 1 a fast pass close by; 2 a slower train passing far off
+    if i == 0:
+        x = mag_pass(r, 4.0, 110.0, 40.0, 2.0, SR)
+    else:
+        x = mag_pass(r, 6.0, 60.0, 180.0, 3.0, SR)
+    return cap(trim(far(x, r, 8000.0, 1.0, 0.2, damp=4000.0, predelay=0.02), db_floor=-55.0))
+
+
+@shots("amb_hyperloop_tone", 3)
+def shot_hyperloop_tone(r, i):
+    # a station's soft announcement chime: 1 a two-note ding-dong; 2 a three-note chime; 3 one bright,
+    # long-ringing tone
+    x = zeros(5.0)
+    if i == 0:
+        place(x, 0.02, glock(r, ga.mtof(79), 3.0, 1.2, SR), SR, 0.8)
+        place(x, 0.7, glock(r, ga.mtof(76), 3.0, 1.2, SR), SR, 0.8)
+    elif i == 1:
+        for j, m in enumerate((79, 76, 72)):
+            place(x, 0.02 + 0.6 * j, glock(r, ga.mtof(m), 3.0, 1.2, SR), SR, 0.8)
+    else:
+        place(x, 0.02, glock(r, ga.mtof(84), 4.0, 2.0, SR), SR, 0.6)
+    return cap(trim(far(x, r, 8000.0, 1.8, 0.3, damp=4000.0, predelay=0.03), db_floor=-55.0))
+
+
+@shots("amb_hyperloop_hiss", 2)
+def shot_hyperloop_hiss(r, i):
+    # the air seal of a station door: 1 a sharp hiss that sighs away; 2 a longer hiss, ending on a soft clunk
+    x = zeros(3.5)
+    place(x, 0.02, hiss_burst(r, 1.6 if i == 0 else 2.6, 1500.0, 8500.0, SR), SR, 0.7)
+    if i == 1:
+        place(x, 2.5, noise_hit(r, 0.25, 80.0, 400.0, 0.04, SR), SR, 0.6)
+    return cap(trim(far(x, r, 8000.0, 0.8, 0.2, damp=5000.0, predelay=0.01), db_floor=-55.0))
+
+
+@shots("amb_lotus_frog", 3)
+def shot_lotus_frog(r, i):
+    # frogs calling from the lotus pond: 1 one frog's croak; 2 a chorus of frogs; 3 a deep croak, then a
+    # higher one answering it
+    x = zeros(5.0)
+    if i == 0:
+        place(x, 0.02, frog_croak(r, SR), SR, 0.8)
+    elif i == 1:
+        for _ in range(5):
+            place(x, r.uniform(0.02, 3.6), frog_croak(r, SR), SR, r.uniform(0.3, 0.8))
+    else:
+        place(x, 0.02, frog_croak(r, SR, f=r.uniform(200.0, 260.0), pulses=5), SR, 0.8)
+        place(x, 1.8, frog_croak(r, SR, f=r.uniform(330.0, 420.0)), SR, 0.6)
+    return cap(trim(far(x, r, 4500.0, 1.2, 0.25, damp=3000.0, predelay=0.02), db_floor=-55.0))
+
+
+@shots("amb_lotus_bell", 2)
+def shot_lotus_bell(r, i):
+    # a temple bell rung far off across the valley: 1 one strike, ringing on; 2 a strike and a lower one answering
+    x = zeros(6.0)
+    place(x, 0.02, ga.bell(ga.mtof(50), 5.5, SR, 2.4), SR, 0.8)
+    if i == 1:
+        place(x, 2.8, ga.bell(ga.mtof(47), 5.0, SR, 2.2), SR, 0.5)
+    return cap(trim(far(x, r, 5000.0, 2.6, 0.35, damp=3000.0, predelay=0.04), db_floor=-55.0))
+
+
+@shots("amb_lotus_drip", 2)
+def shot_lotus_drip(r, i):
+    # water on the stones of a stream: 1 a single drip into a pool; 2 a splash, then drips tumbling down the stones
+    x = zeros(3.0)
+    if i == 0:
+        place(x, 0.02, bubble(r, r.uniform(600.0, 1000.0), 0.03, 0.6, SR), SR, 0.8)
+    else:
+        place(x, 0.02, noise_hit(r, 0.25, 1500.0, 7000.0, 0.02, SR), SR, 0.5)
+        for j in range(5):
+            place(x, 0.2 + 0.25 * j, bubble(r, r.uniform(500.0, 1400.0), r.uniform(0.01, 0.02), 0.6, SR), SR,
+                  r.uniform(0.3, 0.7))
+    return cap(trim(reverb(x, r, 1.2, 4000.0, 0.3, predelay=0.01)))
 
 
 # ==========================================================================
